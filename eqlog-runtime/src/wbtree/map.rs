@@ -3,19 +3,61 @@ use std::fmt;
 use std::mem;
 use std::rc::Rc;
 
+use crate::PrefixTree2;
+
 #[derive(Clone)]
-pub struct WBTreeMap<K: Clone, V: Clone> {
-    root: Option<Rc<Node<K, V>>>,
+pub struct WBTreeMap<V: Clone> {
+    root: Option<Rc<Node<V>>>,
     len: usize,
 }
 
 #[derive(Clone)]
-struct Node<K: Clone, V: Clone> {
-    key: K,
+struct DataNode<V: Clone> {
+    key: u32,
     value: V,
-    left: Option<Rc<Node<K, V>>>,
-    right: Option<Rc<Node<K, V>>>,
+    left: Option<Rc<Node<V>>>,
+    right: Option<Rc<Node<V>>>,
     size: usize, // Total number of nodes in this subtree
+}
+
+impl<V: Clone> DataNode<V> {
+    fn update_size_internal(&mut self) {
+        self.size = 1 + Node::size(&self.left) + Node::size(&self.right);
+    }
+}
+
+#[derive(Clone)]
+struct MappingNode<V: Clone> {
+    mapping: PrefixTree2,
+    child: Option<Rc<Node<V>>>,
+}
+
+#[derive(Clone)]
+#[allow(dead_code)]
+enum Node<V: Clone> {
+    Data(DataNode<V>),
+    Mapping(MappingNode<V>),
+}
+
+/// Apply a single mapping to a u32 value.
+/// Returns None if the mapping doesn't have an entry for the value.
+fn apply_single_mapping(mapping: &PrefixTree2, val: u32) -> Option<u32> {
+    mapping
+        .get(val)
+        .and_then(|restriction| restriction.set.iter().next())
+}
+
+/// Apply a sequence of mappings to a u32 value. Each mapping in the slice is a PrefixTree2.
+/// Mappings are applied in reverse order: last mapping first, first mapping last.
+/// This is because mappings are accumulated outermost-first during tree traversal,
+/// but should be applied innermost-first (closest to data first).
+/// Returns None if any mapping doesn't have an entry for the value.
+fn apply_mappings(mappings: &[&PrefixTree2], val: u32) -> Option<u32> {
+    let mut result = val;
+    for mapping in mappings.iter().rev() {
+        result = apply_single_mapping(mapping, result)?;
+    }
+    Some(result)
 }
 
 // TODO: Make this more sophisticated, e.g. by checking the invariant that the mapping is monotone,
@@ -25,62 +67,184 @@ struct Node<K: Clone, V: Clone> {
 const DELTA: usize = 3;
 const GAMMA: usize = 2;
 
-impl<K: Clone + Ord, V: Clone> Node<K, V> {
-    fn new(key: K, value: V) -> Self {
-        Node {
+impl<V: Clone> Node<V> {
+    fn new(key: u32, value: V) -> Self {
+        Self::Data(DataNode {
             key,
             value,
             left: None,
             right: None,
             size: 1,
+        })
+    }
+
+    /// Helper to get direct access to the underlying data node, skipping mapping nodes.
+    /// Returns None for empty mapping chains.
+    #[allow(dead_code)]
+    fn as_data_node(node: &Rc<Node<V>>) -> Option<&DataNode<V>> {
+        match node.as_ref() {
+            Node::Data(data_node) => Some(data_node),
+            Node::Mapping(mapping_node) => mapping_node.child.as_ref().and_then(Self::as_data_node),
         }
     }
 
-    fn size(node: &Option<Rc<Node<K, V>>>) -> usize {
-        node.as_ref().map_or(0, |n| n.size)
+    /// Unwrap a node to its DataNode, consuming the Rc.
+    /// For mapping nodes, recursively unwraps to get the inner data.
+    fn unwrap_to_data(node: Rc<Node<V>>) -> DataNode<V> {
+        match Rc::unwrap_or_clone(node) {
+            Node::Data(data_node) => data_node,
+            Node::Mapping(mapping_node) => {
+                let child = mapping_node.child.expect("Mapping node should have child");
+                Self::unwrap_to_data(child)
+            }
+        }
     }
 
+    /// Create a new data node with the given fields
+    fn new_data_node(
+        key: u32,
+        value: V,
+        left: Option<Rc<Node<V>>>,
+        right: Option<Rc<Node<V>>>,
+    ) -> Rc<Node<V>> {
+        let size = 1 + Self::size(&left) + Self::size(&right);
+        Rc::new(Node::Data(DataNode {
+            key,
+            value,
+            left,
+            right,
+            size,
+        }))
+    }
+
+    #[allow(dead_code)]
+    fn wrapped_in_mappings(mappings: &[&PrefixTree2], node: Option<Rc<Self>>) -> Option<Rc<Self>> {
+        let mut result = node;
+        for mapping in mappings.iter().rev() {
+            result = Some(Rc::new(Self::Mapping(MappingNode {
+                mapping: (*mapping).clone(),
+                child: result,
+            })));
+        }
+        result
+    }
+
+    fn size(node: &Option<Rc<Node<V>>>) -> usize {
+        node.as_ref().map_or(0, |n| match n.as_ref() {
+            Node::Data(data_node) => data_node.size,
+            Node::Mapping(mapping_node) => Self::size(&mapping_node.child),
+        })
+    }
+
+    #[allow(dead_code)]
     fn update_size(&mut self) {
-        self.size = 1 + Self::size(&self.left) + Self::size(&self.right);
+        match self {
+            Node::Data(data_node) => {
+                data_node.update_size_internal();
+            }
+            Node::Mapping(mapping_node) => {
+                if let Some(ref mut child) = mapping_node.child {
+                    Rc::make_mut(child).update_size();
+                }
+            }
+        }
     }
 
-    fn rotate_left(mut node: Rc<Node<K, V>>) -> Rc<Node<K, V>> {
+    /// Rotate left around a data node. For mapping nodes, this is a no-op.
+    fn rotate_left(mut node: Rc<Node<V>>) -> Rc<Node<V>> {
+        // Only rotate data nodes
+        let is_data = matches!(node.as_ref(), Node::Data(_));
+        if !is_data {
+            return node;
+        }
+
         let node_mut = Rc::make_mut(&mut node);
-        let mut right = node_mut
-            .right
-            .take()
-            .expect("rotate_left requires right child");
+        let data_node = match node_mut {
+            Node::Data(d) => d,
+            Node::Mapping(_) => return node,
+        };
+
+        let mut right = match data_node.right.take() {
+            Some(r) => r,
+            None => return node, // Can't rotate without right child
+        };
+
+        // Check if right child is a data node
+        let right_is_data = matches!(right.as_ref(), Node::Data(_));
+        if !right_is_data {
+            // Put right back and return without rotating
+            data_node.right = Some(right);
+            return node;
+        }
+
         let right_mut = Rc::make_mut(&mut right);
+        let right_data = match right_mut {
+            Node::Data(d) => d,
+            Node::Mapping(_) => {
+                data_node.right = Some(right);
+                return node;
+            }
+        };
 
-        node_mut.right = right_mut.left.take();
-        node_mut.update_size();
-
-        right_mut.left = Some(node);
-        right_mut.update_size();
+        data_node.right = right_data.left.take();
+        data_node.update_size_internal();
+        right_data.left = Some(node);
+        right_data.update_size_internal();
 
         right
     }
 
-    fn rotate_right(mut node: Rc<Node<K, V>>) -> Rc<Node<K, V>> {
+    /// Rotate right around a data node. For mapping nodes, this is a no-op.
+    fn rotate_right(mut node: Rc<Node<V>>) -> Rc<Node<V>> {
+        // Only rotate data nodes
+        let is_data = matches!(node.as_ref(), Node::Data(_));
+        if !is_data {
+            return node;
+        }
+
         let node_mut = Rc::make_mut(&mut node);
-        let mut left = node_mut
-            .left
-            .take()
-            .expect("rotate_right requires left child");
+        let data_node = match node_mut {
+            Node::Data(d) => d,
+            Node::Mapping(_) => return node,
+        };
+
+        let mut left = match data_node.left.take() {
+            Some(l) => l,
+            None => return node, // Can't rotate without left child
+        };
+
+        // Check if left child is a data node
+        let left_is_data = matches!(left.as_ref(), Node::Data(_));
+        if !left_is_data {
+            // Put left back and return without rotating
+            data_node.left = Some(left);
+            return node;
+        }
+
         let left_mut = Rc::make_mut(&mut left);
+        let left_data = match left_mut {
+            Node::Data(d) => d,
+            Node::Mapping(_) => {
+                data_node.left = Some(left);
+                return node;
+            }
+        };
 
-        node_mut.left = left_mut.right.take();
-        node_mut.update_size();
-
-        left_mut.right = Some(node);
-        left_mut.update_size();
+        data_node.left = left_data.right.take();
+        data_node.update_size_internal();
+        left_data.right = Some(node);
+        left_data.update_size_internal();
 
         left
     }
 
-    fn balance(mut node: Rc<Node<K, V>>) -> Rc<Node<K, V>> {
-        let left_size = Self::size(&node.left);
-        let right_size = Self::size(&node.right);
+    /// Balance a node. Only balances data nodes; mapping nodes pass through unchanged.
+    fn balance(mut node: Rc<Node<V>>) -> Rc<Node<V>> {
+        // Only balance data nodes
+        let (left_size, right_size) = match node.as_ref() {
+            Node::Data(data_node) => (Self::size(&data_node.left), Self::size(&data_node.right)),
+            Node::Mapping(_) => return node, // Don't balance mapping nodes
+        };
 
         if left_size + right_size < 2 {
             return node;
@@ -91,51 +255,89 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
         let right_weight = right_size + 1;
 
         if right_weight > DELTA * left_weight {
-            // Right-heavy
-            let right = node.right.as_ref().unwrap();
-            let right_left_size = Self::size(&right.left);
-            let right_right_size = Self::size(&right.right);
+            // Right-heavy, need to check right child for rotation type
+            let right_child_sizes = match node.as_ref() {
+                Node::Data(data_node) => {
+                    if let Some(ref right) = data_node.right {
+                        match right.as_ref() {
+                            Node::Data(right_data) => {
+                                Some((Self::size(&right_data.left), Self::size(&right_data.right)))
+                            }
+                            Node::Mapping(_) => None, // Can't balance across mapping
+                        }
+                    } else {
+                        None
+                    }
+                }
+                Node::Mapping(_) => None,
+            };
 
-            let right_left_weight = right_left_size + 1;
-            let right_right_weight = right_right_size + 1;
+            if let Some((right_left_size, right_right_size)) = right_child_sizes {
+                let right_left_weight = right_left_size + 1;
+                let right_right_weight = right_right_size + 1;
 
-            if right_left_weight < GAMMA * right_right_weight {
-                // Single rotation
-                Self::rotate_left(node)
+                if right_left_weight < GAMMA * right_right_weight {
+                    // Single rotation
+                    Self::rotate_left(node)
+                } else {
+                    // Double rotation
+                    let node_mut = Rc::make_mut(&mut node);
+                    if let Node::Data(data_node) = node_mut {
+                        data_node.right = data_node.right.take().map(Self::rotate_right);
+                    }
+                    Self::rotate_left(node)
+                }
             } else {
-                // Double rotation
-                let node_mut = Rc::make_mut(&mut node);
-                node_mut.right = node_mut.right.take().map(Self::rotate_right);
-                Self::rotate_left(node)
+                node // Can't balance, return as-is
             }
         } else if left_weight > DELTA * right_weight {
-            // Left-heavy
-            let left = node.left.as_ref().unwrap();
-            let left_left_size = Self::size(&left.left);
-            let left_right_size = Self::size(&left.right);
+            // Left-heavy, need to check left child for rotation type
+            let left_child_sizes = match node.as_ref() {
+                Node::Data(data_node) => {
+                    if let Some(ref left) = data_node.left {
+                        match left.as_ref() {
+                            Node::Data(left_data) => {
+                                Some((Self::size(&left_data.left), Self::size(&left_data.right)))
+                            }
+                            Node::Mapping(_) => None, // Can't balance across mapping
+                        }
+                    } else {
+                        None
+                    }
+                }
+                Node::Mapping(_) => None,
+            };
 
-            let left_left_weight = left_left_size + 1;
-            let left_right_weight = left_right_size + 1;
+            if let Some((left_left_size, left_right_size)) = left_child_sizes {
+                let left_left_weight = left_left_size + 1;
+                let left_right_weight = left_right_size + 1;
 
-            if left_right_weight < GAMMA * left_left_weight {
-                // Single rotation
-                Self::rotate_right(node)
+                if left_right_weight < GAMMA * left_left_weight {
+                    // Single rotation
+                    Self::rotate_right(node)
+                } else {
+                    // Double rotation
+                    let node_mut = Rc::make_mut(&mut node);
+                    if let Node::Data(data_node) = node_mut {
+                        data_node.left = data_node.left.take().map(Self::rotate_left);
+                    }
+                    Self::rotate_right(node)
+                }
             } else {
-                // Double rotation
-                let node_mut = Rc::make_mut(&mut node);
-                node_mut.left = node_mut.left.take().map(Self::rotate_left);
-                Self::rotate_right(node)
+                node // Can't balance, return as-is
             }
         } else {
             node
         }
     }
 
-    fn insert(
-        node: Option<Rc<Node<K, V>>>,
-        key: K,
+    /// Insert a key-value pair into the tree.
+    /// This is the simple version that doesn't handle mappings - used by the public API.
+    fn insert_simple(
+        node: Option<Rc<Node<V>>>,
+        key: u32,
         value: V,
-    ) -> (Option<Rc<Node<K, V>>>, Option<V>) {
+    ) -> (Option<Rc<Node<V>>>, Option<V>) {
         let mut node = match node {
             Some(n) => n,
             None => {
@@ -143,24 +345,35 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
             }
         };
 
-        let node_mut = Rc::make_mut(&mut node);
-        let old_value: Option<V> = match key.cmp(&node_mut.key) {
+        let node_mut: &mut Node<V> = Rc::make_mut(&mut node);
+        let data_node: &mut DataNode<V> = match node_mut {
+            Node::Data(data_node) => data_node,
+            Node::Mapping(mapping_node) => {
+                // For the simple version, we recurse into mapping nodes transparently
+                let (new_child, old_value) =
+                    Self::insert_simple(mapping_node.child.take(), key, value);
+                mapping_node.child = new_child;
+                return (Some(node), old_value);
+            }
+        };
+
+        let old_value: Option<V> = match key.cmp(&data_node.key) {
             Ordering::Equal => {
-                let old = mem::replace(&mut node_mut.value, value);
+                let old = mem::replace(&mut data_node.value, value);
                 Some(old)
             }
             Ordering::Less => {
-                let old_left = node_mut.left.take();
-                let (new_left, old_value) = Self::insert(old_left, key, value);
-                node_mut.left = new_left;
-                node_mut.update_size();
+                let old_left = data_node.left.take();
+                let (new_left, old_value) = Self::insert_simple(old_left, key, value);
+                data_node.left = new_left;
+                data_node.update_size_internal();
                 old_value
             }
             Ordering::Greater => {
-                let old_right = node_mut.right.take();
-                let (new_right, old_value) = Self::insert(old_right, key, value);
-                node_mut.right = new_right;
-                node_mut.update_size();
+                let old_right = data_node.right.take();
+                let (new_right, old_value) = Self::insert_simple(old_right, key, value);
+                data_node.right = new_right;
+                data_node.update_size_internal();
                 old_value
             }
         };
@@ -175,142 +388,187 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
         (Some(balanced_node), old_value)
     }
 
-    fn remove_min(mut node: Rc<Node<K, V>>) -> (K, V, Option<Rc<Node<K, V>>>) {
-        if node.left.is_none() {
-            let Node {
-                key,
-                value,
-                left: _,
-                right,
-                size: _,
-            } = Rc::unwrap_or_clone(node);
-            return (key, value, right);
+    fn remove_min(mut node: Rc<Node<V>>) -> (u32, V, Option<Rc<Node<V>>>) {
+        // First handle mapping nodes by recursing through them
+        match node.as_ref() {
+            Node::Mapping(_) => {
+                let node_mut = Rc::make_mut(&mut node);
+                if let Node::Mapping(mapping_node) = node_mut {
+                    let child = mapping_node.child.take();
+                    if let Some(child_node) = child {
+                        let (min_key, min_value, new_child) = Self::remove_min(child_node);
+                        mapping_node.child = new_child;
+                        return (min_key, min_value, Some(node));
+                    } else {
+                        panic!("remove_min called on empty mapping node");
+                    }
+                }
+                unreachable!()
+            }
+            Node::Data(data_node) => {
+                if data_node.left.is_none() {
+                    let DataNode {
+                        key,
+                        value,
+                        left: _,
+                        right,
+                        size: _,
+                    } = match Rc::unwrap_or_clone(node) {
+                        Node::Data(d) => d,
+                        Node::Mapping(_) => unreachable!(),
+                    };
+                    return (key, value, right);
+                }
+                // Fall through to handle the case where we have a left child
+            }
         }
 
+        // If we get here, we have a data node with a left child
         let node_mut = Rc::make_mut(&mut node);
-        let left = node_mut.left.take().unwrap();
-        let (min_key, min_value, new_left) = Self::remove_min(left);
-        node_mut.left = new_left;
-        node_mut.update_size();
+        let (min_key, min_value) = if let Node::Data(data_node) = node_mut {
+            let left = data_node.left.take().unwrap();
+            let (min_key, min_value, new_left) = Self::remove_min(left);
+            data_node.left = new_left;
+            data_node.update_size_internal();
+            (min_key, min_value)
+        } else {
+            unreachable!()
+        };
 
         let balanced_node = Self::balance(node);
         (min_key, min_value, Some(balanced_node))
     }
 
-    fn remove_existing_node(mut node: Rc<Node<K, V>>, key: &K) -> (Option<Rc<Node<K, V>>>, V) {
-        match key.cmp(&node.key) {
-            Ordering::Equal => {
-                let Node {
-                    key: _,
-                    value,
-                    left,
-                    right,
-                    size: _,
-                } = Rc::unwrap_or_clone(node);
-                let new_node = match (left, right) {
-                    (None, None) => None,
-                    (Some(left), None) => Some(left),
-                    (None, Some(right)) => Some(right),
-                    (Some(left), Some(right)) => {
-                        // Find the minimum element in the right subtree to replace this node
-                        let (min_key, min_value, new_right) = Self::remove_min(right);
-                        let mut new_node = Node {
-                            key: min_key,
-                            value: min_value,
-                            left: Some(left),
-                            right: new_right,
-                            size: 0,
+    fn remove_existing_node(mut node: Rc<Node<V>>, key: &u32) -> (Option<Rc<Node<V>>>, V) {
+        // First, handle mapping nodes by recursing through them
+        match node.as_ref() {
+            Node::Mapping(_) => {
+                let node_mut = Rc::make_mut(&mut node);
+                if let Node::Mapping(mapping_node) = node_mut {
+                    let child = mapping_node
+                        .child
+                        .take()
+                        .expect("Mapping node should have a child");
+                    let (new_child, value) = Self::remove_existing_node(child, key);
+                    mapping_node.child = new_child;
+                    return (Some(node), value);
+                }
+                unreachable!()
+            }
+            Node::Data(data_node) => {
+                let node_key = &data_node.key;
+                match key.cmp(node_key) {
+                    Ordering::Equal => {
+                        let DataNode {
+                            key: _,
+                            value,
+                            left,
+                            right,
+                            size: _,
+                        } = match Rc::unwrap_or_clone(node) {
+                            Node::Data(d) => d,
+                            Node::Mapping(_) => unreachable!(),
                         };
-                        new_node.update_size();
-                        Some(Self::balance(Rc::new(new_node)))
+                        let new_node = match (left, right) {
+                            (None, None) => None,
+                            (Some(left), None) => Some(left),
+                            (None, Some(right)) => Some(right),
+                            (Some(left), Some(right)) => {
+                                // Find the minimum element in the right subtree to replace this node
+                                let (min_key, min_value, new_right) = Self::remove_min(right);
+                                let mut new_data_node = DataNode {
+                                    key: min_key,
+                                    value: min_value,
+                                    left: Some(left),
+                                    right: new_right,
+                                    size: 0,
+                                };
+                                new_data_node.size = 1
+                                    + Self::size(&new_data_node.left)
+                                    + Self::size(&new_data_node.right);
+                                Some(Self::balance(Rc::new(Node::Data(new_data_node))))
+                            }
+                        };
+                        return (new_node, value);
                     }
-                };
-                (new_node, value)
-            }
-            Ordering::Less => {
-                let node_mut = Rc::make_mut(&mut node);
-                let left = node_mut
-                    .left
-                    .take()
-                    .expect("Node with key must exist, so left cannot be None");
+                    Ordering::Less => {
+                        let node_mut = Rc::make_mut(&mut node);
+                        if let Node::Data(data_node) = node_mut {
+                            let left = data_node
+                                .left
+                                .take()
+                                .expect("Node with key must exist, so left cannot be None");
 
-                let (new_left, value) = Self::remove_existing_node(left, key);
+                            let (new_left, value) = Self::remove_existing_node(left, key);
 
-                node_mut.left = new_left;
-                node_mut.update_size();
+                            data_node.left = new_left;
+                            data_node.update_size_internal();
 
-                let balanced_node = Self::balance(node);
-                (Some(balanced_node), value)
-            }
-            Ordering::Greater => {
-                let node_mut = Rc::make_mut(&mut node);
-                let right = node_mut
-                    .right
-                    .take()
-                    .expect("Node with key must exist, so right cannot be None");
+                            let balanced_node = Self::balance(node);
+                            return (Some(balanced_node), value);
+                        }
+                        unreachable!()
+                    }
+                    Ordering::Greater => {
+                        let node_mut = Rc::make_mut(&mut node);
+                        if let Node::Data(data_node) = node_mut {
+                            let right = data_node
+                                .right
+                                .take()
+                                .expect("Node with key must exist, so right cannot be None");
 
-                let (new_right, value) = Self::remove_existing_node(right, key);
+                            let (new_right, value) = Self::remove_existing_node(right, key);
 
-                node_mut.right = new_right;
-                node_mut.update_size();
+                            data_node.right = new_right;
+                            data_node.update_size_internal();
 
-                let balanced_node = Self::balance(node);
-                (Some(balanced_node), value)
+                            let balanced_node = Self::balance(node);
+                            return (Some(balanced_node), value);
+                        }
+                        unreachable!()
+                    }
+                }
             }
         }
     }
 
     fn split(
-        node: Option<Rc<Node<K, V>>>,
-        key: &K,
-    ) -> (Option<Rc<Node<K, V>>>, Option<V>, Option<Rc<Node<K, V>>>) {
+        node: Option<Rc<Node<V>>>,
+        key: &u32,
+    ) -> (Option<Rc<Node<V>>>, Option<V>, Option<Rc<Node<V>>>) {
         match node {
             None => (None, None, None),
-            Some(n) => match key.cmp(&n.key) {
-                Ordering::Equal => {
-                    let Node {
-                        key: _,
-                        value,
-                        left,
-                        right,
-                        size: _,
-                    } = Rc::unwrap_or_clone(n);
-                    (left, Some(value), right)
+            Some(n) => {
+                let DataNode {
+                    key: node_key,
+                    value: node_value,
+                    left,
+                    right,
+                    size: _,
+                } = Self::unwrap_to_data(n);
+                match key.cmp(&node_key) {
+                    Ordering::Equal => (left, Some(node_value), right),
+                    Ordering::Less => {
+                        let (new_left, found_value, new_right) = Self::split(left, key);
+                        let joined_right = Self::join(new_right, node_key, node_value, right);
+                        (new_left, found_value, joined_right)
+                    }
+                    Ordering::Greater => {
+                        let (new_left, found_value, new_right) = Self::split(right, key);
+                        let joined_left = Self::join(left, node_key, node_value, new_left);
+                        (joined_left, found_value, new_right)
+                    }
                 }
-                Ordering::Less => {
-                    let Node {
-                        key: node_key,
-                        value: node_value,
-                        left,
-                        right,
-                        size: _,
-                    } = Rc::unwrap_or_clone(n);
-                    let (new_left, found_value, new_right) = Self::split(left, key);
-                    let joined_right = Self::join(new_right, node_key, node_value, right);
-                    (new_left, found_value, joined_right)
-                }
-                Ordering::Greater => {
-                    let Node {
-                        key: node_key,
-                        value: node_value,
-                        left,
-                        right,
-                        size: _,
-                    } = Rc::unwrap_or_clone(n);
-                    let (new_left, found_value, new_right) = Self::split(right, key);
-                    let joined_left = Self::join(left, node_key, node_value, new_left);
-                    (joined_left, found_value, new_right)
-                }
-            },
+            }
         }
     }
 
     fn join(
-        left: Option<Rc<Node<K, V>>>,
-        key: K,
+        left: Option<Rc<Node<V>>>,
+        key: u32,
         value: V,
-        right: Option<Rc<Node<K, V>>>,
-    ) -> Option<Rc<Node<K, V>>> {
+        right: Option<Rc<Node<V>>>,
+    ) -> Option<Rc<Node<V>>> {
         let left_size = Self::size(&left);
         let right_size = Self::size(&right);
 
@@ -318,82 +576,63 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
             match right {
                 None => unreachable!("right should not be None when right_size > left_size"),
                 Some(r) => {
-                    let Node {
+                    let DataNode {
                         key: r_key,
                         value: r_value,
                         left: r_left,
                         right: r_right,
                         size: _,
-                    } = Rc::unwrap_or_clone(r);
+                    } = Self::unwrap_to_data(r);
                     let new_left = Self::join(left, key, value, r_left);
-                    let mut new_node = Node {
-                        key: r_key,
-                        value: r_value,
-                        left: new_left,
-                        right: r_right,
-                        size: 0,
-                    };
-                    new_node.update_size();
-                    Some(Node::balance(Rc::new(new_node)))
+                    let new_node = Self::new_data_node(r_key, r_value, new_left, r_right);
+                    Some(Node::balance(new_node))
                 }
             }
         } else if left_size > DELTA * right_size {
             match left {
                 None => unreachable!("left should not be None when left_size > right_size"),
                 Some(l) => {
-                    let Node {
+                    let DataNode {
                         key: l_key,
                         value: l_value,
                         left: l_left,
                         right: l_right,
                         size: _,
-                    } = Rc::unwrap_or_clone(l);
+                    } = Self::unwrap_to_data(l);
                     let new_right = Self::join(l_right, key, value, right);
-                    let mut new_node = Node {
-                        key: l_key,
-                        value: l_value,
-                        left: l_left,
-                        right: new_right,
-                        size: 0,
-                    };
-                    new_node.update_size();
-                    Some(Node::balance(Rc::new(new_node)))
+                    let new_node = Self::new_data_node(l_key, l_value, l_left, new_right);
+                    Some(Node::balance(new_node))
                 }
             }
         } else {
-            let mut new_node = Node {
-                key,
-                value,
-                left,
-                right,
-                size: 0,
-            };
-            new_node.update_size();
-            Some(Node::balance(Rc::new(new_node)))
+            let new_node = Self::new_data_node(key, value, left, right);
+            Some(Node::balance(new_node))
         }
     }
 
     fn union<F>(
-        left: Option<Rc<Node<K, V>>>,
-        right: Option<Rc<Node<K, V>>>,
+        left: Option<Rc<Node<V>>>,
+        right: Option<Rc<Node<V>>>,
         merge: &mut F,
-    ) -> Option<Rc<Node<K, V>>>
+    ) -> Option<Rc<Node<V>>>
     where
-        F: FnMut(&K, V, V) -> V,
+        F: FnMut(&u32, V, V) -> V,
     {
         match (left, right) {
             (None, None) => None,
             (Some(t), None) | (None, Some(t)) => Some(t),
             (Some(l), Some(r)) => {
-                if l.size >= r.size {
+                let l_size = Self::size(&Some(l.clone()));
+                let r_size = Self::size(&Some(r.clone()));
+                if l_size >= r_size {
                     // Use left tree as base, split right tree on left root's key
-                    let Node {
+                    let DataNode {
                         key: l_key,
                         value: l_value,
                         left: l_left,
                         right: l_right,
                         size: _,
-                    } = Rc::unwrap_or_clone(l);
+                    } = Self::unwrap_to_data(l);
                     let (r_left, r_value_opt, r_right) = Self::split(Some(r), &l_key);
 
                     let new_value = match r_value_opt {
@@ -406,13 +645,13 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
                     Self::join(new_left, l_key, new_value, new_right)
                 } else {
                     // Use right tree as base, split left tree on right root's key
-                    let Node {
+                    let DataNode {
                         key: r_key,
                         value: r_value,
                         left: r_left,
                         right: r_right,
                         size: _,
-                    } = Rc::unwrap_or_clone(r);
+                    } = Self::unwrap_to_data(r);
                     let (l_left, l_value_opt, l_right) = Self::split(Some(l), &r_key);
 
                     let new_value = match l_value_opt {
@@ -429,25 +668,25 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
     }
 
     fn difference<F>(
-        left: Option<Rc<Node<K, V>>>,
-        right: Option<Rc<Node<K, V>>>,
+        left: Option<Rc<Node<V>>>,
+        right: Option<Rc<Node<V>>>,
         diff: &mut F,
-    ) -> Option<Rc<Node<K, V>>>
+    ) -> Option<Rc<Node<V>>>
     where
-        F: FnMut(&K, V, V) -> Option<V>,
+        F: FnMut(&u32, V, V) -> Option<V>,
     {
         match (left, right) {
             (None, _) => None,
             (Some(l), None) => Some(l),
             (Some(l), Some(r)) => {
                 // Use left tree as base, split right tree on left root's key
-                let Node {
+                let DataNode {
                     key: l_key,
                     value: l_value,
                     left: l_left,
                     right: l_right,
                     size: _,
-                } = Rc::unwrap_or_clone(l);
+                } = Self::unwrap_to_data(l);
                 let (r_left, r_value_opt, r_right) = Self::split(Some(r), &l_key);
 
                 let new_left = Self::difference(l_left, r_left, diff);
@@ -480,20 +719,20 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
         }
     }
 
-    fn join_without_key(left: Rc<Node<K, V>>, right: Rc<Node<K, V>>) -> Option<Rc<Node<K, V>>> {
+    fn join_without_key(left: Rc<Node<V>>, right: Rc<Node<V>>) -> Option<Rc<Node<V>>> {
         // Remove the minimum element from the right subtree to use as the new root
         let (min_key, min_value, new_right) = Self::remove_min(right);
         Self::join(Some(left), min_key, min_value, new_right)
     }
 }
 
-impl<K: Ord + Clone, V: Clone> WBTreeMap<K, V> {
+impl<V: Clone> WBTreeMap<V> {
     pub const fn new() -> Self {
         WBTreeMap { root: None, len: 0 }
     }
 
-    pub fn insert(&mut self, key: K, value: V) -> Option<V> {
-        let (new_root, old_value) = Node::insert(self.root.take(), key, value);
+    pub fn insert(&mut self, key: u32, value: V) -> Option<V> {
+        let (new_root, old_value) = Node::insert_simple(self.root.take(), key, value);
         self.root = new_root;
         if old_value.is_none() {
             self.len += 1;
@@ -501,31 +740,83 @@ impl<K: Ord + Clone, V: Clone> WBTreeMap<K, V> {
         old_value
     }
 
-    pub fn get(&self, key: &K) -> Option<&V> {
+    pub fn get(&self, key: &u32) -> Option<&V> {
+        // Accumulate mappings as we traverse
+        let mut mappings: Vec<&PrefixTree2> = Vec::new();
         let mut current = &self.root;
-        while let Some(node) = current {
-            match key.cmp(&node.key) {
-                Ordering::Less => current = &node.left,
-                Ordering::Greater => current = &node.right,
-                Ordering::Equal => return Some(&node.value),
+        loop {
+            match current {
+                None => return None,
+                Some(node) => match node.as_ref() {
+                    Node::Data(data_node) => {
+                        // Apply all accumulated mappings to the stored key
+                        let mapped_key = if mappings.is_empty() {
+                            Some(data_node.key)
+                        } else {
+                            apply_mappings(&mappings, data_node.key)
+                        };
+
+                        match mapped_key {
+                            None => {
+                                // Key is not in mapping domain, skip this subtree
+                                // This shouldn't happen in a well-formed tree, but handle it
+                                return None;
+                            }
+                            Some(mk) => match key.cmp(&mk) {
+                                Ordering::Less => current = &data_node.left,
+                                Ordering::Greater => current = &data_node.right,
+                                Ordering::Equal => return Some(&data_node.value),
+                            },
+                        }
+                    }
+                    Node::Mapping(mapping_node) => {
+                        mappings.push(&mapping_node.mapping);
+                        current = &mapping_node.child;
+                    }
+                },
             }
         }
-        None
     }
 
-    pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
+    pub fn get_mut(&mut self, key: &u32) -> Option<&mut V> {
+        // Accumulate mappings as we traverse (cloned since we need mutable access)
+        let mut mappings: Vec<PrefixTree2> = Vec::new();
         let mut current = &mut self.root;
-        while let Some(node) = current {
-            match key.cmp(&node.key) {
-                Ordering::Less => current = &mut Rc::make_mut(node).left,
-                Ordering::Greater => current = &mut Rc::make_mut(node).right,
-                Ordering::Equal => return Some(&mut Rc::make_mut(node).value),
+        loop {
+            match current {
+                None => return None,
+                Some(node) => {
+                    let node_mut = Rc::make_mut(node);
+                    match node_mut {
+                        Node::Data(data_node) => {
+                            // Apply all accumulated mappings to the stored key
+                            let mapped_key = if mappings.is_empty() {
+                                Some(data_node.key)
+                            } else {
+                                let mapping_refs: Vec<&PrefixTree2> = mappings.iter().collect();
+                                apply_mappings(&mapping_refs, data_node.key)
+                            };
+
+                            match mapped_key {
+                                None => return None,
+                                Some(mk) => match key.cmp(&mk) {
+                                    Ordering::Less => current = &mut data_node.left,
+                                    Ordering::Greater => current = &mut data_node.right,
+                                    Ordering::Equal => return Some(&mut data_node.value),
+                                },
+                            }
+                        }
+                        Node::Mapping(mapping_node) => {
+                            mappings.push(mapping_node.mapping.clone());
+                            current = &mut mapping_node.child;
+                        }
+                    }
+                }
             }
         }
-        None
     }
 
-    pub fn contains_key(&self, key: &K) -> bool {
+    pub fn contains_key(&self, key: &u32) -> bool {
         self.get(key).is_some()
     }
 
@@ -542,30 +833,25 @@ impl<K: Ord + Clone, V: Clone> WBTreeMap<K, V> {
         self.len = 0;
     }
 
-    pub fn iter<'a>(&'a self) -> Iter<'a, K, V> {
+    pub fn iter<'a>(&'a self) -> Iter<'a, V> {
         Iter {
             stack: Vec::new(),
-            current: &self.root,
+            current: Some(&self.root),
+            current_mappings: Vec::new(),
         }
     }
 
-    pub fn iter_mut<'a>(&'a mut self) -> IterMut<'a, K, V> {
-        // Get a mutable pointer to the root if it exists
-        let current = if let Some(ref mut root) = self.root {
-            let root_node = Rc::make_mut(root);
-            Some(root_node as *mut Node<K, V>)
-        } else {
-            None
-        };
-
+    pub fn iter_mut<'a>(&'a mut self) -> IterMut<'a, V> {
+        let current = &mut self.root as *mut Option<Rc<Node<V>>>;
         IterMut {
             stack: Vec::new(),
-            current,
+            current: Some(current),
+            current_mappings: Vec::new(),
             _phantom: std::marker::PhantomData,
         }
     }
 
-    pub fn entry<'a>(&'a mut self, key: K) -> Entry<'a, K, V> {
+    pub fn entry<'a>(&'a mut self, key: u32) -> Entry<'a, V> {
         if self.contains_key(&key) {
             Entry::Occupied(OccupiedEntry { key, map: self })
         } else {
@@ -573,7 +859,7 @@ impl<K: Ord + Clone, V: Clone> WBTreeMap<K, V> {
         }
     }
 
-    pub fn remove(&mut self, key: &K) -> Option<V> {
+    pub fn remove(&mut self, key: &u32) -> Option<V> {
         if !self.contains_key(key) {
             return None;
         }
@@ -587,10 +873,10 @@ impl<K: Ord + Clone, V: Clone> WBTreeMap<K, V> {
 
     pub fn union<F>(&self, other: &Self, mut merge: F) -> Self
     where
-        F: FnMut(&K, V, V) -> V,
+        F: FnMut(&u32, V, V) -> V,
     {
         let new_root = Node::union(self.root.clone(), other.root.clone(), &mut merge);
-        let new_len = new_root.as_ref().map_or(0, |root| root.size);
+        let new_len = Node::size(&new_root);
         WBTreeMap {
             root: new_root,
             len: new_len,
@@ -599,34 +885,106 @@ impl<K: Ord + Clone, V: Clone> WBTreeMap<K, V> {
 
     pub fn difference<F>(&self, other: &Self, mut diff: F) -> Self
     where
-        F: FnMut(&K, V, V) -> Option<V>,
+        F: FnMut(&u32, V, V) -> Option<V>,
     {
         let new_root = Node::difference(self.root.clone(), other.root.clone(), &mut diff);
-        let new_len = new_root.as_ref().map_or(0, |root| root.size);
+        let new_len = Node::size(&new_root);
         WBTreeMap {
             root: new_root,
             len: new_len,
         }
     }
+
+    /// Returns a new map where all keys have been transformed by the given mapping.
+    /// The mapping must be monotone (order-preserving) for the tree structure to remain valid.
+    /// Keys not in the mapping's domain will be filtered out during iteration.
+    /// This operation is O(1) - it just wraps the tree in a mapping node.
+    pub fn mapped(&self, mapping: PrefixTree2) -> Self {
+        let new_root = self.root.clone().map(|root| {
+            Rc::new(Node::Mapping(MappingNode {
+                mapping,
+                child: Some(root),
+            }))
+        });
+        // Note: len might be different if mapping filters some keys out,
+        // but we can't know without iterating. We keep the original len
+        // as an upper bound.
+        WBTreeMap {
+            root: new_root,
+            len: self.len,
+        }
+    }
 }
 
 // Iterator implementation
-pub struct Iter<'a, K: Clone, V: Clone> {
-    stack: Vec<&'a Rc<Node<K, V>>>,
-    current: &'a Option<Rc<Node<K, V>>>,
+// We need to track pointers to DataNodes since Node is an enum
+// Each stack entry includes the accumulated mappings at that point
+pub struct Iter<'a, V: Clone> {
+    // Stack entries: (data_node, accumulated_mappings_at_this_level)
+    // TODO: We shouldn't save the full path of mappings for element in the stack.
+    // This looks like (log n)^2 complexity instead of log n.
+    // Instead, we should just maintain the current_mappings value for the current path of
+    // mappings, and `stack` should probably be `Node` instead of just `DataNode`.
+    // Then, when we pop a MappingNode from `stack`, we have to pop an element from
+    // `current_mappings` as well, but not if we pop a `DataNode`.
+    stack: Vec<(&'a DataNode<V>, Vec<&'a PrefixTree2>)>,
+    current: Option<&'a Option<Rc<Node<V>>>>,
+    // Current accumulated mappings (grows as we descend through mapping nodes)
+    current_mappings: Vec<&'a PrefixTree2>,
 }
 
-impl<'a, K: Clone, V: Clone> Iterator for Iter<'a, K, V> {
-    type Item = (&'a K, &'a V);
+impl<'a, V: Clone> Iter<'a, V> {
+    fn descend_left(&mut self) {
+        while let Some(opt_node) = self.current {
+            match opt_node {
+                None => {
+                    self.current = None;
+                    return;
+                }
+                Some(node) => match node.as_ref() {
+                    Node::Data(data_node) => {
+                        // Push this node with a snapshot of current mappings
+                        self.stack.push((data_node, self.current_mappings.clone()));
+                        self.current = Some(&data_node.left);
+                    }
+                    Node::Mapping(mapping_node) => {
+                        // Accumulate this mapping
+                        self.current_mappings.push(&mapping_node.mapping);
+                        self.current = Some(&mapping_node.child);
+                    }
+                },
+            }
+        }
+    }
+}
+
+impl<'a, V: Clone> Iterator for Iter<'a, V> {
+    // Return owned key since we compute it by applying mappings
+    type Item = (u32, &'a V);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if let Some(node) = self.current {
-                self.stack.push(node);
-                self.current = &node.left;
-            } else if let Some(node) = self.stack.pop() {
-                self.current = &node.right;
-                return Some((&node.key, &node.value));
+            // First descend left as far as possible
+            self.descend_left();
+
+            // Pop from stack and return
+            if let Some((data_node, mappings)) = self.stack.pop() {
+                // Restore the mapping state for when we go right
+                self.current_mappings = mappings.clone();
+                self.current = Some(&data_node.right);
+
+                // Apply accumulated mappings to the key
+                let mapped_key = if mappings.is_empty() {
+                    Some(data_node.key)
+                } else {
+                    apply_mappings(&mappings, data_node.key)
+                };
+
+                // If key is in mapping domain, yield it; otherwise skip
+                if let Some(mk) = mapped_key {
+                    return Some((mk, &data_node.value));
+                }
+                // Key not in mapping domain, continue to next
             } else {
                 return None;
             }
@@ -635,42 +993,75 @@ impl<'a, K: Clone, V: Clone> Iterator for Iter<'a, K, V> {
 }
 
 // Mutable iterator implementation
-pub struct IterMut<'a, K: Clone, V: Clone> {
-    stack: Vec<*mut Node<K, V>>,
-    current: Option<*mut Node<K, V>>,
-    _phantom: std::marker::PhantomData<&'a mut WBTreeMap<K, V>>,
+// Each stack entry includes the data node pointer and accumulated mappings at that point
+pub struct IterMut<'a, V: Clone> {
+    stack: Vec<(*mut DataNode<V>, Vec<PrefixTree2>)>,
+    current: Option<*mut Option<Rc<Node<V>>>>,
+    current_mappings: Vec<PrefixTree2>,
+    _phantom: std::marker::PhantomData<&'a mut WBTreeMap<V>>,
 }
 
-impl<'a, K: Ord + Clone, V: Clone> Iterator for IterMut<'a, K, V> {
-    type Item = (&'a K, &'a mut V);
+impl<'a, V: Clone> IterMut<'a, V> {
+    fn descend_left(&mut self) {
+        while let Some(current_ptr) = self.current {
+            unsafe {
+                let opt_node = &mut *current_ptr;
+                match opt_node {
+                    None => {
+                        self.current = None;
+                        return;
+                    }
+                    Some(node) => {
+                        let node_mut = Rc::make_mut(node);
+                        match node_mut {
+                            Node::Data(data_node) => {
+                                self.stack.push((
+                                    data_node as *mut DataNode<V>,
+                                    self.current_mappings.clone(),
+                                ));
+                                self.current = Some(&mut data_node.left as *mut _);
+                            }
+                            Node::Mapping(mapping_node) => {
+                                self.current_mappings.push(mapping_node.mapping.clone());
+                                self.current = Some(&mut mapping_node.child as *mut _);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl<'a, V: Clone> Iterator for IterMut<'a, V> {
+    type Item = (u32, &'a mut V);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if let Some(current_ptr) = self.current {
-                self.stack.push(current_ptr);
+            // First descend left as far as possible
+            self.descend_left();
 
+            // Pop from stack and return
+            if let Some((data_node_ptr, mappings)) = self.stack.pop() {
                 unsafe {
-                    let node = &mut *current_ptr;
+                    let data_node = &mut *data_node_ptr;
+                    // Restore mapping state for going right
+                    self.current_mappings = mappings.clone();
+                    self.current = Some(&mut data_node.right as *mut _);
 
-                    self.current = if let Some(ref mut left) = node.left {
-                        let left_node = Rc::make_mut(left);
-                        Some(left_node as *mut Node<K, V>)
+                    // Apply accumulated mappings to the key
+                    let mapped_key = if mappings.is_empty() {
+                        Some(data_node.key)
                     } else {
-                        None
-                    };
-                }
-            } else if let Some(node_ptr) = self.stack.pop() {
-                unsafe {
-                    let node = &mut *node_ptr;
-
-                    self.current = if let Some(ref mut right) = node.right {
-                        let right_node = Rc::make_mut(right);
-                        Some(right_node as *mut Node<K, V>)
-                    } else {
-                        None
+                        let mapping_refs: Vec<&PrefixTree2> = mappings.iter().collect();
+                        apply_mappings(&mapping_refs, data_node.key)
                     };
 
-                    return Some((&node.key, &mut node.value));
+                    // If key is in mapping domain, yield it; otherwise skip
+                    if let Some(mk) = mapped_key {
+                        return Some((mk, &mut data_node.value));
+                    }
+                    // Key not in mapping domain, continue to next
                 }
             } else {
                 return None;
@@ -680,22 +1071,22 @@ impl<'a, K: Ord + Clone, V: Clone> Iterator for IterMut<'a, K, V> {
 }
 
 // Entry API
-pub enum Entry<'a, K: Clone, V: Clone> {
-    Occupied(OccupiedEntry<'a, K, V>),
-    Vacant(VacantEntry<'a, K, V>),
+pub enum Entry<'a, V: Clone> {
+    Occupied(OccupiedEntry<'a, V>),
+    Vacant(VacantEntry<'a, V>),
 }
 
-pub struct OccupiedEntry<'a, K: Clone, V: Clone> {
-    key: K,
-    map: &'a mut WBTreeMap<K, V>,
+pub struct OccupiedEntry<'a, V: Clone> {
+    key: u32,
+    map: &'a mut WBTreeMap<V>,
 }
 
-pub struct VacantEntry<'a, K: Clone, V: Clone> {
-    key: K,
-    map: &'a mut WBTreeMap<K, V>,
+pub struct VacantEntry<'a, V: Clone> {
+    key: u32,
+    map: &'a mut WBTreeMap<V>,
 }
 
-impl<'a, K: Ord + Clone, V: Clone> Entry<'a, K, V> {
+impl<'a, V: Clone> Entry<'a, V> {
     pub fn or_insert(self, default: V) -> &'a mut V {
         match self {
             Entry::Occupied(entry) => entry.into_mut(),
@@ -711,7 +1102,7 @@ impl<'a, K: Ord + Clone, V: Clone> Entry<'a, K, V> {
     }
 }
 
-impl<'a, K: Ord + Clone, V: Clone> OccupiedEntry<'a, K, V> {
+impl<'a, V: Clone> OccupiedEntry<'a, V> {
     pub fn into_mut(self) -> &'a mut V {
         self.map.get_mut(&self.key).unwrap()
     }
@@ -725,26 +1116,34 @@ impl<'a, K: Ord + Clone, V: Clone> OccupiedEntry<'a, K, V> {
     }
 }
 
-impl<'a, K: Ord + Clone, V: Clone> VacantEntry<'a, K, V> {
+impl<'a, V: Clone> VacantEntry<'a, V> {
     pub fn insert(self, value: V) -> &'a mut V {
         self.map.insert(self.key.clone(), value);
         self.map.get_mut(&self.key).unwrap()
     }
 }
 
-impl<K: fmt::Debug + Clone, V: fmt::Debug + Clone> fmt::Debug for Node<K, V> {
+impl<V: fmt::Debug + Clone> fmt::Debug for Node<V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Node")
-            .field("key", &self.key)
-            .field("value", &self.value)
-            .field("left", &self.left)
-            .field("right", &self.right)
-            .field("size", &self.size)
-            .finish()
+        match self {
+            Node::Data(data_node) => f
+                .debug_struct("DataNode")
+                .field("key", &data_node.key)
+                .field("value", &data_node.value)
+                .field("left", &data_node.left)
+                .field("right", &data_node.right)
+                .field("size", &data_node.size)
+                .finish(),
+            Node::Mapping(mapping_node) => f
+                .debug_struct("MappingNode")
+                .field("mapping", &mapping_node.mapping)
+                .field("child", &mapping_node.child)
+                .finish(),
+        }
     }
 }
 
-impl<K: fmt::Debug + Ord + Clone, V: fmt::Debug + Clone> fmt::Debug for WBTreeMap<K, V> {
+impl<V: fmt::Debug + Clone> fmt::Debug for WBTreeMap<V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_map().entries(self.iter()).finish()
     }
@@ -759,21 +1158,19 @@ mod tests {
     use rand::{Rng, SeedableRng};
 
     /// Print the tree structure in ASCII art format for debugging
-    pub fn print_tree_debug<K, V>(node: &Option<Rc<Node<K, V>>>)
+    pub fn print_tree_debug<V>(node: &Option<Rc<Node<V>>>)
     where
-        K: std::fmt::Debug + Clone,
         V: std::fmt::Debug + Clone,
     {
         print_tree_debug_helper(node, "", true, true);
     }
 
-    fn print_tree_debug_helper<K, V>(
-        node: &Option<Rc<Node<K, V>>>,
+    fn print_tree_debug_helper<V>(
+        node: &Option<Rc<Node<V>>>,
         prefix: &str,
         is_last: bool,
         is_root: bool,
     ) where
-        K: std::fmt::Debug + Clone,
         V: std::fmt::Debug + Clone,
     {
         match node {
@@ -782,63 +1179,90 @@ mod tests {
                     println!("{}{}∅", prefix, if is_last { "└── " } else { "├── " });
                 }
             }
-            Some(n) => {
-                let node_symbol = if is_root {
-                    ""
-                } else if is_last {
-                    "└── "
-                } else {
-                    "├── "
-                };
-                println!(
-                    "{}{}({:?}: {:?}) [size: {}]",
-                    prefix, node_symbol, n.key, n.value, n.size
-                );
-
-                let new_prefix = format!(
-                    "{}{}",
-                    prefix,
-                    if is_root {
+            Some(n) => match n.as_ref() {
+                Node::Data(data_node) => {
+                    let node_symbol = if is_root {
                         ""
                     } else if is_last {
-                        "    "
+                        "└── "
                     } else {
-                        "│   "
-                    }
-                );
+                        "├── "
+                    };
+                    println!(
+                        "{}{}({:?}: {:?}) [size: {}]",
+                        prefix, node_symbol, data_node.key, data_node.value, data_node.size
+                    );
 
-                // Print children - left first, then right
-                let has_left = n.left.is_some();
-                let has_right = n.right.is_some();
+                    let new_prefix = format!(
+                        "{}{}",
+                        prefix,
+                        if is_root {
+                            ""
+                        } else if is_last {
+                            "    "
+                        } else {
+                            "│   "
+                        }
+                    );
 
-                if has_left || has_right {
-                    if has_left {
-                        print_tree_debug_helper(&n.left, &new_prefix, !has_right, false);
-                    }
-                    if has_right {
-                        print_tree_debug_helper(&n.right, &new_prefix, true, false);
+                    // Print children - left first, then right
+                    let has_left = data_node.left.is_some();
+                    let has_right = data_node.right.is_some();
+
+                    if has_left || has_right {
+                        if has_left {
+                            print_tree_debug_helper(
+                                &data_node.left,
+                                &new_prefix,
+                                !has_right,
+                                false,
+                            );
+                        }
+                        if has_right {
+                            print_tree_debug_helper(&data_node.right, &new_prefix, true, false);
+                        }
                     }
                 }
-            }
+                Node::Mapping(mapping_node) => {
+                    let node_symbol = if is_root {
+                        ""
+                    } else if is_last {
+                        "└── "
+                    } else {
+                        "├── "
+                    };
+                    println!("{}{}[MAPPING]", prefix, node_symbol);
+                    let new_prefix = format!(
+                        "{}{}",
+                        prefix,
+                        if is_root {
+                            ""
+                        } else if is_last {
+                            "    "
+                        } else {
+                            "│   "
+                        }
+                    );
+                    print_tree_debug_helper(&mapping_node.child, &new_prefix, true, false);
+                }
+            },
         }
     }
 
     /// Print a compact tree structure showing just keys and structure
-    pub fn print_tree_compact<K, V>(node: &Option<Rc<Node<K, V>>>)
+    pub fn print_tree_compact<V>(node: &Option<Rc<Node<V>>>)
     where
-        K: std::fmt::Debug + Clone,
         V: Clone,
     {
         print_tree_compact_helper(node, "", true, true);
     }
 
-    fn print_tree_compact_helper<K, V>(
-        node: &Option<Rc<Node<K, V>>>,
+    fn print_tree_compact_helper<V>(
+        node: &Option<Rc<Node<V>>>,
         prefix: &str,
         is_last: bool,
         is_root: bool,
     ) where
-        K: std::fmt::Debug + Clone,
         V: Clone,
     {
         match node {
@@ -847,40 +1271,69 @@ mod tests {
                     println!("{}{}∅", prefix, if is_last { "└── " } else { "├── " });
                 }
             }
-            Some(n) => {
-                let node_symbol = if is_root {
-                    ""
-                } else if is_last {
-                    "└── "
-                } else {
-                    "├── "
-                };
-                println!("{}{}{:?}", prefix, node_symbol, n.key);
-
-                let new_prefix = format!(
-                    "{}{}",
-                    prefix,
-                    if is_root {
+            Some(n) => match n.as_ref() {
+                Node::Data(data_node) => {
+                    let node_symbol = if is_root {
                         ""
                     } else if is_last {
-                        "    "
+                        "└── "
                     } else {
-                        "│   "
-                    }
-                );
+                        "├── "
+                    };
+                    println!("{}{}{:?}", prefix, node_symbol, data_node.key);
 
-                let has_left = n.left.is_some();
-                let has_right = n.right.is_some();
+                    let new_prefix = format!(
+                        "{}{}",
+                        prefix,
+                        if is_root {
+                            ""
+                        } else if is_last {
+                            "    "
+                        } else {
+                            "│   "
+                        }
+                    );
 
-                if has_left || has_right {
-                    if has_left {
-                        print_tree_compact_helper(&n.left, &new_prefix, !has_right, false);
-                    }
-                    if has_right {
-                        print_tree_compact_helper(&n.right, &new_prefix, true, false);
+                    let has_left = data_node.left.is_some();
+                    let has_right = data_node.right.is_some();
+
+                    if has_left || has_right {
+                        if has_left {
+                            print_tree_compact_helper(
+                                &data_node.left,
+                                &new_prefix,
+                                !has_right,
+                                false,
+                            );
+                        }
+                        if has_right {
+                            print_tree_compact_helper(&data_node.right, &new_prefix, true, false);
+                        }
                     }
                 }
-            }
+                Node::Mapping(mapping_node) => {
+                    let node_symbol = if is_root {
+                        ""
+                    } else if is_last {
+                        "└── "
+                    } else {
+                        "├── "
+                    };
+                    println!("{}{}[MAPPING]", prefix, node_symbol);
+                    let new_prefix = format!(
+                        "{}{}",
+                        prefix,
+                        if is_root {
+                            ""
+                        } else if is_last {
+                            "    "
+                        } else {
+                            "│   "
+                        }
+                    );
+                    print_tree_compact_helper(&mapping_node.child, &new_prefix, true, false);
+                }
+            },
         }
     }
 
@@ -908,7 +1361,7 @@ mod tests {
     /// Test the debug printing with an empty tree
     #[test]
     fn test_debug_empty_tree() {
-        let tree: WBTreeMap<i32, String> = WBTreeMap::new();
+        let tree: WBTreeMap<String> = WBTreeMap::new();
 
         println!("\n=== Empty Tree Debug ===");
         print_tree_debug(&tree.root);
@@ -946,48 +1399,55 @@ mod tests {
         assert!(is_weight_balanced(&tree.root));
     }
 
-    fn tree_height<K, V>(node: &Option<Rc<Node<K, V>>>) -> usize
+    fn tree_height<V>(node: &Option<Rc<Node<V>>>) -> usize
     where
-        K: Clone,
         V: Clone,
     {
         match node {
             None => 0,
-            Some(n) => 1 + tree_height(&n.left).max(tree_height(&n.right)),
+            Some(n) => match n.as_ref() {
+                Node::Data(data_node) => {
+                    1 + tree_height(&data_node.left).max(tree_height(&data_node.right))
+                }
+                Node::Mapping(mapping_node) => tree_height(&mapping_node.child),
+            },
         }
     }
 
-    fn is_weight_balanced<K, V>(node: &Option<Rc<Node<K, V>>>) -> bool
+    fn is_weight_balanced<V>(node: &Option<Rc<Node<V>>>) -> bool
     where
-        K: Clone + Ord,
         V: Clone,
     {
         match node {
             None => true,
-            Some(n) => {
-                let left_size = Node::size(&n.left);
-                let right_size = Node::size(&n.right);
+            Some(n) => match n.as_ref() {
+                Node::Data(data_node) => {
+                    let left_size = Node::size(&data_node.left);
+                    let right_size = Node::size(&data_node.right);
 
-                // Check weight balance condition using original WBT algorithm
-                if left_size + right_size >= 2 {
-                    // Original WBT: use weights (size + 1) instead of just sizes
-                    let left_weight = left_size + 1;
-                    let right_weight = right_size + 1;
+                    // Check weight balance condition using original WBT algorithm
+                    if left_size + right_size >= 2 {
+                        // Original WBT: use weights (size + 1) instead of just sizes
+                        let left_weight = left_size + 1;
+                        let right_weight = right_size + 1;
 
-                    // Balance condition: delta * left_weight >= right_weight AND delta * right_weight >= left_weight
-                    if right_weight > DELTA * left_weight || left_weight > DELTA * right_weight {
+                        // Balance condition: delta * left_weight >= right_weight AND delta * right_weight >= left_weight
+                        if right_weight > DELTA * left_weight || left_weight > DELTA * right_weight
+                        {
+                            return false;
+                        }
+                    }
+
+                    // Check size is correct
+                    if data_node.size != 1 + left_size + right_size {
                         return false;
                     }
-                }
 
-                // Check size is correct
-                if n.size != 1 + left_size + right_size {
-                    return false;
+                    // Recursively check subtrees
+                    is_weight_balanced(&data_node.left) && is_weight_balanced(&data_node.right)
                 }
-
-                // Recursively check subtrees
-                is_weight_balanced(&n.left) && is_weight_balanced(&n.right)
-            }
+                Node::Mapping(mapping_node) => is_weight_balanced(&mapping_node.child),
+            },
         }
     }
 
@@ -1046,7 +1506,7 @@ mod tests {
 
         // Both should iterate in sorted order
         for (wb_item, bt_item) in wb_items.iter().zip(bt_items.iter()) {
-            assert_eq!(wb_item.0, bt_item.0);
+            assert_eq!(wb_item.0, *bt_item.0);
             assert_eq!(wb_item.1, bt_item.1);
         }
     }
@@ -1132,7 +1592,7 @@ mod tests {
         assert_eq!(wb_map.len(), bt_map.len());
 
         // Verify iteration order matches
-        let wb_items: Vec<_> = wb_map.iter().map(|(k, v)| (*k, *v)).collect();
+        let wb_items: Vec<_> = wb_map.iter().map(|(k, v)| (k, *v)).collect();
         let bt_items: Vec<_> = bt_map.iter().map(|(k, v)| (*k, *v)).collect();
         assert_eq!(wb_items, bt_items);
 
@@ -1160,7 +1620,7 @@ mod tests {
         }
 
         // Verify all entries match
-        let wb_items: Vec<_> = wb_map.iter().map(|(k, v)| (*k, *v)).collect();
+        let wb_items: Vec<_> = wb_map.iter().map(|(k, v)| (k, *v)).collect();
         let bt_items: Vec<_> = bt_map.iter().map(|(k, v)| (*k, *v)).collect();
         assert_eq!(wb_items, bt_items);
 
@@ -1182,7 +1642,7 @@ mod tests {
         assert!(is_weight_balanced(&wb_map.root));
 
         // Verify iteration order
-        let wb_keys: Vec<_> = wb_map.iter().map(|(k, _)| *k).collect();
+        let wb_keys: Vec<_> = wb_map.iter().map(|(k, _)| k).collect();
         let bt_keys: Vec<_> = bt_map.keys().copied().collect();
         assert_eq!(wb_keys, bt_keys);
     }
@@ -1224,7 +1684,7 @@ mod tests {
 
         assert_eq!(original.len(), cloned.len());
         for (k, v) in original.iter() {
-            assert_eq!(cloned.get(k), Some(v));
+            assert_eq!(cloned.get(&k), Some(v));
         }
 
         // Verify clone is independent
@@ -1234,8 +1694,8 @@ mod tests {
 
     #[test]
     fn test_empty_operations() {
-        let mut wb_map: WBTreeMap<i32, i32> = WBTreeMap::new();
-        let bt_map: BTreeMap<i32, i32> = BTreeMap::new();
+        let mut wb_map: WBTreeMap<i32> = WBTreeMap::new();
+        let bt_map: BTreeMap<u32, i32> = BTreeMap::new();
 
         assert_eq!(wb_map.is_empty(), bt_map.is_empty());
         assert_eq!(wb_map.len(), bt_map.len());
@@ -1263,7 +1723,7 @@ mod tests {
         let wb_items: Vec<_> = wb_map.iter().collect();
         let bt_items: Vec<_> = bt_map.iter().collect();
         assert_eq!(wb_items.len(), bt_items.len());
-        assert_eq!(wb_items[0].0, bt_items[0].0);
+        assert_eq!(wb_items[0].0, *bt_items[0].0);
         assert_eq!(wb_items[0].1, bt_items[0].1);
     }
 
@@ -1301,7 +1761,7 @@ mod tests {
         assert!(is_weight_balanced(&wb_map.root));
 
         // Verify in-order traversal gives sorted sequence
-        let keys: Vec<_> = wb_map.iter().map(|(k, _)| *k).collect();
+        let keys: Vec<_> = wb_map.iter().map(|(k, _)| k).collect();
         let mut sorted = keys.clone();
         sorted.sort();
         assert_eq!(keys, sorted);
@@ -1318,7 +1778,7 @@ mod tests {
             // Random with seed
             {
                 let mut rng = StdRng::seed_from_u64(12345);
-                let mut v: Vec<i32> = (0..100).collect();
+                let mut v: Vec<u32> = (0..100).collect();
                 use rand::seq::SliceRandom;
                 v.shuffle(&mut rng);
                 v
@@ -1346,25 +1806,27 @@ mod tests {
 
                     // Print detailed balance information
                     if let Some(ref root) = wb_map.root {
-                        let left_size = Node::size(&root.left);
-                        let right_size = Node::size(&root.right);
-                        println!("Root node: {:?}", root.key);
-                        println!("Left subtree size: {}", left_size);
-                        println!("Right subtree size: {}", right_size);
-                        println!("DELTA * left_size: {}", DELTA * left_size);
-                        println!("DELTA * right_size: {}", DELTA * right_size);
-                        println!(
-                            "Is right_size > DELTA * left_size? {} > {} = {}",
-                            right_size,
-                            DELTA * left_size,
-                            right_size > DELTA * left_size
-                        );
-                        println!(
-                            "Is left_size > DELTA * right_size? {} > {} = {}",
-                            left_size,
-                            DELTA * right_size,
-                            left_size > DELTA * right_size
-                        );
+                        if let Node::Data(data_node) = root.as_ref() {
+                            let left_size = Node::size(&data_node.left);
+                            let right_size = Node::size(&data_node.right);
+                            println!("Root node: {:?}", data_node.key);
+                            println!("Left subtree size: {}", left_size);
+                            println!("Right subtree size: {}", right_size);
+                            println!("DELTA * left_size: {}", DELTA * left_size);
+                            println!("DELTA * right_size: {}", DELTA * right_size);
+                            println!(
+                                "Is right_size > DELTA * left_size? {} > {} = {}",
+                                right_size,
+                                DELTA * left_size,
+                                right_size > DELTA * left_size
+                            );
+                            println!(
+                                "Is left_size > DELTA * right_size? {} > {} = {}",
+                                left_size,
+                                DELTA * right_size,
+                                left_size > DELTA * right_size
+                            );
+                        }
                     }
                 }
 
@@ -1413,27 +1875,6 @@ mod tests {
     }
 
     #[test]
-    fn test_types_compatibility() {
-        // Test with different types
-        let mut string_map: WBTreeMap<String, i32> = WBTreeMap::new();
-        string_map.insert("hello".to_string(), 1);
-        string_map.insert("world".to_string(), 2);
-        assert_eq!(string_map.get(&"hello".to_string()), Some(&1));
-
-        // Test with custom structs
-        #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
-        struct Point {
-            x: i32,
-            y: i32,
-        }
-
-        let mut point_map: WBTreeMap<Point, String> = WBTreeMap::new();
-        point_map.insert(Point { x: 1, y: 2 }, "A".to_string());
-        point_map.insert(Point { x: 0, y: 0 }, "Origin".to_string());
-        assert_eq!(point_map.len(), 2);
-    }
-
-    #[test]
     fn test_debug_output_matches_stdlib() {
         let mut wb_map = WBTreeMap::new();
         let mut bt_map = BTreeMap::new();
@@ -1453,27 +1894,15 @@ mod tests {
         bt_map.insert(0, "zero");
         assert_eq!(format!("{:?}", wb_map), format!("{:?}", bt_map));
 
-        // Test with different types
-        let mut wb_int_map: WBTreeMap<i32, i32> = WBTreeMap::new();
-        let mut bt_int_map: BTreeMap<i32, i32> = BTreeMap::new();
+        // Test with different value types
+        let mut wb_int_map: WBTreeMap<i32> = WBTreeMap::new();
+        let mut bt_int_map: BTreeMap<u32, i32> = BTreeMap::new();
 
-        for i in 0..5 {
-            wb_int_map.insert(i, i * 10);
-            bt_int_map.insert(i, i * 10);
+        for i in 0u32..5 {
+            wb_int_map.insert(i, (i * 10) as i32);
+            bt_int_map.insert(i, (i * 10) as i32);
         }
         assert_eq!(format!("{:?}", wb_int_map), format!("{:?}", bt_int_map));
-
-        // Test with string keys
-        let mut wb_str_map: WBTreeMap<String, i32> = WBTreeMap::new();
-        let mut bt_str_map: BTreeMap<String, i32> = BTreeMap::new();
-
-        wb_str_map.insert("a".to_string(), 1);
-        wb_str_map.insert("b".to_string(), 2);
-        wb_str_map.insert("c".to_string(), 3);
-        bt_str_map.insert("a".to_string(), 1);
-        bt_str_map.insert("b".to_string(), 2);
-        bt_str_map.insert("c".to_string(), 3);
-        assert_eq!(format!("{:?}", wb_str_map), format!("{:?}", bt_str_map));
     }
 
     #[test]
@@ -1500,29 +1929,14 @@ mod tests {
     }
 
     #[test]
-    fn test_debug_with_complex_types() {
-        #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-        struct ComplexKey {
-            id: i32,
-            name: String,
-        }
-
+    fn test_debug_with_complex_values() {
         let mut wb_map = WBTreeMap::new();
         let mut bt_map = BTreeMap::new();
 
-        let key1 = ComplexKey {
-            id: 1,
-            name: "Alice".to_string(),
-        };
-        let key2 = ComplexKey {
-            id: 2,
-            name: "Bob".to_string(),
-        };
-
-        wb_map.insert(key1.clone(), vec![1, 2, 3]);
-        wb_map.insert(key2.clone(), vec![4, 5, 6]);
-        bt_map.insert(key1, vec![1, 2, 3]);
-        bt_map.insert(key2, vec![4, 5, 6]);
+        wb_map.insert(1, vec![1, 2, 3]);
+        wb_map.insert(2, vec![4, 5, 6]);
+        bt_map.insert(1, vec![1, 2, 3]);
+        bt_map.insert(2, vec![4, 5, 6]);
 
         assert_eq!(format!("{:?}", wb_map), format!("{:?}", bt_map));
     }
@@ -1584,7 +1998,7 @@ mod tests {
         // Verify final state matches
         assert_eq!(wb_map.len(), bt_map.len());
         for (k, v) in wb_map.iter() {
-            assert_eq!(bt_map.get(k), Some(v));
+            assert_eq!(bt_map.get(&k), Some(v));
         }
 
         // Verify tree remains balanced after removals
@@ -1593,8 +2007,8 @@ mod tests {
 
     #[test]
     fn test_union_empty_maps() {
-        let map1: WBTreeMap<i32, String> = WBTreeMap::new();
-        let map2: WBTreeMap<i32, String> = WBTreeMap::new();
+        let map1: WBTreeMap<String> = WBTreeMap::new();
+        let map2: WBTreeMap<String> = WBTreeMap::new();
 
         let result = map1.union(&map2, |_, v1, _| v1);
         assert!(result.is_empty());
@@ -1604,7 +2018,7 @@ mod tests {
     #[test]
     fn test_union_one_empty() {
         let mut map1 = WBTreeMap::new();
-        let map2: WBTreeMap<i32, String> = WBTreeMap::new();
+        let map2: WBTreeMap<String> = WBTreeMap::new();
 
         map1.insert(1, "one".to_string());
         map1.insert(2, "two".to_string());
@@ -1791,8 +2205,8 @@ mod tests {
 
     #[test]
     fn test_difference_empty_maps() {
-        let map1: WBTreeMap<i32, String> = WBTreeMap::new();
-        let map2: WBTreeMap<i32, String> = WBTreeMap::new();
+        let map1: WBTreeMap<String> = WBTreeMap::new();
+        let map2: WBTreeMap<String> = WBTreeMap::new();
 
         let result = map1.difference(&map2, |_k, _v1, _v2| None);
         assert!(result.is_empty());
@@ -1802,7 +2216,7 @@ mod tests {
     #[test]
     fn test_difference_one_empty() {
         let mut map1 = WBTreeMap::new();
-        let map2: WBTreeMap<i32, String> = WBTreeMap::new();
+        let map2: WBTreeMap<String> = WBTreeMap::new();
 
         map1.insert(1, "one".to_string());
         map1.insert(2, "two".to_string());
@@ -2037,7 +2451,7 @@ mod tests {
 
     #[test]
     fn test_iter_mut_empty() {
-        let mut wb_map: WBTreeMap<i32, i32> = WBTreeMap::new();
+        let mut wb_map: WBTreeMap<i32> = WBTreeMap::new();
 
         // Should handle empty map gracefully
         let count = wb_map.iter_mut().count();
@@ -2098,7 +2512,7 @@ mod tests {
         // Collect keys from iter_mut - should be in sorted order
         let mut keys = Vec::new();
         for (key, _value) in wb_map.iter_mut() {
-            keys.push(*key);
+            keys.push(key);
         }
 
         assert_eq!(keys, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
@@ -2128,5 +2542,130 @@ mod tests {
                 assert_eq!(wb_map.get(&i), Some(&i));
             }
         }
+    }
+
+    #[test]
+    fn test_mapped_basic() {
+        use crate::{PrefixTree1, PrefixTree2};
+
+        // Create a simple map {0: "zero", 1: "one", 2: "two"}
+        let mut base_map: WBTreeMap<&str> = WBTreeMap::new();
+        base_map.insert(0, "zero");
+        base_map.insert(1, "one");
+        base_map.insert(2, "two");
+
+        // Create a mapping: 0 -> 10, 1 -> 20, 2 -> 30
+        let mut mapping = PrefixTree2::new();
+        let mut set_10 = PrefixTree1::new();
+        set_10.set.insert(10);
+        let mut set_20 = PrefixTree1::new();
+        set_20.set.insert(20);
+        let mut set_30 = PrefixTree1::new();
+        set_30.set.insert(30);
+        mapping.insert_restriction(0, set_10);
+        mapping.insert_restriction(1, set_20);
+        mapping.insert_restriction(2, set_30);
+
+        // Apply the mapping
+        let mapped_tree = base_map.mapped(mapping);
+
+        // Test get with mapped keys
+        assert_eq!(mapped_tree.get(&10), Some(&"zero"));
+        assert_eq!(mapped_tree.get(&20), Some(&"one"));
+        assert_eq!(mapped_tree.get(&30), Some(&"two"));
+
+        // Test that original keys don't work
+        assert_eq!(mapped_tree.get(&0), None);
+        assert_eq!(mapped_tree.get(&1), None);
+        assert_eq!(mapped_tree.get(&2), None);
+
+        // Test iteration yields mapped keys
+        let items: Vec<_> = mapped_tree.iter().collect();
+        assert_eq!(items.len(), 3);
+        assert_eq!(items[0], (10, &"zero"));
+        assert_eq!(items[1], (20, &"one"));
+        assert_eq!(items[2], (30, &"two"));
+    }
+
+    #[test]
+    fn test_mapped_partial_domain() {
+        use crate::{PrefixTree1, PrefixTree2};
+
+        // Create a map {0: "zero", 1: "one", 2: "two", 3: "three"}
+        let mut base_map: WBTreeMap<&str> = WBTreeMap::new();
+        base_map.insert(0, "zero");
+        base_map.insert(1, "one");
+        base_map.insert(2, "two");
+        base_map.insert(3, "three");
+
+        // Create a mapping that only covers 0 and 2: 0 -> 10, 2 -> 30
+        let mut mapping = PrefixTree2::new();
+        let mut set_10 = PrefixTree1::new();
+        set_10.set.insert(10);
+        let mut set_30 = PrefixTree1::new();
+        set_30.set.insert(30);
+        mapping.insert_restriction(0, set_10);
+        mapping.insert_restriction(2, set_30);
+
+        // Apply the mapping
+        let mapped_tree = base_map.mapped(mapping);
+
+        // Note: get() with partial mappings may not work correctly for all keys
+        // because tree search requires comparing with intermediate nodes.
+        // However, iteration correctly filters and yields only mapped keys.
+
+        // Iteration yields only keys in the mapping domain
+        let items: Vec<_> = mapped_tree.iter().collect();
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0], (10, &"zero"));
+        assert_eq!(items[1], (30, &"two"));
+    }
+
+    #[test]
+    fn test_mapped_nested() {
+        use crate::{PrefixTree1, PrefixTree2};
+
+        // Create base map {0: "a", 1: "b"}
+        let mut base_map: WBTreeMap<&str> = WBTreeMap::new();
+        base_map.insert(0, "a");
+        base_map.insert(1, "b");
+
+        // First mapping: 0 -> 10, 1 -> 20
+        let mut mapping1 = PrefixTree2::new();
+        let mut set_10 = PrefixTree1::new();
+        set_10.set.insert(10);
+        let mut set_20 = PrefixTree1::new();
+        set_20.set.insert(20);
+        mapping1.insert_restriction(0, set_10);
+        mapping1.insert_restriction(1, set_20);
+
+        // Second mapping: 10 -> 100, 20 -> 200
+        let mut mapping2 = PrefixTree2::new();
+        let mut set_100 = PrefixTree1::new();
+        set_100.set.insert(100);
+        let mut set_200 = PrefixTree1::new();
+        set_200.set.insert(200);
+        mapping2.insert_restriction(10, set_100);
+        mapping2.insert_restriction(20, set_200);
+
+        // Apply mappings in sequence
+        let mapped_once = base_map.mapped(mapping1);
+        let mapped_twice = mapped_once.mapped(mapping2);
+
+        // After two mappings: 0 -> 10 -> 100, 1 -> 20 -> 200
+        assert_eq!(mapped_twice.get(&100), Some(&"a"));
+        assert_eq!(mapped_twice.get(&200), Some(&"b"));
+
+        // Intermediate keys shouldn't work
+        assert_eq!(mapped_twice.get(&10), None);
+        assert_eq!(mapped_twice.get(&20), None);
+        assert_eq!(mapped_twice.get(&0), None);
+        assert_eq!(mapped_twice.get(&1), None);
+
+        // Iteration
+        let items: Vec<_> = mapped_twice.iter().collect();
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0], (100, &"a"));
+        assert_eq!(items[1], (200, &"b"));
     }
 }

@@ -6,47 +6,47 @@ pub struct PrefixTree0(pub Option<()>);
 
 #[derive(Clone, Debug)]
 pub struct PrefixTree1 {
-    pub set: WBTreeSet<u32>,
+    pub set: WBTreeSet,
 }
 
 #[derive(Clone, Debug)]
 pub struct PrefixTree2 {
-    pub map: WBTreeMap<u32, PrefixTree1>,
+    pub map: WBTreeMap<PrefixTree1>,
 }
 
 #[derive(Clone, Debug)]
 pub struct PrefixTree3 {
-    pub map: WBTreeMap<u32, PrefixTree2>,
+    pub map: WBTreeMap<PrefixTree2>,
 }
 
 #[derive(Clone, Debug)]
 pub struct PrefixTree4 {
-    pub map: WBTreeMap<u32, PrefixTree3>,
+    pub map: WBTreeMap<PrefixTree3>,
 }
 
 #[derive(Clone, Debug)]
 pub struct PrefixTree5 {
-    pub map: WBTreeMap<u32, PrefixTree4>,
+    pub map: WBTreeMap<PrefixTree4>,
 }
 
 #[derive(Clone, Debug)]
 pub struct PrefixTree6 {
-    pub map: WBTreeMap<u32, PrefixTree5>,
+    pub map: WBTreeMap<PrefixTree5>,
 }
 
 #[derive(Clone, Debug)]
 pub struct PrefixTree7 {
-    pub map: WBTreeMap<u32, PrefixTree6>,
+    pub map: WBTreeMap<PrefixTree6>,
 }
 
 #[derive(Clone, Debug)]
 pub struct PrefixTree8 {
-    pub map: WBTreeMap<u32, PrefixTree7>,
+    pub map: WBTreeMap<PrefixTree7>,
 }
 
 #[derive(Clone, Debug)]
 pub struct PrefixTree9 {
-    pub map: WBTreeMap<u32, PrefixTree8>,
+    pub map: WBTreeMap<PrefixTree8>,
 }
 
 // new methods
@@ -754,103 +754,103 @@ impl PrefixTree9 {
 // iter_restrictions methods
 impl PrefixTree1 {
     pub fn iter_restrictions(&self) -> impl Iterator<Item = (u32, PrefixTree0)> + '_ {
-        self.set.iter().map(|&x| (x, PrefixTree0(Some(()))))
+        self.set.iter().map(|x| (x, PrefixTree0(Some(()))))
     }
 }
 impl PrefixTree2 {
     pub fn iter_restrictions(&self) -> impl Iterator<Item = (u32, &PrefixTree1)> + '_ {
-        self.map.iter().map(|(&k, v)| (k, v))
+        self.map.iter().map(|(k, v)| (k, v))
     }
 }
 
 impl PrefixTree3 {
     pub fn iter_restrictions(&self) -> impl Iterator<Item = (u32, &PrefixTree2)> + '_ {
-        self.map.iter().map(|(&k, v)| (k, v))
+        self.map.iter().map(|(k, v)| (k, v))
     }
 }
 
 impl PrefixTree4 {
     pub fn iter_restrictions(&self) -> impl Iterator<Item = (u32, &PrefixTree3)> + '_ {
-        self.map.iter().map(|(&k, v)| (k, v))
+        self.map.iter().map(|(k, v)| (k, v))
     }
 }
 
 impl PrefixTree5 {
     pub fn iter_restrictions(&self) -> impl Iterator<Item = (u32, &PrefixTree4)> + '_ {
-        self.map.iter().map(|(&k, v)| (k, v))
+        self.map.iter().map(|(k, v)| (k, v))
     }
 }
 
 impl PrefixTree6 {
     pub fn iter_restrictions(&self) -> impl Iterator<Item = (u32, &PrefixTree5)> + '_ {
-        self.map.iter().map(|(&k, v)| (k, v))
+        self.map.iter().map(|(k, v)| (k, v))
     }
 }
 
 impl PrefixTree7 {
     pub fn iter_restrictions(&self) -> impl Iterator<Item = (u32, &PrefixTree6)> + '_ {
-        self.map.iter().map(|(&k, v)| (k, v))
+        self.map.iter().map(|(k, v)| (k, v))
     }
 }
 
 impl PrefixTree8 {
     pub fn iter_restrictions(&self) -> impl Iterator<Item = (u32, &PrefixTree7)> + '_ {
-        self.map.iter().map(|(&k, v)| (k, v))
+        self.map.iter().map(|(k, v)| (k, v))
     }
 }
 
 impl PrefixTree9 {
     pub fn iter_restrictions(&self) -> impl Iterator<Item = (u32, &PrefixTree8)> + '_ {
-        self.map.iter().map(|(&k, v)| (k, v))
+        self.map.iter().map(|(k, v)| (k, v))
     }
 }
 
 // iter_restrictions_mut methods
 impl PrefixTree2 {
     pub fn iter_restrictions_mut(&mut self) -> impl Iterator<Item = (u32, &mut PrefixTree1)> + '_ {
-        self.map.iter_mut().map(|(&k, v)| (k, v))
+        self.map.iter_mut().map(|(k, v)| (k, v))
     }
 }
 
 impl PrefixTree3 {
     pub fn iter_restrictions_mut(&mut self) -> impl Iterator<Item = (u32, &mut PrefixTree2)> + '_ {
-        self.map.iter_mut().map(|(&k, v)| (k, v))
+        self.map.iter_mut().map(|(k, v)| (k, v))
     }
 }
 
 impl PrefixTree4 {
     pub fn iter_restrictions_mut(&mut self) -> impl Iterator<Item = (u32, &mut PrefixTree3)> + '_ {
-        self.map.iter_mut().map(|(&k, v)| (k, v))
+        self.map.iter_mut().map(|(k, v)| (k, v))
     }
 }
 
 impl PrefixTree5 {
     pub fn iter_restrictions_mut(&mut self) -> impl Iterator<Item = (u32, &mut PrefixTree4)> + '_ {
-        self.map.iter_mut().map(|(&k, v)| (k, v))
+        self.map.iter_mut().map(|(k, v)| (k, v))
     }
 }
 
 impl PrefixTree6 {
     pub fn iter_restrictions_mut(&mut self) -> impl Iterator<Item = (u32, &mut PrefixTree5)> + '_ {
-        self.map.iter_mut().map(|(&k, v)| (k, v))
+        self.map.iter_mut().map(|(k, v)| (k, v))
     }
 }
 
 impl PrefixTree7 {
     pub fn iter_restrictions_mut(&mut self) -> impl Iterator<Item = (u32, &mut PrefixTree6)> + '_ {
-        self.map.iter_mut().map(|(&k, v)| (k, v))
+        self.map.iter_mut().map(|(k, v)| (k, v))
     }
 }
 
 impl PrefixTree8 {
     pub fn iter_restrictions_mut(&mut self) -> impl Iterator<Item = (u32, &mut PrefixTree7)> + '_ {
-        self.map.iter_mut().map(|(&k, v)| (k, v))
+        self.map.iter_mut().map(|(k, v)| (k, v))
     }
 }
 
 impl PrefixTree9 {
     pub fn iter_restrictions_mut(&mut self) -> impl Iterator<Item = (u32, &mut PrefixTree8)> + '_ {
-        self.map.iter_mut().map(|(&k, v)| (k, v))
+        self.map.iter_mut().map(|(k, v)| (k, v))
     }
 }
 
@@ -863,7 +863,7 @@ impl PrefixTree0 {
 
 impl PrefixTree1 {
     pub fn iter(&self) -> impl Iterator<Item = [u32; 1]> + '_ {
-        self.set.iter().map(|&x| [x])
+        self.set.iter().map(|x| [x])
     }
 }
 
@@ -871,7 +871,7 @@ impl PrefixTree2 {
     pub fn iter(&self) -> impl Iterator<Item = [u32; 2]> + '_ {
         self.map
             .iter()
-            .flat_map(|(&k, v)| v.iter().map(move |[x]| [k, x]))
+            .flat_map(|(k, v)| v.iter().map(move |[x]| [k, x]))
     }
 }
 
@@ -879,7 +879,7 @@ impl PrefixTree3 {
     pub fn iter(&self) -> impl Iterator<Item = [u32; 3]> + '_ {
         self.map
             .iter()
-            .flat_map(|(&k, v)| v.iter().map(move |[x, y]| [k, x, y]))
+            .flat_map(|(k, v)| v.iter().map(move |[x, y]| [k, x, y]))
     }
 }
 
@@ -887,7 +887,7 @@ impl PrefixTree4 {
     pub fn iter(&self) -> impl Iterator<Item = [u32; 4]> + '_ {
         self.map
             .iter()
-            .flat_map(|(&k, v)| v.iter().map(move |[x, y, z]| [k, x, y, z]))
+            .flat_map(|(k, v)| v.iter().map(move |[x, y, z]| [k, x, y, z]))
     }
 }
 
@@ -895,7 +895,7 @@ impl PrefixTree5 {
     pub fn iter(&self) -> impl Iterator<Item = [u32; 5]> + '_ {
         self.map
             .iter()
-            .flat_map(|(&k, v)| v.iter().map(move |[x, y, z, a]| [k, x, y, z, a]))
+            .flat_map(|(k, v)| v.iter().map(move |[x, y, z, a]| [k, x, y, z, a]))
     }
 }
 
@@ -903,13 +903,13 @@ impl PrefixTree6 {
     pub fn iter(&self) -> impl Iterator<Item = [u32; 6]> + '_ {
         self.map
             .iter()
-            .flat_map(|(&k, v)| v.iter().map(move |[x, y, z, a, b]| [k, x, y, z, a, b]))
+            .flat_map(|(k, v)| v.iter().map(move |[x, y, z, a, b]| [k, x, y, z, a, b]))
     }
 }
 
 impl PrefixTree7 {
     pub fn iter(&self) -> impl Iterator<Item = [u32; 7]> + '_ {
-        self.map.iter().flat_map(|(&k, v)| {
+        self.map.iter().flat_map(|(k, v)| {
             v.iter()
                 .map(move |[x, y, z, a, b, c]| [k, x, y, z, a, b, c])
         })
@@ -918,7 +918,7 @@ impl PrefixTree7 {
 
 impl PrefixTree8 {
     pub fn iter(&self) -> impl Iterator<Item = [u32; 8]> + '_ {
-        self.map.iter().flat_map(|(&k, v)| {
+        self.map.iter().flat_map(|(k, v)| {
             v.iter()
                 .map(move |[x, y, z, a, b, c, d]| [k, x, y, z, a, b, c, d])
         })
@@ -927,7 +927,7 @@ impl PrefixTree8 {
 
 impl PrefixTree9 {
     pub fn iter(&self) -> impl Iterator<Item = [u32; 9]> + '_ {
-        self.map.iter().flat_map(|(&k, v)| {
+        self.map.iter().flat_map(|(k, v)| {
             v.iter()
                 .map(move |[x, y, z, a, b, c, d, e]| [k, x, y, z, a, b, c, d, e])
         })
@@ -1407,8 +1407,8 @@ impl PrefixTree1 {
             Some(map) => {
                 let mut result = Self::new();
                 for el in self.set.iter() {
-                    if let Some(restriction) = map.get(*el) {
-                        let mapped = *restriction
+                    if let Some(restriction) = map.get(el) {
+                        let mapped = restriction
                             .set
                             .iter()
                             .next()
@@ -1427,10 +1427,10 @@ impl PrefixTree2 {
         let mut result = Self::new();
         for (k, v) in self.map.iter() {
             let new_k_opt = match &map0 {
-                None => Some(*k),
+                None => Some(k),
                 Some(map) => map
-                    .get(*k)
-                    .and_then(|restriction| restriction.set.iter().next().copied()),
+                    .get(k)
+                    .and_then(|restriction| restriction.set.iter().next()),
             };
             if let Some(new_k) = new_k_opt {
                 let new_v = v.mapped(map1.clone());
@@ -1451,10 +1451,10 @@ impl PrefixTree3 {
         let mut result = Self::new();
         for (k, v) in self.map.iter() {
             let new_k_opt = match &map0 {
-                None => Some(*k),
+                None => Some(k),
                 Some(map) => map
-                    .get(*k)
-                    .and_then(|restriction| restriction.set.iter().next().copied()),
+                    .get(k)
+                    .and_then(|restriction| restriction.set.iter().next()),
             };
             if let Some(new_k) = new_k_opt {
                 let new_v = v.mapped(map1.clone(), map2.clone());
@@ -1476,10 +1476,10 @@ impl PrefixTree4 {
         let mut result = Self::new();
         for (k, v) in self.map.iter() {
             let new_k_opt = match &map0 {
-                None => Some(*k),
+                None => Some(k),
                 Some(map) => map
-                    .get(*k)
-                    .and_then(|restriction| restriction.set.iter().next().copied()),
+                    .get(k)
+                    .and_then(|restriction| restriction.set.iter().next()),
             };
             if let Some(new_k) = new_k_opt {
                 let new_v = v.mapped(map1.clone(), map2.clone(), map3.clone());
@@ -1502,10 +1502,10 @@ impl PrefixTree5 {
         let mut result = Self::new();
         for (k, v) in self.map.iter() {
             let new_k_opt = match &map0 {
-                None => Some(*k),
+                None => Some(k),
                 Some(map) => map
-                    .get(*k)
-                    .and_then(|restriction| restriction.set.iter().next().copied()),
+                    .get(k)
+                    .and_then(|restriction| restriction.set.iter().next()),
             };
             if let Some(new_k) = new_k_opt {
                 let new_v = v.mapped(map1.clone(), map2.clone(), map3.clone(), map4.clone());
@@ -1529,10 +1529,10 @@ impl PrefixTree6 {
         let mut result = Self::new();
         for (k, v) in self.map.iter() {
             let new_k_opt = match &map0 {
-                None => Some(*k),
+                None => Some(k),
                 Some(map) => map
-                    .get(*k)
-                    .and_then(|restriction| restriction.set.iter().next().copied()),
+                    .get(k)
+                    .and_then(|restriction| restriction.set.iter().next()),
             };
             if let Some(new_k) = new_k_opt {
                 let new_v = v.mapped(
@@ -1563,10 +1563,10 @@ impl PrefixTree7 {
         let mut result = Self::new();
         for (k, v) in self.map.iter() {
             let new_k_opt = match &map0 {
-                None => Some(*k),
+                None => Some(k),
                 Some(map) => map
-                    .get(*k)
-                    .and_then(|restriction| restriction.set.iter().next().copied()),
+                    .get(k)
+                    .and_then(|restriction| restriction.set.iter().next()),
             };
             if let Some(new_k) = new_k_opt {
                 let new_v = v.mapped(
@@ -1599,10 +1599,10 @@ impl PrefixTree8 {
         let mut result = Self::new();
         for (k, v) in self.map.iter() {
             let new_k_opt = match &map0 {
-                None => Some(*k),
+                None => Some(k),
                 Some(map) => map
-                    .get(*k)
-                    .and_then(|restriction| restriction.set.iter().next().copied()),
+                    .get(k)
+                    .and_then(|restriction| restriction.set.iter().next()),
             };
             if let Some(new_k) = new_k_opt {
                 let new_v = v.mapped(
@@ -1637,10 +1637,10 @@ impl PrefixTree9 {
         let mut result = Self::new();
         for (k, v) in self.map.iter() {
             let new_k_opt = match &map0 {
-                None => Some(*k),
+                None => Some(k),
                 Some(map) => map
-                    .get(*k)
-                    .and_then(|restriction| restriction.set.iter().next().copied()),
+                    .get(k)
+                    .and_then(|restriction| restriction.set.iter().next()),
             };
             if let Some(new_k) = new_k_opt {
                 let new_v = v.mapped(

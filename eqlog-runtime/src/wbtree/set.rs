@@ -2,26 +2,26 @@ use super::map::*;
 use std::fmt;
 
 #[derive(Clone)]
-pub struct WBTreeSet<V: Clone> {
-    map: WBTreeMap<V, ()>,
+pub struct WBTreeSet {
+    map: WBTreeMap<()>,
 }
 
-impl<V: Ord + Clone> WBTreeSet<V> {
+impl WBTreeSet {
     pub const fn new() -> Self {
         WBTreeSet {
             map: WBTreeMap::new(),
         }
     }
 
-    pub fn insert(&mut self, value: V) -> bool {
+    pub fn insert(&mut self, value: u32) -> bool {
         self.map.insert(value, ()).is_none()
     }
 
-    pub fn contains(&self, value: &V) -> bool {
+    pub fn contains(&self, value: &u32) -> bool {
         self.map.contains_key(value)
     }
 
-    pub fn remove(&mut self, value: &V) -> bool {
+    pub fn remove(&mut self, value: &u32) -> bool {
         self.map.remove(value).is_some()
     }
 
@@ -37,7 +37,7 @@ impl<V: Ord + Clone> WBTreeSet<V> {
         self.map.clear();
     }
 
-    pub fn iter<'a>(&'a self) -> WBTreeSetIter<'a, V> {
+    pub fn iter(&self) -> WBTreeSetIter<'_> {
         WBTreeSetIter {
             map_iter: self.map.iter(),
         }
@@ -56,19 +56,19 @@ impl<V: Ord + Clone> WBTreeSet<V> {
     }
 }
 
-impl<V: fmt::Debug + Ord + Clone> fmt::Debug for WBTreeSet<V> {
+impl fmt::Debug for WBTreeSet {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_set().entries(self.iter()).finish()
     }
 }
 
 // Iterator for WBTreeSet
-pub struct WBTreeSetIter<'a, V: Clone> {
-    map_iter: Iter<'a, V, ()>,
+pub struct WBTreeSetIter<'a> {
+    map_iter: Iter<'a, ()>,
 }
 
-impl<'a, V: Clone> Iterator for WBTreeSetIter<'a, V> {
-    type Item = &'a V;
+impl<'a> Iterator for WBTreeSetIter<'a> {
+    type Item = u32;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.map_iter.next().map(|(k, _)| k)
