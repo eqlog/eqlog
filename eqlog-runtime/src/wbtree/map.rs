@@ -900,6 +900,17 @@ impl<V: Clone> WBTreeMap<V> {
     /// Keys not in the mapping's domain will be filtered out during iteration.
     /// This operation is O(1) - it just wraps the tree in a mapping node.
     pub fn mapped(&self, mapping: PrefixTree2) -> Self {
+        debug_assert!(
+            {
+                let mut last_value: Option<u32> = None;
+                mapping.iter().all(|[_, v]| {
+                    let ok = last_value.map_or(true, |prev| prev < v);
+                    last_value = Some(v);
+                    ok
+                })
+            },
+            "mapping must be monotone"
+        );
         let new_root = self.root.clone().map(|root| {
             Rc::new(Node::Mapping(MappingNode {
                 mapping,
