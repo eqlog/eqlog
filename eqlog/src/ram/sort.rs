@@ -63,6 +63,7 @@ fn collect_stmt_dependencies(stmts: &[RamStmt]) -> Vec<BTreeSet<usize>> {
                         RamStmt::Iter(_) => true,
                         RamStmt::Insert(_) => false,
                         RamStmt::GuardInhabited(_) => true,
+                        RamStmt::CanonicalizeElVar(_) => true,
                     };
                     if depends_on_j {
                         dependencies.insert(j);
@@ -77,6 +78,14 @@ fn collect_stmt_dependencies(stmts: &[RamStmt]) -> Vec<BTreeSet<usize>> {
                     dependencies.insert(set_def_site);
                 }
             }
+            RamStmt::CanonicalizeElVar(CanonicalizeElVarStmt { var, typ: _ }) => {
+                let el_def_site = *el_var_def_sites
+                    .get(&var.name)
+                    .expect("Variable must be defined before use");
+                dependencies.insert(el_def_site);
+                // The canonicalized variable shadows the original with the same name
+                el_var_def_sites.insert(var.name.clone(), i);
+            }
         }
     }
 
@@ -86,15 +95,16 @@ fn collect_stmt_dependencies(stmts: &[RamStmt]) -> Vec<BTreeSet<usize>> {
 fn ram_stmt_cost(stmt: &RamStmt) -> usize {
     match stmt {
         RamStmt::GuardInhabited(_) => 1,
-        RamStmt::Insert(_) => 2,
+        RamStmt::CanonicalizeElVar(_) => 2,
+        RamStmt::Insert(_) => 3,
         RamStmt::DefineSet(DefineSetStmt { defined_var, expr }) => match expr {
             InSetExpr::GetIndex(_) => 0,
             InSetExpr::Restrict(_) => match defined_var.strictness {
-                Strictness::Lazy => 3,
-                Strictness::Strict => 4,
+                Strictness::Lazy => 4,
+                Strictness::Strict => 5,
             },
         },
-        RamStmt::Iter(_) => 5,
+        RamStmt::Iter(_) => 6,
     }
 }
 

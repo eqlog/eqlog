@@ -33,6 +33,7 @@ pub fn make_ram_lazy(ram_stmts: &mut [RamStmt]) {
                     }
                 }
             }
+            RamStmt::CanonicalizeElVar(_) => {}
         }
     }
 }

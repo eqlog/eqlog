@@ -1,4 +1,5 @@
 use crate::flat_eqlog::{FlatInRel, FlatOutRel, FlatRule, IndexSpec};
+use eqlog_eqlog::Type;
 use std::sync::Arc;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
@@ -70,11 +71,18 @@ pub struct GuardInhabitedStmt {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct CanonicalizeElVarStmt {
+    pub var: ElVar,
+    pub typ: Type,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub enum RamStmt {
     DefineSet(DefineSetStmt),
     Iter(IterStmt),
     Insert(InsertStmt),
     GuardInhabited(GuardInhabitedStmt),
+    CanonicalizeElVar(CanonicalizeElVarStmt),
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]

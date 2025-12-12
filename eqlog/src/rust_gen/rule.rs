@@ -1,3 +1,4 @@
+use crate::eqlog_util::display_type;
 use crate::flat_eqlog::*;
 use crate::fmt_util::*;
 use crate::rust_gen::flat_eqlog::display_flat_rule;
@@ -6,7 +7,7 @@ use convert_case::{Case, Casing};
 use eqlog_eqlog::*;
 use indoc::writedoc;
 use itertools::Itertools;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter, Result};
 
 use Case::{Snake, UpperCamel};
@@ -40,7 +41,10 @@ pub fn module_env_in_rels(ram_module: &RamModule) -> BTreeSet<(FlatInRel, IndexS
                 .filter_map(|stmt| -> Option<(FlatInRel, IndexSpec)> {
                     let define_set_stmt = match stmt {
                         RamStmt::DefineSet(define_set_stmt) => define_set_stmt,
-                        RamStmt::Iter(_) | RamStmt::Insert(_) | RamStmt::GuardInhabited(_) => {
+                        RamStmt::Iter(_)
+                        | RamStmt::Insert(_)
+                        | RamStmt::GuardInhabited(_)
+                        | RamStmt::CanonicalizeElVar(_) => {
                             return None;
                         }
                     };
@@ -68,7 +72,10 @@ pub fn module_env_out_rels(ram_module: &RamModule) -> BTreeSet<FlatOutRel> {
                 .iter()
                 .filter_map(|stmt| -> Option<FlatOutRel> {
                     let InsertStmt { rel, args: _ } = match stmt {
-                        RamStmt::DefineSet(_) | RamStmt::Iter(_) | RamStmt::GuardInhabited(_) => {
+                        RamStmt::DefineSet(_)
+                        | RamStmt::Iter(_)
+                        | RamStmt::GuardInhabited(_)
+                        | RamStmt::CanonicalizeElVar(_) => {
                             return None;
                         }
                         RamStmt::Insert(insert_stmt) => insert_stmt,
@@ -76,6 +83,22 @@ pub fn module_env_out_rels(ram_module: &RamModule) -> BTreeSet<FlatOutRel> {
 
                     Some(rel.clone())
                 })
+        })
+        .collect()
+}
+
+pub fn module_env_union_find_types(ram_module: &RamModule) -> BTreeSet<Type> {
+    ram_module
+        .routines
+        .iter()
+        .flat_map(|routine| {
+            routine.stmts.iter().filter_map(|stmt| match stmt {
+                RamStmt::CanonicalizeElVar(CanonicalizeElVarStmt { var: _, typ }) => Some(*typ),
+                RamStmt::DefineSet(_)
+                | RamStmt::Iter(_)
+                | RamStmt::Insert(_)
+                | RamStmt::GuardInhabited(_) => None,
+            })
         })
         .collect()
 }
@@ -110,6 +133,20 @@ pub fn display_module_env_struct<'a>(
             })
             .format("\n");
 
+        let union_find_types = module_env_union_find_types(ram_module)
+            .into_iter()
+            .map(|typ| {
+                FmtFn(move |f| {
+                    let type_camel = display_type(typ, eqlog, identifiers)
+                        .to_string()
+                        .to_case(UpperCamel);
+                    let type_snake = type_camel.to_case(Snake);
+
+                    write!(f, "{type_snake}_equalities: &'a Unification<{type_camel}>,")
+                })
+            })
+            .format("\n");
+
         let name = display_module_env_struct_name(ram_module);
 
         writedoc! {f, "
@@ -120,6 +157,8 @@ pub fn display_module_env_struct<'a>(
             {in_rels}
 
             {out_rels}
+
+            {union_find_types}
             }}
         "}
     })
@@ -252,13 +291,23 @@ fn display_stmt_pre<'a>(
                     if false {checks} {{
                 "}
             }
+            RamStmt::CanonicalizeElVar(CanonicalizeElVarStmt { var, typ }) => {
+                let var_name = &var.name;
+                let type_camel = display_type(*typ, eqlog, identifiers)
+                    .to_string()
+                    .to_case(UpperCamel);
+                let type_snake = type_camel.to_case(Snake);
+                writedoc! {f, "
+                    let {var_name} = env.{type_snake}_equalities.root_const({var_name});
+                "}
+            }
         }
     })
 }
 
 fn display_stmt_post<'a>(ram_stmt: &'a RamStmt) -> impl 'a + Display {
     FmtFn(move |f| match ram_stmt {
-        RamStmt::DefineSet(_) | RamStmt::Insert(_) => Ok(()),
+        RamStmt::DefineSet(_) | RamStmt::Insert(_) | RamStmt::CanonicalizeElVar(_) => Ok(()),
         RamStmt::Iter(_) | RamStmt::GuardInhabited(_) => {
             writedoc! {f, "
                     }}
