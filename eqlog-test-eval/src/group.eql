@@ -18,16 +18,14 @@ rule inv_total {
 }
 
 rule right_to_left_associativity {
-    if t_0 = mul(x, y);
-    if t_1 = z;
-    if to = mul(x, mul(y, z));
-    then mul(t_0, t_1) = to;
+    if xy = mul(x, y);
+    if x_yz = mul(x, mul(y, z));
+    then mul(xy, z) = x_yz;
 }
 rule left_to_right_associativity {
-    if t_0 = x;
-    if t_1 = mul(y, z);
-    if to = mul(mul(x, y), z);
-    then mul(t_0, t_1) = to;
+    if yz = mul(y, z);
+    if xy_z = mul(mul(x, y), z);
+    then mul(x, yz) = xy_z;
 }
 
 rule right_identity {

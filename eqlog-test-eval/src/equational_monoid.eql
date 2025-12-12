@@ -15,14 +15,12 @@ rule left_identity {
     then mul(t_0, t_1) = to;
 }
 rule left_to_right_associativity {
-    if t_0 = mul(a, b);
-    if t_1 = c;
-    if to = mul(a, mul(b, c));
-    then mul(t_0, t_1) = to;
+    if ab = mul(a, b);
+    if a_bc = mul(a, mul(b, c));
+    then mul(ab, c) = a_bc;
 }
-rule right_to_left_associativity{
-    if t_0 = a;
-    if t_1 = mul(b, c);
-    if to = mul(mul(a, b), c);
-    then mul(t_0, t_1) = to;
+rule right_to_left_associativity {
+    if bc = mul(b, c);
+    if ab_c = mul(mul(a, b), c);
+    then mul(a, bc) = ab_c;
 }
