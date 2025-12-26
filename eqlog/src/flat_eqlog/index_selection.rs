@@ -157,12 +157,17 @@ impl IndexSpec {
 }
 
 // Maps relation name and query spec to the index of the the relation that can serve the query.
-pub type IndexSelection = BTreeMap<(FlatInRel, QuerySpec), Vec<IndexSpec>>;
+//pub type IndexSelection = BTreeMap<(FlatInRel, QuerySpec), Vec<IndexSpec>>;
+pub struct IndexSelection {
+    pub indices: BTreeMap<FlatInRel, Vec<IndexSpec>>,
+    pub queries: BTreeMap<(FlatInRel, QuerySpec), Vec<IndexSpec>>,
+}
 
 pub fn index_set(index_selection: &IndexSelection) -> BTreeSet<(FlatInRel, IndexSpec)> {
     index_selection
+        .indices
         .iter()
-        .flat_map(|((rel, _query_spec), indices)| {
+        .flat_map(|(rel, indices)| {
             indices
                 .iter()
                 .map(move |index| (rel.clone(), index.clone()))
@@ -259,7 +264,7 @@ pub fn select_indices<'a>(
         ]
     }));
 
-    query_specs
+    let queries: BTreeMap<(FlatInRel, QuerySpec), Vec<IndexSpec>> = query_specs
         .into_iter()
         .chunk_by(|(rel, _query_spec)| rel.clone())
         .into_iter()
@@ -290,5 +295,21 @@ pub fn select_indices<'a>(
                 })
             })
         })
-        .collect()
+        .collect();
+
+    // Compute indices map from queries map
+    let mut indices: BTreeMap<FlatInRel, Vec<IndexSpec>> = BTreeMap::new();
+    for ((rel, _query_spec), index_specs) in queries.iter() {
+        indices
+            .entry(rel.clone())
+            .or_insert_with(Vec::new)
+            .extend(index_specs.iter().cloned());
+    }
+    // Deduplicate indices for each relation
+    for index_specs in indices.values_mut() {
+        index_specs.sort();
+        index_specs.dedup();
+    }
+
+    IndexSelection { indices, queries }
 }

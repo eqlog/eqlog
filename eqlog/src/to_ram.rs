@@ -29,6 +29,7 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
         };
 
         let indices = index_selection
+            .queries
             .get(&(flat_stmt.rel.clone(), query_spec.clone()))
             .expect("Index for query in flat rule should exist");
         for index1 in &indices[1..] {

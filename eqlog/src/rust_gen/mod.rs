@@ -292,6 +292,7 @@ fn display_is_dirty_fn<'a>(
 
                     // See index_selection.rs for why the expectations hold.
                     let index = index_selection
+                        .queries
                         .get(&(rel.clone(), query_spec))
                         .expect("should have indices for all new tuples in every type/relation")
                         .as_slice();
@@ -368,6 +369,7 @@ fn display_pub_predicate_holds_fn<'a>(
         let rel = FlatInRel::EqlogRel(rel);
         let query = QuerySpec::one(rel.clone(), eqlog);
         let indices = index_selection
+            .queries
             .get(&(rel.clone(), query))
             .expect("should have indices for relation")
             .as_slice();
@@ -459,6 +461,7 @@ fn display_pub_function_eval_fn<'a>(
         let flat_in_rel = FlatInRel::EqlogRel(rel);
 
         let indices = index_selection
+            .queries
             .get(&(flat_in_rel.clone(), query_spec))
             .unwrap();
 
@@ -572,6 +575,7 @@ fn display_pub_iter_fn<'a>(
         let flat_in_rel = FlatInRel::EqlogRel(rel);
         let query_spec = QuerySpec::all();
         let indices = index_selection
+            .queries
             .get(&(flat_in_rel.clone(), query_spec))
             .expect("should have indices for relation")
             .as_slice();
@@ -832,6 +836,7 @@ fn display_pub_insert_relation<'a>(
         let flat_rel = FlatInRel::EqlogRel(rel);
         let contains_query = QuerySpec::one(flat_rel.clone(), eqlog);
         let contains_indices = index_selection
+            .queries
             .get(&(flat_rel.clone(), contains_query))
             .expect("should have indices for relation")
             .as_slice();
@@ -1303,7 +1308,7 @@ fn display_iter_type_fn<'a>(
         let type_camel = type_snake.to_case(UpperCamel);
         let rel = FlatInRel::TypeSet(typ);
         let query = QuerySpec::all();
-        let indices = index_selection.get(&(rel.clone(), query)).unwrap();
+        let indices = index_selection.queries.get(&(rel.clone(), query)).unwrap();
 
         let index_chain_iter = indices
             .into_iter()
@@ -1435,12 +1440,14 @@ fn display_canonicalize_rel_block<'a>(
                 .format("\n");
 
         let primary_new_indices = index_selection
+            .queries
             .get(&(FlatInRel::EqlogRel(rel), QuerySpec::all_new()))
             .unwrap();
         assert_eq!(primary_new_indices.len(), 1);
         let primary_new_index: IndexSpec = primary_new_indices[0].clone();
 
         let primary_old_indices = index_selection
+            .queries
             .get(&(FlatInRel::EqlogRel(rel), QuerySpec::all_old()))
             .unwrap();
         assert_eq!(primary_old_indices.len(), 1);
@@ -1448,7 +1455,7 @@ fn display_canonicalize_rel_block<'a>(
 
         let mut secondary_new_indices: BTreeSet<(FlatInRel, IndexSpec)> = BTreeSet::new();
         let mut secondary_old_indices: BTreeSet<(FlatInRel, IndexSpec)> = BTreeSet::new();
-        for ((r0, _query_spec), indices) in index_selection {
+        for (r0, indices) in &index_selection.indices {
             match r0 {
                 FlatInRel::EqlogRel(rel0) => {
                     if *rel0 != rel {
@@ -1954,6 +1961,7 @@ fn display_move_new_to_old_fn<'a>(
                     let flat_rel = FlatInRel::EqlogRel(rel);
                     let query_new = QuerySpec::all_new();
                     let indices_new = index_selection
+                        .queries
                         .get(&(flat_rel.clone(), query_new))
                         .expect("should have indices for all new relations");
                     assert!(
@@ -2699,8 +2707,9 @@ fn display_weight_static<'a>(
         let el_lookup_weight = type_list_vec(eqlog.arity(rel).unwrap(), eqlog).len();
 
         let relevant_indices: BTreeSet<(FlatInRel, IndexSpec)> = index_selection
+            .indices
             .iter()
-            .filter_map(|((flat_in_rel, _query_spec), index_specs)| {
+            .filter_map(|(flat_in_rel, index_specs)| {
                 match flat_in_rel {
                     FlatInRel::EqlogRel(rel0) => {
                         if *rel0 != rel {
