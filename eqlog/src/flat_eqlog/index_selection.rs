@@ -163,18 +163,6 @@ pub struct IndexSelection {
     pub queries: BTreeMap<(FlatInRel, QuerySpec), Vec<IndexSpec>>,
 }
 
-pub fn index_set(index_selection: &IndexSelection) -> BTreeSet<(FlatInRel, IndexSpec)> {
-    index_selection
-        .indices
-        .iter()
-        .flat_map(|(rel, indices)| {
-            indices
-                .iter()
-                .map(move |index| (rel.clone(), index.clone()))
-        })
-        .collect()
-}
-
 pub fn select_indices<'a>(
     rules: impl IntoIterator<Item = &'a FlatRule>,
     eqlog: &'a Eqlog,

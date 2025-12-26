@@ -650,8 +650,14 @@ fn display_insert_row_block<'a>(
     identifiers: &'a BTreeMap<Ident, String>,
     index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
-    index_set(index_selection)
-        .into_iter()
+    index_selection
+        .indices
+        .iter()
+        .flat_map(|(rel, indices)| {
+            indices
+                .iter()
+                .map(move |index| (rel.clone(), index.clone()))
+        })
         .filter(move |(flat_in_rel, index)| {
             if index.age != age {
                 return false;
@@ -918,6 +924,7 @@ fn display_new_element_fn_internal<'a>(
     typ: Type,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let type_camel = display_type(typ, eqlog, identifiers)
@@ -956,14 +963,18 @@ fn display_new_element_fn_internal<'a>(
             write!(f, "self.insert_{parent_pred}(parent, el.into());")
         });
 
-        let new_index = IndexSpec {
-            order: vec![0].into(),
-            age: IndexAge::New,
-        };
-
         let type_set_rel = FlatInRel::TypeSet(typ);
+        let new_index = index_selection
+            .indices
+            .get(&type_set_rel)
+            .expect("type set should have indices")
+            .iter()
+            .filter(|index| index.age == IndexAge::New)
+            .exactly_one()
+            .expect("should have exactly one new index for type set");
+
         let new_index_field =
-            display_index_field_name(&type_set_rel, &new_index, eqlog, identifiers);
+            display_index_field_name(&type_set_rel, new_index, eqlog, identifiers);
 
         writedoc! {f, "
             /// Adjoins a new element of type [{type_camel}].
@@ -1204,23 +1215,31 @@ fn display_equate_elements<'a>(
     typ: Type,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let type_camel = format!("{}", display_type(typ, eqlog, identifiers)).to_case(UpperCamel);
         let type_snake = type_camel.to_case(Snake);
 
         let type_set_rel = FlatInRel::TypeSet(typ);
-        let index_new = IndexSpec {
-            order: vec![0].into(),
-            age: IndexAge::New,
-        };
-        let index_old = IndexSpec {
-            order: vec![0].into(),
-            age: IndexAge::Old,
-        };
+        let indices = index_selection
+            .indices
+            .get(&type_set_rel)
+            .expect("type set should have indices");
 
-        let index_new = display_index_field_name(&type_set_rel, &index_new, eqlog, identifiers);
-        let index_old = display_index_field_name(&type_set_rel, &index_old, eqlog, identifiers);
+        let index_new = indices
+            .iter()
+            .filter(|index| index.age == IndexAge::New)
+            .exactly_one()
+            .expect("should have exactly one new index for type set");
+        let index_old = indices
+            .iter()
+            .filter(|index| index.age == IndexAge::Old)
+            .exactly_one()
+            .expect("should have exactly one old index for type set");
+
+        let index_new = display_index_field_name(&type_set_rel, index_new, eqlog, identifiers);
+        let index_old = display_index_field_name(&type_set_rel, index_old, eqlog, identifiers);
 
         writedoc! {f, "
             /// Enforces the equality `lhs = rhs`.
@@ -1994,8 +2013,14 @@ fn display_move_new_to_old_fn<'a>(
                         index_selection,
                     );
 
-                    let new_clears = index_set(index_selection)
-                        .into_iter()
+                    let new_clears = index_selection
+                        .indices
+                        .iter()
+                        .flat_map(|(rel, indices)| {
+                            indices
+                                .iter()
+                                .map(move |index| (rel.clone(), index.clone()))
+                        })
                         .filter(|(flat_in_rel, index)| {
                             match index.age {
                                 IndexAge::Old => {
@@ -2040,19 +2065,26 @@ fn display_move_new_to_old_fn<'a>(
                 FmtFn(move |f| {
                     let flat_rel = FlatInRel::TypeSet(typ);
 
-                    let index_new = IndexSpec {
-                        age: IndexAge::New,
-                        order: vec![0].into(),
-                    };
-                    let index_old = IndexSpec {
-                        age: IndexAge::Old,
-                        order: index_new.order.clone(),
-                    };
+                    let indices = index_selection
+                        .indices
+                        .get(&flat_rel)
+                        .expect("type set should have indices");
+
+                    let index_new = indices
+                        .iter()
+                        .filter(|index| index.age == IndexAge::New)
+                        .exactly_one()
+                        .expect("should have exactly one new index for type set");
+                    let index_old = indices
+                        .iter()
+                        .filter(|index| index.age == IndexAge::Old)
+                        .exactly_one()
+                        .expect("should have exactly one old index for type set");
 
                     let new_index =
-                        display_index_field_name(&flat_rel, &index_new, eqlog, identifiers);
+                        display_index_field_name(&flat_rel, index_new, eqlog, identifiers);
                     let old_index =
-                        display_index_field_name(&flat_rel, &index_old, eqlog, identifiers);
+                        display_index_field_name(&flat_rel, index_old, eqlog, identifiers);
 
                     writedoc! {f, "
                         for r in self.{new_index}.iter() {{
@@ -2101,45 +2133,63 @@ fn display_recompute_model_indices_fn<'a>(
                         FlatInRel::EqlogRel(cod_rel);
                     let set_rel = FlatInRel::TypeSet(typ);
 
-                    let new_order_1_0 = IndexSpec {
-                        age: IndexAge::New,
-                        order: vec![1, 0].into(),
-                    };
-                    let old_order_1_0 = IndexSpec {
-                        age: IndexAge::Old,
-                        order: vec![1, 0].into(),
-                    };
+                    let dom_indices = index_selection
+                        .indices
+                        .get(&dom_rel)
+                        .expect("dom rel should have indices");
+                    let new_order_1_0 = dom_indices
+                        .iter()
+                        .filter(|index| index.age == IndexAge::New && index.order.as_ref() == [1, 0])
+                        .exactly_one()
+                        .expect("should have exactly one new index with order [1, 0] for dom rel");
+                    let old_order_1_0 = dom_indices
+                        .iter()
+                        .filter(|index| index.age == IndexAge::Old && index.order.as_ref() == [1, 0])
+                        .exactly_one()
+                        .expect("should have exactly one old index with order [1, 0] for dom rel");
 
                     let dom_new_order_1_0 =
-                        display_index_field_name(&dom_rel, &new_order_1_0, eqlog, identifiers);
+                        display_index_field_name(&dom_rel, new_order_1_0, eqlog, identifiers);
                     let dom_old_order_1_0 =
-                        display_index_field_name(&dom_rel, &old_order_1_0, eqlog, identifiers);
+                        display_index_field_name(&dom_rel, old_order_1_0, eqlog, identifiers);
 
-                    let new_order_0_1 = IndexSpec {
-                        age: IndexAge::New,
-                        order: vec![0, 1].into(),
-                    };
-                    let old_order_0_1 = IndexSpec {
-                        age: IndexAge::Old,
-                        order: vec![0, 1].into(),
-                    };
+                    let cod_indices = index_selection
+                        .indices
+                        .get(&cod_rel)
+                        .expect("cod rel should have indices");
+                    let new_order_0_1 = cod_indices
+                        .iter()
+                        .filter(|index| index.age == IndexAge::New && index.order.as_ref() == [0, 1])
+                        .exactly_one()
+                        .expect("should have exactly one new index with order [0, 1] for cod rel");
+                    let old_order_0_1 = cod_indices
+                        .iter()
+                        .filter(|index| index.age == IndexAge::Old && index.order.as_ref() == [0, 1])
+                        .exactly_one()
+                        .expect("should have exactly one old index with order [0, 1] for cod rel");
 
                     let cod_new_order_0_1 =
-                        display_index_field_name(&cod_rel, &new_order_0_1, eqlog, identifiers);
+                        display_index_field_name(&cod_rel, new_order_0_1, eqlog, identifiers);
                     let cod_old_order_0_1 =
-                        display_index_field_name(&cod_rel, &old_order_0_1, eqlog, identifiers);
+                        display_index_field_name(&cod_rel, old_order_0_1, eqlog, identifiers);
 
-                    let new_order_0 = IndexSpec {
-                        age: IndexAge::New,
-                        order: vec![0].into(),
-                    };
-                    let old_order_0 = IndexSpec {
-                        age: IndexAge::Old,
-                        order: vec![0].into(),
-                    };
+                    let set_indices = index_selection
+                        .indices
+                        .get(&set_rel)
+                        .expect("set rel should have indices");
+                    let new_order_0 = set_indices
+                        .iter()
+                        .filter(|index| index.age == IndexAge::New)
+                        .exactly_one()
+                        .expect("should have exactly one new index for set rel");
+                    let old_order_0 = set_indices
+                        .iter()
+                        .filter(|index| index.age == IndexAge::Old)
+                        .exactly_one()
+                        .expect("should have exactly one old index for set rel");
 
-                    let obj_new_order_0 = display_index_field_name(&set_rel, &new_order_0, eqlog, identifiers);
-                    let obj_old_order_0 = display_index_field_name(&set_rel, &old_order_0, eqlog, identifiers);
+                    let obj_new_order_0 = display_index_field_name(&set_rel, new_order_0, eqlog, identifiers);
+                    let obj_old_order_0 = display_index_field_name(&set_rel, old_order_0, eqlog, identifiers);
 
                     writedoc! {f, r#"
                         let ordered_{type_snake}_mor: Vec<eqlog_runtime::MorphismWithSignature> =
@@ -2157,9 +2207,14 @@ fn display_recompute_model_indices_fn<'a>(
             })
             .format("\n");
 
-        let compute_rel_sets =
-            index_set(index_selection)
-            .into_iter()
+        let compute_rel_sets = index_selection
+            .indices
+            .iter()
+            .flat_map(|(rel, indices)| {
+                indices
+                    .iter()
+                    .map(move |index| (rel.clone(), index.clone()))
+            })
             .filter_map(|(flat_in_rel, index_spec)| {
                 let parent_model_type = flat_in_rel.parent_model_type(eqlog)?;
                 Some((flat_in_rel, index_spec, parent_model_type))
@@ -2253,17 +2308,23 @@ fn display_recompute_model_indices_fn<'a>(
                                 let mor_app_rel: Rel = eqlog.func_rel(mor_app_func).unwrap();
                                 let mor_app_rel: FlatInRel = FlatInRel::EqlogRel(mor_app_rel);
 
-                                let mor_app_eval_index_new = IndexSpec {
-                                    order: vec![0, 1, 2].into(),
-                                    age: IndexAge::New,
-                                };
-                                let mor_app_eval_index_old = IndexSpec {
-                                    order: vec![0, 1, 2].into(),
-                                    age: IndexAge::Old,
-                                };
+                                let mor_app_indices = index_selection
+                                    .indices
+                                    .get(&mor_app_rel)
+                                    .expect("mor_app rel should have indices");
+                                let mor_app_eval_index_new = mor_app_indices
+                                    .iter()
+                                    .filter(|index| index.age == IndexAge::New && index.order.as_ref() == [0, 1, 2])
+                                    .exactly_one()
+                                    .expect("should have exactly one new index with order [0, 1, 2] for mor_app rel");
+                                let mor_app_eval_index_old = mor_app_indices
+                                    .iter()
+                                    .filter(|index| index.age == IndexAge::Old && index.order.as_ref() == [0, 1, 2])
+                                    .exactly_one()
+                                    .expect("should have exactly one old index with order [0, 1, 2] for mor_app rel");
 
-                                let mor_app_eval_index_new_name = display_index_field_name(&mor_app_rel, &mor_app_eval_index_new, eqlog, identifiers);
-                                let mor_app_eval_index_old_name = display_index_field_name(&mor_app_rel, &mor_app_eval_index_old, eqlog, identifiers);
+                                let mor_app_eval_index_new_name = display_index_field_name(&mor_app_rel, mor_app_eval_index_new, eqlog, identifiers);
+                                let mor_app_eval_index_old_name = display_index_field_name(&mor_app_rel, mor_app_eval_index_old, eqlog, identifiers);
 
                                 writedoc!{f, "
                                     Some(
@@ -2442,14 +2503,16 @@ fn display_new_fn<'a>(
             writeln!(f, "{type_snake}_weights: Vec::new(),").unwrap();
             writeln!(f, "{type_snake}_uprooted: Vec::new(),").unwrap();
         }
-        for (flat_rel, index) in index_set(index_selection) {
-            let field_name = display_index_field_name(&flat_rel, &index, eqlog, identifiers);
-            let index_type = display_index_type(&flat_rel, eqlog);
-            if flat_rel.parent_model_type(eqlog).is_some() {
-                writeln!(f, "{field_name}_own: {index_type}::new(),").unwrap();
-                writeln!(f, "{field_name}_all: {index_type}::new(),").unwrap();
-            } else {
-                writeln!(f, "{field_name}: {index_type}::new(),").unwrap();
+        for (flat_rel, indices) in &index_selection.indices {
+            for index in indices {
+                let field_name = display_index_field_name(&flat_rel, &index, eqlog, identifiers);
+                let index_type = display_index_type(&flat_rel, eqlog);
+                if flat_rel.parent_model_type(eqlog).is_some() {
+                    writeln!(f, "{field_name}_own: {index_type}::new(),").unwrap();
+                    writeln!(f, "{field_name}_all: {index_type}::new(),").unwrap();
+                } else {
+                    writeln!(f, "{field_name}: {index_type}::new(),").unwrap();
+                }
             }
         }
         for rel in eqlog.iter_rel() {
@@ -2765,8 +2828,14 @@ fn display_theory_struct<'a>(
     index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let index_fields = index_set(index_selection)
-            .into_iter()
+        let index_fields = index_selection
+            .indices
+            .iter()
+            .flat_map(|(rel, indices)| {
+                indices
+                    .iter()
+                    .map(move |index| (rel.clone(), index.clone()))
+            })
             .map(|(rel, index)| {
                 FmtFn(move |f| {
                     let index_name = display_index_field_name(&rel, &index, eqlog, identifiers);
@@ -2855,10 +2924,11 @@ fn display_theory_impl<'a>(
         }
 
         for typ in eqlog.iter_type() {
-            let new_element_fn_internal = display_new_element_fn_internal(typ, eqlog, identifiers);
+            let new_element_fn_internal =
+                display_new_element_fn_internal(typ, eqlog, identifiers, index_selection);
             writeln!(f, "{new_element_fn_internal}")?;
 
-            let equate_elements = display_equate_elements(typ, eqlog, identifiers);
+            let equate_elements = display_equate_elements(typ, eqlog, identifiers, index_selection);
             write!(f, "{}", equate_elements)?;
         }
 
