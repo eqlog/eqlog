@@ -315,7 +315,7 @@ pub fn iter_rule_morphisms<'a>(
     let first_dom = eqlog.before_rule_structure(rule).unwrap();
 
     let first_morphisms: Vec<Morphism> = eqlog
-        .iter_dom()
+        .iter_source()
         .filter_map(|(morph, dom)| {
             if eqlog.are_equal_structure(dom, first_dom) {
                 Some(morph)
@@ -331,11 +331,11 @@ pub fn iter_rule_morphisms<'a>(
             let prev_cods: BTreeSet<Structure> = prev_morphisms
                 .iter()
                 .copied()
-                .map(|morph| eqlog.cod(morph).unwrap())
+                .map(|morph| eqlog.target(morph).unwrap())
                 .collect();
 
             let next_morphisms: Vec<Morphism> = eqlog
-                .iter_dom()
+                .iter_source()
                 .filter_map(|(morph, dom)| {
                     if prev_cods.contains(&dom) {
                         Some(morph)

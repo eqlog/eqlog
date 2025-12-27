@@ -950,9 +950,9 @@ rule dep_arity_laws {
             then dep_arity(rel) = tys;
         }
         FuncRel(function) => {
-            if dom = domain(function);
-            if cod = codomain(function);
-            then tys := SnocTypeList(dom, cod)!;
+            if func_dom = domain(function);
+            if func_cod = codomain(function);
+            then tys := SnocTypeList(func_dom, func_cod)!;
             then dep_arity(rel) = tys;
         }
     }
@@ -1188,7 +1188,7 @@ rule instantiated_type_member {
 }
 
 pred should_instantiate_types(model_el: El, types: TypeList);
-func instantiated_types(model: El, types: TypeList) -> DepTypeList;
+func instantiated_types(model_el: El, types: TypeList) -> DepTypeList;
 
 rule instantiated_types_nil {
     if should_instantiate_types(model_el, tys);
@@ -1338,16 +1338,16 @@ rule constrained_init_snoc {
 // ## Morphisms
 
 type Morphism;
-func dom(Morphism) -> Structure;
-func cod(Morphism) -> Structure;
+func source(Morphism) -> Structure;
+func target(Morphism) -> Structure;
 
-rule dom_total {
+rule source_total {
     if morph: Morphism;
-    then dom(morph)!;
+    then source(morph)!;
 }
-rule cod_total {
+rule target_total {
     if morph: Morphism;
-    then cod(morph)!;
+    then target(morph)!;
 }
 
 func map_el(Morphism, El) -> El;
@@ -1356,22 +1356,22 @@ func map_els(Morphism, ElList) -> ElList;
 // Mapped elements live in the codomain structure.
 rule map_el_structure {
     if mapped = map_el(mor, _);
-    if cod = cod(mor);
-    then el_structure(mapped) = cod;
+    if morph_target = target(mor);
+    then el_structure(mapped) = morph_target;
 }
 
 // The operations map_el(mor, -) and map_els(mor, -) are total.
 rule map_el_defined {
-    if dom(mor) = struct;
+    if source(mor) = struct;
     if el_structure(el) = struct;
     then map_el(mor, el)!;
 }
 // Morphisms commute with nil, cons and snoc.
 rule map_els_defined {
-    if els_structure(els) = dom(mor);
+    if els_structure(els) = source(mor);
     match els {
         NilElList(_) => {
-            if c = cod(mor);
+            if c = target(mor);
             then cod_nil := NilElList(c)!;
             then map_els(mor, els) = cod_nil;
         }
@@ -1421,7 +1421,7 @@ rule map_dep_func_member {
 rule map_var {
     if el = var(_, name);
     if mapped_el = map_el(morph, el);
-    if cod(morph) = cod_structure;
+    if target(morph) = cod_structure;
     then mapped_el = var(cod_structure, name);
 }
 rule map_rel_app {
@@ -1500,7 +1500,7 @@ rule map_reflects_dep_type {
 rule map_preserves_ambient_model_els {
     if el = ambient_model_el(ss, _);
     if mapped_el = map_el(morph, el);
-    if cod(morph) = cod_structure;
+    if target(morph) = cod_structure;
     then mapped_el = ambient_model_el(ss, cod_structure);
 }
 
@@ -2216,9 +2216,9 @@ rule ambient_model_el_structure_model_scope {
 rule ambient_model_el_morphism_signature {
     if morph = ambient_model_el_morphism(rul);
     if brs = before_rule_structure(rul);
-    then dom(morph) = brs;
+    then source(morph) = brs;
     then ams := ambient_model_el_structure(rul)!;
-    then cod(morph) = ams;
+    then target(morph) = ams;
 }
 
 rule ambient_model_el_structure_els {
@@ -2240,7 +2240,7 @@ rule before_first_rule_stmt {
 rule cfg_edge_stmt_structure {
     if cfg_edge(from_stmt, to_stmt);
     if stmt_morphism(from_stmt, from_morphism);
-    if from_cod = cod(from_morphism);
+    if from_cod = target(from_morphism);
     then before_stmt_structure(to_stmt, from_cod);
 }
 
@@ -2251,21 +2251,21 @@ func branch_stmt_morphism(StmtNode, before_structure: Structure) -> Morphism;
 // This should only be defined for match statements.
 func match_stmt_morphism(StmtNode, before_structure: Structure) -> Morphism;
 
-rule if_atom_morphism_dom {
-    if morph_dom = dom(if_atom_morphism(_, before_structure));
-    then morph_dom = before_structure;
+rule if_atom_morphism_source {
+    if morph_source = source(if_atom_morphism(_, before_structure));
+    then morph_source = before_structure;
 }
-rule then_atom_morphism_dom {
-    if morph_dom = dom(then_atom_morphism(_, before_structure));
-    then morph_dom = before_structure;
+rule then_atom_morphism_source {
+    if morph_source = source(then_atom_morphism(_, before_structure));
+    then morph_source = before_structure;
 }
-rule branch_stmt_morphism_dom {
-    if morph_dom = dom(branch_stmt_morphism(_, before_structure));
-    then morph_dom = before_structure;
+rule branch_stmt_morphism_source {
+    if morph_source = source(branch_stmt_morphism(_, before_structure));
+    then morph_source = before_structure;
 }
-rule match_stmt_morphism_dom {
-    if morph_dom = dom(match_stmt_morphism(_, before_structure));
-    then morph_dom = before_structure;
+rule match_stmt_morphism_source {
+    if morph_source = source(match_stmt_morphism(_, before_structure));
+    then morph_source = before_structure;
 }
 
 rule if_stmt_morphism_defined {
@@ -2355,7 +2355,7 @@ pred func_expr_structure(FuncExprNode, Structure);
 
 rule stmt_structure_morphism {
     if stmt_morphism(stmt, morph);
-    if s = cod(morph);
+    if s = target(morph);
     then stmt_structure(stmt, s);
 }
 
@@ -2940,12 +2940,12 @@ pred el_is_surjective_ok(El);
 
 rule surjective_codomain_should_be_ok {
     if surj_then_morphism(morph);
-    if el_structure(el) = cod(morph);
+    if el_structure(el) = target(morph);
     then el_should_be_surjective_ok(el);
 }
 rule non_surjective_codomain_should_be_ok {
     if non_surj_then_morphism(morph);
-    if el_structure(el) = cod(morph);
+    if el_structure(el) = target(morph);
     then el_should_be_surjective_ok(el);
 }
 

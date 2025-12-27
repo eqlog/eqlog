@@ -140,8 +140,8 @@ pub fn display_morphisms<'a>(
         let mut displayed_structures: BTreeSet<Structure> = BTreeSet::new();
         for morphisms in iter_rule_morphisms(rule, eqlog) {
             for morphism in morphisms {
-                let dom = eqlog.dom(morphism).unwrap();
-                let cod = eqlog.cod(morphism).unwrap();
+                let dom = eqlog.source(morphism).unwrap();
+                let cod = eqlog.target(morphism).unwrap();
                 writeln!(f, "{morphism:?}: {dom:?} -> {cod:?}")?;
                 for (stmt, morphism0) in eqlog.iter_stmt_morphism() {
                     if !eqlog.are_equal_morphism(morphism, morphism0) {

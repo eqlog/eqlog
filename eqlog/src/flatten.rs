@@ -33,7 +33,7 @@ fn assign_el_vars(
             }
         }
 
-        let cod = eqlog.cod(transition).expect("cod should be total");
+        let cod = eqlog.target(transition).expect("cod should be total");
         for el in iter_els(cod, eqlog) {
             el_vars.entry(el).or_insert_with(|| {
                 let typ = eqlog.underlying_type(el_type(el, eqlog).unwrap()).unwrap();
@@ -106,7 +106,7 @@ fn flatten_if_arbitrary(
         }
     }
 
-    let cod = eqlog.cod(morphism).expect("cod should be total");
+    let cod = eqlog.target(morphism).expect("cod should be total");
 
     for (rel, els) in iter_rel_app(cod, eqlog) {
         if eqlog.rel_tuple_in_img(morphism, rel, els) {
@@ -188,7 +188,7 @@ fn flatten_surj_then(
         }
     }
 
-    let cod = eqlog.cod(morphism).expect("cod should be total");
+    let cod = eqlog.target(morphism).expect("cod should be total");
 
     for (rel, els) in iter_rel_app(cod, eqlog) {
         if eqlog.rel_tuple_in_img(morphism, rel, els) {
@@ -225,7 +225,7 @@ fn flatten_non_surj_then(
     el_vars: &BTreeMap<El, FlatVar>,
     eqlog: &Eqlog,
 ) -> Option<(FlatIfStmt, FlatThenStmt)> {
-    let cod = eqlog.cod(morphism).expect("cod should be total");
+    let cod = eqlog.target(morphism).expect("cod should be total");
     let cod_els: BTreeSet<El> = iter_els(cod, eqlog).collect();
     let img_els: BTreeSet<El> = eqlog
         .iter_map_el()
@@ -317,11 +317,11 @@ fn flatten_rule(
 
     for morphism in iter_rule_morphisms(rule, eqlog).flatten() {
         let dom_matching_stmts: &[FlatIfStmt] = matching_stmts
-            .get(&eqlog.dom(morphism).unwrap())
+            .get(&eqlog.source(morphism).unwrap())
             .unwrap()
             .as_slice();
 
-        let cod = eqlog.cod(morphism).expect("cod should be total");
+        let cod = eqlog.target(morphism).expect("cod should be total");
 
         let cod_matching_stmts: Vec<FlatIfStmt> = if eqlog.if_morphism(morphism) {
             dom_matching_stmts
