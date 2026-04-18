@@ -10,4 +10,4 @@ readme.workspace = true
 links = "eqlog-runtime-0.8"
 
 [dev-dependencies]
-rand = ">= 0.9"
+rand = "0.9"
