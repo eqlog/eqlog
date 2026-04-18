@@ -1,4 +1,8 @@
-Loosen all dependency version constraints to `>= 0`, pin the rustc
-toolchain to 1.95.0, and check in `Cargo.lock` for reproducible builds.
-Fix a rand 0.10 compatibility issue (import the new `RngExt` trait so
-`random_range` resolves on `StdRng`).
+Loosen version constraints and check in Cargo.lock
+
+Set all dependency version constraints to `>= 0` so `cargo update`
+always picks the latest compatible release, pin the rustc toolchain
+to 1.95.0, and start tracking `Cargo.lock` for reproducible builds.
+
+Fix a rand 0.10 compatibility issue: `random_range` moved to a new
+`RngExt` trait, which now needs to be imported.
