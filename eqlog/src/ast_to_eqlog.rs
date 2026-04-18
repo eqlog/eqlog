@@ -422,8 +422,7 @@ impl<'a> Ctx<'a> {
     }
 
     fn build_ctor_decl_list(&mut self, ctors: &[ast::CtorDecl]) -> CtorDeclListNode {
-        let ctor_nodes: Vec<CtorDeclNode> =
-            ctors.iter().map(|c| self.build_ctor_decl(c)).collect();
+        let ctor_nodes: Vec<CtorDeclNode> = ctors.iter().map(|c| self.build_ctor_decl(c)).collect();
         let mut node = self.eqlog.new_ctor_decl_list_node();
         self.eqlog.insert_nil_ctor_decl_list_node(node);
         for ctor in ctor_nodes.iter().rev() {
