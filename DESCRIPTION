@@ -1,0 +1,9 @@
+Introduce a plain Rust AST and stop generating eqlog-eqlog nodes from the grammar
+
+First step toward retiring eqlog-eqlog. The grammar now produces an `ast::Module`
+of ordinary Rust types: every node carries a `Location` field, identifiers are
+plain `String`s, and child collections are `Vec`s or `Box`es. The new
+`ast_to_eqlog` module walks the AST and populates the existing eqlog-eqlog
+`Eqlog` model with exactly the nodes the grammar used to create directly.
+Behavior should be unchanged; this only opens the door to gradually cutting
+AST-like sorts out of eqlog-eqlog.

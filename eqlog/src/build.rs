@@ -1,9 +1,10 @@
+use crate::ast;
+use crate::ast_to_eqlog::populate_eqlog;
 use crate::debug::display_morphisms;
 use crate::error::*;
 use crate::flat_eqlog::*;
 use crate::flatten::*;
 use crate::grammar::*;
-use crate::grammar_util::*;
 use crate::ram::*;
 use crate::rust_gen::*;
 use crate::semantics::*;
@@ -13,14 +14,12 @@ use anyhow::ensure;
 use anyhow::Context as _;
 pub use anyhow::{Error, Result};
 use convert_case::{Case, Casing};
-use eqlog_eqlog::*;
 use indoc::{formatdoc, indoc};
 use log::debug;
 use log::log_enabled;
 use rayon::iter::ParallelBridge as _;
 use rayon::iter::ParallelIterator as _;
 use sha2::{Digest as _, Sha256};
-use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsStr;
 use std::fs::{self};
@@ -46,39 +45,12 @@ fn whipe_comments(source: &str) -> String {
     lines.join("\n")
 }
 
-fn parse(
-    source: &str,
-) -> Result<
-    (
-        Eqlog,
-        BTreeMap<Ident, String>,
-        BTreeMap<Loc, Location>,
-        ModuleNode,
-    ),
-    CompileError,
-> {
+fn parse(source: &str) -> Result<ast::Module, CompileError> {
     let source = whipe_comments(&source);
-    let mut eqlog = Eqlog::new();
-
-    let mut identifiers: BTreeMap<String, Ident> = BTreeMap::new();
-    let mut locations: BTreeMap<Location, Loc> = BTreeMap::new();
-
     let module = ModuleParser::new()
-        .parse(
-            &mut eqlog,
-            &mut identifiers,
-            &mut locations,
-            source.as_str(),
-        )
+        .parse(source.as_str())
         .map_err(CompileError::from)?;
-
-    let identifiers = identifiers.into_iter().map(|(s, i)| (i, s)).collect();
-    let locations = locations
-        .into_iter()
-        .map(|(location, loc)| (loc, location))
-        .collect();
-
-    Ok((eqlog, identifiers, locations, module))
+    Ok(module)
 }
 
 fn find_files_by_extension(root_path: &Path, extensions: &[&str]) -> Result<Vec<PathBuf>> {
@@ -457,7 +429,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     // what state we would end up otherwise in case we fail half-way through.
     remove_digest(in_file, config)?;
 
-    let (mut eqlog, identifiers, locations, _module) = match parse(source.as_str()) {
+    let module = match parse(source.as_str()) {
         Ok(x) => x,
         Err(error) => {
             return Err(CompileErrorWithContext {
@@ -468,6 +440,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
             .into());
         }
     };
+    let (mut eqlog, identifiers, locations, _module) = populate_eqlog(&module);
     eqlog.close();
 
     if log_enabled!(log::Level::Debug) {

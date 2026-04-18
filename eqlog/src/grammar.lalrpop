@@ -1,23 +1,14 @@
-use eqlog_eqlog::*;
-use std::collections::BTreeMap;
-use crate::grammar_util::*;
+use crate::ast::*;
+use crate::grammar_util::{Location, NeverType};
 
-grammar(
-    eqlog: &mut Eqlog,
-    identifiers: &mut BTreeMap<String, Ident>,
-    locations: &mut BTreeMap<Location, Loc>
-);
+grammar;
 
 extern {
     type Error = NeverType;
 }
 
-Id: Ident  = {
-    <s : r"[A-Za-z][A-Za-z0-9'_]*"> => {
-        *identifiers.entry(s.to_string()).or_insert_with(|| {
-            eqlog.new_ident()
-        })
-    },
+Id: String = {
+    <s : r"[A-Za-z][A-Za-z0-9'_]*"> => s.to_string(),
 }
 
 PairFirst<First, Second>: First = {
@@ -36,80 +27,49 @@ Intersperse<Item, Separator>: Vec<Item> = {
     () => vec![],
 }
 
-Variable: TermNode = {
-    <l: @L> <ident: Id> <r: @R> => {
-        let tm = eqlog.new_term_node();
-        let virt_ident = eqlog.define_real_virt_ident(ident);
-        eqlog.insert_var_term_node(tm, virt_ident);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_term_node_loc(tm, loc);
-
-        tm
+Variable: Term = {
+    <l: @L> <name: Id> <r: @R> => Term {
+        loc: Location(l, r),
+        kind: TermKind::Var(name),
     },
 }
 
-Wildcard: TermNode = {
-    <l: @L> "_" <r: @R> => {
-        let tm = eqlog.new_term_node();
-        eqlog.insert_wildcard_term_node(tm);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_term_node_loc(tm, loc);
-
-        tm
+Wildcard: Term = {
+    <l: @L> "_" <r: @R> => Term {
+        loc: Location(l, r),
+        kind: TermKind::Wildcard,
     },
 }
 
-ApplicationTerm: TermNode = {
-    <l: @L> <func_expr: FuncExpr> <args: ArgList> <r: @R> => {
-        let tm = eqlog.new_term_node();
-        eqlog.insert_app_term_node(tm, func_expr, args);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_term_node_loc(tm, loc);
-
-        tm
+ApplicationTerm: Term = {
+    <l: @L> <func: FuncExpr> <args: ArgList> <r: @R> => Term {
+        loc: Location(l, r),
+        kind: TermKind::App { func, args },
     },
 }
 
-DomTerm: TermNode = {
-    <l: @L> "dom" "(" <arg_mor: Term> ")" <r: @R> => {
-        let tm = eqlog.new_term_node();
-        eqlog.insert_dom_term_node(tm, arg_mor);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_term_node_loc(tm, loc);
-
-        tm
-    }
+DomTerm: Term = {
+    <l: @L> "dom" "(" <arg: Term> ")" <r: @R> => Term {
+        loc: Location(l, r),
+        kind: TermKind::Dom(Box::new(arg)),
+    },
 }
 
-CodTerm: TermNode = {
-    <l: @L> "cod" "(" <arg_mor: Term> ")" <r: @R> => {
-        let tm = eqlog.new_term_node();
-        eqlog.insert_cod_term_node(tm, arg_mor);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_term_node_loc(tm, loc);
-
-        tm
-    }
+CodTerm: Term = {
+    <l: @L> "cod" "(" <arg: Term> ")" <r: @R> => Term {
+        loc: Location(l, r),
+        kind: TermKind::Cod(Box::new(arg)),
+    },
 }
 
-MorAppTerm: TermNode = {
-    <l: @L> <mor_term: Term> "@" "(" <arg_term: Term> ")" <r: @R> => {
-        let tm = eqlog.new_term_node();
-        eqlog.insert_mor_app_term_node(tm, mor_term, arg_term);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_term_node_loc(tm, loc);
-
-        tm
-    }
+MorAppTerm: Term = {
+    <l: @L> <mor: Term> "@" "(" <arg: Term> ")" <r: @R> => Term {
+        loc: Location(l, r),
+        kind: TermKind::MorApp { mor: Box::new(mor), arg: Box::new(arg) },
+    },
 }
 
-Term: TermNode = {
+Term: Term = {
     <var: Variable> => var,
     <wildcard: Wildcard> => wildcard,
     <application: ApplicationTerm> => application,
@@ -118,378 +78,202 @@ Term: TermNode = {
     <app_term: MorAppTerm> => app_term,
 }
 
-TypeExpr: TypeExprNode = {
-    <l: @L> <ty_ident: Id> <r: @R> => {
-        let node = eqlog.new_type_expr_node();
-        eqlog.insert_ambient_type_expr(node, ty_ident);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_type_expr_node_loc(node, loc);
-
-        node
+TypeExpr: TypeExpr = {
+    <l: @L> <name: Id> <r: @R> => TypeExpr {
+        loc: Location(l, r),
+        kind: TypeExprKind::Ambient(name),
     },
-    <l: @L> <tm: Term> "." <ty_ident: Id> <r: @R> => {
-        let node = eqlog.new_type_expr_node();
-        eqlog.insert_member_type_expr(node, tm, ty_ident);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_type_expr_node_loc(node, loc);
-
-        node
+    <l: @L> <tm: Term> "." <name: Id> <r: @R> => TypeExpr {
+        loc: Location(l, r),
+        kind: TypeExprKind::Member { term: Box::new(tm), name },
     },
-    <l: @L> "Mor" "(" <ty_ident: Id> ")" <r: @R> => {
-        let node = eqlog.new_type_expr_node();
-        eqlog.insert_mor_type_expr(node, ty_ident);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_type_expr_node_loc(node, loc);
-
-        node
-    }
-}
-
-#[inline]
-PredExpr: PredExprNode = {
-    <l: @L> <pred_ident: Id> <r: @R> => {
-        let node = eqlog.new_pred_expr_node();
-        eqlog.insert_ambient_pred_expr(node, pred_ident);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_pred_expr_node_loc(node, loc);
-
-        node
-    },
-    <l: @L> <tm: Term> "." <pred_ident: Id> <r: @R> => {
-        let node = eqlog.new_pred_expr_node();
-        eqlog.insert_member_pred_expr(node, tm, pred_ident);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_pred_expr_node_loc(node, loc);
- 
-        node
+    <l: @L> "Mor" "(" <name: Id> ")" <r: @R> => TypeExpr {
+        loc: Location(l, r),
+        kind: TypeExprKind::Mor(name),
     },
 }
 
 #[inline]
-FuncExpr: FuncExprNode = {
-    <l: @L> <func_ident: Id> <r: @R> => {
-        let node = eqlog.new_func_expr_node();
-        eqlog.insert_ambient_func_expr(node, func_ident);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_func_expr_node_loc(node, loc);
-
-        node
+PredExpr: PredExpr = {
+    <l: @L> <name: Id> <r: @R> => PredExpr {
+        loc: Location(l, r),
+        kind: PredExprKind::Ambient(name),
     },
-    <l: @L> <tm: Term> "." <func_ident: Id> <r: @R> => {
-        let node = eqlog.new_func_expr_node();
-        eqlog.insert_member_func_expr(node, tm, func_ident);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_func_expr_node_loc(node, loc);
- 
-        node
+    <l: @L> <tm: Term> "." <name: Id> <r: @R> => PredExpr {
+        loc: Location(l, r),
+        kind: PredExprKind::Member { term: Box::new(tm), name },
     },
 }
 
-ArgList: TermListNode = {
-    <l: @L> "(" <args: Intersperse<Term, ",">> ")" <r: @R> => {
-        let tms = term_list_node(args.as_slice(), eqlog);
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_term_list_node_loc(tms, loc);
-        tms
+#[inline]
+FuncExpr: FuncExpr = {
+    <l: @L> <name: Id> <r: @R> => FuncExpr {
+        loc: Location(l, r),
+        kind: FuncExprKind::Ambient(name),
+    },
+    <l: @L> <tm: Term> "." <name: Id> <r: @R> => FuncExpr {
+        loc: Location(l, r),
+        kind: FuncExprKind::Member { term: Box::new(tm), name },
     },
 }
 
-IfAtom: IfAtomNode = {
-    <l: @L> <lhs: Term> "=" <rhs: Term> <r: @R> => {
-        let atom = eqlog.new_if_atom_node();
-        eqlog.insert_equal_if_atom_node(atom, lhs, rhs);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_if_atom_node_loc(atom, loc);
-
-        atom
-    },
-    <l: @L> <tm: Term> "!" <r: @R> => {
-        let atom = eqlog.new_if_atom_node();
-        eqlog.insert_defined_if_atom_node(atom, tm);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_if_atom_node_loc(atom, loc);
-
-        atom
-    },
-    <l: @L> <pred: PredExpr> <args: ArgList> <r: @R> => {
-        let atom = eqlog.new_if_atom_node();
-        eqlog.insert_pred_if_atom_node(atom, pred, args);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_if_atom_node_loc(atom, loc);
-
-        atom
-    },
-    <l: @L> <term: Term> ":" <typ: TypeExpr> <r: @R> => {
-        let atom = eqlog.new_if_atom_node();
-        eqlog.insert_var_if_atom_node(atom, term, typ);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_if_atom_node_loc(atom, loc);
-
-        atom
+ArgList: TermList = {
+    <l: @L> "(" <args: Intersperse<Term, ",">> ")" <r: @R> => TermList {
+        loc: Location(l, r),
+        terms: args,
     },
 }
 
-ThenAtom: ThenAtomNode = {
-    <l: @L> <lhs: Term> "=" <rhs: Term> <r: @R> => {
-        let atom = eqlog.new_then_atom_node();
-        eqlog.insert_equal_then_atom_node(atom, lhs, rhs);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_then_atom_node_loc(atom, loc);
-
-        atom
+IfAtom: IfAtom = {
+    <l: @L> <lhs: Term> "=" <rhs: Term> <r: @R> => IfAtom {
+        loc: Location(l, r),
+        kind: IfAtomKind::Equal(lhs, rhs),
     },
-    <l: @L> <var: PairFirst<Term, ":=">?> <term: Term> "!" <r: @R> => {
-        let atom = eqlog.new_then_atom_node();
-        let var = opt_term_node(var, eqlog);
-        eqlog.insert_defined_then_atom_node(atom, var, term);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_then_atom_node_loc(atom, loc);
-
-        atom
+    <l: @L> <tm: Term> "!" <r: @R> => IfAtom {
+        loc: Location(l, r),
+        kind: IfAtomKind::Defined(tm),
     },
-    <l: @L> <pred: PredExpr> <args: ArgList> <r: @R> => {
-        let atom = eqlog.new_then_atom_node();
-        eqlog.insert_pred_then_atom_node(atom, pred, args);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_then_atom_node_loc(atom, loc);
-
-        atom
+    <l: @L> <pred: PredExpr> <args: ArgList> <r: @R> => IfAtom {
+        loc: Location(l, r),
+        kind: IfAtomKind::Pred { pred, args },
+    },
+    <l: @L> <term: Term> ":" <typ: TypeExpr> <r: @R> => IfAtom {
+        loc: Location(l, r),
+        kind: IfAtomKind::Var { term, typ },
     },
 }
 
-StmtBlock: StmtListNode = {
-    "{" <stmts: Stmt*> "}" => {
-        stmt_list_node(stmts.as_slice(), eqlog)
-    }
-}
-
-MatchCase: MatchCaseNode = {
-    <l: @L> <pattern: Term> "=>" <body: StmtBlock> <r: @R> => {
-        let case = eqlog.new_match_case_node();
-        eqlog.insert_match_case(case, pattern, body);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_match_case_node_loc(case, loc);
-
-        case
+ThenAtom: ThenAtom = {
+    <l: @L> <lhs: Term> "=" <rhs: Term> <r: @R> => ThenAtom {
+        loc: Location(l, r),
+        kind: ThenAtomKind::Equal(lhs, rhs),
+    },
+    <l: @L> <var: PairFirst<Term, ":=">?> <term: Term> "!" <r: @R> => ThenAtom {
+        loc: Location(l, r),
+        kind: ThenAtomKind::Defined { var, term },
+    },
+    <l: @L> <pred: PredExpr> <args: ArgList> <r: @R> => ThenAtom {
+        loc: Location(l, r),
+        kind: ThenAtomKind::Pred { pred, args },
     },
 }
 
-Stmt: StmtNode = {
-    "branch" <blocks: NonEmptyIntersperse<StmtBlock, "along">> => {
-        let blocks = stmt_block_list_node(blocks.as_slice(), eqlog);
-        let stmt = eqlog.new_stmt_node();
-        eqlog.insert_branch_stmt_node(stmt, blocks);
-        stmt
-    },
-    <l: @L> "if" <atom: IfAtom> ";" <r: @R> => {
-        let stmt = eqlog.new_stmt_node();
-        eqlog.insert_if_stmt_node(stmt, atom);
+StmtBlock: Vec<Stmt> = {
+    "{" <stmts: Stmt*> "}" => stmts,
+}
 
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_stmt_node_loc(stmt, loc);
-
-        stmt
-    },
-    <l: @L> "then" <atom: ThenAtom> ";" <r: @R> => {
-        let stmt = eqlog.new_stmt_node();
-        eqlog.insert_then_stmt_node(stmt, atom);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_stmt_node_loc(stmt, loc);
-
-        stmt
-    },
-    <l: @L> "match" <tm: Term> "{" <cases: MatchCase*> "}" <r: @R> => {
-        let cases = match_case_list_node(cases.as_slice(), eqlog);
-
-        let stmt = eqlog.new_stmt_node();
-        eqlog.insert_match_stmt_node(stmt, tm, cases);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_stmt_node_loc(stmt, loc);
-
-        stmt
+MatchCase: MatchCase = {
+    <l: @L> <pattern: Term> "=>" <body: StmtBlock> <r: @R> => MatchCase {
+        loc: Location(l, r),
+        pattern,
+        body,
     },
 }
 
-RuleDecl: RuleDeclNode = {
-    <l: @L> "rule" <name: Id?> "{" <body: Stmt*> "}" <r: @R> => {
-        let rule = eqlog.new_rule_decl_node();
-        let body = stmt_list_node(body.as_slice(), eqlog);
-        eqlog.insert_rule_decl(rule, body);
-
-        if let Some(name) = name {
-            eqlog.insert_rule_name(rule, name);
-        }
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_rule_decl_node_loc(rule, loc);
-
-        rule
+Stmt: Stmt = {
+    <l: @L> "branch" <blocks: NonEmptyIntersperse<StmtBlock, "along">> <r: @R> => Stmt {
+        loc: Location(l, r),
+        kind: StmtKind::Branch(blocks),
+    },
+    <l: @L> "if" <atom: IfAtom> ";" <r: @R> => Stmt {
+        loc: Location(l, r),
+        kind: StmtKind::If(atom),
+    },
+    <l: @L> "then" <atom: ThenAtom> ";" <r: @R> => Stmt {
+        loc: Location(l, r),
+        kind: StmtKind::Then(atom),
+    },
+    <l: @L> "match" <tm: Term> "{" <cases: MatchCase*> "}" <r: @R> => Stmt {
+        loc: Location(l, r),
+        kind: StmtKind::Match { term: tm, cases },
     },
 }
 
-TypeDecl: TypeDeclNode = {
-    <l: @L>  "type" <name: Id> ";" <r: @R> => {
-        // TODO: This node should be associated with data.
-        let typ = eqlog.new_type_decl_node();
-        eqlog.insert_type_decl(typ, name);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_type_decl_node_loc(typ, loc);
-
-        typ
+RuleDecl: RuleDecl = {
+    <l: @L> "rule" <name: Id?> "{" <body: Stmt*> "}" <r: @R> => RuleDecl {
+        loc: Location(l, r),
+        name,
+        body,
     },
 }
 
-ArgDecl: ArgDeclNode = {
-    <l: @L> <name: PairFirst<Id, ":">?> <type_expr: TypeExpr> <r: @R> => {
-        let arg_decl = eqlog.new_arg_decl_node();
-        if let Some(name) = name {
-            eqlog.insert_arg_decl_node_name(arg_decl, name);
-        }
-        eqlog.insert_arg_decl_node_type(arg_decl, type_expr);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_arg_decl_node_loc(arg_decl, loc);
-
-        arg_decl
+TypeDecl: TypeDecl = {
+    <l: @L> "type" <name: Id> ";" <r: @R> => TypeDecl {
+        loc: Location(l, r),
+        name,
     },
 }
 
-ArgDeclList: ArgDeclListNode = {
-    <l: @L> "(" <arg_decls: Intersperse<ArgDecl, ",">> ")" <r: @R> => {
-        let arg_decls = arg_decl_list_node(arg_decls.as_slice(), eqlog);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_arg_decl_list_node_loc(arg_decls, loc);
-
-        arg_decls
+ArgDecl: ArgDecl = {
+    <l: @L> <name: PairFirst<Id, ":">?> <typ: TypeExpr> <r: @R> => ArgDecl {
+        loc: Location(l, r),
+        name,
+        typ,
     },
 }
 
-PredDecl: PredDeclNode = {
-    <l: @L> "pred" <name: Id> <arg_decls: ArgDeclList> ";" <r: @R> => {
-        let pred = eqlog.new_pred_decl_node();
-        eqlog.insert_pred_decl(pred, name, arg_decls);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_pred_decl_node_loc(pred, loc);
-
-        pred
+ArgDeclList: ArgDeclList = {
+    <l: @L> "(" <args: Intersperse<ArgDecl, ",">> ")" <r: @R> => ArgDeclList {
+        loc: Location(l, r),
+        args,
     },
 }
 
-FuncDecl: FuncDeclNode = {
-    <l: @L> "func" <name: Id> <arg_decls: ArgDeclList> "->" <result: TypeExpr> ";" <r: @R> => {
-        let func = eqlog.new_func_decl_node();
-        eqlog.insert_func_decl(func, name, arg_decls, result);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_func_decl_node_loc(func, loc);
-
-        func
+PredDecl: PredDecl = {
+    <l: @L> "pred" <name: Id> <args: ArgDeclList> ";" <r: @R> => PredDecl {
+        loc: Location(l, r),
+        name,
+        args,
     },
 }
 
-CtorDecl: CtorDeclNode = {
-    <l: @L> <name: Id> <arg_decls: ArgDeclList> <r: @R> => {
-        let ctor_decl = eqlog.new_ctor_decl_node();
-        eqlog.insert_ctor_decl(ctor_decl, name, arg_decls);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_ctor_decl_node_loc(ctor_decl, loc);
-
-        ctor_decl
+FuncDecl: FuncDecl = {
+    <l: @L> "func" <name: Id> <args: ArgDeclList> "->" <result: TypeExpr> ";" <r: @R> => FuncDecl {
+        loc: Location(l, r),
+        name,
+        args,
+        result,
     },
 }
 
-EnumDecl: EnumDeclNode = {
+CtorDecl: CtorDecl = {
+    <l: @L> <name: Id> <args: ArgDeclList> <r: @R> => CtorDecl {
+        loc: Location(l, r),
+        name,
+        args,
+    },
+}
+
+EnumDecl: EnumDecl = {
     // TODO: Let's also allow an optional comma after the last constructor. As of this writing,
     // adding a ","? there causes a shift-reduce conflict.
-    <l: @L> "enum" <name: Id> "{" <ctors: Intersperse<CtorDecl, ",">> "}" <r: @R> => {
-        let enum_decl = eqlog.new_enum_decl_node();
-        let ctors = ctor_decl_list_node(ctors.as_slice(), eqlog);
-        eqlog.insert_enum_decl(enum_decl, name, ctors);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_enum_decl_node_loc(enum_decl, loc);
-
-        enum_decl
-    }
-}
-
-ModelDecl: ModelDeclNode = {
-    <l: @L> "model" <name: Id> "{" <members: Decl*> "}" <r: @R> => {
-        let model_decl = eqlog.new_model_decl_node();
-        let members = decl_list_node(members.as_slice(), eqlog);
-        eqlog.insert_model_decl(model_decl, name, members);
-
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_model_decl_node_loc(model_decl, loc);
-
-        model_decl
-    }
-}
-
-Decl: DeclNode = {
-    <typ: TypeDecl> => {
-        let decl = eqlog.new_decl_node();
-        eqlog.insert_decl_node_type(decl, typ);
-        decl
-    },
-    <pred: PredDecl> => {
-        let decl = eqlog.new_decl_node();
-        eqlog.insert_decl_node_pred(decl, pred);
-        decl
-    },
-    <func: FuncDecl> => {
-        let decl = eqlog.new_decl_node();
-        eqlog.insert_decl_node_func(decl, func);
-        decl
-    },
-    <rule: RuleDecl> => {
-        let decl = eqlog.new_decl_node();
-        eqlog.insert_decl_node_rule(decl, rule);
-        decl
-    },
-    <enum_decl: EnumDecl> => {
-        let decl = eqlog.new_decl_node();
-        eqlog.insert_decl_node_enum(decl, enum_decl);
-        decl
-    },
-    <model_decl: ModelDecl> => {
-        let decl = eqlog.new_decl_node();
-        eqlog.insert_decl_node_model(decl, model_decl);
-        decl
+    <l: @L> "enum" <name: Id> "{" <ctors: Intersperse<CtorDecl, ",">> "}" <r: @R> => EnumDecl {
+        loc: Location(l, r),
+        name,
+        ctors,
     },
 }
 
-pub Module: ModuleNode = {
-    <l: @L> <decls: Decl*> <r: @R> => {
-        let module = eqlog.new_module_node();
-        let decls = decl_list_node(decls.as_slice(), eqlog);
-        eqlog.insert_decls_module_node(module, decls);
+ModelDecl: ModelDecl = {
+    <l: @L> "model" <name: Id> "{" <body: Decl*> "}" <r: @R> => ModelDecl {
+        loc: Location(l, r),
+        name,
+        body,
+    },
+}
 
-        let loc = make_loc(Location(l, r), eqlog, locations);
-        eqlog.insert_decl_list_node_loc(decls, loc);
-        eqlog.insert_module_node_loc(module, loc);
+Decl: Decl = {
+    <t: TypeDecl> => Decl::Type(t),
+    <p: PredDecl> => Decl::Pred(p),
+    <f: FuncDecl> => Decl::Func(f),
+    <r: RuleDecl> => Decl::Rule(r),
+    <e: EnumDecl> => Decl::Enum(e),
+    <m: ModelDecl> => Decl::Model(m),
+}
 
-        module
-    }
+pub Module: Module = {
+    <l: @L> <decls: Decl*> <r: @R> => Module {
+        loc: Location(l, r),
+        decls,
+    },
 }
