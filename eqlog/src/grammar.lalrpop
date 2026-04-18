@@ -30,42 +30,42 @@ Intersperse<Item, Separator>: Vec<Item> = {
 Variable: Term = {
     <l: @L> <name: Id> <r: @R> => Term {
         loc: Location(l, r),
-        kind: TermKind::Var(name),
+        data: TermData::Var(name),
     },
 }
 
 Wildcard: Term = {
     <l: @L> "_" <r: @R> => Term {
         loc: Location(l, r),
-        kind: TermKind::Wildcard,
+        data: TermData::Wildcard,
     },
 }
 
 ApplicationTerm: Term = {
     <l: @L> <func: FuncExpr> <args: ArgList> <r: @R> => Term {
         loc: Location(l, r),
-        kind: TermKind::App { func, args },
+        data: TermData::App { func, args },
     },
 }
 
 DomTerm: Term = {
     <l: @L> "dom" "(" <arg: Term> ")" <r: @R> => Term {
         loc: Location(l, r),
-        kind: TermKind::Dom(Box::new(arg)),
+        data: TermData::Dom(Box::new(arg)),
     },
 }
 
 CodTerm: Term = {
     <l: @L> "cod" "(" <arg: Term> ")" <r: @R> => Term {
         loc: Location(l, r),
-        kind: TermKind::Cod(Box::new(arg)),
+        data: TermData::Cod(Box::new(arg)),
     },
 }
 
 MorAppTerm: Term = {
     <l: @L> <mor: Term> "@" "(" <arg: Term> ")" <r: @R> => Term {
         loc: Location(l, r),
-        kind: TermKind::MorApp { mor: Box::new(mor), arg: Box::new(arg) },
+        data: TermData::MorApp { mor: Box::new(mor), arg: Box::new(arg) },
     },
 }
 
@@ -81,15 +81,15 @@ Term: Term = {
 TypeExpr: TypeExpr = {
     <l: @L> <name: Id> <r: @R> => TypeExpr {
         loc: Location(l, r),
-        kind: TypeExprKind::Ambient(name),
+        data: TypeExprData::Ambient(name),
     },
     <l: @L> <tm: Term> "." <name: Id> <r: @R> => TypeExpr {
         loc: Location(l, r),
-        kind: TypeExprKind::Member { term: Box::new(tm), name },
+        data: TypeExprData::Member { term: Box::new(tm), name },
     },
     <l: @L> "Mor" "(" <name: Id> ")" <r: @R> => TypeExpr {
         loc: Location(l, r),
-        kind: TypeExprKind::Mor(name),
+        data: TypeExprData::Mor(name),
     },
 }
 
@@ -97,11 +97,11 @@ TypeExpr: TypeExpr = {
 PredExpr: PredExpr = {
     <l: @L> <name: Id> <r: @R> => PredExpr {
         loc: Location(l, r),
-        kind: PredExprKind::Ambient(name),
+        data: PredExprData::Ambient(name),
     },
     <l: @L> <tm: Term> "." <name: Id> <r: @R> => PredExpr {
         loc: Location(l, r),
-        kind: PredExprKind::Member { term: Box::new(tm), name },
+        data: PredExprData::Member { term: Box::new(tm), name },
     },
 }
 
@@ -109,11 +109,11 @@ PredExpr: PredExpr = {
 FuncExpr: FuncExpr = {
     <l: @L> <name: Id> <r: @R> => FuncExpr {
         loc: Location(l, r),
-        kind: FuncExprKind::Ambient(name),
+        data: FuncExprData::Ambient(name),
     },
     <l: @L> <tm: Term> "." <name: Id> <r: @R> => FuncExpr {
         loc: Location(l, r),
-        kind: FuncExprKind::Member { term: Box::new(tm), name },
+        data: FuncExprData::Member { term: Box::new(tm), name },
     },
 }
 
@@ -127,34 +127,34 @@ ArgList: TermList = {
 IfAtom: IfAtom = {
     <l: @L> <lhs: Term> "=" <rhs: Term> <r: @R> => IfAtom {
         loc: Location(l, r),
-        kind: IfAtomKind::Equal(lhs, rhs),
+        data: IfAtomData::Equal(lhs, rhs),
     },
     <l: @L> <tm: Term> "!" <r: @R> => IfAtom {
         loc: Location(l, r),
-        kind: IfAtomKind::Defined(tm),
+        data: IfAtomData::Defined(tm),
     },
     <l: @L> <pred: PredExpr> <args: ArgList> <r: @R> => IfAtom {
         loc: Location(l, r),
-        kind: IfAtomKind::Pred { pred, args },
+        data: IfAtomData::Pred { pred, args },
     },
     <l: @L> <term: Term> ":" <typ: TypeExpr> <r: @R> => IfAtom {
         loc: Location(l, r),
-        kind: IfAtomKind::Var { term, typ },
+        data: IfAtomData::Var { term, typ },
     },
 }
 
 ThenAtom: ThenAtom = {
     <l: @L> <lhs: Term> "=" <rhs: Term> <r: @R> => ThenAtom {
         loc: Location(l, r),
-        kind: ThenAtomKind::Equal(lhs, rhs),
+        data: ThenAtomData::Equal(lhs, rhs),
     },
     <l: @L> <var: PairFirst<Term, ":=">?> <term: Term> "!" <r: @R> => ThenAtom {
         loc: Location(l, r),
-        kind: ThenAtomKind::Defined { var, term },
+        data: ThenAtomData::Defined { var, term },
     },
     <l: @L> <pred: PredExpr> <args: ArgList> <r: @R> => ThenAtom {
         loc: Location(l, r),
-        kind: ThenAtomKind::Pred { pred, args },
+        data: ThenAtomData::Pred { pred, args },
     },
 }
 
@@ -173,19 +173,19 @@ MatchCase: MatchCase = {
 Stmt: Stmt = {
     <l: @L> "branch" <blocks: NonEmptyIntersperse<StmtBlock, "along">> <r: @R> => Stmt {
         loc: Location(l, r),
-        kind: StmtKind::Branch(blocks),
+        data: StmtData::Branch(blocks),
     },
     <l: @L> "if" <atom: IfAtom> ";" <r: @R> => Stmt {
         loc: Location(l, r),
-        kind: StmtKind::If(atom),
+        data: StmtData::If(atom),
     },
     <l: @L> "then" <atom: ThenAtom> ";" <r: @R> => Stmt {
         loc: Location(l, r),
-        kind: StmtKind::Then(atom),
+        data: StmtData::Then(atom),
     },
     <l: @L> "match" <tm: Term> "{" <cases: MatchCase*> "}" <r: @R> => Stmt {
         loc: Location(l, r),
-        kind: StmtKind::Match { term: tm, cases },
+        data: StmtData::Match { term: tm, cases },
     },
 }
 

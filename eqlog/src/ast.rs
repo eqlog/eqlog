@@ -81,11 +81,11 @@ pub struct ArgDeclList {
 #[derive(Clone, Debug)]
 pub struct Term {
     pub loc: Location,
-    pub kind: TermKind,
+    pub data: TermData,
 }
 
 #[derive(Clone, Debug)]
-pub enum TermKind {
+pub enum TermData {
     Var(String),
     Wildcard,
     App { func: FuncExpr, args: TermList },
@@ -103,11 +103,11 @@ pub struct TermList {
 #[derive(Clone, Debug)]
 pub struct TypeExpr {
     pub loc: Location,
-    pub kind: TypeExprKind,
+    pub data: TypeExprData,
 }
 
 #[derive(Clone, Debug)]
-pub enum TypeExprKind {
+pub enum TypeExprData {
     Ambient(String),
     Member { term: Box<Term>, name: String },
     Mor(String),
@@ -116,11 +116,11 @@ pub enum TypeExprKind {
 #[derive(Clone, Debug)]
 pub struct PredExpr {
     pub loc: Location,
-    pub kind: PredExprKind,
+    pub data: PredExprData,
 }
 
 #[derive(Clone, Debug)]
-pub enum PredExprKind {
+pub enum PredExprData {
     Ambient(String),
     Member { term: Box<Term>, name: String },
 }
@@ -128,11 +128,11 @@ pub enum PredExprKind {
 #[derive(Clone, Debug)]
 pub struct FuncExpr {
     pub loc: Location,
-    pub kind: FuncExprKind,
+    pub data: FuncExprData,
 }
 
 #[derive(Clone, Debug)]
-pub enum FuncExprKind {
+pub enum FuncExprData {
     Ambient(String),
     Member { term: Box<Term>, name: String },
 }
@@ -140,11 +140,11 @@ pub enum FuncExprKind {
 #[derive(Clone, Debug)]
 pub struct IfAtom {
     pub loc: Location,
-    pub kind: IfAtomKind,
+    pub data: IfAtomData,
 }
 
 #[derive(Clone, Debug)]
-pub enum IfAtomKind {
+pub enum IfAtomData {
     Equal(Term, Term),
     Defined(Term),
     Pred { pred: PredExpr, args: TermList },
@@ -154,11 +154,11 @@ pub enum IfAtomKind {
 #[derive(Clone, Debug)]
 pub struct ThenAtom {
     pub loc: Location,
-    pub kind: ThenAtomKind,
+    pub data: ThenAtomData,
 }
 
 #[derive(Clone, Debug)]
-pub enum ThenAtomKind {
+pub enum ThenAtomData {
     Equal(Term, Term),
     Defined { var: Option<Term>, term: Term },
     Pred { pred: PredExpr, args: TermList },
@@ -174,11 +174,11 @@ pub struct MatchCase {
 #[derive(Clone, Debug)]
 pub struct Stmt {
     pub loc: Location,
-    pub kind: StmtKind,
+    pub data: StmtData,
 }
 
 #[derive(Clone, Debug)]
-pub enum StmtKind {
+pub enum StmtData {
     If(IfAtom),
     Then(ThenAtom),
     Branch(Vec<Vec<Stmt>>),
