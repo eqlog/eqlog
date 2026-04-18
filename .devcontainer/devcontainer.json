@@ -1,0 +1,9 @@
+{
+    "build": {
+        "dockerfile": "Dockerfile",
+        "args": {
+            "BASE_IMAGE": "${localEnv:BASE_IMAGE:debian:trixie}"
+        }
+    },
+    "containerUser": "user"
+}
