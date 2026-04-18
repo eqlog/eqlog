@@ -5,9 +5,9 @@ edition = "2021"
 
 [dependencies]
 eqlog-runtime = { path = "../eqlog-runtime" }
-maplit = "*"
+maplit = ">= 0"
 
 [build-dependencies]
 eqlog = { path = "../eqlog", features = ["rebuild"] }
-env_logger = "*"
-log = "*"
+env_logger = ">= 0"
+log = ">= 0"
