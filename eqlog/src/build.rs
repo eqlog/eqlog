@@ -1,4 +1,4 @@
-use crate::ast;
+use crate::ast::{Ast, ModuleId};
 use crate::ast_to_eqlog::populate_eqlog;
 use crate::debug::display_morphisms;
 use crate::error::*;
@@ -45,12 +45,13 @@ fn whipe_comments(source: &str) -> String {
     lines.join("\n")
 }
 
-fn parse(source: &str) -> Result<ast::Module, CompileError> {
+fn parse(source: &str) -> Result<(Ast, ModuleId), CompileError> {
     let source = whipe_comments(&source);
+    let mut ast = Ast::new();
     let module = ModuleParser::new()
-        .parse(source.as_str())
+        .parse(&mut ast, source.as_str())
         .map_err(CompileError::from)?;
-    Ok(module)
+    Ok((ast, module))
 }
 
 fn find_files_by_extension(root_path: &Path, extensions: &[&str]) -> Result<Vec<PathBuf>> {
@@ -429,7 +430,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     // what state we would end up otherwise in case we fail half-way through.
     remove_digest(in_file, config)?;
 
-    let module = match parse(source.as_str()) {
+    let (ast, module) = match parse(source.as_str()) {
         Ok(x) => x,
         Err(error) => {
             return Err(CompileErrorWithContext {
@@ -440,7 +441,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
             .into());
         }
     };
-    let (mut eqlog, identifiers, locations, _module) = populate_eqlog(&module);
+    let (mut eqlog, identifiers, locations, _module) = populate_eqlog(&ast, module);
     eqlog.close();
 
     if log_enabled!(log::Level::Debug) {
