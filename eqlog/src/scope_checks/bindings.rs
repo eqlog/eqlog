@@ -1,7 +1,8 @@
-//! Scope-level rule-body checks. See [`check_scopes`] for the entry point.
+//! Position-local binding checks on rule bodies. See [`check_bindings`] for
+//! the entry point.
 //!
-//! Runs after [`crate::scopes::resolve_scopes`] and covers checks that depend
-//! on name resolution but not on type inference:
+//! Each check asks, at a specific AST position, whether a variable name is
+//! already bound in the enclosing scope:
 //!
 //! * [`CompileError::VariableIntroducedInThenStmt`]: a variable occurs in a
 //!   `then` atom in an epic position without having been bound earlier.
@@ -19,10 +20,10 @@ use crate::ast::*;
 use crate::error::CompileError;
 use crate::scopes::{ScopeId, Scopes, Symbol};
 
-/// Walks rule bodies under `module` and returns all scope-level errors in
-/// source order.
-pub fn check_scopes(ast: &Ast, scopes: &Scopes, module: ModuleId) -> Vec<CompileError> {
-    let mut checker = ScopeChecker {
+/// Walks rule bodies under `module` and returns all binding-position errors
+/// in source order.
+pub fn check_bindings(ast: &Ast, scopes: &Scopes, module: ModuleId) -> Vec<CompileError> {
+    let mut checker = BindingsChecker {
         ast,
         scopes,
         errors: Vec::new(),
@@ -31,13 +32,13 @@ pub fn check_scopes(ast: &Ast, scopes: &Scopes, module: ModuleId) -> Vec<Compile
     checker.errors
 }
 
-struct ScopeChecker<'a> {
+struct BindingsChecker<'a> {
     ast: &'a Ast,
     scopes: &'a Scopes,
     errors: Vec<CompileError>,
 }
 
-impl<'a> ScopeChecker<'a> {
+impl<'a> BindingsChecker<'a> {
     fn walk_module(&mut self, module: ModuleId) {
         for decl in self.ast.module(module).decls.clone() {
             self.walk_decl(decl);

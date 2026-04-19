@@ -7,7 +7,6 @@ mod grammar_util;
 mod semantics;
 lalrpop_mod!(grammar);
 mod build;
-mod check_variables;
 #[allow(dead_code)]
 mod debug;
 mod error;

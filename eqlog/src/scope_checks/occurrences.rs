@@ -1,4 +1,4 @@
-//! Per-rule "variable occurs at least twice" check. See [`check_variables`]
+//! Per-rule "variable occurs at least twice" check. See [`check_occurrences`]
 //! for the entry point.
 
 use std::collections::BTreeSet;
@@ -11,17 +11,17 @@ use crate::scopes::{Scopes, Symbol};
 /// that is not reachable from (and to) another occurrence of the same name
 /// via the scope graph, i.e. the first variable that is used only once in
 /// its scope.
-pub fn check_variables(ast: &Ast, scopes: &Scopes, module: ModuleId) -> Result<(), CompileError> {
-    let checker = VarUsageChecker { ast, scopes };
+pub fn check_occurrences(ast: &Ast, scopes: &Scopes, module: ModuleId) -> Result<(), CompileError> {
+    let checker = OccurrencesChecker { ast, scopes };
     checker.check_module(module)
 }
 
-struct VarUsageChecker<'a> {
+struct OccurrencesChecker<'a> {
     ast: &'a Ast,
     scopes: &'a Scopes,
 }
 
-impl<'a> VarUsageChecker<'a> {
+impl<'a> OccurrencesChecker<'a> {
     fn check_module(&self, module: ModuleId) -> Result<(), CompileError> {
         for decl in self.ast.module(module).decls.clone() {
             self.check_decl(decl)?;
