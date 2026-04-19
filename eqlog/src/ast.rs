@@ -28,6 +28,7 @@ macro_rules! typed_id {
 }
 
 typed_id!(ModuleId);
+typed_id!(DeclId);
 typed_id!(TypeDeclId);
 typed_id!(PredDeclId);
 typed_id!(FuncDeclId);
@@ -37,22 +38,51 @@ typed_id!(ModelDeclId);
 typed_id!(CtorDeclId);
 typed_id!(ArgDeclId);
 typed_id!(ArgDeclListId);
+
 typed_id!(TermId);
+typed_id!(VarTermId);
+typed_id!(AppTermId);
+typed_id!(DomTermId);
+typed_id!(CodTermId);
+typed_id!(MorAppTermId);
+
 typed_id!(TermListId);
+
 typed_id!(TypeExprId);
+typed_id!(AmbientTypeExprId);
+typed_id!(MemberTypeExprId);
+typed_id!(MorTypeExprId);
+
 typed_id!(PredExprId);
+typed_id!(AmbientPredExprId);
+typed_id!(MemberPredExprId);
+
 typed_id!(FuncExprId);
+typed_id!(AmbientFuncExprId);
+typed_id!(MemberFuncExprId);
+
 typed_id!(IfAtomId);
 typed_id!(ThenAtomId);
+typed_id!(EqualAtomId);
+typed_id!(PredAtomId);
+typed_id!(DefinedIfAtomId);
+typed_id!(VarIfAtomId);
+typed_id!(DefinedThenAtomId);
+
 typed_id!(MatchCaseId);
+
 typed_id!(StmtId);
+typed_id!(IfStmtId);
+typed_id!(ThenStmtId);
+typed_id!(BranchStmtId);
+typed_id!(MatchStmtId);
 
 #[derive(Clone, Debug)]
 pub struct Module {
-    pub decls: Vec<Decl>,
+    pub decls: Vec<DeclId>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum Decl {
     Type(TypeDeclId),
     Pred(PredDeclId),
@@ -95,7 +125,7 @@ pub struct EnumDecl {
 #[derive(Clone, Debug)]
 pub struct ModelDecl {
     pub name: String,
-    pub body: Vec<Decl>,
+    pub body: Vec<DeclId>,
 }
 
 #[derive(Clone, Debug)]
@@ -116,13 +146,40 @@ pub struct ArgDeclList {
 }
 
 #[derive(Clone, Debug)]
+pub struct VarTerm {
+    pub name: String,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct AppTerm {
+    pub func: FuncExprId,
+    pub args: TermListId,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct DomTerm {
+    pub arg: TermId,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct CodTerm {
+    pub arg: TermId,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct MorAppTerm {
+    pub mor: TermId,
+    pub arg: TermId,
+}
+
+#[derive(Copy, Clone, Debug)]
 pub enum Term {
-    Var(String),
+    Var(VarTermId),
     Wildcard,
-    App { func: FuncExprId, args: TermListId },
-    Dom(TermId),
-    Cod(TermId),
-    MorApp { mor: TermId, arg: TermId },
+    App(AppTermId),
+    Dom(DomTermId),
+    Cod(CodTermId),
+    MorApp(MorAppTermId),
 }
 
 #[derive(Clone, Debug)]
@@ -131,37 +188,104 @@ pub struct TermList {
 }
 
 #[derive(Clone, Debug)]
+pub struct AmbientTypeExpr {
+    pub name: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct MemberTypeExpr {
+    pub term: TermId,
+    pub name: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct MorTypeExpr {
+    pub name: String,
+}
+
+#[derive(Copy, Clone, Debug)]
 pub enum TypeExpr {
-    Ambient(String),
-    Member { term: TermId, name: String },
-    Mor(String),
+    Ambient(AmbientTypeExprId),
+    Member(MemberTypeExprId),
+    Mor(MorTypeExprId),
 }
 
 #[derive(Clone, Debug)]
+pub struct AmbientPredExpr {
+    pub name: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct MemberPredExpr {
+    pub term: TermId,
+    pub name: String,
+}
+
+#[derive(Copy, Clone, Debug)]
 pub enum PredExpr {
-    Ambient(String),
-    Member { term: TermId, name: String },
+    Ambient(AmbientPredExprId),
+    Member(MemberPredExprId),
 }
 
 #[derive(Clone, Debug)]
+pub struct AmbientFuncExpr {
+    pub name: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct MemberFuncExpr {
+    pub term: TermId,
+    pub name: String,
+}
+
+#[derive(Copy, Clone, Debug)]
 pub enum FuncExpr {
-    Ambient(String),
-    Member { term: TermId, name: String },
+    Ambient(AmbientFuncExprId),
+    Member(MemberFuncExprId),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
+pub struct EqualAtom {
+    pub lhs: TermId,
+    pub rhs: TermId,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct PredAtom {
+    pub pred: PredExprId,
+    pub args: TermListId,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct DefinedIfAtom {
+    pub term: TermId,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct VarIfAtom {
+    pub term: TermId,
+    pub typ: TypeExprId,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct DefinedThenAtom {
+    pub var: Option<TermId>,
+    pub term: TermId,
+}
+
+#[derive(Copy, Clone, Debug)]
 pub enum IfAtom {
-    Equal(TermId, TermId),
-    Defined(TermId),
-    Pred { pred: PredExprId, args: TermListId },
-    Var { term: TermId, typ: TypeExprId },
+    Equal(EqualAtomId),
+    Defined(DefinedIfAtomId),
+    Pred(PredAtomId),
+    Var(VarIfAtomId),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum ThenAtom {
-    Equal(TermId, TermId),
-    Defined { var: Option<TermId>, term: TermId },
-    Pred { pred: PredExprId, args: TermListId },
+    Equal(EqualAtomId),
+    Defined(DefinedThenAtomId),
+    Pred(PredAtomId),
 }
 
 #[derive(Clone, Debug)]
@@ -170,20 +294,39 @@ pub struct MatchCase {
     pub body: Vec<StmtId>,
 }
 
+#[derive(Copy, Clone, Debug)]
+pub struct IfStmt {
+    pub atom: IfAtomId,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct ThenStmt {
+    pub atom: ThenAtomId,
+}
+
 #[derive(Clone, Debug)]
+pub struct BranchStmt {
+    pub blocks: Vec<Vec<StmtId>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct MatchStmt {
+    pub term: TermId,
+    pub cases: Vec<MatchCaseId>,
+}
+
+#[derive(Copy, Clone, Debug)]
 pub enum Stmt {
-    If(IfAtomId),
-    Then(ThenAtomId),
-    Branch(Vec<Vec<StmtId>>),
-    Match {
-        term: TermId,
-        cases: Vec<MatchCaseId>,
-    },
+    If(IfStmtId),
+    Then(ThenStmtId),
+    Branch(BranchStmtId),
+    Match(MatchStmtId),
 }
 
 #[derive(Clone, Debug)]
 pub enum Node {
     Module(Module),
+    Decl(Decl),
     TypeDecl(TypeDecl),
     PredDecl(PredDecl),
     FuncDecl(FuncDecl),
@@ -194,14 +337,35 @@ pub enum Node {
     ArgDecl(ArgDecl),
     ArgDeclList(ArgDeclList),
     Term(Term),
+    VarTerm(VarTerm),
+    AppTerm(AppTerm),
+    DomTerm(DomTerm),
+    CodTerm(CodTerm),
+    MorAppTerm(MorAppTerm),
     TermList(TermList),
     TypeExpr(TypeExpr),
+    AmbientTypeExpr(AmbientTypeExpr),
+    MemberTypeExpr(MemberTypeExpr),
+    MorTypeExpr(MorTypeExpr),
     PredExpr(PredExpr),
+    AmbientPredExpr(AmbientPredExpr),
+    MemberPredExpr(MemberPredExpr),
     FuncExpr(FuncExpr),
+    AmbientFuncExpr(AmbientFuncExpr),
+    MemberFuncExpr(MemberFuncExpr),
     IfAtom(IfAtom),
     ThenAtom(ThenAtom),
+    EqualAtom(EqualAtom),
+    PredAtom(PredAtom),
+    DefinedIfAtom(DefinedIfAtom),
+    VarIfAtom(VarIfAtom),
+    DefinedThenAtom(DefinedThenAtom),
     MatchCase(MatchCase),
     Stmt(Stmt),
+    IfStmt(IfStmt),
+    ThenStmt(ThenStmt),
+    BranchStmt(BranchStmt),
+    MatchStmt(MatchStmt),
 }
 
 #[derive(Clone, Debug, Default)]
@@ -244,6 +408,7 @@ macro_rules! accessor {
 }
 
 accessor!(module, push_module, ModuleId, Module);
+accessor!(decl, push_decl, DeclId, Decl);
 accessor!(type_decl, push_type_decl, TypeDeclId, TypeDecl);
 accessor!(pred_decl, push_pred_decl, PredDeclId, PredDecl);
 accessor!(func_decl, push_func_decl, FuncDeclId, FuncDecl);
@@ -259,11 +424,77 @@ accessor!(
     ArgDeclList
 );
 accessor!(term, push_term, TermId, Term);
+accessor!(var_term, push_var_term, VarTermId, VarTerm);
+accessor!(app_term, push_app_term, AppTermId, AppTerm);
+accessor!(dom_term, push_dom_term, DomTermId, DomTerm);
+accessor!(cod_term, push_cod_term, CodTermId, CodTerm);
+accessor!(mor_app_term, push_mor_app_term, MorAppTermId, MorAppTerm);
 accessor!(term_list, push_term_list, TermListId, TermList);
 accessor!(type_expr, push_type_expr, TypeExprId, TypeExpr);
+accessor!(
+    ambient_type_expr,
+    push_ambient_type_expr,
+    AmbientTypeExprId,
+    AmbientTypeExpr
+);
+accessor!(
+    member_type_expr,
+    push_member_type_expr,
+    MemberTypeExprId,
+    MemberTypeExpr
+);
+accessor!(
+    mor_type_expr,
+    push_mor_type_expr,
+    MorTypeExprId,
+    MorTypeExpr
+);
 accessor!(pred_expr, push_pred_expr, PredExprId, PredExpr);
+accessor!(
+    ambient_pred_expr,
+    push_ambient_pred_expr,
+    AmbientPredExprId,
+    AmbientPredExpr
+);
+accessor!(
+    member_pred_expr,
+    push_member_pred_expr,
+    MemberPredExprId,
+    MemberPredExpr
+);
 accessor!(func_expr, push_func_expr, FuncExprId, FuncExpr);
+accessor!(
+    ambient_func_expr,
+    push_ambient_func_expr,
+    AmbientFuncExprId,
+    AmbientFuncExpr
+);
+accessor!(
+    member_func_expr,
+    push_member_func_expr,
+    MemberFuncExprId,
+    MemberFuncExpr
+);
 accessor!(if_atom, push_if_atom, IfAtomId, IfAtom);
 accessor!(then_atom, push_then_atom, ThenAtomId, ThenAtom);
+accessor!(equal_atom, push_equal_atom, EqualAtomId, EqualAtom);
+accessor!(pred_atom, push_pred_atom, PredAtomId, PredAtom);
+accessor!(
+    defined_if_atom,
+    push_defined_if_atom,
+    DefinedIfAtomId,
+    DefinedIfAtom
+);
+accessor!(var_if_atom, push_var_if_atom, VarIfAtomId, VarIfAtom);
+accessor!(
+    defined_then_atom,
+    push_defined_then_atom,
+    DefinedThenAtomId,
+    DefinedThenAtom
+);
 accessor!(match_case, push_match_case, MatchCaseId, MatchCase);
 accessor!(stmt, push_stmt, StmtId, Stmt);
+accessor!(if_stmt, push_if_stmt, IfStmtId, IfStmt);
+accessor!(then_stmt, push_then_stmt, ThenStmtId, ThenStmt);
+accessor!(branch_stmt, push_branch_stmt, BranchStmtId, BranchStmt);
+accessor!(match_stmt, push_match_stmt, MatchStmtId, MatchStmt);
