@@ -7,6 +7,7 @@ use crate::flatten::*;
 use crate::grammar::*;
 use crate::ram::*;
 use crate::rust_gen::*;
+use crate::scopes::resolve_scopes;
 use crate::semantics::*;
 use crate::to_ram::*;
 use anyhow::anyhow;
@@ -441,6 +442,19 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
             .into());
         }
     };
+
+    let _scopes = match resolve_scopes(&ast, module) {
+        Ok(scopes) => scopes,
+        Err(error) => {
+            return Err(CompileErrorWithContext {
+                error,
+                source,
+                source_path: config.in_dir.join(in_file),
+            }
+            .into());
+        }
+    };
+
     let (mut eqlog, identifiers, locations, _module) = populate_eqlog(&ast, module);
     eqlog.close();
 
