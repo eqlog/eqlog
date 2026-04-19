@@ -1,0 +1,28 @@
+Add Rust-side scope resolution pass
+
+Introduce a `scopes` module that walks the AST and builds a graph of
+`Scope`s with `parent` pointers and per-scope symbol tables. The pass
+uses two scoping disciplines, with corresponding `UnorderedNodeId` and
+`OrderedNodeId` wrapper enums and separate `flat` / `entry` / `exit`
+side tables:
+
+* Unordered (modules, model bodies, decls): one scope per node,
+  declaration order does not affect visibility.
+* Ordered (rule bodies, arg-list descendants, expressions inside
+  them): entry/exit scopes per node, sibling nodes chain so bindings
+  introduced earlier are visible in later siblings.
+
+Every `VarTerm` occurrence and every named `ArgDecl` extends the
+current scope with a fresh child scope containing the corresponding
+`Symbol`, so later occurrences shadow earlier ones and the binder of a
+variable is recoverable by walking the parent chain until the name is
+no longer in scope.
+
+Emit `SymbolDeclaredTwice` errors from this pass for duplicates in
+unordered scopes; the check is order-sensitive (first vs. second
+declaration) so it belongs on the Rust side.
+
+The pass currently runs only to surface these errors; ambient-name
+resolution and the resolution-dependent checks (undeclared symbol,
+bad symbol kind, arity) continue to come from eqlog-eqlog and will
+move in later commits.
