@@ -1,0 +1,11 @@
+type Foo;
+pred bar(Foo);
+pred baz(Foo);
+
+rule {
+    branch {
+        if bar(x);
+    } along {
+        if baz(x);
+    }
+}

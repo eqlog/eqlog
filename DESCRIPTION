@@ -1,19 +1,17 @@
 Move scope-level rule-body checks to the Rust side
 
-Add a new `scope_checks` pass that runs after `resolve_scopes` and
-catches the three compile errors that need name resolution but not
-type inference:
+Two new passes run after `resolve_scopes`, covering compile errors that
+need name resolution but not type inference:
 
-- VariableIntroducedInThenStmt
-- ThenDefinedVarNotNew
-- MatchPatternArgVarIsNotFresh
+- `scope_checks`: VariableIntroducedInThenStmt, ThenDefinedVarNotNew,
+  MatchPatternArgVarIsNotFresh.
+- `check_variables`: VariableOccursOnlyOnce.
 
-The pass collects findings into a `Vec<CompileError>` which is chained
-into `check_eqlog`'s `.min()`, so the existing error-priority ordering
-still applies when both scope and eqlog-side errors are present in the
-same theory.
+Errors from both passes are merged with `check_eqlog` via
+`CompileError`'s `Ord`, so the existing kind-precedence ordering (e.g.
+UndeclaredSymbol still beats a singleton variable) applies globally.
 
-Remove the corresponding iterators from `semantics::check_epic` and
-`semantics` so these errors now have a single source. The eqlog-side
+The corresponding iterators in `semantics::check_epic` and `semantics`
+are removed so each error now has a single source. The eqlog-side
 rules that populate the related predicates still run but their outputs
 are no longer consumed; cleaning up `eqlog.eql` is left for a follow-up.
