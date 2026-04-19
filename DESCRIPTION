@@ -1,0 +1,8 @@
+Migrate casing checks to the Rust side
+
+Move SymbolNotCamelCase, SymbolNotSnakeCase, and VariableNotSnakeCase off
+the eqlog-eqlog side into a new `casing` module. All three are pure AST
+walks: decl names pick their casing from the symbol kind, and every
+variable occurrence in a rule body must be snake_case. The pass runs
+right after scope resolution and its errors are merged with the other
+Rust and eqlog-side errors through `CompileError`'s `Ord`.

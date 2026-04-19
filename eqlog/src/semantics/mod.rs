@@ -5,8 +5,6 @@ use std::collections::BTreeSet;
 use std::iter;
 
 use check_epic::*;
-use convert_case::Case;
-use convert_case::Casing;
 use itertools::Itertools;
 
 use crate::eqlog_util::*;
@@ -76,29 +74,6 @@ fn iter_match_stmt_contains_ctor_of_enum<'a>(
                 missing_ctor_decl_location,
             })
         })
-}
-
-pub fn iter_variable_not_snake_case_errors<'a>(
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-    locations: &'a BTreeMap<Loc, Location>,
-) -> impl 'a + Iterator<Item = CompileError> {
-    eqlog.iter_var_term_node().filter_map(|(tm, virt_ident)| {
-        let ident = eqlog.virt_real_ident(virt_ident)?;
-        let name: &str = identifiers.get(&ident).unwrap().as_str();
-
-        if name == &name.to_case(Case::Snake) {
-            return None;
-        }
-
-        let loc = eqlog.term_node_loc(tm).unwrap();
-        let location = *locations.get(&loc).unwrap();
-
-        Some(CompileError::VariableNotSnakeCase {
-            name: name.to_string(),
-            location,
-        })
-    })
 }
 
 fn element_type_to_string<'a>(
@@ -358,49 +333,6 @@ pub fn iter_func_arg_number_errors<'a>(
         })
 }
 
-pub fn iter_symbol_casing_errors<'a>(
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-    locations: &'a BTreeMap<Loc, Location>,
-) -> impl 'a + Iterator<Item = CompileError> {
-    eqlog
-        .iter_accessible_symbol()
-        .filter_map(|(_scope, ident, kind, loc)| {
-            let name: &str = identifiers.get(&ident).unwrap().as_str();
-
-            let location = *locations.get(&loc).unwrap();
-
-            let symbol_kind = eqlog.symbol_kind_case(kind);
-            match symbol_kind {
-                SymbolKindCase::ModelSymbol()
-                | SymbolKindCase::TypeSymbol()
-                | SymbolKindCase::EnumSymbol()
-                | SymbolKindCase::CtorSymbol() => {
-                    if name != name.to_case(Case::UpperCamel) {
-                        return Some(CompileError::SymbolNotCamelCase {
-                            name: name.to_string(),
-                            location,
-                            symbol_kind,
-                        });
-                    }
-                }
-                SymbolKindCase::PredSymbol()
-                | SymbolKindCase::FuncSymbol()
-                | SymbolKindCase::RuleSymbol() => {
-                    if name != name.to_case(Case::Snake) {
-                        return Some(CompileError::SymbolNotSnakeCase {
-                            name: name.to_string(),
-                            location,
-                            symbol_kind,
-                        });
-                    }
-                }
-            };
-
-            None
-        })
-}
-
 pub fn iter_enum_ctors_not_surjective_errors<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
@@ -484,17 +416,11 @@ pub fn check_eqlog(
         .chain(iter_symbol_lookup_errors(eqlog, identifiers, locations))
         .chain(iter_pred_arg_number_errors(eqlog, locations))
         .chain(iter_func_arg_number_errors(eqlog, locations))
-        .chain(iter_symbol_casing_errors(eqlog, identifiers, locations))
         .chain(iter_conflicting_type_errors(eqlog, identifiers, locations))
         .chain(iter_match_conflicting_enum(eqlog, locations))
         .chain(iter_match_stmt_contains_ctor_of_enum(eqlog, locations))
         .chain(iter_undetermined_type_errors(eqlog, locations))
         .chain(iter_surjectivity_errors(eqlog, locations))
-        .chain(iter_variable_not_snake_case_errors(
-            eqlog,
-            identifiers,
-            locations,
-        ))
         .chain(iter_enum_ctors_not_surjective_errors(
             eqlog,
             identifiers,
