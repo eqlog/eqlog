@@ -65,7 +65,7 @@ impl<'a> Ctx<'a> {
 
     fn build_term(&mut self, term: TermId) -> TermNode {
         let node = self.eqlog.new_term_node();
-        match self.ast.term(term) {
+        match *self.ast.term(term) {
             Term::Var(id) => {
                 let name = self.ast.var_term(id).name.clone();
                 let ident = self.intern_ident(&name);
@@ -126,7 +126,7 @@ impl<'a> Ctx<'a> {
 
     fn build_type_expr(&mut self, type_expr: TypeExprId) -> TypeExprNode {
         let node = self.eqlog.new_type_expr_node();
-        match self.ast.type_expr(type_expr) {
+        match *self.ast.type_expr(type_expr) {
             TypeExpr::Ambient(id) => {
                 let name = self.ast.ambient_type_expr(id).name.clone();
                 let ident = self.intern_ident(&name);
@@ -155,7 +155,7 @@ impl<'a> Ctx<'a> {
 
     fn build_pred_expr(&mut self, pred_expr: PredExprId) -> PredExprNode {
         let node = self.eqlog.new_pred_expr_node();
-        match self.ast.pred_expr(pred_expr) {
+        match *self.ast.pred_expr(pred_expr) {
             PredExpr::Ambient(id) => {
                 let name = self.ast.ambient_pred_expr(id).name.clone();
                 let ident = self.intern_ident(&name);
@@ -179,7 +179,7 @@ impl<'a> Ctx<'a> {
 
     fn build_func_expr(&mut self, func_expr: FuncExprId) -> FuncExprNode {
         let node = self.eqlog.new_func_expr_node();
-        match self.ast.func_expr(func_expr) {
+        match *self.ast.func_expr(func_expr) {
             FuncExpr::Ambient(id) => {
                 let name = self.ast.ambient_func_expr(id).name.clone();
                 let ident = self.intern_ident(&name);
@@ -201,21 +201,19 @@ impl<'a> Ctx<'a> {
         node
     }
 
-    fn build_if_atom(&mut self, atom: IfAtom) -> IfAtomNode {
+    fn build_if_atom(&mut self, atom: IfAtomId) -> IfAtomNode {
         let node = self.eqlog.new_if_atom_node();
-        let loc_source: NodeId = match atom {
+        match *self.ast.if_atom(atom) {
             IfAtom::Equal(id) => {
                 let EqualAtom { lhs, rhs } = *self.ast.equal_atom(id);
                 let lhs = self.build_term(lhs);
                 let rhs = self.build_term(rhs);
                 self.eqlog.insert_equal_if_atom_node(node, lhs, rhs);
-                id.into()
             }
             IfAtom::Defined(id) => {
                 let DefinedIfAtom { term } = *self.ast.defined_if_atom(id);
                 let term_node = self.build_term(term);
                 self.eqlog.insert_defined_if_atom_node(node, term_node);
-                id.into()
             }
             IfAtom::Pred(id) => {
                 let PredAtom { pred, args } = *self.ast.pred_atom(id);
@@ -223,7 +221,6 @@ impl<'a> Ctx<'a> {
                 let args_node = self.build_term_list(args);
                 self.eqlog
                     .insert_pred_if_atom_node(node, pred_node, args_node);
-                id.into()
             }
             IfAtom::Var(id) => {
                 let VarIfAtom { term, typ } = *self.ast.var_if_atom(id);
@@ -231,25 +228,23 @@ impl<'a> Ctx<'a> {
                 let typ_node = self.build_type_expr(typ);
                 self.eqlog
                     .insert_var_if_atom_node(node, term_node, typ_node);
-                id.into()
             }
-        };
+        }
 
-        let loc = self.intern_loc(self.ast.loc(loc_source));
+        let loc = self.intern_loc(self.ast.loc(atom));
         self.eqlog.insert_if_atom_node_loc(node, loc);
 
         node
     }
 
-    fn build_then_atom(&mut self, atom: ThenAtom) -> ThenAtomNode {
+    fn build_then_atom(&mut self, atom: ThenAtomId) -> ThenAtomNode {
         let node = self.eqlog.new_then_atom_node();
-        let loc_source: NodeId = match atom {
+        match *self.ast.then_atom(atom) {
             ThenAtom::Equal(id) => {
                 let EqualAtom { lhs, rhs } = *self.ast.equal_atom(id);
                 let lhs = self.build_term(lhs);
                 let rhs = self.build_term(rhs);
                 self.eqlog.insert_equal_then_atom_node(node, lhs, rhs);
-                id.into()
             }
             ThenAtom::Defined(id) => {
                 let DefinedThenAtom { var, term } = *self.ast.defined_then_atom(id);
@@ -257,7 +252,6 @@ impl<'a> Ctx<'a> {
                 let var_node = self.build_opt_term(var);
                 self.eqlog
                     .insert_defined_then_atom_node(node, var_node, term_node);
-                id.into()
             }
             ThenAtom::Pred(id) => {
                 let PredAtom { pred, args } = *self.ast.pred_atom(id);
@@ -265,11 +259,10 @@ impl<'a> Ctx<'a> {
                 let args_node = self.build_term_list(args);
                 self.eqlog
                     .insert_pred_then_atom_node(node, pred_node, args_node);
-                id.into()
             }
-        };
+        }
 
-        let loc = self.intern_loc(self.ast.loc(loc_source));
+        let loc = self.intern_loc(self.ast.loc(atom));
         self.eqlog.insert_then_atom_node_loc(node, loc);
 
         node
@@ -347,7 +340,7 @@ impl<'a> Ctx<'a> {
     fn build_stmt(&mut self, stmt: StmtId) -> StmtNode {
         let node = self.eqlog.new_stmt_node();
         let insert_loc;
-        match self.ast.stmt(stmt) {
+        match *self.ast.stmt(stmt) {
             Stmt::If(id) => {
                 let atom = self.ast.if_stmt(id).atom;
                 let atom_node = self.build_if_atom(atom);
@@ -544,39 +537,39 @@ impl<'a> Ctx<'a> {
         node
     }
 
-    fn build_decl(&mut self, decl: &Decl) -> DeclNode {
+    fn build_decl(&mut self, decl: DeclId) -> DeclNode {
         let node = self.eqlog.new_decl_node();
-        match decl {
+        match *self.ast.decl(decl) {
             Decl::Type(d) => {
-                let inner = self.build_type_decl(*d);
+                let inner = self.build_type_decl(d);
                 self.eqlog.insert_decl_node_type(node, inner);
             }
             Decl::Pred(d) => {
-                let inner = self.build_pred_decl(*d);
+                let inner = self.build_pred_decl(d);
                 self.eqlog.insert_decl_node_pred(node, inner);
             }
             Decl::Func(d) => {
-                let inner = self.build_func_decl(*d);
+                let inner = self.build_func_decl(d);
                 self.eqlog.insert_decl_node_func(node, inner);
             }
             Decl::Rule(d) => {
-                let inner = self.build_rule_decl(*d);
+                let inner = self.build_rule_decl(d);
                 self.eqlog.insert_decl_node_rule(node, inner);
             }
             Decl::Enum(d) => {
-                let inner = self.build_enum_decl(*d);
+                let inner = self.build_enum_decl(d);
                 self.eqlog.insert_decl_node_enum(node, inner);
             }
             Decl::Model(d) => {
-                let inner = self.build_model_decl(*d);
+                let inner = self.build_model_decl(d);
                 self.eqlog.insert_decl_node_model(node, inner);
             }
         }
         node
     }
 
-    fn build_decl_list(&mut self, decls: &[Decl]) -> DeclListNode {
-        let decl_nodes: Vec<DeclNode> = decls.iter().map(|d| self.build_decl(d)).collect();
+    fn build_decl_list(&mut self, decls: &[DeclId]) -> DeclListNode {
+        let decl_nodes: Vec<DeclNode> = decls.iter().map(|d| self.build_decl(*d)).collect();
         let mut node = self.eqlog.new_decl_list_node();
         self.eqlog.insert_nil_decl_list_node(node);
         for decl in decl_nodes.iter().rev() {

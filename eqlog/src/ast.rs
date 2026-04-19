@@ -27,20 +27,8 @@ macro_rules! typed_id {
     };
 }
 
-/// Defines a variant id that is interchangeable with a generic "parent" id.
-macro_rules! variant_id {
-    ($variant:ident, $generic:ident) => {
-        typed_id!($variant);
-
-        impl From<$variant> for $generic {
-            fn from(id: $variant) -> $generic {
-                $generic(id.0)
-            }
-        }
-    };
-}
-
 typed_id!(ModuleId);
+typed_id!(DeclId);
 typed_id!(TypeDeclId);
 typed_id!(PredDeclId);
 typed_id!(FuncDeclId);
@@ -52,27 +40,29 @@ typed_id!(ArgDeclId);
 typed_id!(ArgDeclListId);
 
 typed_id!(TermId);
-variant_id!(VarTermId, TermId);
-variant_id!(AppTermId, TermId);
-variant_id!(DomTermId, TermId);
-variant_id!(CodTermId, TermId);
-variant_id!(MorAppTermId, TermId);
+typed_id!(VarTermId);
+typed_id!(AppTermId);
+typed_id!(DomTermId);
+typed_id!(CodTermId);
+typed_id!(MorAppTermId);
 
 typed_id!(TermListId);
 
 typed_id!(TypeExprId);
-variant_id!(AmbientTypeExprId, TypeExprId);
-variant_id!(MemberTypeExprId, TypeExprId);
-variant_id!(MorTypeExprId, TypeExprId);
+typed_id!(AmbientTypeExprId);
+typed_id!(MemberTypeExprId);
+typed_id!(MorTypeExprId);
 
 typed_id!(PredExprId);
-variant_id!(AmbientPredExprId, PredExprId);
-variant_id!(MemberPredExprId, PredExprId);
+typed_id!(AmbientPredExprId);
+typed_id!(MemberPredExprId);
 
 typed_id!(FuncExprId);
-variant_id!(AmbientFuncExprId, FuncExprId);
-variant_id!(MemberFuncExprId, FuncExprId);
+typed_id!(AmbientFuncExprId);
+typed_id!(MemberFuncExprId);
 
+typed_id!(IfAtomId);
+typed_id!(ThenAtomId);
 typed_id!(EqualAtomId);
 typed_id!(PredAtomId);
 typed_id!(DefinedIfAtomId);
@@ -82,14 +72,14 @@ typed_id!(DefinedThenAtomId);
 typed_id!(MatchCaseId);
 
 typed_id!(StmtId);
-variant_id!(IfStmtId, StmtId);
-variant_id!(ThenStmtId, StmtId);
-variant_id!(BranchStmtId, StmtId);
-variant_id!(MatchStmtId, StmtId);
+typed_id!(IfStmtId);
+typed_id!(ThenStmtId);
+typed_id!(BranchStmtId);
+typed_id!(MatchStmtId);
 
 #[derive(Clone, Debug)]
 pub struct Module {
-    pub decls: Vec<Decl>,
+    pub decls: Vec<DeclId>,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -135,7 +125,7 @@ pub struct EnumDecl {
 #[derive(Clone, Debug)]
 pub struct ModelDecl {
     pub name: String,
-    pub body: Vec<Decl>,
+    pub body: Vec<DeclId>,
 }
 
 #[derive(Clone, Debug)]
@@ -159,9 +149,6 @@ pub struct ArgDeclList {
 pub struct VarTerm {
     pub name: String,
 }
-
-#[derive(Copy, Clone, Debug)]
-pub struct WildcardTerm;
 
 #[derive(Copy, Clone, Debug)]
 pub struct AppTerm {
@@ -309,12 +296,12 @@ pub struct MatchCase {
 
 #[derive(Copy, Clone, Debug)]
 pub struct IfStmt {
-    pub atom: IfAtom,
+    pub atom: IfAtomId,
 }
 
 #[derive(Copy, Clone, Debug)]
 pub struct ThenStmt {
-    pub atom: ThenAtom,
+    pub atom: ThenAtomId,
 }
 
 #[derive(Clone, Debug)]
@@ -339,6 +326,7 @@ pub enum Stmt {
 #[derive(Clone, Debug)]
 pub enum Node {
     Module(Module),
+    Decl(Decl),
     TypeDecl(TypeDecl),
     PredDecl(PredDecl),
     FuncDecl(FuncDecl),
@@ -348,26 +336,32 @@ pub enum Node {
     CtorDecl(CtorDecl),
     ArgDecl(ArgDecl),
     ArgDeclList(ArgDeclList),
+    Term(Term),
     VarTerm(VarTerm),
-    WildcardTerm(WildcardTerm),
     AppTerm(AppTerm),
     DomTerm(DomTerm),
     CodTerm(CodTerm),
     MorAppTerm(MorAppTerm),
     TermList(TermList),
+    TypeExpr(TypeExpr),
     AmbientTypeExpr(AmbientTypeExpr),
     MemberTypeExpr(MemberTypeExpr),
     MorTypeExpr(MorTypeExpr),
+    PredExpr(PredExpr),
     AmbientPredExpr(AmbientPredExpr),
     MemberPredExpr(MemberPredExpr),
+    FuncExpr(FuncExpr),
     AmbientFuncExpr(AmbientFuncExpr),
     MemberFuncExpr(MemberFuncExpr),
+    IfAtom(IfAtom),
+    ThenAtom(ThenAtom),
     EqualAtom(EqualAtom),
     PredAtom(PredAtom),
     DefinedIfAtom(DefinedIfAtom),
     VarIfAtom(VarIfAtom),
     DefinedThenAtom(DefinedThenAtom),
     MatchCase(MatchCase),
+    Stmt(Stmt),
     IfStmt(IfStmt),
     ThenStmt(ThenStmt),
     BranchStmt(BranchStmt),
@@ -414,6 +408,7 @@ macro_rules! accessor {
 }
 
 accessor!(module, push_module, ModuleId, Module);
+accessor!(decl, push_decl, DeclId, Decl);
 accessor!(type_decl, push_type_decl, TypeDeclId, TypeDecl);
 accessor!(pred_decl, push_pred_decl, PredDeclId, PredDecl);
 accessor!(func_decl, push_func_decl, FuncDeclId, FuncDecl);
@@ -428,12 +423,14 @@ accessor!(
     ArgDeclListId,
     ArgDeclList
 );
+accessor!(term, push_term, TermId, Term);
 accessor!(var_term, push_var_term, VarTermId, VarTerm);
 accessor!(app_term, push_app_term, AppTermId, AppTerm);
 accessor!(dom_term, push_dom_term, DomTermId, DomTerm);
 accessor!(cod_term, push_cod_term, CodTermId, CodTerm);
 accessor!(mor_app_term, push_mor_app_term, MorAppTermId, MorAppTerm);
 accessor!(term_list, push_term_list, TermListId, TermList);
+accessor!(type_expr, push_type_expr, TypeExprId, TypeExpr);
 accessor!(
     ambient_type_expr,
     push_ambient_type_expr,
@@ -452,6 +449,7 @@ accessor!(
     MorTypeExprId,
     MorTypeExpr
 );
+accessor!(pred_expr, push_pred_expr, PredExprId, PredExpr);
 accessor!(
     ambient_pred_expr,
     push_ambient_pred_expr,
@@ -464,6 +462,7 @@ accessor!(
     MemberPredExprId,
     MemberPredExpr
 );
+accessor!(func_expr, push_func_expr, FuncExprId, FuncExpr);
 accessor!(
     ambient_func_expr,
     push_ambient_func_expr,
@@ -476,6 +475,8 @@ accessor!(
     MemberFuncExprId,
     MemberFuncExpr
 );
+accessor!(if_atom, push_if_atom, IfAtomId, IfAtom);
+accessor!(then_atom, push_then_atom, ThenAtomId, ThenAtom);
 accessor!(equal_atom, push_equal_atom, EqualAtomId, EqualAtom);
 accessor!(pred_atom, push_pred_atom, PredAtomId, PredAtom);
 accessor!(
@@ -492,62 +493,8 @@ accessor!(
     DefinedThenAtom
 );
 accessor!(match_case, push_match_case, MatchCaseId, MatchCase);
+accessor!(stmt, push_stmt, StmtId, Stmt);
 accessor!(if_stmt, push_if_stmt, IfStmtId, IfStmt);
 accessor!(then_stmt, push_then_stmt, ThenStmtId, ThenStmt);
 accessor!(branch_stmt, push_branch_stmt, BranchStmtId, BranchStmt);
 accessor!(match_stmt, push_match_stmt, MatchStmtId, MatchStmt);
-
-impl Ast {
-    pub fn push_wildcard_term(&mut self, loc: Location) -> TermId {
-        let id = NodeId(self.nodes.len());
-        self.nodes.push((loc, Node::WildcardTerm(WildcardTerm)));
-        TermId(id)
-    }
-
-    pub fn term(&self, id: TermId) -> Term {
-        match &self.nodes[(id.0).0].1 {
-            Node::VarTerm(_) => Term::Var(VarTermId(id.0)),
-            Node::WildcardTerm(_) => Term::Wildcard,
-            Node::AppTerm(_) => Term::App(AppTermId(id.0)),
-            Node::DomTerm(_) => Term::Dom(DomTermId(id.0)),
-            Node::CodTerm(_) => Term::Cod(CodTermId(id.0)),
-            Node::MorAppTerm(_) => Term::MorApp(MorAppTermId(id.0)),
-            other => panic!("expected Term at {:?}, got {:?}", id, other),
-        }
-    }
-
-    pub fn type_expr(&self, id: TypeExprId) -> TypeExpr {
-        match &self.nodes[(id.0).0].1 {
-            Node::AmbientTypeExpr(_) => TypeExpr::Ambient(AmbientTypeExprId(id.0)),
-            Node::MemberTypeExpr(_) => TypeExpr::Member(MemberTypeExprId(id.0)),
-            Node::MorTypeExpr(_) => TypeExpr::Mor(MorTypeExprId(id.0)),
-            other => panic!("expected TypeExpr at {:?}, got {:?}", id, other),
-        }
-    }
-
-    pub fn pred_expr(&self, id: PredExprId) -> PredExpr {
-        match &self.nodes[(id.0).0].1 {
-            Node::AmbientPredExpr(_) => PredExpr::Ambient(AmbientPredExprId(id.0)),
-            Node::MemberPredExpr(_) => PredExpr::Member(MemberPredExprId(id.0)),
-            other => panic!("expected PredExpr at {:?}, got {:?}", id, other),
-        }
-    }
-
-    pub fn func_expr(&self, id: FuncExprId) -> FuncExpr {
-        match &self.nodes[(id.0).0].1 {
-            Node::AmbientFuncExpr(_) => FuncExpr::Ambient(AmbientFuncExprId(id.0)),
-            Node::MemberFuncExpr(_) => FuncExpr::Member(MemberFuncExprId(id.0)),
-            other => panic!("expected FuncExpr at {:?}, got {:?}", id, other),
-        }
-    }
-
-    pub fn stmt(&self, id: StmtId) -> Stmt {
-        match &self.nodes[(id.0).0].1 {
-            Node::IfStmt(_) => Stmt::If(IfStmtId(id.0)),
-            Node::ThenStmt(_) => Stmt::Then(ThenStmtId(id.0)),
-            Node::BranchStmt(_) => Stmt::Branch(BranchStmtId(id.0)),
-            Node::MatchStmt(_) => Stmt::Match(MatchStmtId(id.0)),
-            other => panic!("expected Stmt at {:?}, got {:?}", id, other),
-        }
-    }
-}
