@@ -9,6 +9,7 @@ use crate::ram::*;
 use crate::rust_gen::*;
 use crate::scopes::resolve_scopes;
 use crate::semantics::*;
+use crate::syntactic::check_syntactic;
 use crate::to_ram::*;
 use anyhow::anyhow;
 use anyhow::ensure;
@@ -442,6 +443,15 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
             .into());
         }
     };
+
+    if let Err(error) = check_syntactic(&ast, module) {
+        return Err(CompileErrorWithContext {
+            error,
+            source,
+            source_path: config.in_dir.join(in_file),
+        }
+        .into());
+    }
 
     let _scopes = match resolve_scopes(&ast, module) {
         Ok(scopes) => scopes,

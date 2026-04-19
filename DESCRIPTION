@@ -1,0 +1,7 @@
+Move resolution-independent checks off the eqlog-eqlog side
+
+Replace the eqlog-eqlog machinery for several compile errors that don't
+need type information with plain Rust passes over the AST and the scope
+table introduced in a7f85a7. The first pass is syntactic and runs right
+after parsing; subsequent commits use the scope table for freshness and
+variable-occurrence checks.
