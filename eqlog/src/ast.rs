@@ -3,24 +3,14 @@ use crate::grammar_util::Location;
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct NodeId(usize);
 
-pub trait AstNode: Copy {
-    fn node(self) -> NodeId;
-}
-
-impl AstNode for NodeId {
-    fn node(self) -> NodeId {
-        self
-    }
-}
-
 macro_rules! typed_id {
     ($name:ident) => {
         #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
         pub struct $name(NodeId);
 
-        impl AstNode for $name {
-            fn node(self) -> NodeId {
-                self.0
+        impl From<$name> for NodeId {
+            fn from(id: $name) -> NodeId {
+                id.0
             }
         }
     };
@@ -213,8 +203,8 @@ impl Ast {
         Self::default()
     }
 
-    pub fn loc<Id: AstNode>(&self, id: Id) -> Location {
-        self.nodes[id.node().0].0
+    pub fn loc(&self, id: impl Into<NodeId>) -> Location {
+        self.nodes[id.into().0].0
     }
 }
 
