@@ -1,22 +1,4 @@
-//! Scope resolution pass.
-//!
-//! Builds a graph of [`Scope`]s over the AST and associates each AST node with
-//! the scope it participates in. Two side tables are maintained depending on
-//! the scoping discipline of the node:
-//!
-//! * Unordered nodes (modules, models, decls): a single [`ScopeId`] is
-//!   associated via [`Scopes::flat`]. Within an unordered scope, declaration
-//!   order does not affect which names are visible.
-//! * Ordered nodes (rule-body descendants and arg-list descendants): an
-//!   `entry` and an `exit` [`ScopeId`] are associated via [`Scopes::entry`]
-//!   and [`Scopes::exit`]. Sibling nodes chain so that names bound in an
-//!   earlier sibling are visible in a later one.
-//!
-//! Every variable term occurrence and every named arg declaration extends the
-//! current scope with a fresh child scope that contains the corresponding
-//! [`Symbol`]. Lookups walk the `parent` chain, so later occurrences shadow
-//! earlier ones, and ambient global symbols are reachable from the innermost
-//! scope via the chain out into the surrounding flat scope.
+//! Scope resolution pass. See [`resolve_scopes`] for the entry point.
 
 use std::collections::BTreeMap;
 
@@ -214,11 +196,31 @@ impl From<OrderedNodeId> for NodeId {
     }
 }
 
+/// A graph of [`Scope`]s keyed by AST node, with `parent` pointers for
+/// ancestor lookup.
+///
+/// Two side tables are maintained depending on the scoping discipline of the
+/// node:
+///
+/// * Unordered nodes (modules, models, decls): a single [`ScopeId`] via
+///   [`Scopes::unordered`]. Declaration order within an unordered scope does
+///   not affect which names are visible.
+/// * Ordered nodes (rule-body descendants and arg-list descendants): an
+///   `entry` and an `exit` [`ScopeId`] via [`Scopes::entry`] and
+///   [`Scopes::exit`]. Sibling nodes chain so that names bound in an earlier
+///   sibling are visible in a later one.
+///
+/// Every variable term occurrence and every named arg declaration extends
+/// the current scope with a fresh child scope that contains the
+/// corresponding [`Symbol`]. [`Scopes::lookup`] walks the `parent` chain, so
+/// later occurrences shadow earlier ones, and ambient global symbols are
+/// reachable from the innermost scope via the chain out into the surrounding
+/// unordered scope.
 #[derive(Clone, Debug, Default)]
 #[allow(dead_code)]
 pub struct Scopes {
     scopes: Vec<Scope>,
-    flat: BTreeMap<NodeId, ScopeId>,
+    unordered: BTreeMap<NodeId, ScopeId>,
     entry: BTreeMap<NodeId, ScopeId>,
     exit: BTreeMap<NodeId, ScopeId>,
 }
@@ -229,13 +231,13 @@ impl Scopes {
         &self.scopes[id.0]
     }
 
-    pub fn flat(&self, id: impl Into<UnorderedNodeId>) -> ScopeId {
+    pub fn unordered(&self, id: impl Into<UnorderedNodeId>) -> ScopeId {
         let unordered: UnorderedNodeId = id.into();
         let node: NodeId = unordered.into();
         *self
-            .flat
+            .unordered
             .get(&node)
-            .expect("flat scope was not populated for node")
+            .expect("unordered scope was not populated for node")
     }
 
     pub fn entry(&self, id: impl Into<OrderedNodeId>) -> ScopeId {
@@ -278,20 +280,20 @@ pub fn resolve_scopes(ast: &Ast, module: ModuleId) -> (Scopes, Vec<CompileError>
     let mut builder = ScopeBuilder {
         ast,
         scopes: Vec::new(),
-        flat: BTreeMap::new(),
+        unordered: BTreeMap::new(),
         entry: BTreeMap::new(),
         exit: BTreeMap::new(),
         errors: Vec::new(),
     };
     let module_scope = builder.new_scope(None);
     builder
-        .flat
+        .unordered
         .insert(NodeId::from(UnorderedNodeId::from(module)), module_scope);
     let decls = ast.module(module).decls.clone();
-    builder.populate_flat(module_scope, &decls);
+    builder.populate_unordered(module_scope, &decls);
     let ScopeBuilder {
         scopes,
-        flat,
+        unordered,
         entry,
         exit,
         errors,
@@ -300,7 +302,7 @@ pub fn resolve_scopes(ast: &Ast, module: ModuleId) -> (Scopes, Vec<CompileError>
     (
         Scopes {
             scopes,
-            flat,
+            unordered,
             entry,
             exit,
         },
@@ -311,7 +313,7 @@ pub fn resolve_scopes(ast: &Ast, module: ModuleId) -> (Scopes, Vec<CompileError>
 struct ScopeBuilder<'a> {
     ast: &'a Ast,
     scopes: Vec<Scope>,
-    flat: BTreeMap<NodeId, ScopeId>,
+    unordered: BTreeMap<NodeId, ScopeId>,
     entry: BTreeMap<NodeId, ScopeId>,
     exit: BTreeMap<NodeId, ScopeId>,
     errors: Vec<CompileError>,
@@ -341,9 +343,9 @@ impl<'a> ScopeBuilder<'a> {
         id
     }
 
-    fn insert_flat<I: Into<UnorderedNodeId>>(&mut self, id: I, scope: ScopeId) {
+    fn insert_unordered<I: Into<UnorderedNodeId>>(&mut self, id: I, scope: ScopeId) {
         let node: NodeId = id.into().into();
-        self.flat.insert(node, scope);
+        self.unordered.insert(node, scope);
     }
 
     fn insert_entry<I: Into<OrderedNodeId>>(&mut self, id: I, scope: ScopeId) {
@@ -374,39 +376,39 @@ impl<'a> ScopeBuilder<'a> {
     /// Populate `scope` with the symbols directly declared in `decls`, then
     /// dispatch children that own further scopes (model bodies) or switch to
     /// ordered scoping (rule bodies, arg lists).
-    fn populate_flat(&mut self, scope: ScopeId, decls: &[DeclId]) {
+    fn populate_unordered(&mut self, scope: ScopeId, decls: &[DeclId]) {
         // Pass A: finalize `scope`.
         for decl in decls {
-            self.insert_flat(*decl, scope);
+            self.insert_unordered(*decl, scope);
             match *self.ast.decl(*decl) {
                 Decl::Type(id) => {
-                    self.insert_flat(id, scope);
+                    self.insert_unordered(id, scope);
                     let name = self.ast.type_decl(id).name.clone();
                     self.insert_decl_symbol(scope, &name, Symbol::Type(id));
                 }
                 Decl::Pred(id) => {
-                    self.insert_flat(id, scope);
+                    self.insert_unordered(id, scope);
                     let name = self.ast.pred_decl(id).name.clone();
                     self.insert_decl_symbol(scope, &name, Symbol::Pred(id));
                 }
                 Decl::Func(id) => {
-                    self.insert_flat(id, scope);
+                    self.insert_unordered(id, scope);
                     let name = self.ast.func_decl(id).name.clone();
                     self.insert_decl_symbol(scope, &name, Symbol::Func(id));
                 }
                 Decl::Rule(id) => {
-                    self.insert_flat(id, scope);
+                    self.insert_unordered(id, scope);
                     if let Some(name) = self.ast.rule_decl(id).name.clone() {
                         self.insert_decl_symbol(scope, &name, Symbol::Rule(id));
                     }
                 }
                 Decl::Enum(id) => {
-                    self.insert_flat(id, scope);
+                    self.insert_unordered(id, scope);
                     let enum_name = self.ast.enum_decl(id).name.clone();
                     self.insert_decl_symbol(scope, &enum_name, Symbol::Enum(id));
                     let ctors = self.ast.enum_decl(id).ctors.clone();
                     for ctor in &ctors {
-                        self.insert_flat(*ctor, scope);
+                        self.insert_unordered(*ctor, scope);
                         let ctor_name = self.ast.ctor_decl(*ctor).name.clone();
                         self.insert_decl_symbol(scope, &ctor_name, Symbol::Ctor(*ctor));
                     }
@@ -447,8 +449,8 @@ impl<'a> ScopeBuilder<'a> {
                 Decl::Model(id) => {
                     let body = self.ast.model_decl(id).body.clone();
                     let body_scope = self.new_scope(Some(scope));
-                    self.insert_flat(id, body_scope);
-                    self.populate_flat(body_scope, &body);
+                    self.insert_unordered(id, body_scope);
+                    self.populate_unordered(body_scope, &body);
                 }
             }
         }
