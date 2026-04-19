@@ -1,0 +1,11 @@
+Split each sum-type AST node (Term, TypeExpr, PredExpr, FuncExpr, IfAtom,
+ThenAtom, Stmt) into one arena node per variant, each with its own typed
+id. The generic id (TermId, etc.) still exists as a variant-agnostic
+handle; `ast.term(id)` dispatches on the node discriminant and returns
+an enum wrapping the specific variant id. Variant ids convert back to
+the generic id via `From` so that callers can pass a specific id wherever
+a generic one is expected.
+
+Equality and predicate atoms are now shared between if and then atoms:
+the same `EqualAtomId` / `PredAtomId` can appear under either context,
+and the enclosing `IfStmt` / `ThenStmt` records which.

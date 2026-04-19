@@ -28,31 +28,33 @@ Intersperse<Item, Separator>: Vec<Item> = {
 }
 
 Variable: TermId = {
-    <l: @L> <name: Id> <r: @R> => ast.push_term(Location(l, r), Term::Var(name)),
+    <l: @L> <name: Id> <r: @R> =>
+        ast.push_var_term(Location(l, r), VarTerm { name }).into(),
 }
 
 Wildcard: TermId = {
-    <l: @L> "_" <r: @R> => ast.push_term(Location(l, r), Term::Wildcard),
+    <l: @L> "_" <r: @R> =>
+        ast.push_wildcard_term(Location(l, r), WildcardTerm).into(),
 }
 
 ApplicationTerm: TermId = {
     <l: @L> <func: FuncExpr> <args: ArgList> <r: @R> =>
-        ast.push_term(Location(l, r), Term::App { func, args }),
+        ast.push_app_term(Location(l, r), AppTerm { func, args }).into(),
 }
 
 DomTerm: TermId = {
     <l: @L> "dom" "(" <arg: Term> ")" <r: @R> =>
-        ast.push_term(Location(l, r), Term::Dom(arg)),
+        ast.push_dom_term(Location(l, r), DomTerm { arg }).into(),
 }
 
 CodTerm: TermId = {
     <l: @L> "cod" "(" <arg: Term> ")" <r: @R> =>
-        ast.push_term(Location(l, r), Term::Cod(arg)),
+        ast.push_cod_term(Location(l, r), CodTerm { arg }).into(),
 }
 
 MorAppTerm: TermId = {
     <l: @L> <mor: Term> "@" "(" <arg: Term> ")" <r: @R> =>
-        ast.push_term(Location(l, r), Term::MorApp { mor, arg }),
+        ast.push_mor_app_term(Location(l, r), MorAppTerm { mor, arg }).into(),
 }
 
 Term: TermId = {
@@ -66,27 +68,27 @@ Term: TermId = {
 
 TypeExpr: TypeExprId = {
     <l: @L> <name: Id> <r: @R> =>
-        ast.push_type_expr(Location(l, r), TypeExpr::Ambient(name)),
+        ast.push_ambient_type_expr(Location(l, r), AmbientTypeExpr { name }).into(),
     <l: @L> <tm: Term> "." <name: Id> <r: @R> =>
-        ast.push_type_expr(Location(l, r), TypeExpr::Member { term: tm, name }),
+        ast.push_member_type_expr(Location(l, r), MemberTypeExpr { term: tm, name }).into(),
     <l: @L> "Mor" "(" <name: Id> ")" <r: @R> =>
-        ast.push_type_expr(Location(l, r), TypeExpr::Mor(name)),
+        ast.push_mor_type_expr(Location(l, r), MorTypeExpr { name }).into(),
 }
 
 #[inline]
 PredExpr: PredExprId = {
     <l: @L> <name: Id> <r: @R> =>
-        ast.push_pred_expr(Location(l, r), PredExpr::Ambient(name)),
+        ast.push_ambient_pred_expr(Location(l, r), AmbientPredExpr { name }).into(),
     <l: @L> <tm: Term> "." <name: Id> <r: @R> =>
-        ast.push_pred_expr(Location(l, r), PredExpr::Member { term: tm, name }),
+        ast.push_member_pred_expr(Location(l, r), MemberPredExpr { term: tm, name }).into(),
 }
 
 #[inline]
 FuncExpr: FuncExprId = {
     <l: @L> <name: Id> <r: @R> =>
-        ast.push_func_expr(Location(l, r), FuncExpr::Ambient(name)),
+        ast.push_ambient_func_expr(Location(l, r), AmbientFuncExpr { name }).into(),
     <l: @L> <tm: Term> "." <name: Id> <r: @R> =>
-        ast.push_func_expr(Location(l, r), FuncExpr::Member { term: tm, name }),
+        ast.push_member_func_expr(Location(l, r), MemberFuncExpr { term: tm, name }).into(),
 }
 
 ArgList: TermListId = {
@@ -94,24 +96,26 @@ ArgList: TermListId = {
         ast.push_term_list(Location(l, r), TermList { terms: args }),
 }
 
-IfAtom: IfAtomId = {
+IfAtom: IfAtom = {
     <l: @L> <lhs: Term> "=" <rhs: Term> <r: @R> =>
-        ast.push_if_atom(Location(l, r), IfAtom::Equal(lhs, rhs)),
+        IfAtom::Equal(ast.push_equal_atom(Location(l, r), EqualAtom { lhs, rhs })),
     <l: @L> <tm: Term> "!" <r: @R> =>
-        ast.push_if_atom(Location(l, r), IfAtom::Defined(tm)),
+        IfAtom::Defined(ast.push_defined_if_atom(Location(l, r), DefinedIfAtom { term: tm })),
     <l: @L> <pred: PredExpr> <args: ArgList> <r: @R> =>
-        ast.push_if_atom(Location(l, r), IfAtom::Pred { pred, args }),
+        IfAtom::Pred(ast.push_pred_atom(Location(l, r), PredAtom { pred, args })),
     <l: @L> <term: Term> ":" <typ: TypeExpr> <r: @R> =>
-        ast.push_if_atom(Location(l, r), IfAtom::Var { term, typ }),
+        IfAtom::Var(ast.push_var_if_atom(Location(l, r), VarIfAtom { term, typ })),
 }
 
-ThenAtom: ThenAtomId = {
+ThenAtom: ThenAtom = {
     <l: @L> <lhs: Term> "=" <rhs: Term> <r: @R> =>
-        ast.push_then_atom(Location(l, r), ThenAtom::Equal(lhs, rhs)),
+        ThenAtom::Equal(ast.push_equal_atom(Location(l, r), EqualAtom { lhs, rhs })),
     <l: @L> <var: PairFirst<Term, ":=">?> <term: Term> "!" <r: @R> =>
-        ast.push_then_atom(Location(l, r), ThenAtom::Defined { var, term }),
+        ThenAtom::Defined(
+            ast.push_defined_then_atom(Location(l, r), DefinedThenAtom { var, term })
+        ),
     <l: @L> <pred: PredExpr> <args: ArgList> <r: @R> =>
-        ast.push_then_atom(Location(l, r), ThenAtom::Pred { pred, args }),
+        ThenAtom::Pred(ast.push_pred_atom(Location(l, r), PredAtom { pred, args })),
 }
 
 StmtBlock: Vec<StmtId> = {
@@ -125,13 +129,13 @@ MatchCase: MatchCaseId = {
 
 Stmt: StmtId = {
     <l: @L> "branch" <blocks: NonEmptyIntersperse<StmtBlock, "along">> <r: @R> =>
-        ast.push_stmt(Location(l, r), Stmt::Branch(blocks)),
+        ast.push_branch_stmt(Location(l, r), BranchStmt { blocks }).into(),
     <l: @L> "if" <atom: IfAtom> ";" <r: @R> =>
-        ast.push_stmt(Location(l, r), Stmt::If(atom)),
+        ast.push_if_stmt(Location(l, r), IfStmt { atom }).into(),
     <l: @L> "then" <atom: ThenAtom> ";" <r: @R> =>
-        ast.push_stmt(Location(l, r), Stmt::Then(atom)),
+        ast.push_then_stmt(Location(l, r), ThenStmt { atom }).into(),
     <l: @L> "match" <tm: Term> "{" <cases: MatchCase*> "}" <r: @R> =>
-        ast.push_stmt(Location(l, r), Stmt::Match { term: tm, cases }),
+        ast.push_match_stmt(Location(l, r), MatchStmt { term: tm, cases }).into(),
 }
 
 RuleDecl: RuleDeclId = {
