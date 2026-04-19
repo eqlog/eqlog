@@ -37,12 +37,12 @@ typed_id!(MatchCaseId);
 typed_id!(StmtId);
 
 #[derive(Clone, Debug)]
-pub struct ModuleData {
-    pub decls: Vec<DeclData>,
+pub struct Module {
+    pub decls: Vec<Decl>,
 }
 
 #[derive(Clone, Debug)]
-pub enum DeclData {
+pub enum Decl {
     Type(TypeDeclId),
     Pred(PredDeclId),
     Func(FuncDeclId),
@@ -52,60 +52,60 @@ pub enum DeclData {
 }
 
 #[derive(Clone, Debug)]
-pub struct TypeDeclData {
+pub struct TypeDecl {
     pub name: String,
 }
 
 #[derive(Clone, Debug)]
-pub struct PredDeclData {
+pub struct PredDecl {
     pub name: String,
     pub args: ArgDeclListId,
 }
 
 #[derive(Clone, Debug)]
-pub struct FuncDeclData {
+pub struct FuncDecl {
     pub name: String,
     pub args: ArgDeclListId,
     pub result: TypeExprId,
 }
 
 #[derive(Clone, Debug)]
-pub struct RuleDeclData {
+pub struct RuleDecl {
     pub name: Option<String>,
     pub body: Vec<StmtId>,
 }
 
 #[derive(Clone, Debug)]
-pub struct EnumDeclData {
+pub struct EnumDecl {
     pub name: String,
     pub ctors: Vec<CtorDeclId>,
 }
 
 #[derive(Clone, Debug)]
-pub struct ModelDeclData {
+pub struct ModelDecl {
     pub name: String,
-    pub body: Vec<DeclData>,
+    pub body: Vec<Decl>,
 }
 
 #[derive(Clone, Debug)]
-pub struct CtorDeclData {
+pub struct CtorDecl {
     pub name: String,
     pub args: ArgDeclListId,
 }
 
 #[derive(Clone, Debug)]
-pub struct ArgDeclData {
+pub struct ArgDecl {
     pub name: Option<String>,
     pub typ: TypeExprId,
 }
 
 #[derive(Clone, Debug)]
-pub struct ArgDeclListData {
+pub struct ArgDeclList {
     pub args: Vec<ArgDeclId>,
 }
 
 #[derive(Clone, Debug)]
-pub enum TermData {
+pub enum Term {
     Var(String),
     Wildcard,
     App { func: FuncExprId, args: TermListId },
@@ -115,31 +115,31 @@ pub enum TermData {
 }
 
 #[derive(Clone, Debug)]
-pub struct TermListData {
+pub struct TermList {
     pub terms: Vec<TermId>,
 }
 
 #[derive(Clone, Debug)]
-pub enum TypeExprData {
+pub enum TypeExpr {
     Ambient(String),
     Member { term: TermId, name: String },
     Mor(String),
 }
 
 #[derive(Clone, Debug)]
-pub enum PredExprData {
+pub enum PredExpr {
     Ambient(String),
     Member { term: TermId, name: String },
 }
 
 #[derive(Clone, Debug)]
-pub enum FuncExprData {
+pub enum FuncExpr {
     Ambient(String),
     Member { term: TermId, name: String },
 }
 
 #[derive(Clone, Debug)]
-pub enum IfAtomData {
+pub enum IfAtom {
     Equal(TermId, TermId),
     Defined(TermId),
     Pred { pred: PredExprId, args: TermListId },
@@ -147,20 +147,20 @@ pub enum IfAtomData {
 }
 
 #[derive(Clone, Debug)]
-pub enum ThenAtomData {
+pub enum ThenAtom {
     Equal(TermId, TermId),
     Defined { var: Option<TermId>, term: TermId },
     Pred { pred: PredExprId, args: TermListId },
 }
 
 #[derive(Clone, Debug)]
-pub struct MatchCaseData {
+pub struct MatchCase {
     pub pattern: TermId,
     pub body: Vec<StmtId>,
 }
 
 #[derive(Clone, Debug)]
-pub enum StmtData {
+pub enum Stmt {
     If(IfAtomId),
     Then(ThenAtomId),
     Branch(Vec<Vec<StmtId>>),
@@ -171,31 +171,31 @@ pub enum StmtData {
 }
 
 #[derive(Clone, Debug)]
-pub enum NodeData {
-    Module(ModuleData),
-    TypeDecl(TypeDeclData),
-    PredDecl(PredDeclData),
-    FuncDecl(FuncDeclData),
-    RuleDecl(RuleDeclData),
-    EnumDecl(EnumDeclData),
-    ModelDecl(ModelDeclData),
-    CtorDecl(CtorDeclData),
-    ArgDecl(ArgDeclData),
-    ArgDeclList(ArgDeclListData),
-    Term(TermData),
-    TermList(TermListData),
-    TypeExpr(TypeExprData),
-    PredExpr(PredExprData),
-    FuncExpr(FuncExprData),
-    IfAtom(IfAtomData),
-    ThenAtom(ThenAtomData),
-    MatchCase(MatchCaseData),
-    Stmt(StmtData),
+pub enum Node {
+    Module(Module),
+    TypeDecl(TypeDecl),
+    PredDecl(PredDecl),
+    FuncDecl(FuncDecl),
+    RuleDecl(RuleDecl),
+    EnumDecl(EnumDecl),
+    ModelDecl(ModelDecl),
+    CtorDecl(CtorDecl),
+    ArgDecl(ArgDecl),
+    ArgDeclList(ArgDeclList),
+    Term(Term),
+    TermList(TermList),
+    TypeExpr(TypeExpr),
+    PredExpr(PredExpr),
+    FuncExpr(FuncExpr),
+    IfAtom(IfAtom),
+    ThenAtom(ThenAtom),
+    MatchCase(MatchCase),
+    Stmt(Stmt),
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct Ast {
-    nodes: Vec<(Location, NodeData)>,
+    nodes: Vec<(Location, Node)>,
 }
 
 impl Ast {
@@ -209,129 +209,50 @@ impl Ast {
 }
 
 macro_rules! accessor {
-    ($getter:ident, $pusher:ident, $id:ident, $data:ident, $variant:ident) => {
+    ($getter:ident, $pusher:ident, $id:ident, $kind:ident) => {
         impl Ast {
-            pub fn $getter(&self, id: $id) -> &$data {
+            pub fn $getter(&self, id: $id) -> &$kind {
                 match &self.nodes[(id.0).0].1 {
-                    NodeData::$variant(d) => d,
+                    Node::$kind(d) => d,
                     other => panic!(
                         "expected {} at {:?}, got {:?}",
-                        stringify!($variant),
+                        stringify!($kind),
                         id,
                         other
                     ),
                 }
             }
 
-            pub fn $pusher(&mut self, loc: Location, data: $data) -> $id {
+            pub fn $pusher(&mut self, loc: Location, data: $kind) -> $id {
                 let id = NodeId(self.nodes.len());
-                self.nodes.push((loc, NodeData::$variant(data)));
+                self.nodes.push((loc, Node::$kind(data)));
                 $id(id)
             }
         }
     };
 }
 
-accessor!(module, push_module, ModuleId, ModuleData, Module);
-accessor!(
-    type_decl,
-    push_type_decl,
-    TypeDeclId,
-    TypeDeclData,
-    TypeDecl
-);
-accessor!(
-    pred_decl,
-    push_pred_decl,
-    PredDeclId,
-    PredDeclData,
-    PredDecl
-);
-accessor!(
-    func_decl,
-    push_func_decl,
-    FuncDeclId,
-    FuncDeclData,
-    FuncDecl
-);
-accessor!(
-    rule_decl,
-    push_rule_decl,
-    RuleDeclId,
-    RuleDeclData,
-    RuleDecl
-);
-accessor!(
-    enum_decl,
-    push_enum_decl,
-    EnumDeclId,
-    EnumDeclData,
-    EnumDecl
-);
-accessor!(
-    model_decl,
-    push_model_decl,
-    ModelDeclId,
-    ModelDeclData,
-    ModelDecl
-);
-accessor!(
-    ctor_decl,
-    push_ctor_decl,
-    CtorDeclId,
-    CtorDeclData,
-    CtorDecl
-);
-accessor!(arg_decl, push_arg_decl, ArgDeclId, ArgDeclData, ArgDecl);
+accessor!(module, push_module, ModuleId, Module);
+accessor!(type_decl, push_type_decl, TypeDeclId, TypeDecl);
+accessor!(pred_decl, push_pred_decl, PredDeclId, PredDecl);
+accessor!(func_decl, push_func_decl, FuncDeclId, FuncDecl);
+accessor!(rule_decl, push_rule_decl, RuleDeclId, RuleDecl);
+accessor!(enum_decl, push_enum_decl, EnumDeclId, EnumDecl);
+accessor!(model_decl, push_model_decl, ModelDeclId, ModelDecl);
+accessor!(ctor_decl, push_ctor_decl, CtorDeclId, CtorDecl);
+accessor!(arg_decl, push_arg_decl, ArgDeclId, ArgDecl);
 accessor!(
     arg_decl_list,
     push_arg_decl_list,
     ArgDeclListId,
-    ArgDeclListData,
     ArgDeclList
 );
-accessor!(term, push_term, TermId, TermData, Term);
-accessor!(
-    term_list,
-    push_term_list,
-    TermListId,
-    TermListData,
-    TermList
-);
-accessor!(
-    type_expr,
-    push_type_expr,
-    TypeExprId,
-    TypeExprData,
-    TypeExpr
-);
-accessor!(
-    pred_expr,
-    push_pred_expr,
-    PredExprId,
-    PredExprData,
-    PredExpr
-);
-accessor!(
-    func_expr,
-    push_func_expr,
-    FuncExprId,
-    FuncExprData,
-    FuncExpr
-);
-accessor!(if_atom, push_if_atom, IfAtomId, IfAtomData, IfAtom);
-accessor!(
-    then_atom,
-    push_then_atom,
-    ThenAtomId,
-    ThenAtomData,
-    ThenAtom
-);
-accessor!(
-    match_case,
-    push_match_case,
-    MatchCaseId,
-    MatchCaseData,
-    MatchCase
-);
-accessor!(stmt, push_stmt, StmtId, StmtData, Stmt);
+accessor!(term, push_term, TermId, Term);
+accessor!(term_list, push_term_list, TermListId, TermList);
+accessor!(type_expr, push_type_expr, TypeExprId, TypeExpr);
+accessor!(pred_expr, push_pred_expr, PredExprId, PredExpr);
+accessor!(func_expr, push_func_expr, FuncExprId, FuncExpr);
+accessor!(if_atom, push_if_atom, IfAtomId, IfAtom);
+accessor!(then_atom, push_then_atom, ThenAtomId, ThenAtom);
+accessor!(match_case, push_match_case, MatchCaseId, MatchCase);
+accessor!(stmt, push_stmt, StmtId, Stmt);

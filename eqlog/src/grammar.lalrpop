@@ -28,31 +28,31 @@ Intersperse<Item, Separator>: Vec<Item> = {
 }
 
 Variable: TermId = {
-    <l: @L> <name: Id> <r: @R> => ast.push_term(Location(l, r), TermData::Var(name)),
+    <l: @L> <name: Id> <r: @R> => ast.push_term(Location(l, r), Term::Var(name)),
 }
 
 Wildcard: TermId = {
-    <l: @L> "_" <r: @R> => ast.push_term(Location(l, r), TermData::Wildcard),
+    <l: @L> "_" <r: @R> => ast.push_term(Location(l, r), Term::Wildcard),
 }
 
 ApplicationTerm: TermId = {
     <l: @L> <func: FuncExpr> <args: ArgList> <r: @R> =>
-        ast.push_term(Location(l, r), TermData::App { func, args }),
+        ast.push_term(Location(l, r), Term::App { func, args }),
 }
 
 DomTerm: TermId = {
     <l: @L> "dom" "(" <arg: Term> ")" <r: @R> =>
-        ast.push_term(Location(l, r), TermData::Dom(arg)),
+        ast.push_term(Location(l, r), Term::Dom(arg)),
 }
 
 CodTerm: TermId = {
     <l: @L> "cod" "(" <arg: Term> ")" <r: @R> =>
-        ast.push_term(Location(l, r), TermData::Cod(arg)),
+        ast.push_term(Location(l, r), Term::Cod(arg)),
 }
 
 MorAppTerm: TermId = {
     <l: @L> <mor: Term> "@" "(" <arg: Term> ")" <r: @R> =>
-        ast.push_term(Location(l, r), TermData::MorApp { mor, arg }),
+        ast.push_term(Location(l, r), Term::MorApp { mor, arg }),
 }
 
 Term: TermId = {
@@ -66,52 +66,52 @@ Term: TermId = {
 
 TypeExpr: TypeExprId = {
     <l: @L> <name: Id> <r: @R> =>
-        ast.push_type_expr(Location(l, r), TypeExprData::Ambient(name)),
+        ast.push_type_expr(Location(l, r), TypeExpr::Ambient(name)),
     <l: @L> <tm: Term> "." <name: Id> <r: @R> =>
-        ast.push_type_expr(Location(l, r), TypeExprData::Member { term: tm, name }),
+        ast.push_type_expr(Location(l, r), TypeExpr::Member { term: tm, name }),
     <l: @L> "Mor" "(" <name: Id> ")" <r: @R> =>
-        ast.push_type_expr(Location(l, r), TypeExprData::Mor(name)),
+        ast.push_type_expr(Location(l, r), TypeExpr::Mor(name)),
 }
 
 #[inline]
 PredExpr: PredExprId = {
     <l: @L> <name: Id> <r: @R> =>
-        ast.push_pred_expr(Location(l, r), PredExprData::Ambient(name)),
+        ast.push_pred_expr(Location(l, r), PredExpr::Ambient(name)),
     <l: @L> <tm: Term> "." <name: Id> <r: @R> =>
-        ast.push_pred_expr(Location(l, r), PredExprData::Member { term: tm, name }),
+        ast.push_pred_expr(Location(l, r), PredExpr::Member { term: tm, name }),
 }
 
 #[inline]
 FuncExpr: FuncExprId = {
     <l: @L> <name: Id> <r: @R> =>
-        ast.push_func_expr(Location(l, r), FuncExprData::Ambient(name)),
+        ast.push_func_expr(Location(l, r), FuncExpr::Ambient(name)),
     <l: @L> <tm: Term> "." <name: Id> <r: @R> =>
-        ast.push_func_expr(Location(l, r), FuncExprData::Member { term: tm, name }),
+        ast.push_func_expr(Location(l, r), FuncExpr::Member { term: tm, name }),
 }
 
 ArgList: TermListId = {
     <l: @L> "(" <args: Intersperse<Term, ",">> ")" <r: @R> =>
-        ast.push_term_list(Location(l, r), TermListData { terms: args }),
+        ast.push_term_list(Location(l, r), TermList { terms: args }),
 }
 
 IfAtom: IfAtomId = {
     <l: @L> <lhs: Term> "=" <rhs: Term> <r: @R> =>
-        ast.push_if_atom(Location(l, r), IfAtomData::Equal(lhs, rhs)),
+        ast.push_if_atom(Location(l, r), IfAtom::Equal(lhs, rhs)),
     <l: @L> <tm: Term> "!" <r: @R> =>
-        ast.push_if_atom(Location(l, r), IfAtomData::Defined(tm)),
+        ast.push_if_atom(Location(l, r), IfAtom::Defined(tm)),
     <l: @L> <pred: PredExpr> <args: ArgList> <r: @R> =>
-        ast.push_if_atom(Location(l, r), IfAtomData::Pred { pred, args }),
+        ast.push_if_atom(Location(l, r), IfAtom::Pred { pred, args }),
     <l: @L> <term: Term> ":" <typ: TypeExpr> <r: @R> =>
-        ast.push_if_atom(Location(l, r), IfAtomData::Var { term, typ }),
+        ast.push_if_atom(Location(l, r), IfAtom::Var { term, typ }),
 }
 
 ThenAtom: ThenAtomId = {
     <l: @L> <lhs: Term> "=" <rhs: Term> <r: @R> =>
-        ast.push_then_atom(Location(l, r), ThenAtomData::Equal(lhs, rhs)),
+        ast.push_then_atom(Location(l, r), ThenAtom::Equal(lhs, rhs)),
     <l: @L> <var: PairFirst<Term, ":=">?> <term: Term> "!" <r: @R> =>
-        ast.push_then_atom(Location(l, r), ThenAtomData::Defined { var, term }),
+        ast.push_then_atom(Location(l, r), ThenAtom::Defined { var, term }),
     <l: @L> <pred: PredExpr> <args: ArgList> <r: @R> =>
-        ast.push_then_atom(Location(l, r), ThenAtomData::Pred { pred, args }),
+        ast.push_then_atom(Location(l, r), ThenAtom::Pred { pred, args }),
 }
 
 StmtBlock: Vec<StmtId> = {
@@ -120,77 +120,77 @@ StmtBlock: Vec<StmtId> = {
 
 MatchCase: MatchCaseId = {
     <l: @L> <pattern: Term> "=>" <body: StmtBlock> <r: @R> =>
-        ast.push_match_case(Location(l, r), MatchCaseData { pattern, body }),
+        ast.push_match_case(Location(l, r), MatchCase { pattern, body }),
 }
 
 Stmt: StmtId = {
     <l: @L> "branch" <blocks: NonEmptyIntersperse<StmtBlock, "along">> <r: @R> =>
-        ast.push_stmt(Location(l, r), StmtData::Branch(blocks)),
+        ast.push_stmt(Location(l, r), Stmt::Branch(blocks)),
     <l: @L> "if" <atom: IfAtom> ";" <r: @R> =>
-        ast.push_stmt(Location(l, r), StmtData::If(atom)),
+        ast.push_stmt(Location(l, r), Stmt::If(atom)),
     <l: @L> "then" <atom: ThenAtom> ";" <r: @R> =>
-        ast.push_stmt(Location(l, r), StmtData::Then(atom)),
+        ast.push_stmt(Location(l, r), Stmt::Then(atom)),
     <l: @L> "match" <tm: Term> "{" <cases: MatchCase*> "}" <r: @R> =>
-        ast.push_stmt(Location(l, r), StmtData::Match { term: tm, cases }),
+        ast.push_stmt(Location(l, r), Stmt::Match { term: tm, cases }),
 }
 
 RuleDecl: RuleDeclId = {
     <l: @L> "rule" <name: Id?> "{" <body: Stmt*> "}" <r: @R> =>
-        ast.push_rule_decl(Location(l, r), RuleDeclData { name, body }),
+        ast.push_rule_decl(Location(l, r), RuleDecl { name, body }),
 }
 
 TypeDecl: TypeDeclId = {
     <l: @L> "type" <name: Id> ";" <r: @R> =>
-        ast.push_type_decl(Location(l, r), TypeDeclData { name }),
+        ast.push_type_decl(Location(l, r), TypeDecl { name }),
 }
 
 ArgDecl: ArgDeclId = {
     <l: @L> <name: PairFirst<Id, ":">?> <typ: TypeExpr> <r: @R> =>
-        ast.push_arg_decl(Location(l, r), ArgDeclData { name, typ }),
+        ast.push_arg_decl(Location(l, r), ArgDecl { name, typ }),
 }
 
 ArgDeclList: ArgDeclListId = {
     <l: @L> "(" <args: Intersperse<ArgDecl, ",">> ")" <r: @R> =>
-        ast.push_arg_decl_list(Location(l, r), ArgDeclListData { args }),
+        ast.push_arg_decl_list(Location(l, r), ArgDeclList { args }),
 }
 
 PredDecl: PredDeclId = {
     <l: @L> "pred" <name: Id> <args: ArgDeclList> ";" <r: @R> =>
-        ast.push_pred_decl(Location(l, r), PredDeclData { name, args }),
+        ast.push_pred_decl(Location(l, r), PredDecl { name, args }),
 }
 
 FuncDecl: FuncDeclId = {
     <l: @L> "func" <name: Id> <args: ArgDeclList> "->" <result: TypeExpr> ";" <r: @R> =>
-        ast.push_func_decl(Location(l, r), FuncDeclData { name, args, result }),
+        ast.push_func_decl(Location(l, r), FuncDecl { name, args, result }),
 }
 
 CtorDecl: CtorDeclId = {
     <l: @L> <name: Id> <args: ArgDeclList> <r: @R> =>
-        ast.push_ctor_decl(Location(l, r), CtorDeclData { name, args }),
+        ast.push_ctor_decl(Location(l, r), CtorDecl { name, args }),
 }
 
 EnumDecl: EnumDeclId = {
     // TODO: Let's also allow an optional comma after the last constructor. As of this writing,
     // adding a ","? there causes a shift-reduce conflict.
     <l: @L> "enum" <name: Id> "{" <ctors: Intersperse<CtorDecl, ",">> "}" <r: @R> =>
-        ast.push_enum_decl(Location(l, r), EnumDeclData { name, ctors }),
+        ast.push_enum_decl(Location(l, r), EnumDecl { name, ctors }),
 }
 
 ModelDecl: ModelDeclId = {
     <l: @L> "model" <name: Id> "{" <body: Decl*> "}" <r: @R> =>
-        ast.push_model_decl(Location(l, r), ModelDeclData { name, body }),
+        ast.push_model_decl(Location(l, r), ModelDecl { name, body }),
 }
 
-Decl: DeclData = {
-    <t: TypeDecl> => DeclData::Type(t),
-    <p: PredDecl> => DeclData::Pred(p),
-    <f: FuncDecl> => DeclData::Func(f),
-    <r: RuleDecl> => DeclData::Rule(r),
-    <e: EnumDecl> => DeclData::Enum(e),
-    <m: ModelDecl> => DeclData::Model(m),
+Decl: Decl = {
+    <t: TypeDecl> => Decl::Type(t),
+    <p: PredDecl> => Decl::Pred(p),
+    <f: FuncDecl> => Decl::Func(f),
+    <r: RuleDecl> => Decl::Rule(r),
+    <e: EnumDecl> => Decl::Enum(e),
+    <m: ModelDecl> => Decl::Model(m),
 }
 
 pub Module: ModuleId = {
     <l: @L> <decls: Decl*> <r: @R> =>
-        ast.push_module(Location(l, r), ModuleData { decls }),
+        ast.push_module(Location(l, r), Module { decls }),
 }
