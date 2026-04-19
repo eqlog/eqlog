@@ -272,8 +272,8 @@ impl Scopes {
 /// Builds scopes for `ast` rooted at `module`.
 ///
 /// Returns the populated [`Scopes`] along with any errors detected during the
-/// pass. For this commit, only duplicate-symbol errors in unordered scopes are
-/// reported; the returned scope graph is populated regardless.
+/// pass. Errors do not abort population; the scope graph is always fully
+/// populated.
 pub fn resolve_scopes(ast: &Ast, module: ModuleId) -> (Scopes, Vec<CompileError>) {
     let mut builder = ScopeBuilder {
         ast,
