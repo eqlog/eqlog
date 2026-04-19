@@ -15,7 +15,6 @@ mod flatten;
 mod fmt_util;
 mod ram;
 mod rust_gen;
-#[allow(dead_code)]
 mod scopes;
 mod source_display;
 mod to_ram;

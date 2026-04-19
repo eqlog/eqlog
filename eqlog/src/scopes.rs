@@ -42,6 +42,7 @@ pub enum Symbol {
 
 #[derive(Clone, Debug)]
 pub struct Scope {
+    #[allow(dead_code)]
     pub parent: Option<ScopeId>,
     pub symbols: BTreeMap<String, Symbol>,
 }
@@ -214,6 +215,7 @@ impl From<OrderedNodeId> for NodeId {
 }
 
 #[derive(Clone, Debug, Default)]
+#[allow(dead_code)]
 pub struct Scopes {
     scopes: Vec<Scope>,
     flat: BTreeMap<NodeId, ScopeId>,
@@ -221,6 +223,7 @@ pub struct Scopes {
     exit: BTreeMap<NodeId, ScopeId>,
 }
 
+#[allow(dead_code)]
 impl Scopes {
     pub fn scope(&self, id: ScopeId) -> &Scope {
         &self.scopes[id.0]
