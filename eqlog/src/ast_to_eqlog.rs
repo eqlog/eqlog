@@ -72,7 +72,7 @@ impl<'a> Ctx<'a> {
                 let virt_ident = self.eqlog.define_real_virt_ident(ident);
                 self.eqlog.insert_var_term_node(node, virt_ident);
             }
-            Term::Wildcard(_) => {
+            Term::Wildcard => {
                 self.eqlog.insert_wildcard_term_node(node);
             }
             Term::App(id) => {

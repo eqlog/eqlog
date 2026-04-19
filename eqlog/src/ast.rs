@@ -2,21 +2,12 @@
 //!
 //! All nodes live in a single `Vec<(Location, Node)>` arena on [`Ast`], and
 //! children are referenced by index rather than owned or borrowed. Each node
-//! kind has a typed id (e.g. [`VarTermId`], [`EqualAtomId`]) that wraps a
-//! [`NodeId`]; `ast.var_term(id)` returns the payload and panics if the id
-//! points at a node of the wrong kind.
+//! kind has a typed id (e.g. [`TermId`], [`IfAtomId`]) that wraps a [`NodeId`];
+//! `ast.term(id)` returns the payload and panics if the id points at a node of
+//! the wrong kind.
 //!
-//! Sum-type nodes like [`Term`], [`IfAtom`] or [`Stmt`] do not live in the
-//! arena themselves. Instead, each variant is its own arena node, and the
-//! sum-type enum simply wraps a typed variant id. A "generic" id such as
-//! [`TermId`] is a variant-agnostic handle; `ast.term(id)` dispatches on the
-//! node discriminant and returns the matching enum. Variant ids convert back
-//! to the generic id via [`From`], so code can hand a specific id to an API
-//! that asks for the generic one.
-//!
-//! Equality and predicate atoms are shared between [`IfAtom`] and
-//! [`ThenAtom`]: the same [`EqualAtomId`] or [`PredAtomId`] can appear in
-//! either context, and the enclosing [`IfStmt`] or [`ThenStmt`] records which.
+//! The arena representation lets downstream passes key side tables by id
+//! without caring about pointer stability or borrow lifetimes.
 
 use crate::grammar_util::Location;
 
@@ -62,7 +53,6 @@ typed_id!(ArgDeclListId);
 
 typed_id!(TermId);
 variant_id!(VarTermId, TermId);
-variant_id!(WildcardTermId, TermId);
 variant_id!(AppTermId, TermId);
 variant_id!(DomTermId, TermId);
 variant_id!(CodTermId, TermId);
@@ -198,9 +188,7 @@ pub struct MorAppTerm {
 #[derive(Copy, Clone, Debug)]
 pub enum Term {
     Var(VarTermId),
-    // `WildcardTerm` has no payload, so nothing reads the id; kept for symmetry with the other
-    // variants so that callers can still refer to a specific wildcard term node.
-    Wildcard(#[allow(dead_code)] WildcardTermId),
+    Wildcard,
     App(AppTermId),
     Dom(DomTermId),
     Cod(CodTermId),
@@ -404,7 +392,6 @@ impl Ast {
 macro_rules! accessor {
     ($getter:ident, $pusher:ident, $id:ident, $kind:ident) => {
         impl Ast {
-            #[allow(dead_code)]
             pub fn $getter(&self, id: $id) -> &$kind {
                 match &self.nodes[(id.0).0].1 {
                     Node::$kind(d) => d,
@@ -442,12 +429,6 @@ accessor!(
     ArgDeclList
 );
 accessor!(var_term, push_var_term, VarTermId, VarTerm);
-accessor!(
-    wildcard_term,
-    push_wildcard_term,
-    WildcardTermId,
-    WildcardTerm
-);
 accessor!(app_term, push_app_term, AppTermId, AppTerm);
 accessor!(dom_term, push_dom_term, DomTermId, DomTerm);
 accessor!(cod_term, push_cod_term, CodTermId, CodTerm);
@@ -517,10 +498,16 @@ accessor!(branch_stmt, push_branch_stmt, BranchStmtId, BranchStmt);
 accessor!(match_stmt, push_match_stmt, MatchStmtId, MatchStmt);
 
 impl Ast {
+    pub fn push_wildcard_term(&mut self, loc: Location) -> TermId {
+        let id = NodeId(self.nodes.len());
+        self.nodes.push((loc, Node::WildcardTerm(WildcardTerm)));
+        TermId(id)
+    }
+
     pub fn term(&self, id: TermId) -> Term {
         match &self.nodes[(id.0).0].1 {
             Node::VarTerm(_) => Term::Var(VarTermId(id.0)),
-            Node::WildcardTerm(_) => Term::Wildcard(WildcardTermId(id.0)),
+            Node::WildcardTerm(_) => Term::Wildcard,
             Node::AppTerm(_) => Term::App(AppTermId(id.0)),
             Node::DomTerm(_) => Term::Dom(DomTermId(id.0)),
             Node::CodTerm(_) => Term::Cod(CodTermId(id.0)),

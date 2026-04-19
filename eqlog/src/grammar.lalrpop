@@ -33,8 +33,7 @@ Variable: TermId = {
 }
 
 Wildcard: TermId = {
-    <l: @L> "_" <r: @R> =>
-        ast.push_wildcard_term(Location(l, r), WildcardTerm).into(),
+    <l: @L> "_" <r: @R> => ast.push_wildcard_term(Location(l, r)),
 }
 
 ApplicationTerm: TermId = {
