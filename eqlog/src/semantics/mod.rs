@@ -14,52 +14,6 @@ use crate::error::*;
 use crate::grammar_util::*;
 use eqlog_eqlog::*;
 
-fn iter_match_pattern_is_variable_errors<'a>(
-    eqlog: &'a Eqlog,
-    locations: &'a BTreeMap<Loc, Location>,
-) -> impl 'a + Iterator<Item = CompileError> {
-    eqlog
-        .iter_case_pattern_is_variable()
-        .filter_map(move |loc| {
-            let location = *locations.get(&loc).unwrap();
-            Some(CompileError::MatchPatternIsVariable { location })
-        })
-}
-
-fn iter_match_pattern_is_wildcard_errors<'a>(
-    eqlog: &'a Eqlog,
-    locations: &'a BTreeMap<Loc, Location>,
-) -> impl 'a + Iterator<Item = CompileError> {
-    eqlog
-        .iter_case_pattern_is_wildcard()
-        .filter_map(move |loc| {
-            let location = *locations.get(&loc).unwrap();
-            Some(CompileError::MatchPatternIsWildcard { location })
-        })
-}
-
-fn iter_match_pattern_is_member_func_errors<'a>(
-    eqlog: &'a Eqlog,
-    locations: &'a BTreeMap<Loc, Location>,
-) -> impl 'a + Iterator<Item = CompileError> {
-    eqlog
-        .iter_case_pattern_is_member_func()
-        .filter_map(move |loc| {
-            let location = *locations.get(&loc).unwrap();
-            Some(CompileError::MatchPatternIsMemberFunc { location })
-        })
-}
-
-fn iter_match_pattern_ctor_arg_is_app_errors<'a>(
-    eqlog: &'a Eqlog,
-    locations: &'a BTreeMap<Loc, Location>,
-) -> impl 'a + Iterator<Item = CompileError> {
-    eqlog.iter_pattern_ctor_arg_is_app().filter_map(move |loc| {
-        let location = *locations.get(&loc).unwrap();
-        Some(CompileError::MatchPatternCtorArgIsApp { location })
-    })
-}
-
 fn iter_match_pattern_ctor_arg_is_not_fresh<'a>(
     eqlog: &'a Eqlog,
     locations: &'a BTreeMap<Loc, Location>,
@@ -543,20 +497,6 @@ pub fn iter_enum_ctors_not_surjective_errors<'a>(
         })
 }
 
-pub fn iter_illegal_rel_arg_errors<'a>(
-    eqlog: &'a Eqlog,
-    _identifiers: &'a BTreeMap<Ident, String>,
-    locations: &'a BTreeMap<Loc, Location>,
-) -> impl 'a + Iterator<Item = CompileError> {
-    eqlog
-        .iter_illegal_member_type_expr_in_signature()
-        .filter_map(move |type_expr_node| {
-            let loc = eqlog.type_expr_node_loc(type_expr_node)?;
-            let location = *locations.get(&loc).unwrap();
-            Some(CompileError::IllegalMemberTypeExprInArgDecl { location })
-        })
-}
-
 pub fn iter_non_morphism_applied_as_morphism_errors<'a>(
     eqlog: &'a Eqlog,
     _identifiers: &'a BTreeMap<Ident, String>,
@@ -606,12 +546,7 @@ pub fn check_eqlog(
         .chain(iter_symbol_casing_errors(eqlog, identifiers, locations))
         .chain(iter_then_defined_variable_errors(eqlog, locations))
         .chain(iter_variable_introduced_in_then_errors(eqlog, locations))
-        .chain(iter_wildcard_in_then_errors(eqlog, locations))
         .chain(iter_conflicting_type_errors(eqlog, identifiers, locations))
-        .chain(iter_match_pattern_is_variable_errors(eqlog, locations))
-        .chain(iter_match_pattern_is_wildcard_errors(eqlog, locations))
-        .chain(iter_match_pattern_is_member_func_errors(eqlog, locations))
-        .chain(iter_match_pattern_ctor_arg_is_app_errors(eqlog, locations))
         .chain(iter_match_pattern_ctor_arg_is_not_fresh(eqlog, locations))
         .chain(iter_match_conflicting_enum(eqlog, locations))
         .chain(iter_match_stmt_contains_ctor_of_enum(eqlog, locations))
@@ -628,7 +563,6 @@ pub fn check_eqlog(
             identifiers,
             locations,
         ))
-        .chain(iter_illegal_rel_arg_errors(eqlog, identifiers, locations))
         .chain(iter_non_morphism_applied_as_morphism_errors(
             eqlog,
             identifiers,

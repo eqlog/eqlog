@@ -68,21 +68,6 @@ pub fn iter_variable_introduced_in_then_errors<'a>(
     })
 }
 
-pub fn iter_wildcard_in_then_errors<'a>(
-    eqlog: &'a Eqlog,
-    locations: &'a BTreeMap<Loc, Location>,
-) -> impl 'a + Iterator<Item = CompileError> {
-    eqlog.iter_term_should_be_epic_ok().filter_map(|tm| {
-        if eqlog.wildcard_term_node(tm) {
-            let loc = eqlog.term_node_loc(tm).unwrap();
-            let location = *locations.get(&loc).unwrap();
-            Some(CompileError::WildcardInThenStmt { location })
-        } else {
-            None
-        }
-    })
-}
-
 pub fn iter_then_defined_variable_errors<'a>(
     eqlog: &'a Eqlog,
     locations: &'a BTreeMap<Loc, Location>,
@@ -102,28 +87,20 @@ pub fn iter_then_defined_variable_errors<'a>(
                 return None;
             }
 
-            let loc = eqlog.term_node_loc(var_term).unwrap();
-            let location = *locations.get(&loc).unwrap();
-
-            let var_name: Option<VirtIdent> = eqlog.iter_var_term_node().find_map(|(vt, name)| {
+            let var_name: VirtIdent = eqlog.iter_var_term_node().find_map(|(vt, name)| {
                 if eqlog.are_equal_term_node(vt, var_term) {
                     Some(name)
                 } else {
                     None
                 }
-            });
-
-            let var_name: VirtIdent = match var_name {
-                None => {
-                    return Some(CompileError::ThenDefinedNotVar { location });
-                }
-                Some(name) => name,
-            };
+            })?;
 
             let scope = eqlog
                 .entry_scope(eqlog.rule_descendant_term(var_term).unwrap())
                 .unwrap();
             if eqlog.var_in_scope(var_name, scope) {
+                let loc = eqlog.term_node_loc(var_term).unwrap();
+                let location = *locations.get(&loc).unwrap();
                 return Some(CompileError::ThenDefinedVarNotNew { location });
             }
 

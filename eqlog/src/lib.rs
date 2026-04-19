@@ -17,6 +17,7 @@ mod ram;
 mod rust_gen;
 mod scopes;
 mod source_display;
+mod syntactic;
 mod to_ram;
 mod unification;
 
