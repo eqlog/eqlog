@@ -1,0 +1,6 @@
+Error: variable "x" occurs only once
+ --> error-test-source/variable-only-once-separate-branches/theory.eql:7
+  | 
+7 |         if bar(x);
+  |                ^  
+  | 

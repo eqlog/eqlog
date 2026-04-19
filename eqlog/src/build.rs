@@ -7,6 +7,7 @@ use crate::flatten::*;
 use crate::grammar::*;
 use crate::ram::*;
 use crate::rust_gen::*;
+use crate::scope_checks::{check_bindings, check_occurrences};
 use crate::scopes::resolve_scopes;
 use crate::semantics::*;
 use crate::syntactic::check_syntactic;
@@ -453,7 +454,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
         .into());
     }
 
-    let _scopes = match resolve_scopes(&ast, module) {
+    let scopes = match resolve_scopes(&ast, module) {
         Ok(scopes) => scopes,
         Err(error) => {
             return Err(CompileErrorWithContext {
@@ -464,6 +465,9 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
             .into());
         }
     };
+
+    let binding_errors = check_bindings(&ast, &scopes, module);
+    let occurrence_err = check_occurrences(&ast, &scopes, module).err();
 
     let (mut eqlog, identifiers, locations, _module) = populate_eqlog(&ast, module);
     eqlog.close();
@@ -480,11 +484,24 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
         }
     }
 
-    check_eqlog(&eqlog, &identifiers, &locations).map_err(|error| CompileErrorWithContext {
-        error,
-        source,
-        source_path: config.in_dir.join(in_file),
-    })?;
+    let eqlog_err = check_eqlog(&eqlog, &identifiers, &locations).err();
+
+    // Merge Rust-side and eqlog-side errors by `CompileError`'s `Ord`, which
+    // applies the kind precedence (e.g. UndeclaredSymbol beats
+    // VariableOccursOnlyOnce) before falling back to source location.
+    if let Some(error) = binding_errors
+        .into_iter()
+        .chain(occurrence_err)
+        .chain(eqlog_err)
+        .min()
+    {
+        return Err(CompileErrorWithContext {
+            error,
+            source,
+            source_path: config.in_dir.join(in_file),
+        }
+        .into());
+    }
     assert!(!eqlog.absurd());
 
     let flat_rule_groups = flatten(&eqlog, &identifiers);

@@ -15,6 +15,7 @@ mod flatten;
 mod fmt_util;
 mod ram;
 mod rust_gen;
+mod scope_checks;
 mod scopes;
 mod source_display;
 mod syntactic;
