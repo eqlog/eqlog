@@ -1,186 +1,347 @@
 use crate::grammar_util::Location;
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct NodeId(usize);
+
+pub trait AstNode: Copy {
+    fn node(self) -> NodeId;
+}
+
+impl AstNode for NodeId {
+    fn node(self) -> NodeId {
+        self
+    }
+}
+
+macro_rules! typed_id {
+    ($name:ident) => {
+        #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+        pub struct $name(NodeId);
+
+        impl AstNode for $name {
+            fn node(self) -> NodeId {
+                self.0
+            }
+        }
+    };
+}
+
+typed_id!(ModuleId);
+typed_id!(TypeDeclId);
+typed_id!(PredDeclId);
+typed_id!(FuncDeclId);
+typed_id!(RuleDeclId);
+typed_id!(EnumDeclId);
+typed_id!(ModelDeclId);
+typed_id!(CtorDeclId);
+typed_id!(ArgDeclId);
+typed_id!(ArgDeclListId);
+typed_id!(TermId);
+typed_id!(TermListId);
+typed_id!(TypeExprId);
+typed_id!(PredExprId);
+typed_id!(FuncExprId);
+typed_id!(IfAtomId);
+typed_id!(ThenAtomId);
+typed_id!(MatchCaseId);
+typed_id!(StmtId);
+
 #[derive(Clone, Debug)]
-pub struct Module {
-    pub loc: Location,
-    pub decls: Vec<Decl>,
+pub struct ModuleData {
+    pub decls: Vec<DeclData>,
 }
 
 #[derive(Clone, Debug)]
-pub enum Decl {
-    Type(TypeDecl),
-    Pred(PredDecl),
-    Func(FuncDecl),
-    Rule(RuleDecl),
-    Enum(EnumDecl),
-    Model(ModelDecl),
+pub enum DeclData {
+    Type(TypeDeclId),
+    Pred(PredDeclId),
+    Func(FuncDeclId),
+    Rule(RuleDeclId),
+    Enum(EnumDeclId),
+    Model(ModelDeclId),
 }
 
 #[derive(Clone, Debug)]
-pub struct TypeDecl {
-    pub loc: Location,
+pub struct TypeDeclData {
     pub name: String,
 }
 
 #[derive(Clone, Debug)]
-pub struct PredDecl {
-    pub loc: Location,
+pub struct PredDeclData {
     pub name: String,
-    pub args: ArgDeclList,
+    pub args: ArgDeclListId,
 }
 
 #[derive(Clone, Debug)]
-pub struct FuncDecl {
-    pub loc: Location,
+pub struct FuncDeclData {
     pub name: String,
-    pub args: ArgDeclList,
-    pub result: TypeExpr,
+    pub args: ArgDeclListId,
+    pub result: TypeExprId,
 }
 
 #[derive(Clone, Debug)]
-pub struct RuleDecl {
-    pub loc: Location,
+pub struct RuleDeclData {
     pub name: Option<String>,
-    pub body: Vec<Stmt>,
+    pub body: Vec<StmtId>,
 }
 
 #[derive(Clone, Debug)]
-pub struct EnumDecl {
-    pub loc: Location,
+pub struct EnumDeclData {
     pub name: String,
-    pub ctors: Vec<CtorDecl>,
+    pub ctors: Vec<CtorDeclId>,
 }
 
 #[derive(Clone, Debug)]
-pub struct ModelDecl {
-    pub loc: Location,
+pub struct ModelDeclData {
     pub name: String,
-    pub body: Vec<Decl>,
+    pub body: Vec<DeclData>,
 }
 
 #[derive(Clone, Debug)]
-pub struct CtorDecl {
-    pub loc: Location,
+pub struct CtorDeclData {
     pub name: String,
-    pub args: ArgDeclList,
+    pub args: ArgDeclListId,
 }
 
 #[derive(Clone, Debug)]
-pub struct ArgDecl {
-    pub loc: Location,
+pub struct ArgDeclData {
     pub name: Option<String>,
-    pub typ: TypeExpr,
+    pub typ: TypeExprId,
 }
 
 #[derive(Clone, Debug)]
-pub struct ArgDeclList {
-    pub loc: Location,
-    pub args: Vec<ArgDecl>,
-}
-
-#[derive(Clone, Debug)]
-pub struct Term {
-    pub loc: Location,
-    pub data: TermData,
+pub struct ArgDeclListData {
+    pub args: Vec<ArgDeclId>,
 }
 
 #[derive(Clone, Debug)]
 pub enum TermData {
     Var(String),
     Wildcard,
-    App { func: FuncExpr, args: TermList },
-    Dom(Box<Term>),
-    Cod(Box<Term>),
-    MorApp { mor: Box<Term>, arg: Box<Term> },
+    App { func: FuncExprId, args: TermListId },
+    Dom(TermId),
+    Cod(TermId),
+    MorApp { mor: TermId, arg: TermId },
 }
 
 #[derive(Clone, Debug)]
-pub struct TermList {
-    pub loc: Location,
-    pub terms: Vec<Term>,
-}
-
-#[derive(Clone, Debug)]
-pub struct TypeExpr {
-    pub loc: Location,
-    pub data: TypeExprData,
+pub struct TermListData {
+    pub terms: Vec<TermId>,
 }
 
 #[derive(Clone, Debug)]
 pub enum TypeExprData {
     Ambient(String),
-    Member { term: Box<Term>, name: String },
+    Member { term: TermId, name: String },
     Mor(String),
-}
-
-#[derive(Clone, Debug)]
-pub struct PredExpr {
-    pub loc: Location,
-    pub data: PredExprData,
 }
 
 #[derive(Clone, Debug)]
 pub enum PredExprData {
     Ambient(String),
-    Member { term: Box<Term>, name: String },
-}
-
-#[derive(Clone, Debug)]
-pub struct FuncExpr {
-    pub loc: Location,
-    pub data: FuncExprData,
+    Member { term: TermId, name: String },
 }
 
 #[derive(Clone, Debug)]
 pub enum FuncExprData {
     Ambient(String),
-    Member { term: Box<Term>, name: String },
-}
-
-#[derive(Clone, Debug)]
-pub struct IfAtom {
-    pub loc: Location,
-    pub data: IfAtomData,
+    Member { term: TermId, name: String },
 }
 
 #[derive(Clone, Debug)]
 pub enum IfAtomData {
-    Equal(Term, Term),
-    Defined(Term),
-    Pred { pred: PredExpr, args: TermList },
-    Var { term: Term, typ: TypeExpr },
-}
-
-#[derive(Clone, Debug)]
-pub struct ThenAtom {
-    pub loc: Location,
-    pub data: ThenAtomData,
+    Equal(TermId, TermId),
+    Defined(TermId),
+    Pred { pred: PredExprId, args: TermListId },
+    Var { term: TermId, typ: TypeExprId },
 }
 
 #[derive(Clone, Debug)]
 pub enum ThenAtomData {
-    Equal(Term, Term),
-    Defined { var: Option<Term>, term: Term },
-    Pred { pred: PredExpr, args: TermList },
+    Equal(TermId, TermId),
+    Defined { var: Option<TermId>, term: TermId },
+    Pred { pred: PredExprId, args: TermListId },
 }
 
 #[derive(Clone, Debug)]
-pub struct MatchCase {
-    pub loc: Location,
-    pub pattern: Term,
-    pub body: Vec<Stmt>,
-}
-
-#[derive(Clone, Debug)]
-pub struct Stmt {
-    pub loc: Location,
-    pub data: StmtData,
+pub struct MatchCaseData {
+    pub pattern: TermId,
+    pub body: Vec<StmtId>,
 }
 
 #[derive(Clone, Debug)]
 pub enum StmtData {
-    If(IfAtom),
-    Then(ThenAtom),
-    Branch(Vec<Vec<Stmt>>),
-    Match { term: Term, cases: Vec<MatchCase> },
+    If(IfAtomId),
+    Then(ThenAtomId),
+    Branch(Vec<Vec<StmtId>>),
+    Match {
+        term: TermId,
+        cases: Vec<MatchCaseId>,
+    },
 }
+
+#[derive(Clone, Debug)]
+pub enum NodeData {
+    Module(ModuleData),
+    TypeDecl(TypeDeclData),
+    PredDecl(PredDeclData),
+    FuncDecl(FuncDeclData),
+    RuleDecl(RuleDeclData),
+    EnumDecl(EnumDeclData),
+    ModelDecl(ModelDeclData),
+    CtorDecl(CtorDeclData),
+    ArgDecl(ArgDeclData),
+    ArgDeclList(ArgDeclListData),
+    Term(TermData),
+    TermList(TermListData),
+    TypeExpr(TypeExprData),
+    PredExpr(PredExprData),
+    FuncExpr(FuncExprData),
+    IfAtom(IfAtomData),
+    ThenAtom(ThenAtomData),
+    MatchCase(MatchCaseData),
+    Stmt(StmtData),
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct Ast {
+    nodes: Vec<(Location, NodeData)>,
+}
+
+impl Ast {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn loc<Id: AstNode>(&self, id: Id) -> Location {
+        self.nodes[id.node().0].0
+    }
+}
+
+macro_rules! accessor {
+    ($getter:ident, $pusher:ident, $id:ident, $data:ident, $variant:ident) => {
+        impl Ast {
+            pub fn $getter(&self, id: $id) -> &$data {
+                match &self.nodes[(id.0).0].1 {
+                    NodeData::$variant(d) => d,
+                    other => panic!(
+                        "expected {} at {:?}, got {:?}",
+                        stringify!($variant),
+                        id,
+                        other
+                    ),
+                }
+            }
+
+            pub fn $pusher(&mut self, loc: Location, data: $data) -> $id {
+                let id = NodeId(self.nodes.len());
+                self.nodes.push((loc, NodeData::$variant(data)));
+                $id(id)
+            }
+        }
+    };
+}
+
+accessor!(module, push_module, ModuleId, ModuleData, Module);
+accessor!(
+    type_decl,
+    push_type_decl,
+    TypeDeclId,
+    TypeDeclData,
+    TypeDecl
+);
+accessor!(
+    pred_decl,
+    push_pred_decl,
+    PredDeclId,
+    PredDeclData,
+    PredDecl
+);
+accessor!(
+    func_decl,
+    push_func_decl,
+    FuncDeclId,
+    FuncDeclData,
+    FuncDecl
+);
+accessor!(
+    rule_decl,
+    push_rule_decl,
+    RuleDeclId,
+    RuleDeclData,
+    RuleDecl
+);
+accessor!(
+    enum_decl,
+    push_enum_decl,
+    EnumDeclId,
+    EnumDeclData,
+    EnumDecl
+);
+accessor!(
+    model_decl,
+    push_model_decl,
+    ModelDeclId,
+    ModelDeclData,
+    ModelDecl
+);
+accessor!(
+    ctor_decl,
+    push_ctor_decl,
+    CtorDeclId,
+    CtorDeclData,
+    CtorDecl
+);
+accessor!(arg_decl, push_arg_decl, ArgDeclId, ArgDeclData, ArgDecl);
+accessor!(
+    arg_decl_list,
+    push_arg_decl_list,
+    ArgDeclListId,
+    ArgDeclListData,
+    ArgDeclList
+);
+accessor!(term, push_term, TermId, TermData, Term);
+accessor!(
+    term_list,
+    push_term_list,
+    TermListId,
+    TermListData,
+    TermList
+);
+accessor!(
+    type_expr,
+    push_type_expr,
+    TypeExprId,
+    TypeExprData,
+    TypeExpr
+);
+accessor!(
+    pred_expr,
+    push_pred_expr,
+    PredExprId,
+    PredExprData,
+    PredExpr
+);
+accessor!(
+    func_expr,
+    push_func_expr,
+    FuncExprId,
+    FuncExprData,
+    FuncExpr
+);
+accessor!(if_atom, push_if_atom, IfAtomId, IfAtomData, IfAtom);
+accessor!(
+    then_atom,
+    push_then_atom,
+    ThenAtomId,
+    ThenAtomData,
+    ThenAtom
+);
+accessor!(
+    match_case,
+    push_match_case,
+    MatchCaseId,
+    MatchCaseData,
+    MatchCase
+);
+accessor!(stmt, push_stmt, StmtId, StmtData, Stmt);

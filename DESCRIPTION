@@ -1,0 +1,11 @@
+Flatten the Rust AST into an id-based arena
+
+Replace the pointer-based AST with a `Vec<(Location, NodeData)>` arena in
+`Ast`. Each AST node kind gets a typed id (e.g. `TermId`, `IfAtomId`) that
+wraps a `NodeId`, and accessors like `ast.term(id)` panic on a variant
+mismatch. Child references are stored as ids, which lets downstream passes
+key maps by id without worrying about borrow lifetimes or moves.
+
+The grammar now takes `&mut Ast` and pushes nodes into the arena as it
+parses; `populate_eqlog` takes `&Ast` and a `ModuleId` and walks the arena
+by id.

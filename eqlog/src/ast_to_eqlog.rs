@@ -2,11 +2,12 @@ use std::collections::BTreeMap;
 
 use eqlog_eqlog::*;
 
-use crate::ast;
+use crate::ast::*;
 use crate::grammar_util::Location;
 
 pub fn populate_eqlog(
-    module: &ast::Module,
+    ast: &Ast,
+    module: ModuleId,
 ) -> (
     Eqlog,
     BTreeMap<Ident, String>,
@@ -15,6 +16,7 @@ pub fn populate_eqlog(
 ) {
     let mut eqlog = Eqlog::new();
     let mut ctx = Ctx {
+        ast,
         eqlog: &mut eqlog,
         identifiers: BTreeMap::new(),
         locations: BTreeMap::new(),
@@ -38,6 +40,7 @@ pub fn populate_eqlog(
 }
 
 struct Ctx<'a> {
+    ast: &'a Ast,
     eqlog: &'a mut Eqlog,
     identifiers: BTreeMap<String, Ident>,
     locations: BTreeMap<Location, Loc>,
@@ -60,31 +63,37 @@ impl<'a> Ctx<'a> {
             .or_insert_with(|| eqlog.new_loc())
     }
 
-    fn build_term(&mut self, term: &ast::Term) -> TermNode {
+    fn build_term(&mut self, term: TermId) -> TermNode {
         let node = self.eqlog.new_term_node();
-        match &term.data {
-            ast::TermData::Var(name) => {
+        match self.ast.term(term) {
+            TermData::Var(name) => {
                 let ident = self.intern_ident(name);
                 let virt_ident = self.eqlog.define_real_virt_ident(ident);
                 self.eqlog.insert_var_term_node(node, virt_ident);
             }
-            ast::TermData::Wildcard => {
+            TermData::Wildcard => {
                 self.eqlog.insert_wildcard_term_node(node);
             }
-            ast::TermData::App { func, args } => {
+            TermData::App { func, args } => {
+                let func = *func;
+                let args = *args;
                 let func_expr = self.build_func_expr(func);
                 let arg_list = self.build_term_list(args);
                 self.eqlog.insert_app_term_node(node, func_expr, arg_list);
             }
-            ast::TermData::Dom(arg) => {
+            TermData::Dom(arg) => {
+                let arg = *arg;
                 let arg_node = self.build_term(arg);
                 self.eqlog.insert_dom_term_node(node, arg_node);
             }
-            ast::TermData::Cod(arg) => {
+            TermData::Cod(arg) => {
+                let arg = *arg;
                 let arg_node = self.build_term(arg);
                 self.eqlog.insert_cod_term_node(node, arg_node);
             }
-            ast::TermData::MorApp { mor, arg } => {
+            TermData::MorApp { mor, arg } => {
+                let mor = *mor;
+                let arg = *arg;
                 let mor_node = self.build_term(mor);
                 let arg_node = self.build_term(arg);
                 self.eqlog
@@ -92,14 +101,15 @@ impl<'a> Ctx<'a> {
             }
         }
 
-        let loc = self.intern_loc(term.loc);
+        let loc = self.intern_loc(self.ast.loc(term));
         self.eqlog.insert_term_node_loc(node, loc);
 
         node
     }
 
-    fn build_term_list(&mut self, list: &ast::TermList) -> TermListNode {
-        let term_nodes: Vec<TermNode> = list.terms.iter().map(|t| self.build_term(t)).collect();
+    fn build_term_list(&mut self, list: TermListId) -> TermListNode {
+        let terms: Vec<TermId> = self.ast.term_list(list).terms.clone();
+        let term_nodes: Vec<TermNode> = terms.into_iter().map(|t| self.build_term(t)).collect();
 
         let mut node = self.eqlog.new_term_list_node();
         self.eqlog.insert_nil_term_list_node(node);
@@ -109,95 +119,108 @@ impl<'a> Ctx<'a> {
             node = cons;
         }
 
-        let loc = self.intern_loc(list.loc);
+        let loc = self.intern_loc(self.ast.loc(list));
         self.eqlog.insert_term_list_node_loc(node, loc);
 
         node
     }
 
-    fn build_type_expr(&mut self, type_expr: &ast::TypeExpr) -> TypeExprNode {
+    fn build_type_expr(&mut self, type_expr: TypeExprId) -> TypeExprNode {
         let node = self.eqlog.new_type_expr_node();
-        match &type_expr.data {
-            ast::TypeExprData::Ambient(name) => {
+        match self.ast.type_expr(type_expr) {
+            TypeExprData::Ambient(name) => {
                 let ident = self.intern_ident(name);
                 self.eqlog.insert_ambient_type_expr(node, ident);
             }
-            ast::TypeExprData::Member { term, name } => {
+            TypeExprData::Member { term, name } => {
+                let term = *term;
+                let name = name.clone();
                 let term_node = self.build_term(term);
-                let ident = self.intern_ident(name);
+                let ident = self.intern_ident(&name);
                 self.eqlog.insert_member_type_expr(node, term_node, ident);
             }
-            ast::TypeExprData::Mor(name) => {
+            TypeExprData::Mor(name) => {
                 let ident = self.intern_ident(name);
                 self.eqlog.insert_mor_type_expr(node, ident);
             }
         }
 
-        let loc = self.intern_loc(type_expr.loc);
+        let loc = self.intern_loc(self.ast.loc(type_expr));
         self.eqlog.insert_type_expr_node_loc(node, loc);
 
         node
     }
 
-    fn build_pred_expr(&mut self, pred_expr: &ast::PredExpr) -> PredExprNode {
+    fn build_pred_expr(&mut self, pred_expr: PredExprId) -> PredExprNode {
         let node = self.eqlog.new_pred_expr_node();
-        match &pred_expr.data {
-            ast::PredExprData::Ambient(name) => {
+        match self.ast.pred_expr(pred_expr) {
+            PredExprData::Ambient(name) => {
                 let ident = self.intern_ident(name);
                 self.eqlog.insert_ambient_pred_expr(node, ident);
             }
-            ast::PredExprData::Member { term, name } => {
+            PredExprData::Member { term, name } => {
+                let term = *term;
+                let name = name.clone();
                 let term_node = self.build_term(term);
-                let ident = self.intern_ident(name);
+                let ident = self.intern_ident(&name);
                 self.eqlog.insert_member_pred_expr(node, term_node, ident);
             }
         }
 
-        let loc = self.intern_loc(pred_expr.loc);
+        let loc = self.intern_loc(self.ast.loc(pred_expr));
         self.eqlog.insert_pred_expr_node_loc(node, loc);
 
         node
     }
 
-    fn build_func_expr(&mut self, func_expr: &ast::FuncExpr) -> FuncExprNode {
+    fn build_func_expr(&mut self, func_expr: FuncExprId) -> FuncExprNode {
         let node = self.eqlog.new_func_expr_node();
-        match &func_expr.data {
-            ast::FuncExprData::Ambient(name) => {
+        match self.ast.func_expr(func_expr) {
+            FuncExprData::Ambient(name) => {
                 let ident = self.intern_ident(name);
                 self.eqlog.insert_ambient_func_expr(node, ident);
             }
-            ast::FuncExprData::Member { term, name } => {
+            FuncExprData::Member { term, name } => {
+                let term = *term;
+                let name = name.clone();
                 let term_node = self.build_term(term);
-                let ident = self.intern_ident(name);
+                let ident = self.intern_ident(&name);
                 self.eqlog.insert_member_func_expr(node, term_node, ident);
             }
         }
 
-        let loc = self.intern_loc(func_expr.loc);
+        let loc = self.intern_loc(self.ast.loc(func_expr));
         self.eqlog.insert_func_expr_node_loc(node, loc);
 
         node
     }
 
-    fn build_if_atom(&mut self, atom: &ast::IfAtom) -> IfAtomNode {
+    fn build_if_atom(&mut self, atom: IfAtomId) -> IfAtomNode {
         let node = self.eqlog.new_if_atom_node();
-        match &atom.data {
-            ast::IfAtomData::Equal(lhs, rhs) => {
+        match self.ast.if_atom(atom) {
+            IfAtomData::Equal(lhs, rhs) => {
+                let lhs = *lhs;
+                let rhs = *rhs;
                 let lhs = self.build_term(lhs);
                 let rhs = self.build_term(rhs);
                 self.eqlog.insert_equal_if_atom_node(node, lhs, rhs);
             }
-            ast::IfAtomData::Defined(term) => {
+            IfAtomData::Defined(term) => {
+                let term = *term;
                 let term_node = self.build_term(term);
                 self.eqlog.insert_defined_if_atom_node(node, term_node);
             }
-            ast::IfAtomData::Pred { pred, args } => {
+            IfAtomData::Pred { pred, args } => {
+                let pred = *pred;
+                let args = *args;
                 let pred_node = self.build_pred_expr(pred);
                 let args_node = self.build_term_list(args);
                 self.eqlog
                     .insert_pred_if_atom_node(node, pred_node, args_node);
             }
-            ast::IfAtomData::Var { term, typ } => {
+            IfAtomData::Var { term, typ } => {
+                let term = *term;
+                let typ = *typ;
                 let term_node = self.build_term(term);
                 let typ_node = self.build_type_expr(typ);
                 self.eqlog
@@ -205,27 +228,33 @@ impl<'a> Ctx<'a> {
             }
         }
 
-        let loc = self.intern_loc(atom.loc);
+        let loc = self.intern_loc(self.ast.loc(atom));
         self.eqlog.insert_if_atom_node_loc(node, loc);
 
         node
     }
 
-    fn build_then_atom(&mut self, atom: &ast::ThenAtom) -> ThenAtomNode {
+    fn build_then_atom(&mut self, atom: ThenAtomId) -> ThenAtomNode {
         let node = self.eqlog.new_then_atom_node();
-        match &atom.data {
-            ast::ThenAtomData::Equal(lhs, rhs) => {
+        match self.ast.then_atom(atom) {
+            ThenAtomData::Equal(lhs, rhs) => {
+                let lhs = *lhs;
+                let rhs = *rhs;
                 let lhs = self.build_term(lhs);
                 let rhs = self.build_term(rhs);
                 self.eqlog.insert_equal_then_atom_node(node, lhs, rhs);
             }
-            ast::ThenAtomData::Defined { var, term } => {
+            ThenAtomData::Defined { var, term } => {
+                let var = *var;
+                let term = *term;
                 let term_node = self.build_term(term);
-                let var_node = self.build_opt_term(var.as_ref());
+                let var_node = self.build_opt_term(var);
                 self.eqlog
                     .insert_defined_then_atom_node(node, var_node, term_node);
             }
-            ast::ThenAtomData::Pred { pred, args } => {
+            ThenAtomData::Pred { pred, args } => {
+                let pred = *pred;
+                let args = *args;
                 let pred_node = self.build_pred_expr(pred);
                 let args_node = self.build_term_list(args);
                 self.eqlog
@@ -233,13 +262,13 @@ impl<'a> Ctx<'a> {
             }
         }
 
-        let loc = self.intern_loc(atom.loc);
+        let loc = self.intern_loc(self.ast.loc(atom));
         self.eqlog.insert_then_atom_node_loc(node, loc);
 
         node
     }
 
-    fn build_opt_term(&mut self, term: Option<&ast::Term>) -> OptTermNode {
+    fn build_opt_term(&mut self, term: Option<TermId>) -> OptTermNode {
         let node = self.eqlog.new_opt_term_node();
         match term {
             Some(term) => {
@@ -253,8 +282,8 @@ impl<'a> Ctx<'a> {
         node
     }
 
-    fn build_stmt_block(&mut self, stmts: &[ast::Stmt]) -> StmtListNode {
-        let stmt_nodes: Vec<StmtNode> = stmts.iter().map(|s| self.build_stmt(s)).collect();
+    fn build_stmt_block(&mut self, stmts: &[StmtId]) -> StmtListNode {
+        let stmt_nodes: Vec<StmtNode> = stmts.iter().map(|s| self.build_stmt(*s)).collect();
         let mut node = self.eqlog.new_stmt_list_node();
         self.eqlog.insert_nil_stmt_list_node(node);
         for stmt in stmt_nodes.iter().rev() {
@@ -265,7 +294,7 @@ impl<'a> Ctx<'a> {
         node
     }
 
-    fn build_stmt_block_list(&mut self, blocks: &[Vec<ast::Stmt>]) -> StmtBlockListNode {
+    fn build_stmt_block_list(&mut self, blocks: &[Vec<StmtId>]) -> StmtBlockListNode {
         let block_nodes: Vec<StmtListNode> =
             blocks.iter().map(|b| self.build_stmt_block(b)).collect();
         let mut node = self.eqlog.new_stmt_block_list_node();
@@ -279,21 +308,24 @@ impl<'a> Ctx<'a> {
         node
     }
 
-    fn build_match_case(&mut self, case: &ast::MatchCase) -> MatchCaseNode {
+    fn build_match_case(&mut self, case: MatchCaseId) -> MatchCaseNode {
         let node = self.eqlog.new_match_case_node();
-        let pattern = self.build_term(&case.pattern);
-        let body = self.build_stmt_block(&case.body);
-        self.eqlog.insert_match_case(node, pattern, body);
+        let MatchCaseData { pattern, body } = self.ast.match_case(case);
+        let pattern = *pattern;
+        let body = body.clone();
+        let pattern_node = self.build_term(pattern);
+        let body_node = self.build_stmt_block(&body);
+        self.eqlog.insert_match_case(node, pattern_node, body_node);
 
-        let loc = self.intern_loc(case.loc);
+        let loc = self.intern_loc(self.ast.loc(case));
         self.eqlog.insert_match_case_node_loc(node, loc);
 
         node
     }
 
-    fn build_match_case_list(&mut self, cases: &[ast::MatchCase]) -> MatchCaseListNode {
+    fn build_match_case_list(&mut self, cases: &[MatchCaseId]) -> MatchCaseListNode {
         let case_nodes: Vec<MatchCaseNode> =
-            cases.iter().map(|c| self.build_match_case(c)).collect();
+            cases.iter().map(|c| self.build_match_case(*c)).collect();
         let mut node = self.eqlog.new_match_case_list_node();
         self.eqlog.insert_nil_match_case_list_node(node);
         for case in case_nodes.iter().rev() {
@@ -305,28 +337,33 @@ impl<'a> Ctx<'a> {
         node
     }
 
-    fn build_stmt(&mut self, stmt: &ast::Stmt) -> StmtNode {
+    fn build_stmt(&mut self, stmt: StmtId) -> StmtNode {
         let node = self.eqlog.new_stmt_node();
         let insert_loc;
-        match &stmt.data {
-            ast::StmtData::If(atom) => {
+        match self.ast.stmt(stmt) {
+            StmtData::If(atom) => {
+                let atom = *atom;
                 let atom_node = self.build_if_atom(atom);
                 self.eqlog.insert_if_stmt_node(node, atom_node);
                 insert_loc = true;
             }
-            ast::StmtData::Then(atom) => {
+            StmtData::Then(atom) => {
+                let atom = *atom;
                 let atom_node = self.build_then_atom(atom);
                 self.eqlog.insert_then_stmt_node(node, atom_node);
                 insert_loc = true;
             }
-            ast::StmtData::Branch(blocks) => {
-                let blocks_node = self.build_stmt_block_list(blocks);
+            StmtData::Branch(blocks) => {
+                let blocks = blocks.clone();
+                let blocks_node = self.build_stmt_block_list(&blocks);
                 self.eqlog.insert_branch_stmt_node(node, blocks_node);
                 insert_loc = false;
             }
-            ast::StmtData::Match { term, cases } => {
+            StmtData::Match { term, cases } => {
+                let term = *term;
+                let cases = cases.clone();
                 let term_node = self.build_term(term);
-                let cases_node = self.build_match_case_list(cases);
+                let cases_node = self.build_match_case_list(&cases);
                 self.eqlog
                     .insert_match_stmt_node(node, term_node, cases_node);
                 insert_loc = true;
@@ -334,31 +371,35 @@ impl<'a> Ctx<'a> {
         }
 
         if insert_loc {
-            let loc = self.intern_loc(stmt.loc);
+            let loc = self.intern_loc(self.ast.loc(stmt));
             self.eqlog.insert_stmt_node_loc(node, loc);
         }
 
         node
     }
 
-    fn build_arg_decl(&mut self, arg: &ast::ArgDecl) -> ArgDeclNode {
+    fn build_arg_decl(&mut self, arg: ArgDeclId) -> ArgDeclNode {
         let node = self.eqlog.new_arg_decl_node();
-        if let Some(name) = &arg.name {
-            let ident = self.intern_ident(name);
+        let ArgDeclData { name, typ } = self.ast.arg_decl(arg);
+        let name = name.clone();
+        let typ = *typ;
+        if let Some(name) = name {
+            let ident = self.intern_ident(&name);
             self.eqlog.insert_arg_decl_node_name(node, ident);
         }
-        let type_node = self.build_type_expr(&arg.typ);
+        let type_node = self.build_type_expr(typ);
         self.eqlog.insert_arg_decl_node_type(node, type_node);
 
-        let loc = self.intern_loc(arg.loc);
+        let loc = self.intern_loc(self.ast.loc(arg));
         self.eqlog.insert_arg_decl_node_loc(node, loc);
 
         node
     }
 
-    fn build_arg_decl_list(&mut self, list: &ast::ArgDeclList) -> ArgDeclListNode {
+    fn build_arg_decl_list(&mut self, list: ArgDeclListId) -> ArgDeclListNode {
+        let args: Vec<ArgDeclId> = self.ast.arg_decl_list(list).args.clone();
         let arg_nodes: Vec<ArgDeclNode> =
-            list.args.iter().map(|a| self.build_arg_decl(a)).collect();
+            args.into_iter().map(|a| self.build_arg_decl(a)).collect();
         let mut node = self.eqlog.new_arg_decl_list_node();
         self.eqlog.insert_nil_arg_decl_list_node(node);
         for arg in arg_nodes.iter().rev() {
@@ -367,62 +408,74 @@ impl<'a> Ctx<'a> {
             node = cons;
         }
 
-        let loc = self.intern_loc(list.loc);
+        let loc = self.intern_loc(self.ast.loc(list));
         self.eqlog.insert_arg_decl_list_node_loc(node, loc);
 
         node
     }
 
-    fn build_type_decl(&mut self, decl: &ast::TypeDecl) -> TypeDeclNode {
+    fn build_type_decl(&mut self, decl: TypeDeclId) -> TypeDeclNode {
         let node = self.eqlog.new_type_decl_node();
-        let ident = self.intern_ident(&decl.name);
+        let TypeDeclData { name } = self.ast.type_decl(decl);
+        let ident = self.intern_ident(&name.clone());
         self.eqlog.insert_type_decl(node, ident);
 
-        let loc = self.intern_loc(decl.loc);
+        let loc = self.intern_loc(self.ast.loc(decl));
         self.eqlog.insert_type_decl_node_loc(node, loc);
 
         node
     }
 
-    fn build_pred_decl(&mut self, decl: &ast::PredDecl) -> PredDeclNode {
+    fn build_pred_decl(&mut self, decl: PredDeclId) -> PredDeclNode {
         let node = self.eqlog.new_pred_decl_node();
-        let ident = self.intern_ident(&decl.name);
-        let args = self.build_arg_decl_list(&decl.args);
+        let PredDeclData { name, args } = self.ast.pred_decl(decl);
+        let name = name.clone();
+        let args = *args;
+        let ident = self.intern_ident(&name);
+        let args = self.build_arg_decl_list(args);
         self.eqlog.insert_pred_decl(node, ident, args);
 
-        let loc = self.intern_loc(decl.loc);
+        let loc = self.intern_loc(self.ast.loc(decl));
         self.eqlog.insert_pred_decl_node_loc(node, loc);
 
         node
     }
 
-    fn build_func_decl(&mut self, decl: &ast::FuncDecl) -> FuncDeclNode {
+    fn build_func_decl(&mut self, decl: FuncDeclId) -> FuncDeclNode {
         let node = self.eqlog.new_func_decl_node();
-        let ident = self.intern_ident(&decl.name);
-        let args = self.build_arg_decl_list(&decl.args);
-        let result = self.build_type_expr(&decl.result);
+        let FuncDeclData { name, args, result } = self.ast.func_decl(decl);
+        let name = name.clone();
+        let args = *args;
+        let result = *result;
+        let ident = self.intern_ident(&name);
+        let args = self.build_arg_decl_list(args);
+        let result = self.build_type_expr(result);
         self.eqlog.insert_func_decl(node, ident, args, result);
 
-        let loc = self.intern_loc(decl.loc);
+        let loc = self.intern_loc(self.ast.loc(decl));
         self.eqlog.insert_func_decl_node_loc(node, loc);
 
         node
     }
 
-    fn build_ctor_decl(&mut self, decl: &ast::CtorDecl) -> CtorDeclNode {
+    fn build_ctor_decl(&mut self, decl: CtorDeclId) -> CtorDeclNode {
         let node = self.eqlog.new_ctor_decl_node();
-        let ident = self.intern_ident(&decl.name);
-        let args = self.build_arg_decl_list(&decl.args);
+        let CtorDeclData { name, args } = self.ast.ctor_decl(decl);
+        let name = name.clone();
+        let args = *args;
+        let ident = self.intern_ident(&name);
+        let args = self.build_arg_decl_list(args);
         self.eqlog.insert_ctor_decl(node, ident, args);
 
-        let loc = self.intern_loc(decl.loc);
+        let loc = self.intern_loc(self.ast.loc(decl));
         self.eqlog.insert_ctor_decl_node_loc(node, loc);
 
         node
     }
 
-    fn build_ctor_decl_list(&mut self, ctors: &[ast::CtorDecl]) -> CtorDeclListNode {
-        let ctor_nodes: Vec<CtorDeclNode> = ctors.iter().map(|c| self.build_ctor_decl(c)).collect();
+    fn build_ctor_decl_list(&mut self, ctors: &[CtorDeclId]) -> CtorDeclListNode {
+        let ctor_nodes: Vec<CtorDeclNode> =
+            ctors.iter().map(|c| self.build_ctor_decl(*c)).collect();
         let mut node = self.eqlog.new_ctor_decl_list_node();
         self.eqlog.insert_nil_ctor_decl_list_node(node);
         for ctor in ctor_nodes.iter().rev() {
@@ -434,78 +487,87 @@ impl<'a> Ctx<'a> {
         node
     }
 
-    fn build_enum_decl(&mut self, decl: &ast::EnumDecl) -> EnumDeclNode {
+    fn build_enum_decl(&mut self, decl: EnumDeclId) -> EnumDeclNode {
         let node = self.eqlog.new_enum_decl_node();
-        let ident = self.intern_ident(&decl.name);
-        let ctors = self.build_ctor_decl_list(&decl.ctors);
+        let EnumDeclData { name, ctors } = self.ast.enum_decl(decl);
+        let name = name.clone();
+        let ctors = ctors.clone();
+        let ident = self.intern_ident(&name);
+        let ctors = self.build_ctor_decl_list(&ctors);
         self.eqlog.insert_enum_decl(node, ident, ctors);
 
-        let loc = self.intern_loc(decl.loc);
+        let loc = self.intern_loc(self.ast.loc(decl));
         self.eqlog.insert_enum_decl_node_loc(node, loc);
 
         node
     }
 
-    fn build_rule_decl(&mut self, decl: &ast::RuleDecl) -> RuleDeclNode {
+    fn build_rule_decl(&mut self, decl: RuleDeclId) -> RuleDeclNode {
         let node = self.eqlog.new_rule_decl_node();
-        let body = self.build_stmt_block(&decl.body);
-        self.eqlog.insert_rule_decl(node, body);
+        let RuleDeclData { name, body } = self.ast.rule_decl(decl);
+        let name = name.clone();
+        let body = body.clone();
+        let body_node = self.build_stmt_block(&body);
+        self.eqlog.insert_rule_decl(node, body_node);
 
-        if let Some(name) = &decl.name {
-            let ident = self.intern_ident(name);
+        if let Some(name) = name {
+            let ident = self.intern_ident(&name);
             self.eqlog.insert_rule_name(node, ident);
         }
 
-        let loc = self.intern_loc(decl.loc);
+        let loc = self.intern_loc(self.ast.loc(decl));
         self.eqlog.insert_rule_decl_node_loc(node, loc);
 
         node
     }
 
-    fn build_model_decl(&mut self, decl: &ast::ModelDecl) -> ModelDeclNode {
+    fn build_model_decl(&mut self, decl: ModelDeclId) -> ModelDeclNode {
         let node = self.eqlog.new_model_decl_node();
-        let ident = self.intern_ident(&decl.name);
-        let body = self.build_decl_list(&decl.body);
+        let ModelDeclData { name, body } = self.ast.model_decl(decl);
+        let name = name.clone();
+        let body = body.clone();
+        let ident = self.intern_ident(&name);
+        let body = self.build_decl_list(&body);
         self.eqlog.insert_model_decl(node, ident, body);
 
-        let loc = self.intern_loc(decl.loc);
+        let loc = self.intern_loc(self.ast.loc(decl));
         self.eqlog.insert_model_decl_node_loc(node, loc);
 
         node
     }
 
-    fn build_decl(&mut self, decl: &ast::Decl) -> DeclNode {
+    fn build_decl(&mut self, decl: &DeclData) -> DeclNode {
         let node = self.eqlog.new_decl_node();
         match decl {
-            ast::Decl::Type(d) => {
-                let inner = self.build_type_decl(d);
+            DeclData::Type(d) => {
+                let inner = self.build_type_decl(*d);
                 self.eqlog.insert_decl_node_type(node, inner);
             }
-            ast::Decl::Pred(d) => {
-                let inner = self.build_pred_decl(d);
+            DeclData::Pred(d) => {
+                let inner = self.build_pred_decl(*d);
                 self.eqlog.insert_decl_node_pred(node, inner);
             }
-            ast::Decl::Func(d) => {
-                let inner = self.build_func_decl(d);
+            DeclData::Func(d) => {
+                let inner = self.build_func_decl(*d);
                 self.eqlog.insert_decl_node_func(node, inner);
             }
-            ast::Decl::Rule(d) => {
-                let inner = self.build_rule_decl(d);
+            DeclData::Rule(d) => {
+                let inner = self.build_rule_decl(*d);
                 self.eqlog.insert_decl_node_rule(node, inner);
             }
-            ast::Decl::Enum(d) => {
-                let inner = self.build_enum_decl(d);
+            DeclData::Enum(d) => {
+                let inner = self.build_enum_decl(*d);
                 self.eqlog.insert_decl_node_enum(node, inner);
             }
-            ast::Decl::Model(d) => {
-                let inner = self.build_model_decl(d);
+            DeclData::Model(d) => {
+                let inner = self.build_model_decl(*d);
                 self.eqlog.insert_decl_node_model(node, inner);
             }
         }
         node
     }
 
-    fn build_decl_list(&mut self, decls: &[ast::Decl]) -> DeclListNode {
+    fn build_decl_list(&mut self, decls: &[DeclData]) -> DeclListNode {
         let decl_nodes: Vec<DeclNode> = decls.iter().map(|d| self.build_decl(d)).collect();
         let mut node = self.eqlog.new_decl_list_node();
         self.eqlog.insert_nil_decl_list_node(node);
@@ -517,13 +579,14 @@ impl<'a> Ctx<'a> {
         node
     }
 
-    fn build_module(&mut self, module: &ast::Module) -> ModuleNode {
+    fn build_module(&mut self, module: ModuleId) -> ModuleNode {
         let node = self.eqlog.new_module_node();
-        let decls = self.build_decl_list(&module.decls);
-        self.eqlog.insert_decls_module_node(node, decls);
+        let decls = self.ast.module(module).decls.clone();
+        let decls_node = self.build_decl_list(&decls);
+        self.eqlog.insert_decls_module_node(node, decls_node);
 
-        let loc = self.intern_loc(module.loc);
-        self.eqlog.insert_decl_list_node_loc(decls, loc);
+        let loc = self.intern_loc(self.ast.loc(module));
+        self.eqlog.insert_decl_list_node_loc(decls_node, loc);
         self.eqlog.insert_module_node_loc(node, loc);
 
         node
