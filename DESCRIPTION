@@ -1,7 +1,6 @@
-Move resolution-independent checks off the eqlog-eqlog side
+Add Rust-side syntactic check pass
 
-Replace the eqlog-eqlog machinery for several compile errors that don't
-need type information with plain Rust passes over the AST and the scope
-table introduced in a7f85a7. The first pass is syntactic and runs right
-after parsing; subsequent commits use the scope table for freshness and
-variable-occurrence checks.
+Move the AST-shape-only compile errors (illegal member type exprs in
+signatures, wildcards in then atoms, non-var defined-then targets, and
+ill-formed match patterns) off the eqlog-eqlog side into a plain Rust
+pass that runs right after parsing.
