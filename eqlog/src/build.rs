@@ -443,15 +443,17 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
         }
     };
 
-    let (_scopes, scope_errors) = resolve_scopes(&ast, module);
-    if let Some(error) = scope_errors.into_iter().min() {
-        return Err(CompileErrorWithContext {
-            error,
-            source,
-            source_path: config.in_dir.join(in_file),
+    let _scopes = match resolve_scopes(&ast, module) {
+        Ok(scopes) => scopes,
+        Err(error) => {
+            return Err(CompileErrorWithContext {
+                error,
+                source,
+                source_path: config.in_dir.join(in_file),
+            }
+            .into());
         }
-        .into());
-    }
+    };
 
     let (mut eqlog, identifiers, locations, _module) = populate_eqlog(&ast, module);
     eqlog.close();

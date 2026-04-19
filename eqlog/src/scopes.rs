@@ -190,40 +190,32 @@ impl Scopes {
     }
 }
 
-/// Builds scopes for `ast` rooted at `module`.
-///
-/// Returns the populated [`Scopes`] along with any errors detected during the
-/// pass. Errors do not abort population; the scope graph is always fully
-/// populated.
-pub fn resolve_scopes(ast: &Ast, module: ModuleId) -> (Scopes, Vec<CompileError>) {
+/// Builds scopes for `ast` rooted at `module`. Returns the first error
+/// encountered, or the populated [`Scopes`] on success.
+pub fn resolve_scopes(ast: &Ast, module: ModuleId) -> Result<Scopes, CompileError> {
     let mut builder = ScopeBuilder {
         ast,
         scopes: Vec::new(),
         unordered: BTreeMap::new(),
         ordered: BTreeMap::new(),
-        errors: Vec::new(),
     };
     let module_scope = builder.new_scope(None);
     builder
         .unordered
         .insert(UnorderedNodeId::from(module), module_scope);
     let decls = ast.module(module).decls.clone();
-    builder.populate_unordered(module_scope, &decls);
+    builder.populate_unordered(module_scope, &decls)?;
     let ScopeBuilder {
         scopes,
         unordered,
         ordered,
-        errors,
         ..
     } = builder;
-    (
-        Scopes {
-            scopes,
-            unordered,
-            ordered,
-        },
-        errors,
-    )
+    Ok(Scopes {
+        scopes,
+        unordered,
+        ordered,
+    })
 }
 
 struct ScopeBuilder<'a> {
@@ -231,7 +223,6 @@ struct ScopeBuilder<'a> {
     scopes: Vec<Scope>,
     unordered: BTreeMap<UnorderedNodeId, ScopeId>,
     ordered: BTreeMap<OrderedNodeId, OrderedScopes>,
-    errors: Vec<CompileError>,
 }
 
 fn symbol_location(ast: &Ast, sym: Symbol) -> Location {
@@ -267,71 +258,75 @@ impl<'a> ScopeBuilder<'a> {
             .insert(id.into(), OrderedScopes { entry, exit });
     }
 
-    /// Insert a decl-level symbol into `scope`, or emit [`CompileError::SymbolDeclaredTwice`].
-    fn insert_decl_symbol(&mut self, scope: ScopeId, name: &str, sym: Symbol) {
-        let second_declaration = symbol_location(self.ast, sym);
+    /// Insert a decl-level symbol into `scope`, or return
+    /// [`CompileError::SymbolDeclaredTwice`] if `name` already exists there.
+    fn insert_decl_symbol(
+        &mut self,
+        scope: ScopeId,
+        name: &str,
+        sym: Symbol,
+    ) -> Result<(), CompileError> {
         if let Some(existing) = self.scopes[scope.0].symbols.get(name).copied() {
-            let first_declaration = symbol_location(self.ast, existing);
-            self.errors.push(CompileError::SymbolDeclaredTwice {
+            return Err(CompileError::SymbolDeclaredTwice {
                 name: name.to_string(),
-                first_declaration,
-                second_declaration,
+                first_declaration: symbol_location(self.ast, existing),
+                second_declaration: symbol_location(self.ast, sym),
             });
-            return;
         }
         self.scopes[scope.0].symbols.insert(name.to_string(), sym);
+        Ok(())
     }
 
     /// Populate `scope` with the symbols directly declared in `decls`, then
-    /// dispatch children that own further scopes (model bodies) or switch to
-    /// ordered scoping (rule bodies, arg lists).
-    fn populate_unordered(&mut self, scope: ScopeId, decls: &[DeclId]) {
-        // Pass A: finalize `scope`.
+    /// recurse into children (model bodies, rule bodies, arg lists). The
+    /// recursion only happens after `scope` has all direct symbols so that
+    /// children can resolve ambient names against a finalized parent
+    /// regardless of source order.
+    fn populate_unordered(&mut self, scope: ScopeId, decls: &[DeclId]) -> Result<(), CompileError> {
         for decl in decls {
             self.insert_unordered(*decl, scope);
             match *self.ast.decl(*decl) {
                 Decl::Type(id) => {
                     self.insert_unordered(id, scope);
                     let name = self.ast.type_decl(id).name.clone();
-                    self.insert_decl_symbol(scope, &name, Symbol::Type(id));
+                    self.insert_decl_symbol(scope, &name, Symbol::Type(id))?;
                 }
                 Decl::Pred(id) => {
                     self.insert_unordered(id, scope);
                     let name = self.ast.pred_decl(id).name.clone();
-                    self.insert_decl_symbol(scope, &name, Symbol::Pred(id));
+                    self.insert_decl_symbol(scope, &name, Symbol::Pred(id))?;
                 }
                 Decl::Func(id) => {
                     self.insert_unordered(id, scope);
                     let name = self.ast.func_decl(id).name.clone();
-                    self.insert_decl_symbol(scope, &name, Symbol::Func(id));
+                    self.insert_decl_symbol(scope, &name, Symbol::Func(id))?;
                 }
                 Decl::Rule(id) => {
                     self.insert_unordered(id, scope);
                     if let Some(name) = self.ast.rule_decl(id).name.clone() {
-                        self.insert_decl_symbol(scope, &name, Symbol::Rule(id));
+                        self.insert_decl_symbol(scope, &name, Symbol::Rule(id))?;
                     }
                 }
                 Decl::Enum(id) => {
                     self.insert_unordered(id, scope);
                     let enum_name = self.ast.enum_decl(id).name.clone();
-                    self.insert_decl_symbol(scope, &enum_name, Symbol::Enum(id));
+                    self.insert_decl_symbol(scope, &enum_name, Symbol::Enum(id))?;
                     let ctors = self.ast.enum_decl(id).ctors.clone();
                     for ctor in &ctors {
                         self.insert_unordered(*ctor, scope);
                         let ctor_name = self.ast.ctor_decl(*ctor).name.clone();
-                        self.insert_decl_symbol(scope, &ctor_name, Symbol::Ctor(*ctor));
+                        self.insert_decl_symbol(scope, &ctor_name, Symbol::Ctor(*ctor))?;
                     }
                 }
                 Decl::Model(id) => {
                     let model_name = self.ast.model_decl(id).name.clone();
-                    self.insert_decl_symbol(scope, &model_name, Symbol::Model(id));
-                    // The model node itself maps to its own body scope,
-                    // allocated below in pass B.
+                    self.insert_decl_symbol(scope, &model_name, Symbol::Model(id))?;
+                    // The model node maps to its own body scope, allocated
+                    // below when we recurse.
                 }
             }
         }
 
-        // Pass B: dispatch children against the now-finalized `scope`.
         for decl in decls {
             match *self.ast.decl(*decl) {
                 Decl::Type(_) => {}
@@ -359,10 +354,12 @@ impl<'a> ScopeBuilder<'a> {
                     let body = self.ast.model_decl(id).body.clone();
                     let body_scope = self.new_scope(Some(scope));
                     self.insert_unordered(id, body_scope);
-                    self.populate_unordered(body_scope, &body);
+                    self.populate_unordered(body_scope, &body)?;
                 }
             }
         }
+
+        Ok(())
     }
 
     fn walk_arg_decl_list(&mut self, current: ScopeId, list: ArgDeclListId) -> ScopeId {
