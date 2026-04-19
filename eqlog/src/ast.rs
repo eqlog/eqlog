@@ -7,9 +7,7 @@
 //! the wrong kind.
 //!
 //! The arena representation lets downstream passes key side tables by id
-//! without caring about pointer stability or borrow lifetimes, and makes it
-//! cheap to synthesize virtual nodes during desugaring: just push and use the
-//! new id.
+//! without caring about pointer stability or borrow lifetimes.
 
 use crate::grammar_util::Location;
 
