@@ -7,6 +7,7 @@ use crate::flatten::*;
 use crate::grammar::*;
 use crate::ram::*;
 use crate::rust_gen::*;
+use crate::scope_checks::check_scopes;
 use crate::scopes::resolve_scopes;
 use crate::semantics::*;
 use crate::syntactic::check_syntactic;
@@ -453,7 +454,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
         .into());
     }
 
-    let _scopes = match resolve_scopes(&ast, module) {
+    let scopes = match resolve_scopes(&ast, module) {
         Ok(scopes) => scopes,
         Err(error) => {
             return Err(CompileErrorWithContext {
@@ -464,6 +465,8 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
             .into());
         }
     };
+
+    let scope_errors = check_scopes(&ast, &scopes, module);
 
     let (mut eqlog, identifiers, locations, _module) = populate_eqlog(&ast, module);
     eqlog.close();
@@ -480,10 +483,12 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
         }
     }
 
-    check_eqlog(&eqlog, &identifiers, &locations).map_err(|error| CompileErrorWithContext {
-        error,
-        source,
-        source_path: config.in_dir.join(in_file),
+    check_eqlog(&eqlog, &identifiers, &locations, scope_errors).map_err(|error| {
+        CompileErrorWithContext {
+            error,
+            source,
+            source_path: config.in_dir.join(in_file),
+        }
     })?;
     assert!(!eqlog.absurd());
 

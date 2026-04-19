@@ -14,18 +14,6 @@ use crate::error::*;
 use crate::grammar_util::*;
 use eqlog_eqlog::*;
 
-fn iter_match_pattern_ctor_arg_is_not_fresh<'a>(
-    eqlog: &'a Eqlog,
-    locations: &'a BTreeMap<Loc, Location>,
-) -> impl 'a + Iterator<Item = CompileError> {
-    eqlog
-        .iter_pattern_ctor_arg_var_is_not_fresh()
-        .filter_map(move |loc| {
-            let location = *locations.get(&loc).unwrap();
-            Some(CompileError::MatchPatternArgVarIsNotFresh { location })
-        })
-}
-
 fn iter_match_conflicting_enum<'a>(
     eqlog: &'a Eqlog,
     locations: &'a BTreeMap<Loc, Location>,
@@ -533,8 +521,10 @@ pub fn check_eqlog(
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
     locations: &BTreeMap<Loc, Location>,
+    extra_errors: Vec<CompileError>,
 ) -> Result<(), CompileError> {
     let first_error: Option<CompileError> = iter::empty()
+        .chain(extra_errors)
         .chain(iter_symbol_declared_twice_errors(
             eqlog,
             identifiers,
@@ -544,10 +534,7 @@ pub fn check_eqlog(
         .chain(iter_pred_arg_number_errors(eqlog, locations))
         .chain(iter_func_arg_number_errors(eqlog, locations))
         .chain(iter_symbol_casing_errors(eqlog, identifiers, locations))
-        .chain(iter_then_defined_variable_errors(eqlog, locations))
-        .chain(iter_variable_introduced_in_then_errors(eqlog, locations))
         .chain(iter_conflicting_type_errors(eqlog, identifiers, locations))
-        .chain(iter_match_pattern_ctor_arg_is_not_fresh(eqlog, locations))
         .chain(iter_match_conflicting_enum(eqlog, locations))
         .chain(iter_match_stmt_contains_ctor_of_enum(eqlog, locations))
         .chain(iter_undetermined_type_errors(eqlog, locations))
