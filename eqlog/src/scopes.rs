@@ -204,7 +204,7 @@ pub fn resolve_scopes(ast: &Ast, module: ModuleId) -> Result<Scopes, CompileErro
         .unordered
         .insert(UnorderedNodeId::from(module), module_scope);
     let decls = ast.module(module).decls.clone();
-    builder.populate_unordered(module_scope, &decls)?;
+    builder.walk_decls(module_scope, &decls)?;
     let ScopeBuilder {
         scopes,
         unordered,
@@ -282,7 +282,7 @@ impl<'a> ScopeBuilder<'a> {
     /// recursion only happens after `scope` has all direct symbols so that
     /// children can resolve ambient names against a finalized parent
     /// regardless of source order.
-    fn populate_unordered(&mut self, scope: ScopeId, decls: &[DeclId]) -> Result<(), CompileError> {
+    fn walk_decls(&mut self, scope: ScopeId, decls: &[DeclId]) -> Result<(), CompileError> {
         for decl in decls {
             self.insert_unordered(*decl, scope);
             match *self.ast.decl(*decl) {
@@ -354,7 +354,7 @@ impl<'a> ScopeBuilder<'a> {
                     let body = self.ast.model_decl(id).body.clone();
                     let body_scope = self.new_scope(Some(scope));
                     self.insert_unordered(id, body_scope);
-                    self.populate_unordered(body_scope, &body)?;
+                    self.walk_decls(body_scope, &body)?;
                 }
             }
         }
