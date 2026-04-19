@@ -1,3 +1,16 @@
+//! Flat, id-based AST.
+//!
+//! All nodes live in a single `Vec<(Location, Node)>` arena on [`Ast`], and
+//! children are referenced by index rather than owned or borrowed. Each node
+//! kind has a typed id (e.g. [`TermId`], [`IfAtomId`]) that wraps a [`NodeId`];
+//! `ast.term(id)` returns the payload and panics if the id points at a node of
+//! the wrong kind.
+//!
+//! The arena representation lets downstream passes key side tables by id
+//! without caring about pointer stability or borrow lifetimes, and makes it
+//! cheap to synthesize virtual nodes during desugaring: just push and use the
+//! new id.
+
 use crate::grammar_util::Location;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
