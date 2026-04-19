@@ -277,11 +277,11 @@ impl<'a> ScopeBuilder<'a> {
         Ok(())
     }
 
-    /// Populate `scope` with the symbols directly declared in `decls`, then
-    /// recurse into children (model bodies, rule bodies, arg lists). The
-    /// recursion only happens after `scope` has all direct symbols so that
-    /// children can resolve ambient names against a finalized parent
-    /// regardless of source order.
+    /// Unordered scope, breadth-first: populate `scope` with the symbols
+    /// directly declared in `decls`, then recurse into children (model
+    /// bodies, rule bodies, arg lists). Deferring the recursion until after
+    /// `scope` is fully populated lets children resolve ambient names
+    /// against a finalized parent regardless of source order.
     fn walk_decls(&mut self, scope: ScopeId, decls: &[DeclId]) -> Result<(), CompileError> {
         for decl in decls {
             self.insert_unordered(*decl, scope);
@@ -362,6 +362,7 @@ impl<'a> ScopeBuilder<'a> {
         Ok(())
     }
 
+    /// Ordered scope, depth-first.
     fn walk_arg_decl_list(&mut self, current: ScopeId, list: ArgDeclListId) -> ScopeId {
         let args = self.ast.arg_decl_list(list).args.clone();
         let mut cur = current;
@@ -372,6 +373,7 @@ impl<'a> ScopeBuilder<'a> {
         cur
     }
 
+    /// Ordered scope, depth-first.
     fn walk_arg_decl(&mut self, current: ScopeId, arg: ArgDeclId) -> ScopeId {
         let ArgDecl { name, typ } = self.ast.arg_decl(arg);
         let name = name.clone();
@@ -391,6 +393,7 @@ impl<'a> ScopeBuilder<'a> {
         exit
     }
 
+    /// Ordered scope, depth-first.
     fn walk_stmt_block(&mut self, enclosing: ScopeId, stmts: &[StmtId]) -> ScopeId {
         let mut cur = enclosing;
         for stmt in stmts {
@@ -399,6 +402,7 @@ impl<'a> ScopeBuilder<'a> {
         cur
     }
 
+    /// Ordered scope, depth-first.
     fn walk_stmt(&mut self, current: ScopeId, stmt: StmtId) -> ScopeId {
         let exit = match *self.ast.stmt(stmt) {
             Stmt::If(id) => {
@@ -437,6 +441,7 @@ impl<'a> ScopeBuilder<'a> {
         exit
     }
 
+    /// Ordered scope, depth-first.
     fn walk_match_case(&mut self, enclosing: ScopeId, case: MatchCaseId) -> ScopeId {
         let MatchCase { pattern, body } = self.ast.match_case(case);
         let pattern = *pattern;
@@ -447,6 +452,7 @@ impl<'a> ScopeBuilder<'a> {
         enclosing
     }
 
+    /// Ordered scope, depth-first.
     fn walk_if_atom(&mut self, current: ScopeId, atom: IfAtomId) -> ScopeId {
         let exit = match *self.ast.if_atom(atom) {
             IfAtom::Equal(id) => {
@@ -484,6 +490,7 @@ impl<'a> ScopeBuilder<'a> {
         exit
     }
 
+    /// Ordered scope, depth-first.
     fn walk_then_atom(&mut self, current: ScopeId, atom: ThenAtomId) -> ScopeId {
         let exit = match *self.ast.then_atom(atom) {
             ThenAtom::Equal(id) => {
@@ -515,6 +522,7 @@ impl<'a> ScopeBuilder<'a> {
         exit
     }
 
+    /// Ordered scope, depth-first.
     fn walk_term(&mut self, current: ScopeId, term: TermId) -> ScopeId {
         let exit = match *self.ast.term(term) {
             Term::Var(id) => {
@@ -558,6 +566,7 @@ impl<'a> ScopeBuilder<'a> {
         exit
     }
 
+    /// Ordered scope, depth-first.
     fn walk_term_list(&mut self, current: ScopeId, list: TermListId) -> ScopeId {
         let terms = self.ast.term_list(list).terms.clone();
         let mut cur = current;
@@ -568,6 +577,7 @@ impl<'a> ScopeBuilder<'a> {
         cur
     }
 
+    /// Ordered scope, depth-first.
     fn walk_type_expr(&mut self, current: ScopeId, type_expr: TypeExprId) -> ScopeId {
         let exit = match *self.ast.type_expr(type_expr) {
             TypeExpr::Ambient(id) => {
@@ -590,6 +600,7 @@ impl<'a> ScopeBuilder<'a> {
         exit
     }
 
+    /// Ordered scope, depth-first.
     fn walk_pred_expr(&mut self, current: ScopeId, pred_expr: PredExprId) -> ScopeId {
         let exit = match *self.ast.pred_expr(pred_expr) {
             PredExpr::Ambient(id) => {
@@ -608,6 +619,7 @@ impl<'a> ScopeBuilder<'a> {
         exit
     }
 
+    /// Ordered scope, depth-first.
     fn walk_func_expr(&mut self, current: ScopeId, func_expr: FuncExprId) -> ScopeId {
         let exit = match *self.ast.func_expr(func_expr) {
             FuncExpr::Ambient(id) => {
