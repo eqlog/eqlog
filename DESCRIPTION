@@ -1,0 +1,9 @@
+Add Rust-side "variable occurs at least twice" pass
+
+Move the occurs-only-once check off the eqlog-eqlog side into a plain
+Rust pass that walks each rule body, flags pairs of variable
+occurrences that share a name in the scope graph, and reports any
+remaining singletons as VariableOccursOnlyOnce. The Rust pass and
+`check_eqlog` now both produce optional errors and are merged through
+`CompileError`'s kind-precedence `Ord` so that, e.g., UndeclaredSymbol
+still wins over a singleton variable in the same rule.

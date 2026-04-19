@@ -119,6 +119,11 @@ fn variable_only_once_if() {
 }
 
 #[test]
+fn variable_only_once_separate_branches() {
+    test_case(Path::new("variable-only-once-separate-branches"));
+}
+
+#[test]
 fn bad_argument_number_function_nullary() {
     test_case(Path::new("bad-argument-number-function-nullary"));
 }

@@ -113,53 +113,6 @@ pub fn iter_variable_not_snake_case_errors<'a>(
     })
 }
 
-pub fn iter_variable_occurs_twice<'a>(
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-    locations: &'a BTreeMap<Loc, Location>,
-) -> impl 'a + Iterator<Item = CompileError> {
-    eqlog.iter_var_term_node().filter_map(|(tm, virt_ident)| {
-        let scope = eqlog
-            .exit_scope(eqlog.rule_descendant_term(tm).unwrap())
-            .unwrap();
-        let el_name = eqlog.semantic_name(virt_ident, scope).unwrap();
-
-        let has_second_occurrence = eqlog
-            .iter_var_term_node()
-            .find(|(tm0, virt_ident0)| {
-                if eqlog.are_equal_term_node(tm, *tm0) {
-                    return false;
-                }
-
-                let scope0 = eqlog
-                    .exit_scope(eqlog.rule_descendant_term(*tm0).unwrap())
-                    .unwrap();
-                let el_name0 = eqlog.semantic_name(*virt_ident0, scope0).unwrap();
-                eqlog.are_equal_el_name(el_name, el_name0)
-            })
-            .is_some();
-
-        if has_second_occurrence {
-            return None;
-        }
-
-        let ident = eqlog.virt_real_ident(virt_ident)?;
-        // TODO: This doesn't actually hold; we're ignoring occurs-only-once errors at the
-        // moment if they arise from purely virtual identifiers. But why does it not hold?
-        //.expect("Desugaring should never result in compilation errors");
-
-        let name: &str = identifiers.get(&ident).unwrap().as_str();
-
-        let loc = eqlog.term_node_loc(tm).unwrap();
-        let location = *locations.get(&loc).unwrap();
-
-        Some(CompileError::VariableOccursOnlyOnce {
-            name: name.to_string(),
-            location,
-        })
-    })
-}
-
 fn element_type_to_string<'a>(
     typ: DepType,
     eqlog: &'a Eqlog,
@@ -552,7 +505,6 @@ pub fn check_eqlog(
         .chain(iter_match_stmt_contains_ctor_of_enum(eqlog, locations))
         .chain(iter_undetermined_type_errors(eqlog, locations))
         .chain(iter_surjectivity_errors(eqlog, locations))
-        .chain(iter_variable_occurs_twice(eqlog, identifiers, locations))
         .chain(iter_variable_not_snake_case_errors(
             eqlog,
             identifiers,

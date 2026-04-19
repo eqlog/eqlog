@@ -1,5 +1,6 @@
 use crate::ast::{Ast, ModuleId};
 use crate::ast_to_eqlog::populate_eqlog;
+use crate::check_variables::check_variables;
 use crate::debug::display_morphisms;
 use crate::error::*;
 use crate::flat_eqlog::*;
@@ -453,7 +454,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
         .into());
     }
 
-    let _scopes = match resolve_scopes(&ast, module) {
+    let scopes = match resolve_scopes(&ast, module) {
         Ok(scopes) => scopes,
         Err(error) => {
             return Err(CompileErrorWithContext {
@@ -464,6 +465,8 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
             .into());
         }
     };
+
+    let var_err = check_variables(&ast, &scopes, module).err();
 
     let (mut eqlog, identifiers, locations, _module) = populate_eqlog(&ast, module);
     eqlog.close();
@@ -480,11 +483,19 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
         }
     }
 
-    check_eqlog(&eqlog, &identifiers, &locations).map_err(|error| CompileErrorWithContext {
-        error,
-        source,
-        source_path: config.in_dir.join(in_file),
-    })?;
+    let eqlog_err = check_eqlog(&eqlog, &identifiers, &locations).err();
+
+    // Merge the Rust-side and eqlog-side errors by `CompileError`'s `Ord`,
+    // which applies the kind precedence (e.g. UndeclaredSymbol beats
+    // VariableOccursOnlyOnce) before falling back to source location.
+    if let Some(error) = [var_err, eqlog_err].into_iter().flatten().min() {
+        return Err(CompileErrorWithContext {
+            error,
+            source,
+            source_path: config.in_dir.join(in_file),
+        }
+        .into());
+    }
     assert!(!eqlog.absurd());
 
     let flat_rule_groups = flatten(&eqlog, &identifiers);
