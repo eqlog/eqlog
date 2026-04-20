@@ -12,18 +12,11 @@
 //! by cloning the before-structure and adding whatever the statement
 //! contributes. This pass does no unification and no equating. `=` atoms are
 //! only visited so their subterm Els materialise.
-//!
-//! The pass also surfaces [`CompileError::FunctionArgumentNumber`] and
-//! [`CompileError::PredicateArgumentNumber`] for ambient-resolved predicate
-//! and function references. Member references are skipped because they
-//! require type inference on the receiver term, which this pass does not
-//! perform.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::algebra::signature::*;
 use crate::ast::*;
-use crate::error::CompileError;
 use crate::scopes::{ScopeId, Scopes, Symbol};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -137,26 +130,23 @@ impl Structures {
     }
 }
 
-/// Walks `ast` rooted at `module`, assigns a before-structure and an
-/// after-structure to every statement in every rule, and collects
-/// argument-number errors for ambient-resolved predicate and function
-/// references.
+/// Walks `ast` rooted at `module` and assigns a before-structure and an
+/// after-structure to every statement in every rule.
 pub fn build_structures(
     ast: &Ast,
     scopes: &Scopes,
     signature: &Signature,
     module: ModuleId,
-) -> (Structures, Vec<CompileError>) {
+) -> Structures {
     let mut builder = Builder {
         ast,
         scopes,
         signature,
         structures: Structures::default(),
-        errors: Vec::new(),
     };
     let decls = ast.module(module).decls.clone();
     builder.walk_decls(&decls, &[]);
-    (builder.structures, builder.errors)
+    builder.structures
 }
 
 struct Builder<'a> {
@@ -164,7 +154,6 @@ struct Builder<'a> {
     scopes: &'a Scopes,
     signature: &'a Signature,
     structures: Structures,
-    errors: Vec<CompileError>,
 }
 
 /// Per-rule state the stmt walker threads through recursive calls.
@@ -355,15 +344,7 @@ impl<'a> Builder<'a> {
         };
 
         let parents = self.parents_prefix(self.signature.pred(pred_id).parents.len(), state);
-        let expected = self.signature.pred(pred_id).arity.len();
-        let got = arg_els.len();
-        if got != expected {
-            let location = self.ast.loc(id);
-            self.errors.push(CompileError::PredicateArgumentNumber {
-                expected,
-                got,
-                location,
-            });
+        if arg_els.len() != self.signature.pred(pred_id).arity.len() {
             return;
         }
 
@@ -411,7 +392,7 @@ impl<'a> Builder<'a> {
                     .iter()
                     .map(|t| self.walk_term(*t, current, state))
                     .collect();
-                self.emit_app(term, func, arg_els, current, state)
+                self.emit_app(func, arg_els, current, state)
             }
             Term::Dom(did) => {
                 let DomTerm { arg } = *self.ast.dom_term(did);
@@ -441,13 +422,12 @@ impl<'a> Builder<'a> {
         }
     }
 
-    /// Resolves the func expression, checks argument count, emits the
-    /// [`FuncApp`] (and its result El) on success. Always returns *some* El
-    /// for the result, so callers can thread it; on resolution failure the
-    /// returned El has no type and no [`FuncApp`] is recorded.
+    /// Resolves the func expression and, on success, emits the [`FuncApp`]
+    /// along with its result El. Always returns *some* El for the result, so
+    /// callers can thread it; on resolution failure or arg-count mismatch
+    /// the returned El has no type and no [`FuncApp`] is recorded.
     fn emit_app(
         &mut self,
-        term: TermId,
         func: FuncExprId,
         arg_els: Vec<ElId>,
         current: &mut Structure,
@@ -474,15 +454,7 @@ impl<'a> Builder<'a> {
         };
 
         let func_data = self.signature.func(func_id);
-        let expected = func_data.domain.len();
-        let got = arg_els.len();
-        if got != expected {
-            let location = self.ast.loc(term);
-            self.errors.push(CompileError::FunctionArgumentNumber {
-                expected,
-                got,
-                location,
-            });
+        if arg_els.len() != func_data.domain.len() {
             return current.push_el(El {
                 typ: None,
                 parents: Vec::new(),
