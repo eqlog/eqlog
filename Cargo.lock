@@ -335,6 +335,7 @@ dependencies = [
  "clap",
  "convert_case",
  "eqlog-eqlog 0.8.0",
+ "eqlog-runtime 0.8.0",
  "indoc",
  "itertools",
  "lalrpop",

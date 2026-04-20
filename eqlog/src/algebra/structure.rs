@@ -1,35 +1,52 @@
 //! Data types for per-rule and per-statement structures.
 //!
 //! A [`Structure`] over a [`crate::algebra::signature::Signature`] records the
-//! elements ([`El`]), function applications ([`FuncApp`]) and predicate
+//! elements ([`ElId`]), function applications ([`FuncApp`]) and predicate
 //! applications ([`PredApp`]) that exist at a given point in a rule. Elements
-//! carry an optional type and the chain of parent model elements they live
-//! under. Function and predicate applications are plain data, keyed by their
-//! own contents, so two calls with identical parents and arguments collapse
-//! naturally.
+//! either have a known [`ConcreteType`] (a non-optional [`TypeId`] together
+//! with the element's parent model els) or none at all, and equality between
+//! elements is tracked by an embedded
+//! [`eqlog_runtime::Unification`]. Function and predicate applications are
+//! plain data, keyed by their own contents, so two calls with identical
+//! parents and arguments collapse naturally.
 //!
 //! [`Structures`] holds a flat arena of snapshots plus side tables from
 //! [`RuleDeclId`] and [`StmtId`] to those snapshots. The
-//! [`crate::algebra::build_structure`] module populates it.
+//! [`crate::algebra::algebraize`] module populates it.
 
 use std::collections::{BTreeMap, BTreeSet};
+
+use eqlog_runtime::Unification;
 
 use crate::algebra::signature::{FuncId, PredId, TypeId};
 use crate::ast::{RuleDeclId, StmtId, VarTermId};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ElId(usize);
+pub struct ElId(pub(super) usize);
+
+impl From<u32> for ElId {
+    fn from(x: u32) -> Self {
+        ElId(x as usize)
+    }
+}
+
+impl From<ElId> for u32 {
+    fn from(el: ElId) -> Self {
+        debug_assert!(el.0 <= u32::MAX as usize);
+        el.0 as u32
+    }
+}
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StructureId(usize);
 
-#[allow(dead_code)]
-#[derive(Clone, Debug, Default)]
-pub struct El {
-    /// The element's type, if known. `None` for fresh wildcards and for
-    /// variable bindings without a `var: Type` annotation.
-    pub typ: Option<TypeId>,
-    /// Enclosing model elements, outermost first.
+/// A fully-known type for an [`ElId`]: the element's [`TypeId`] together with
+/// the parent-model elements the type depends on. Parents are outermost first
+/// and have the same length as `signature.type_(typ).parents` in a well-formed
+/// program.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConcreteType {
+    pub typ: TypeId,
     pub parents: Vec<ElId>,
 }
 
@@ -47,9 +64,12 @@ pub struct FuncApp {
     pub args: Vec<ElId>,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct Structure {
-    pub els: Vec<El>,
+    /// Live elements, keyed by [`ElId`]. `None` means the element's type has
+    /// not been determined yet. After [`Structure::close`] only equivalence
+    /// class roots remain as keys.
+    pub els: BTreeMap<ElId, Option<ConcreteType>>,
     pub pred_apps: BTreeSet<PredApp>,
     pub func_apps: BTreeMap<FuncApp, ElId>,
     /// Variable bindings that have entered scope in this structure, keyed by
@@ -57,12 +77,30 @@ pub struct Structure {
     /// the `Symbol::Var` payload). Analogous to
     /// `var(Structure, ElName) -> El` in eqlog.eql.
     pub var_els: BTreeMap<VarTermId, ElId>,
+    /// Equivalence relation on [`ElId`]s. New ElIds start out in their own
+    /// class; [`Structure::close`] may merge classes under functionality.
+    pub unification: Unification<ElId>,
+}
+
+impl Default for Structure {
+    fn default() -> Self {
+        Self {
+            els: BTreeMap::new(),
+            pred_apps: BTreeSet::new(),
+            func_apps: BTreeMap::new(),
+            var_els: BTreeMap::new(),
+            unification: Unification::new(),
+        }
+    }
 }
 
 impl Structure {
-    pub fn push_el(&mut self, el: El) -> ElId {
-        let id = ElId(self.els.len());
-        self.els.push(el);
+    /// Allocates a fresh [`ElId`] with the given (possibly unknown) concrete
+    /// type and registers it with the unification.
+    pub fn push_el(&mut self, ct: Option<ConcreteType>) -> ElId {
+        let id = ElId(self.unification.len());
+        self.unification.increase_size_to(id.0 + 1);
+        self.els.insert(id, ct);
         id
     }
 }

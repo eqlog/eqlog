@@ -7,7 +7,7 @@
 //! only visited so their subterm Els materialise.
 
 use crate::algebra::signature::{Signature, TypeId};
-use crate::algebra::structure::{El, ElId, FuncApp, PredApp, Structure, Structures};
+use crate::algebra::structure::{ConcreteType, ElId, FuncApp, PredApp, Structure, Structures};
 use crate::ast::*;
 use crate::scopes::{ScopeId, Scopes, Symbol};
 
@@ -67,11 +67,11 @@ impl<'a> Builder<'a> {
         let mut initial = Structure::default();
         let mut ambient: Vec<ElId> = Vec::new();
         for &model_tid in enclosing_models {
-            let el = El {
-                typ: Some(model_tid),
+            let ct = ConcreteType {
+                typ: model_tid,
                 parents: ambient.clone(),
             };
-            ambient.push(initial.push_el(el));
+            ambient.push(initial.push_el(Some(ct)));
         }
 
         let initial_id = self.structures.push(initial.clone());
@@ -162,11 +162,8 @@ impl<'a> Builder<'a> {
             IfAtom::Var(id) => {
                 let VarIfAtom { term, typ } = *self.ast.var_if_atom(id);
                 let typ_id = self.resolve_type_expr(typ);
-                let el = El {
-                    typ: typ_id,
-                    parents: self.parents_for_type(typ_id, state),
-                };
-                let el_id = current.push_el(el);
+                let ct = self.concrete_type_for(typ_id, state);
+                let el_id = current.push_el(ct);
                 if let Term::Var(vid) = *self.ast.term(term) {
                     current.var_els.insert(vid, el_id);
                 }
@@ -247,18 +244,11 @@ impl<'a> Builder<'a> {
                 if let Some(&el_id) = current.var_els.get(&binding_id) {
                     return el_id;
                 }
-                let el = El {
-                    typ: None,
-                    parents: Vec::new(),
-                };
-                let el_id = current.push_el(el);
+                let el_id = current.push_el(None);
                 current.var_els.insert(binding_id, el_id);
                 el_id
             }
-            Term::Wildcard => current.push_el(El {
-                typ: None,
-                parents: Vec::new(),
-            }),
+            Term::Wildcard => current.push_el(None),
             Term::App(aid) => {
                 let AppTerm { func, args } = *self.ast.app_term(aid);
                 let arg_terms = self.ast.term_list(args).terms.clone();
@@ -271,27 +261,18 @@ impl<'a> Builder<'a> {
             Term::Dom(did) => {
                 let DomTerm { arg } = *self.ast.dom_term(did);
                 self.walk_term(arg, current, state);
-                current.push_el(El {
-                    typ: None,
-                    parents: Vec::new(),
-                })
+                current.push_el(None)
             }
             Term::Cod(cid) => {
                 let CodTerm { arg } = *self.ast.cod_term(cid);
                 self.walk_term(arg, current, state);
-                current.push_el(El {
-                    typ: None,
-                    parents: Vec::new(),
-                })
+                current.push_el(None)
             }
             Term::MorApp(mid) => {
                 let MorAppTerm { mor, arg } = *self.ast.mor_app_term(mid);
                 self.walk_term(mor, current, state);
                 self.walk_term(arg, current, state);
-                current.push_el(El {
-                    typ: None,
-                    parents: Vec::new(),
-                })
+                current.push_el(None)
             }
         }
     }
@@ -321,27 +302,18 @@ impl<'a> Builder<'a> {
         };
 
         let Some(func_id) = resolved else {
-            return current.push_el(El {
-                typ: None,
-                parents: Vec::new(),
-            });
+            return current.push_el(None);
         };
 
         let func_data = self.signature.func(func_id);
         if arg_els.len() != func_data.domain.len() {
-            return current.push_el(El {
-                typ: None,
-                parents: Vec::new(),
-            });
+            return current.push_el(None);
         }
 
         let parents = self.parents_prefix(func_data.parents.len(), state);
         let codomain = func_data.codomain;
-        let result_el = El {
-            typ: Some(codomain),
-            parents: self.parents_for_type(Some(codomain), state),
-        };
-        let result_id = current.push_el(result_el);
+        let result_ct = self.concrete_type_for(Some(codomain), state);
+        let result_id = current.push_el(result_ct);
         current.func_apps.insert(
             FuncApp {
                 func: func_id,
@@ -374,6 +346,16 @@ impl<'a> Builder<'a> {
             }
             TypeExpr::Member(_) => None,
         }
+    }
+
+    /// Packages a known [`TypeId`] with the parent ambient-el prefix that
+    /// matches its signature. Returns `None` when the type is unknown.
+    fn concrete_type_for(&self, typ_id: Option<TypeId>, state: &RuleState) -> Option<ConcreteType> {
+        let tid = typ_id?;
+        Some(ConcreteType {
+            typ: tid,
+            parents: self.parents_for_type(Some(tid), state),
+        })
     }
 
     /// Returns the ambient-model-el prefix to use as the `parents` of an El
