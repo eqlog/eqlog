@@ -1,0 +1,25 @@
+Add algebra::structure pass
+
+Add a Rust-side reimplementation of the eqlog.eql Structure/El/pred_app
+/func_app/var/el-type machinery in `eqlog/src/algebra/structure.rs`.
+
+A `Structure` carries a flat `Vec<El>` (each El holding an optional
+TypeId plus a parent model el chain), a `BTreeSet<PredApp>`, and a
+`BTreeMap<FuncApp, ElId>`. PredApp and FuncApp are data-keyed structs
+holding the pred/func id, its parent model el chain, and its argument
+els.
+
+`build_structures` walks each rule body and assigns a before- and
+after-structure to every statement. The after is produced by cloning
+the before and extending it with whatever the statement introduces.
+No morphisms, no unification, no equating of elements. Match scrutinee
+and pattern terms are walked into their branch's starting structure.
+
+The pass surfaces ambient-resolved FunctionArgumentNumber and
+PredicateArgumentNumber errors. Member-resolved references are skipped
+because resolving them requires type inference on the receiver term,
+which this pass does not do.
+
+Also widens `algebra::signature::Signature` with PredDeclId -> PredId,
+FuncDeclId -> FuncId, CtorDeclId -> FuncId lookups and Type/Pred/Func
+data accessors the structure pass needs.

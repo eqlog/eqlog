@@ -53,15 +53,14 @@ pub enum TypeKind {
     Mor(TypeId),
 }
 
-#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct Type {
+    #[allow(dead_code)]
     pub kind: TypeKind,
     /// Enclosing model types, outermost first.
     pub parents: Vec<TypeId>,
 }
 
-#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct Pred {
     /// Enclosing model types, outermost first.
@@ -69,12 +68,12 @@ pub struct Pred {
     pub arity: Vec<TypeId>,
 }
 
-#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct Func {
     /// Enclosing model types, outermost first.
     pub parents: Vec<TypeId>,
     pub domain: Vec<TypeId>,
+    #[allow(dead_code)]
     pub codomain: TypeId,
 }
 
@@ -94,9 +93,24 @@ pub struct Signature {
     type_decls: BTreeMap<TypeDeclId, TypeId>,
     enum_decls: BTreeMap<EnumDeclId, TypeId>,
     model_decls: BTreeMap<ModelDeclId, ModelTypeIds>,
+    pred_decls: BTreeMap<PredDeclId, PredId>,
+    func_decls: BTreeMap<FuncDeclId, FuncId>,
+    ctor_decls: BTreeMap<CtorDeclId, FuncId>,
 }
 
 impl Signature {
+    pub fn type_(&self, id: TypeId) -> &Type {
+        &self.types[id.0 as usize]
+    }
+
+    pub fn pred(&self, id: PredId) -> &Pred {
+        &self.preds[id.0 as usize]
+    }
+
+    pub fn func(&self, id: FuncId) -> &Func {
+        &self.funcs[id.0 as usize]
+    }
+
     pub fn type_for_type_decl(&self, id: TypeDeclId) -> TypeId {
         *self
             .type_decls
@@ -116,6 +130,24 @@ impl Signature {
             .model_decls
             .get(&id)
             .expect("model decl was not registered")
+    }
+
+    /// Returns the [`PredId`] for `id`, or `None` if the pred decl was
+    /// dropped during pass 2 because one of its arg types failed to resolve.
+    pub fn pred_for_pred_decl(&self, id: PredDeclId) -> Option<PredId> {
+        self.pred_decls.get(&id).copied()
+    }
+
+    /// Returns the [`FuncId`] for `id`, or `None` if the func decl was
+    /// dropped during pass 2.
+    pub fn func_for_func_decl(&self, id: FuncDeclId) -> Option<FuncId> {
+        self.func_decls.get(&id).copied()
+    }
+
+    /// Returns the [`FuncId`] for the constructor `id`, or `None` if it was
+    /// dropped during pass 2.
+    pub fn func_for_ctor_decl(&self, id: CtorDeclId) -> Option<FuncId> {
+        self.ctor_decls.get(&id).copied()
     }
 
     fn push_type(&mut self, t: Type) -> TypeId {
@@ -228,10 +260,11 @@ impl<'a> Builder<'a> {
                 Decl::Pred(id) => {
                     let args = self.ast.pred_decl(id).args;
                     if let Some(arity) = self.resolve_arg_types(args) {
-                        self.signature.push_pred(Pred {
+                        let pid = self.signature.push_pred(Pred {
                             parents: parents.to_vec(),
                             arity,
                         });
+                        self.signature.pred_decls.insert(id, pid);
                     }
                 }
                 Decl::Func(id) => {
@@ -239,11 +272,12 @@ impl<'a> Builder<'a> {
                     let domain = self.resolve_arg_types(args);
                     let codomain = self.resolve_signature_type_expr(result);
                     if let (Some(domain), Some(codomain)) = (domain, codomain) {
-                        self.signature.push_func(Func {
+                        let fid = self.signature.push_func(Func {
                             parents: parents.to_vec(),
                             domain,
                             codomain,
                         });
+                        self.signature.func_decls.insert(id, fid);
                     }
                 }
                 Decl::Enum(id) => {
@@ -252,11 +286,12 @@ impl<'a> Builder<'a> {
                     for ctor in ctors {
                         let args = self.ast.ctor_decl(ctor).args;
                         if let Some(domain) = self.resolve_arg_types(args) {
-                            self.signature.push_func(Func {
+                            let fid = self.signature.push_func(Func {
                                 parents: parents.to_vec(),
                                 domain,
                                 codomain,
                             });
+                            self.signature.ctor_decls.insert(ctor, fid);
                         }
                     }
                 }

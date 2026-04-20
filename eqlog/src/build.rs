@@ -1,4 +1,5 @@
 use crate::algebra::signature::build_signature;
+use crate::algebra::structure::build_structures;
 use crate::ast::{Ast, ModuleId};
 use crate::ast_to_eqlog::populate_eqlog;
 use crate::casing::check_casing;
@@ -471,7 +472,8 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     let casing_err = check_casing(&ast, module).err();
     let binding_errors = check_bindings(&ast, &scopes, module);
     let occurrence_err = check_occurrences(&ast, &scopes, module).err();
-    let (_signature, signature_errors) = build_signature(&ast, &scopes, module);
+    let (signature, signature_errors) = build_signature(&ast, &scopes, module);
+    let (_structures, structure_errors) = build_structures(&ast, &scopes, &signature, module);
 
     let (mut eqlog, identifiers, locations, _module) = populate_eqlog(&ast, module);
     eqlog.close();
@@ -496,6 +498,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     if let Some(error) = binding_errors
         .into_iter()
         .chain(signature_errors)
+        .chain(structure_errors)
         .chain(casing_err)
         .chain(occurrence_err)
         .chain(eqlog_err)
