@@ -1,5 +1,5 @@
+use crate::algebra::build_structure::build_structures;
 use crate::algebra::signature::build_signature;
-use crate::algebra::structure::build_structures;
 use crate::ast::{Ast, ModuleId};
 use crate::ast_to_eqlog::populate_eqlog;
 use crate::casing::check_casing;
