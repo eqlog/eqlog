@@ -132,20 +132,20 @@ impl Signature {
             .expect("model decl was not registered")
     }
 
-    /// Returns the [`PredId`] for `id`, or `None` if the pred decl was
-    /// dropped during pass 2 because one of its arg types failed to resolve.
+    /// Returns the [`PredId`] for `id`, or `None` if the pred decl is
+    /// malformed (e.g. one of its arg types failed to resolve).
     pub fn pred_for_pred_decl(&self, id: PredDeclId) -> Option<PredId> {
         self.pred_decls.get(&id).copied()
     }
 
-    /// Returns the [`FuncId`] for `id`, or `None` if the func decl was
-    /// dropped during pass 2.
+    /// Returns the [`FuncId`] for `id`, or `None` if the func decl is
+    /// malformed.
     pub fn func_for_func_decl(&self, id: FuncDeclId) -> Option<FuncId> {
         self.func_decls.get(&id).copied()
     }
 
-    /// Returns the [`FuncId`] for the constructor `id`, or `None` if it was
-    /// dropped during pass 2.
+    /// Returns the [`FuncId`] for the constructor `id`, or `None` if the
+    /// constructor is malformed.
     pub fn func_for_ctor_decl(&self, id: CtorDeclId) -> Option<FuncId> {
         self.ctor_decls.get(&id).copied()
     }
