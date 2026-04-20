@@ -53,6 +53,7 @@ pub enum TypeKind {
     Mor(TypeId),
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct Type {
     pub kind: TypeKind,
@@ -60,6 +61,7 @@ pub struct Type {
     pub parents: Vec<TypeId>,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct Pred {
     /// Enclosing model types, outermost first.
@@ -67,6 +69,7 @@ pub struct Pred {
     pub arity: Vec<TypeId>,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct Func {
     /// Enclosing model types, outermost first.
@@ -94,39 +97,6 @@ pub struct Signature {
 }
 
 impl Signature {
-    pub fn type_(&self, id: TypeId) -> &Type {
-        &self.types[id.0 as usize]
-    }
-
-    pub fn pred(&self, id: PredId) -> &Pred {
-        &self.preds[id.0 as usize]
-    }
-
-    pub fn func(&self, id: FuncId) -> &Func {
-        &self.funcs[id.0 as usize]
-    }
-
-    pub fn types(&self) -> impl Iterator<Item = (TypeId, &Type)> {
-        self.types
-            .iter()
-            .enumerate()
-            .map(|(i, t)| (TypeId(i as u32), t))
-    }
-
-    pub fn preds(&self) -> impl Iterator<Item = (PredId, &Pred)> {
-        self.preds
-            .iter()
-            .enumerate()
-            .map(|(i, p)| (PredId(i as u32), p))
-    }
-
-    pub fn funcs(&self) -> impl Iterator<Item = (FuncId, &Func)> {
-        self.funcs
-            .iter()
-            .enumerate()
-            .map(|(i, f)| (FuncId(i as u32), f))
-    }
-
     pub fn type_for_type_decl(&self, id: TypeDeclId) -> TypeId {
         *self
             .type_decls
