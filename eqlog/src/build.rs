@@ -1,5 +1,6 @@
 use crate::ast::{Ast, ModuleId};
 use crate::ast_to_eqlog::populate_eqlog;
+use crate::casing::check_casing;
 use crate::debug::display_morphisms;
 use crate::error::*;
 use crate::flat_eqlog::*;
@@ -466,6 +467,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
         }
     };
 
+    let casing_err = check_casing(&ast, module).err();
     let binding_errors = check_bindings(&ast, &scopes, module);
     let occurrence_err = check_occurrences(&ast, &scopes, module).err();
 
@@ -491,6 +493,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     // VariableOccursOnlyOnce) before falling back to source location.
     if let Some(error) = binding_errors
         .into_iter()
+        .chain(casing_err)
         .chain(occurrence_err)
         .chain(eqlog_err)
         .min()

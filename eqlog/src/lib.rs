@@ -2,6 +2,7 @@ use lalrpop_util::lalrpop_mod;
 
 mod ast;
 mod ast_to_eqlog;
+mod casing;
 mod eqlog_util;
 mod grammar_util;
 mod semantics;
