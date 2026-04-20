@@ -33,13 +33,13 @@ use crate::grammar_util::Location;
 use crate::scopes::{Scopes, Symbol};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct TypeId(u32);
+pub struct TypeId(usize);
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct PredId(u32);
+pub struct PredId(usize);
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct FuncId(u32);
+pub struct FuncId(usize);
 
 /// What flavour of declaration a [`Type`] originated from.
 ///
@@ -100,15 +100,15 @@ pub struct Signature {
 
 impl Signature {
     pub fn type_(&self, id: TypeId) -> &Type {
-        &self.types[id.0 as usize]
+        &self.types[id.0]
     }
 
     pub fn pred(&self, id: PredId) -> &Pred {
-        &self.preds[id.0 as usize]
+        &self.preds[id.0]
     }
 
     pub fn func(&self, id: FuncId) -> &Func {
-        &self.funcs[id.0 as usize]
+        &self.funcs[id.0]
     }
 
     pub fn type_for_type_decl(&self, id: TypeDeclId) -> TypeId {
@@ -151,19 +151,19 @@ impl Signature {
     }
 
     fn push_type(&mut self, t: Type) -> TypeId {
-        let id = TypeId(self.types.len() as u32);
+        let id = TypeId(self.types.len());
         self.types.push(t);
         id
     }
 
     fn push_pred(&mut self, p: Pred) -> PredId {
-        let id = PredId(self.preds.len() as u32);
+        let id = PredId(self.preds.len());
         self.preds.push(p);
         id
     }
 
     fn push_func(&mut self, f: Func) -> FuncId {
-        let id = FuncId(self.funcs.len() as u32);
+        let id = FuncId(self.funcs.len());
         self.funcs.push(f);
         id
     }

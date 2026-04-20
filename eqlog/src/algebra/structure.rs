@@ -20,10 +20,10 @@ use crate::ast::*;
 use crate::scopes::{ScopeId, Scopes, Symbol};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ElId(u32);
+pub struct ElId(usize);
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct StructureId(u32);
+pub struct StructureId(usize);
 
 #[allow(dead_code)]
 #[derive(Clone, Debug, Default)]
@@ -51,37 +51,16 @@ pub struct FuncApp {
 
 #[derive(Clone, Debug, Default)]
 pub struct Structure {
-    els: Vec<El>,
-    pred_apps: BTreeSet<PredApp>,
-    func_apps: BTreeMap<FuncApp, ElId>,
+    pub els: Vec<El>,
+    pub pred_apps: BTreeSet<PredApp>,
+    pub func_apps: BTreeMap<FuncApp, ElId>,
 }
 
-#[allow(dead_code)]
 impl Structure {
-    pub fn els(&self) -> &[El] {
-        &self.els
-    }
-
-    pub fn pred_apps(&self) -> &BTreeSet<PredApp> {
-        &self.pred_apps
-    }
-
-    pub fn func_apps(&self) -> &BTreeMap<FuncApp, ElId> {
-        &self.func_apps
-    }
-
     pub fn push_el(&mut self, el: El) -> ElId {
-        let id = ElId(self.els.len() as u32);
+        let id = ElId(self.els.len());
         self.els.push(el);
         id
-    }
-
-    pub fn add_pred_app(&mut self, app: PredApp) {
-        self.pred_apps.insert(app);
-    }
-
-    pub fn set_func_app(&mut self, app: FuncApp, result: ElId) {
-        self.func_apps.insert(app, result);
     }
 }
 
@@ -96,7 +75,7 @@ pub struct Structures {
 #[allow(dead_code)]
 impl Structures {
     pub fn structure(&self, id: StructureId) -> &Structure {
-        &self.arena[id.0 as usize]
+        &self.arena[id.0]
     }
 
     pub fn rule_initial_structure(&self, id: RuleDeclId) -> StructureId {
@@ -121,7 +100,7 @@ impl Structures {
     }
 
     fn push(&mut self, structure: Structure) -> StructureId {
-        let id = StructureId(self.arena.len() as u32);
+        let id = StructureId(self.arena.len());
         self.arena.push(structure);
         id
     }
@@ -345,7 +324,7 @@ impl<'a> Builder<'a> {
             return;
         }
 
-        current.add_pred_app(PredApp {
+        current.pred_apps.insert(PredApp {
             pred: pred_id,
             parents,
             args: arg_els,
@@ -465,7 +444,7 @@ impl<'a> Builder<'a> {
             parents: self.parents_for_type(Some(codomain), state),
         };
         let result_id = current.push_el(result_el);
-        current.set_func_app(
+        current.func_apps.insert(
             FuncApp {
                 func: func_id,
                 parents,
