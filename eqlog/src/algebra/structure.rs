@@ -29,8 +29,7 @@ pub struct StructureId(u32);
 #[derive(Clone, Debug, Default)]
 pub struct El {
     /// The element's type, if known. `None` for fresh wildcards and for
-    /// variable bindings without a `var: Type` annotation. When `Some`, the
-    /// length of `parents` equals the length of the type's own `parents`.
+    /// variable bindings without a `var: Type` annotation.
     pub typ: Option<TypeId>,
     /// Enclosing model elements, outermost first.
     pub parents: Vec<ElId>,
@@ -39,7 +38,6 @@ pub struct El {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PredApp {
     pub pred: PredId,
-    /// Matches the pred's parent model type list.
     pub parents: Vec<ElId>,
     pub args: Vec<ElId>,
 }
@@ -47,7 +45,6 @@ pub struct PredApp {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct FuncApp {
     pub func: FuncId,
-    /// Matches the func's parent model type list.
     pub parents: Vec<ElId>,
     pub args: Vec<ElId>,
 }
