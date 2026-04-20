@@ -225,17 +225,19 @@ struct ScopeBuilder<'a> {
     ordered: BTreeMap<OrderedNodeId, OrderedScopes>,
 }
 
-fn symbol_location(ast: &Ast, sym: Symbol) -> Location {
-    match sym {
-        Symbol::Type(id) => ast.loc(id),
-        Symbol::Pred(id) => ast.loc(id),
-        Symbol::Func(id) => ast.loc(id),
-        Symbol::Enum(id) => ast.loc(id),
-        Symbol::Ctor(id) => ast.loc(id),
-        Symbol::Model(id) => ast.loc(id),
-        Symbol::Rule(id) => ast.loc(id),
-        Symbol::Arg(id) => ast.loc(id),
-        Symbol::Var(id) => ast.loc(id),
+impl Symbol {
+    pub fn location(self, ast: &Ast) -> Location {
+        match self {
+            Symbol::Type(id) => ast.loc(id),
+            Symbol::Pred(id) => ast.loc(id),
+            Symbol::Func(id) => ast.loc(id),
+            Symbol::Enum(id) => ast.loc(id),
+            Symbol::Ctor(id) => ast.loc(id),
+            Symbol::Model(id) => ast.loc(id),
+            Symbol::Rule(id) => ast.loc(id),
+            Symbol::Arg(id) => ast.loc(id),
+            Symbol::Var(id) => ast.loc(id),
+        }
     }
 }
 
@@ -269,8 +271,8 @@ impl<'a> ScopeBuilder<'a> {
         if let Some(existing) = self.scopes[scope.0].symbols.get(name).copied() {
             return Err(CompileError::SymbolDeclaredTwice {
                 name: name.to_string(),
-                first_declaration: symbol_location(self.ast, existing),
-                second_declaration: symbol_location(self.ast, sym),
+                first_declaration: existing.location(self.ast),
+                second_declaration: sym.location(self.ast),
             });
         }
         self.scopes[scope.0].symbols.insert(name.to_string(), sym);
