@@ -1,5 +1,6 @@
 use lalrpop_util::lalrpop_mod;
 
+mod algebra;
 mod ast;
 mod ast_to_eqlog;
 mod casing;
