@@ -4,7 +4,7 @@
 //! Following the AST conventions of the rest of the crate, ids ([`TypeId`],
 //! [`PredId`], [`FuncId`]) are opaque indices into flat `Vec`s on
 //! [`Signature`]. The data structs ([`Type`], [`Pred`], [`Func`]) hold the
-//! algebraic shape only and carry no source-name information; downstream
+//! algebraic shape only and carry no source-name information. Downstream
 //! callers needing names go through the AST.
 //!
 //! [`build_signature`] runs in two passes:
@@ -170,7 +170,7 @@ impl Signature {
 /// Walks `ast` rooted at `module` and produces a [`Signature`] together with
 /// any symbol-resolution errors it encounters in pred/func/ctor signatures.
 ///
-/// Pass 1 (type registration) is total — it sees every type/enum/model decl
+/// Pass 1 (type registration) is total. It sees every type/enum/model decl
 /// regardless of what later resolves. Pass 2 (relation registration) skips
 /// any pred/func/ctor whose arg types or result type fail to resolve, but
 /// records the failure as a [`CompileError`].
@@ -205,7 +205,7 @@ struct Builder<'a> {
 impl<'a> Builder<'a> {
     /// Pass 1: walk the AST registering one [`Type`] per `type`/`enum`/`model`
     /// declaration (plus the mor companion of each model) and recording the
-    /// AST-id → [`TypeId`] lookups on [`Signature`].
+    /// AST-id to [`TypeId`] lookups on [`Signature`].
     fn populate_types(&mut self, decls: &[DeclId], parents: &[TypeId]) {
         for decl in decls {
             match *self.ast.decl(*decl) {
@@ -303,7 +303,7 @@ impl<'a> Builder<'a> {
     }
 
     /// Resolves every arg's type expression. Errors are accumulated for all
-    /// args before returning; the final `Option` is `None` iff at least one
+    /// args before returning. The final `Option` is `None` iff at least one
     /// resolution failed.
     fn resolve_arg_types(&mut self, args: ArgDeclListId) -> Option<Vec<TypeId>> {
         let arg_ids: Vec<ArgDeclId> = self.ast.arg_decl_list(args).args.clone();
@@ -334,8 +334,8 @@ impl<'a> Builder<'a> {
                     Some(Symbol::Enum(ed)) => Some(self.signature.type_for_enum_decl(ed)),
                     Some(Symbol::Model(md)) => Some(self.signature.types_for_model_decl(md).type_),
                     Some(other) => {
-                        // Sig-position ambient accepts type / enum / model;
-                        // mirror eqlog.eql's `should_be_symbol_3(name, type_kind, enum_kind, model_kind, ...)`
+                        // Sig-position ambient accepts type, enum or model.
+                        // Mirror eqlog.eql's `should_be_symbol_3(name, type_kind, enum_kind, model_kind, ...)`
                         // by reporting `type` as the primary expected kind.
                         self.emit_wrong_kind(name, other, SymbolKindCase::TypeSymbol(), used_at);
                         None
