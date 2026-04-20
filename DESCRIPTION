@@ -1,0 +1,11 @@
+Migrate algebra construction to the Rust side
+
+Introduce an `algebra/` submodule on the Rust side that will eventually
+host the per-statement morphism / structure construction currently
+performed in eqlog.eql. The new pass is intended to assign one morphism
+per statement (collapsing the per-branch-path fan-out the eqlog.eql
+implementation produces today).
+
+This branch starts with `algebra::signature`: dependent signatures over
+types, predicates and functions, together with a pass that walks the
+AST and builds a `Signature` from it. Not yet wired into the build.

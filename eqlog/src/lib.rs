@@ -1,5 +1,7 @@
 use lalrpop_util::lalrpop_mod;
 
+#[allow(dead_code)]
+mod algebra;
 mod ast;
 mod ast_to_eqlog;
 mod casing;
