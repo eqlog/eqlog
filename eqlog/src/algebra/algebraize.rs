@@ -1,4 +1,4 @@
-//! Pass that populates a [`Structures`] from the AST.
+//! Turns AST rule bodies into algebraic data.
 //!
 //! [`build_structures`] walks each rule body and assigns a before-structure
 //! and an after-structure to every statement. The after-structure is produced
