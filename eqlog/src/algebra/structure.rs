@@ -54,6 +54,11 @@ pub struct Structure {
     pub els: Vec<El>,
     pub pred_apps: BTreeSet<PredApp>,
     pub func_apps: BTreeMap<FuncApp, ElId>,
+    /// Variable bindings that have entered scope in this structure, keyed by
+    /// the binding's [`VarTermId`] (which [`Scopes`] records as the
+    /// `Symbol::Var` payload). Analogous to `var(Structure, ElName) -> El` in
+    /// eqlog.eql.
+    pub var_els: BTreeMap<VarTermId, ElId>,
 }
 
 impl Structure {
@@ -139,10 +144,6 @@ struct RuleState {
     /// prefix for every El created in this rule and as the parents of any
     /// relation application we emit.
     ambient: Vec<ElId>,
-    /// Resolves repeated variable occurrences to the same El. Keyed by the
-    /// binding's VarTermId (which [`Scopes`] records as the `Symbol::Var`
-    /// payload).
-    var_els: BTreeMap<VarTermId, ElId>,
 }
 
 impl<'a> Builder<'a> {
@@ -177,10 +178,7 @@ impl<'a> Builder<'a> {
         self.structures.rule_initial.insert(rid, initial_id);
 
         let body = self.ast.rule_decl(rid).body.clone();
-        let mut state = RuleState {
-            ambient,
-            var_els: BTreeMap::new(),
-        };
+        let mut state = RuleState { ambient };
         self.walk_stmt_block(&body, initial, &mut state);
     }
 
@@ -270,7 +268,7 @@ impl<'a> Builder<'a> {
                 };
                 let el_id = current.push_el(el);
                 if let Term::Var(vid) = *self.ast.term(term) {
-                    state.var_els.insert(vid, el_id);
+                    current.var_els.insert(vid, el_id);
                 }
             }
         }
@@ -333,7 +331,7 @@ impl<'a> Builder<'a> {
 
     /// Walks `term`, materialising any Els it needs in `current`, and returns
     /// the El that represents this term occurrence. Repeated variable
-    /// occurrences resolve to the same El via `state.var_els`. Wildcards,
+    /// occurrences resolve to the same El via `current.var_els`. Wildcards,
     /// app-term results, and dom/cod/mor-app results each produce a fresh El.
     fn walk_term(&mut self, term: TermId, current: &mut Structure, state: &mut RuleState) -> ElId {
         match *self.ast.term(term) {
@@ -346,7 +344,7 @@ impl<'a> Builder<'a> {
                     // occurrence. Use its own id as the key.
                     _ => vid,
                 };
-                if let Some(&el_id) = state.var_els.get(&binding_id) {
+                if let Some(&el_id) = current.var_els.get(&binding_id) {
                     return el_id;
                 }
                 let el = El {
@@ -354,7 +352,7 @@ impl<'a> Builder<'a> {
                     parents: Vec::new(),
                 };
                 let el_id = current.push_el(el);
-                state.var_els.insert(binding_id, el_id);
+                current.var_els.insert(binding_id, el_id);
                 el_id
             }
             Term::Wildcard => current.push_el(El {
