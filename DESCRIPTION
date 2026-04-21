@@ -1,26 +1,21 @@
-Integrate close into algebraize, per-rule
+Hoist close's pending worklist onto Structure
 
-Structure exposes an equate(a, b, conflicts) method that declares two
-elements equal. It unifies their equivalence classes and merges their
-concrete-type entries (propagating along parents of matching types)
-but does not run the functionality/typing fixed point. close() is
-still the caller's job.
+Structure now owns a `pending_equalities: Vec<(ElId, ElId)>`. equate()
+just pushes onto it and takes no conflicts argument. The local loop
+inside the old union_eagerly moved into a drain_equalities pass that
+close() invokes as part of its fixed point.
 
-algebraize wires this up for IfAtom::Equal, ThenAtom::Equal and the
-`var := term` form of ThenAtom::Defined. build_structures now
-accumulates a Vec<TypeConflict> alongside Structures and returns both.
+functionality and impose_concrete_type no longer call out to
+union_eagerly; they enqueue pairs on pending_equalities and trust the
+next drain pass to apply them. The close fixed point becomes:
+drain -> functionality -> typing, looping until all three report no
+work. On exit pending_equalities is empty.
 
-Rule processing is one rule at a time: walk the rule body (which
-pushes rule_initial plus every stmt's before/after into the arena),
-then close every structure produced during that walk before moving on
-to the next rule.
+Rationale: every equivalence class has at most one ConcreteType, so
+declaring two elements equal forces their parent lists to reconcile
+pointwise. The pending list is the natural queue for that cascade;
+owning it on Structure means equate() is trivial and all conflict
+reporting surfaces in one place inside close().
 
-close() switched to a sink-style `conflicts: &mut Vec<TypeConflict>`
-parameter to match equate().
-
-Structure carries an eqlog_runtime::Unification<ElId> tracking
-equality between elements, and els is a BTreeMap<ElId,
-Option<ConcreteType>> where ConcreteType pairs a non-optional TypeId
-with its parent-model elements. After close, only equivalence-class
-roots remain as els keys and every FuncApp, PredApp, var-el value and
-ConcreteType.parents reference points at a canonical root.
+Previous commits on this branch: Structure, algebraize and the initial
+close pass.

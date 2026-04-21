@@ -171,7 +171,7 @@ impl<'a> Builder<'a> {
                 let EqualAtom { lhs, rhs } = *self.ast.equal_atom(id);
                 let lhs_el = self.walk_term(lhs, current, state);
                 let rhs_el = self.walk_term(rhs, current, state);
-                current.equate(lhs_el, rhs_el, &mut self.conflicts);
+                current.equate(lhs_el, rhs_el);
             }
             IfAtom::Defined(id) => {
                 let DefinedIfAtom { term } = *self.ast.defined_if_atom(id);
@@ -199,14 +199,14 @@ impl<'a> Builder<'a> {
                 let EqualAtom { lhs, rhs } = *self.ast.equal_atom(id);
                 let lhs_el = self.walk_term(lhs, current, state);
                 let rhs_el = self.walk_term(rhs, current, state);
-                current.equate(lhs_el, rhs_el, &mut self.conflicts);
+                current.equate(lhs_el, rhs_el);
             }
             ThenAtom::Defined(id) => {
                 let DefinedThenAtom { var, term } = *self.ast.defined_then_atom(id);
                 let var_el = var.map(|v| self.walk_term(v, current, state));
                 let term_el = self.walk_term(term, current, state);
                 if let Some(var_el) = var_el {
-                    current.equate(var_el, term_el, &mut self.conflicts);
+                    current.equate(var_el, term_el);
                 }
             }
             ThenAtom::Pred(id) => {

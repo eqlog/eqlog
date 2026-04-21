@@ -83,6 +83,11 @@ pub struct Structure {
     /// Equivalence relation on [`ElId`]s. New ElIds start out in their own
     /// class; [`Structure::close`] may merge classes under functionality.
     pub unification: Unification<ElId>,
+    /// Equalities that have been declared (via [`Structure::equate`]) or
+    /// derived internally (from functionality, typing, or parent matching)
+    /// but whose effects on the rest of the structure have not yet been
+    /// drained. Always empty after [`Structure::close`] returns.
+    pub(super) pending_equalities: Vec<(ElId, ElId)>,
 }
 
 impl Default for Structure {
@@ -93,6 +98,7 @@ impl Default for Structure {
             func_apps: BTreeMap::new(),
             var_els: BTreeMap::new(),
             unification: Unification::new(),
+            pending_equalities: Vec::new(),
         }
     }
 }
@@ -118,14 +124,11 @@ impl Structure {
         id
     }
 
-    /// Declares that `a` and `b` are equal. Unifies their equivalence
-    /// classes and merges their concrete-type entries, which in turn
-    /// propagates along the parents of matching types. Does not run the
-    /// functionality/typing fixed point; call [`Structure::close`] when the
-    /// structure is fully built. Any type conflicts discovered while merging
-    /// concrete types are appended to `conflicts`.
-    pub fn equate(&mut self, a: ElId, b: ElId, conflicts: &mut Vec<TypeConflict>) {
-        self.union_eagerly(a, b, conflicts);
+    /// Declares that `a` and `b` are equal. Just enqueues the pair on
+    /// `pending_equalities`; the actual class merge and any cascading
+    /// parent unifications happen during [`Structure::close`].
+    pub fn equate(&mut self, a: ElId, b: ElId) {
+        self.pending_equalities.push((a, b));
     }
 
     /// Closes the structure under functionality and signature-imposed typing.
@@ -137,31 +140,83 @@ impl Structure {
     ///   - `typing`: walk every [`FuncApp`] and [`PredApp`] and impose the
     ///     type each argument (and the result, for funcs) is required to have
     ///     by the signature. If an element already has an incompatible type,
-    ///     record a [`TypeConflict`]; otherwise unify the imposed parents
-    ///     with whatever the element already tracked.
+    ///     record a [`TypeConflict`]; otherwise enqueue the corresponding
+    ///     parent pairs onto `pending_equalities`.
+    ///   - `drain_equalities`: pop pairs from `pending_equalities`, union
+    ///     their classes and merge their `els` entries (which may enqueue
+    ///     further parent pairs until it settles).
     ///
-    /// Unifying two elements also unifies the parents of their types, pending
-    /// work being drained within `union_eagerly`. The fixed point terminates
-    /// because the number of equivalence classes is bounded by the initial
-    /// number of elements.
+    /// The fixed point terminates because the number of equivalence classes
+    /// plus the size of `pending_equalities` strictly decreases across
+    /// iterations that do any work.
     ///
-    /// After the loop exits, every remaining reference in `pred_apps`,
-    /// `var_els` and in [`ConcreteType`] parents is rewritten to the root of
-    /// its class, and non-root entries are dropped from `els`.
+    /// After the loop exits, `pending_equalities` is empty and every
+    /// remaining reference in `pred_apps`, `var_els` and in [`ConcreteType`]
+    /// parents is rewritten to the root of its class, with non-root entries
+    /// dropped from `els`.
     pub fn close(&mut self, signature: &Signature, conflicts: &mut Vec<TypeConflict>) {
         loop {
-            let func_changed = self.functionality(conflicts);
+            let drained = self.drain_equalities(conflicts);
+            let func_changed = self.functionality();
             let type_changed = self.typing(signature, conflicts);
-            if !func_changed && !type_changed {
+            if !drained && !func_changed && !type_changed {
                 break;
             }
         }
         self.canonicalise_refs();
     }
 
-    /// Rebuilds `func_apps` with canonical keys and merges any duplicates.
-    /// Returns true iff at least one merge happened.
-    fn functionality(&mut self, conflicts: &mut Vec<TypeConflict>) -> bool {
+    /// Drains `pending_equalities` down to empty, performing the union and
+    /// merging `els` entries for each pair. Reports type conflicts, and
+    /// enqueues further pairs as parent lists of matching types are
+    /// reconciled. Returns true iff at least one class merge happened.
+    fn drain_equalities(&mut self, conflicts: &mut Vec<TypeConflict>) -> bool {
+        let mut changed = false;
+        while let Some((a, b)) = self.pending_equalities.pop() {
+            let a = self.root(a);
+            let b = self.root(b);
+            if a == b {
+                continue;
+            }
+            changed = true;
+
+            // Deterministic winner: smaller id stays root.
+            let (keep, drop) = if a.0 <= b.0 { (a, b) } else { (b, a) };
+            self.unification.union_roots_into(drop, keep);
+
+            let drop_ct = self.els.remove(&drop).flatten();
+            let keep_ct = self.els.remove(&keep).flatten();
+            let merged = match (keep_ct, drop_ct) {
+                (None, None) => None,
+                (Some(x), None) | (None, Some(x)) => Some(x),
+                (Some(k), Some(d)) => {
+                    if k.typ != d.typ {
+                        conflicts.push(TypeConflict {
+                            el: keep,
+                            types: (k.typ, d.typ),
+                        });
+                        Some(k)
+                    } else {
+                        let n = k.parents.len().min(d.parents.len());
+                        for i in 0..n {
+                            self.pending_equalities.push((k.parents[i], d.parents[i]));
+                        }
+                        Some(ConcreteType {
+                            typ: k.typ,
+                            parents: k.parents,
+                        })
+                    }
+                }
+            };
+            self.els.insert(keep, merged);
+        }
+        changed
+    }
+
+    /// Rebuilds `func_apps` with canonical keys and enqueues an equality on
+    /// `pending_equalities` for every pair of duplicates. Returns true iff
+    /// at least one duplicate was found.
+    fn functionality(&mut self) -> bool {
         let old = mem::take(&mut self.func_apps);
         let mut new: BTreeMap<FuncApp, ElId> = BTreeMap::new();
         let mut changed = false;
@@ -178,7 +233,8 @@ impl Structure {
                 }
                 Entry::Occupied(o) => {
                     let existing = *o.get();
-                    if self.union_eagerly(existing, canon_result, conflicts) {
+                    if existing != canon_result {
+                        self.pending_equalities.push((existing, canon_result));
                         changed = true;
                     }
                 }
@@ -188,10 +244,10 @@ impl Structure {
         changed
     }
 
-    /// Walks each func/pred application and propagates the type the signature
-    /// demands for every argument (and for the result of a func). Returns
-    /// true iff anything changed (either a fresh type got recorded or parent
-    /// elements got unified).
+    /// Walks each func/pred application and propagates the type the
+    /// signature demands for every argument (and for the result of a func).
+    /// Returns true iff anything changed (either a fresh type got recorded
+    /// or a parent pair got enqueued on `pending_equalities`).
     fn typing(&mut self, signature: &Signature, conflicts: &mut Vec<TypeConflict>) -> bool {
         let mut changed = false;
 
@@ -237,10 +293,11 @@ impl Structure {
         changed
     }
 
-    /// Asserts that `el`'s type is `ct`. If the types match, unifies the
-    /// corresponding parents pairwise; if they disagree, records a
-    /// [`TypeConflict`] and leaves the existing entry in place. Returns
-    /// true iff anything was modified.
+    /// Asserts that `el`'s type is `ct`. On mismatch records a
+    /// [`TypeConflict`] and leaves the existing entry in place. On match,
+    /// enqueues the pairwise parent equalities onto `pending_equalities`.
+    /// Returns true iff the entry was freshly populated or at least one
+    /// parent pair was enqueued.
     fn impose_concrete_type(
         &mut self,
         el: ElId,
@@ -264,60 +321,16 @@ impl Structure {
                 let n = existing.parents.len().min(ct.parents.len());
                 let mut changed = false;
                 for i in 0..n {
-                    if self.union_eagerly(existing.parents[i], ct.parents[i], conflicts) {
+                    let a = self.root(existing.parents[i]);
+                    let b = self.root(ct.parents[i]);
+                    if a != b {
+                        self.pending_equalities.push((a, b));
                         changed = true;
                     }
                 }
                 changed
             }
         }
-    }
-
-    /// Unions `a` and `b`, then drains the pending work triggered by merging
-    /// their concrete types (unifying parents pairwise, reporting type
-    /// conflicts). Returns true iff at least one class merge happened.
-    fn union_eagerly(&mut self, a: ElId, b: ElId, conflicts: &mut Vec<TypeConflict>) -> bool {
-        let mut pending: Vec<(ElId, ElId)> = vec![(a, b)];
-        let mut changed = false;
-        while let Some((a, b)) = pending.pop() {
-            let a = self.root(a);
-            let b = self.root(b);
-            if a == b {
-                continue;
-            }
-            changed = true;
-
-            // Deterministic winner: smaller id stays root.
-            let (keep, drop) = if a.0 <= b.0 { (a, b) } else { (b, a) };
-            self.unification.union_roots_into(drop, keep);
-
-            let drop_ct = self.els.remove(&drop).flatten();
-            let keep_ct = self.els.remove(&keep).flatten();
-            let merged = match (keep_ct, drop_ct) {
-                (None, None) => None,
-                (Some(x), None) | (None, Some(x)) => Some(x),
-                (Some(k), Some(d)) => {
-                    if k.typ != d.typ {
-                        conflicts.push(TypeConflict {
-                            el: keep,
-                            types: (k.typ, d.typ),
-                        });
-                        Some(k)
-                    } else {
-                        let n = k.parents.len().min(d.parents.len());
-                        for i in 0..n {
-                            pending.push((k.parents[i], d.parents[i]));
-                        }
-                        Some(ConcreteType {
-                            typ: k.typ,
-                            parents: k.parents,
-                        })
-                    }
-                }
-            };
-            self.els.insert(keep, merged);
-        }
-        changed
     }
 
     /// Final pass: rewrite every remaining reference (pred app parents and
