@@ -1,19 +1,20 @@
-//! Data types for per-rule and per-statement structures, plus the saturation
-//! pass that closes a [`Structure`] under functionality and signature typing.
+//! Per-snapshot algebraic data and the saturation pass that closes it
+//! under functionality and signature typing.
 //!
-//! A [`Structure`] over a [`crate::algebra::signature::Signature`] records the
-//! elements ([`ElId`]), function applications ([`FuncApp`]) and predicate
-//! applications ([`PredApp`]) that exist at a given point in a rule. Elements
-//! either have a known [`ConcreteType`] (a non-optional [`TypeId`] together
-//! with the element's parent model els) or none at all, and equality between
-//! elements is tracked by an embedded
-//! [`eqlog_runtime::Unification`]. Function and predicate applications are
-//! plain data, keyed by their own contents, so two calls with identical
-//! parents and arguments collapse naturally.
+//! A [`Structure`] over a [`crate::algebra::signature::Signature`] records
+//! the elements ([`ElId`]), function applications ([`FuncApp`]) and
+//! predicate applications ([`PredApp`]) that exist at a given point in a
+//! rule. Elements either have a known [`ConcreteType`] (a non-optional
+//! [`TypeId`] together with the element's parent model els) or none at
+//! all, and equality between elements is tracked by an embedded
+//! [`eqlog_runtime::Unification`]. Function and predicate applications
+//! are plain data, keyed by their own contents, so two calls with
+//! identical parents and arguments collapse naturally.
 //!
-//! [`Structures`] holds a flat arena of snapshots plus side tables from
-//! [`RuleDeclId`] and [`StmtId`] to those snapshots. The
-//! [`crate::algebra::algebraize`] module populates it.
+//! Grouping structures by rule, mapping AST nodes to snapshots and
+//! tracking `semantic_el` provenance all live in
+//! [`crate::algebra::algebraize`], not here. This module has no AST
+//! dependency by design.
 
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
@@ -22,7 +23,6 @@ use std::mem;
 use eqlog_runtime::Unification;
 
 use crate::algebra::signature::{FuncId, PredId, Signature, TypeId};
-use crate::ast::{RuleDeclId, StmtId, TermId, VarTermId};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ElId(pub(super) usize);
@@ -39,9 +39,6 @@ impl From<ElId> for u32 {
         el.0 as u32
     }
 }
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct StructureId(usize);
 
 /// A fully-known type for an [`ElId`]: the element's [`TypeId`] together with
 /// the parent-model elements the type depends on. Parents are outermost first
@@ -69,27 +66,22 @@ pub struct FuncApp {
 
 #[derive(Clone, Debug)]
 pub struct Structure {
-    /// Live elements, keyed by [`ElId`]. `None` means the element's type has
-    /// not been determined yet. After [`Structure::close`] only equivalence
-    /// class roots remain as keys.
+    /// Live elements, keyed by [`ElId`]. `None` means the element's type
+    /// has not been determined yet. After [`Structure::close`] only
+    /// equivalence class roots remain as keys.
     pub els: BTreeMap<ElId, Option<ConcreteType>>,
     pub pred_apps: BTreeSet<PredApp>,
     pub func_apps: BTreeMap<FuncApp, ElId>,
-    /// Variable bindings that have entered scope in this structure, keyed by
-    /// the binding's [`VarTermId`] (which [`crate::scopes::Scopes`] records as
-    /// the `Symbol::Var` payload). Analogous to
-    /// `var(Structure, ElName) -> El` in eqlog.eql.
-    pub var_els: BTreeMap<VarTermId, ElId>,
-    /// Many-to-one map from term occurrences to the element they evaluate
-    /// to. Used to attribute locations when reporting errors about an
-    /// element. Analogous to `semantic_el(TermNode, Structure) -> El` in
-    /// eqlog.eql.
-    pub semantic_el: BTreeMap<TermId, ElId>,
+    /// Variable bindings that have entered scope in this structure, keyed
+    /// by the variable's source name. Analogous to
+    /// `var(Structure, ElName) -> El` in eqlog.eql. Within a single rule
+    /// body distinct names always denote distinct bindings, so name-keying
+    /// is equivalent to binding-id-keying.
+    pub var_els: BTreeMap<String, ElId>,
     /// Elements introduced as ambient model instances by the rule's
-    /// enclosing-model scopes. Every entry here has a fixed [`ConcreteType`]
-    /// for the corresponding model type; these elements have no
-    /// [`TermId`] in `semantic_el` and should never legitimately take part
-    /// in a type conflict.
+    /// enclosing-model scopes. These elements have a fixed
+    /// [`ConcreteType`] for the corresponding model type; they are never
+    /// referenced by any surface term.
     pub ambient_model_els: BTreeSet<ElId>,
     /// Equivalence relation on [`ElId`]s. New ElIds start out in their own
     /// class; [`Structure::close`] may merge classes under functionality.
@@ -108,7 +100,6 @@ impl Default for Structure {
             pred_apps: BTreeSet::new(),
             func_apps: BTreeMap::new(),
             var_els: BTreeMap::new(),
-            semantic_el: BTreeMap::new(),
             ambient_model_els: BTreeSet::new(),
             unification: Unification::new(),
             pending_equalities: Vec::new(),
@@ -353,9 +344,8 @@ impl Structure {
     }
 
     /// Final pass: rewrite every remaining reference (pred app parents and
-    /// args, var-el values, semantic-el values, [`ConcreteType`] parents)
-    /// to the root of its current class, and drop non-root entries from
-    /// `els`.
+    /// args, var-el values, [`ConcreteType`] parents) to the root of its
+    /// current class, and drop non-root entries from `els`.
     fn canonicalise_refs(&mut self) {
         let old_pred_apps = mem::take(&mut self.pred_apps);
         for app in old_pred_apps {
@@ -366,14 +356,8 @@ impl Structure {
             });
         }
 
-        let values: Vec<(VarTermId, ElId)> = self.var_els.iter().map(|(k, v)| (*k, *v)).collect();
-        for (k, v) in values {
-            self.var_els.insert(k, self.root(v));
-        }
-
-        let sem: Vec<(TermId, ElId)> = self.semantic_el.iter().map(|(k, v)| (*k, *v)).collect();
-        for (k, v) in sem {
-            self.semantic_el.insert(k, self.root(v));
+        for v in self.var_els.values_mut() {
+            *v = self.unification.root_const(*v);
         }
 
         let old_els = mem::take(&mut self.els);
@@ -410,44 +394,3 @@ fn concrete_type_at(signature: &Signature, tid: TypeId, parents: &[ElId]) -> Opt
     })
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct Structures {
-    pub(super) arena: Vec<Structure>,
-    pub(super) rule_initial: BTreeMap<RuleDeclId, StructureId>,
-    pub(super) stmt_before: BTreeMap<StmtId, StructureId>,
-    pub(super) stmt_after: BTreeMap<StmtId, StructureId>,
-}
-
-#[allow(dead_code)]
-impl Structures {
-    pub fn structure(&self, id: StructureId) -> &Structure {
-        &self.arena[id.0]
-    }
-
-    pub fn rule_initial_structure(&self, id: RuleDeclId) -> StructureId {
-        *self
-            .rule_initial
-            .get(&id)
-            .expect("rule initial structure not populated")
-    }
-
-    pub fn stmt_before_structure(&self, id: StmtId) -> StructureId {
-        *self
-            .stmt_before
-            .get(&id)
-            .expect("stmt before-structure not populated")
-    }
-
-    pub fn stmt_after_structure(&self, id: StmtId) -> StructureId {
-        *self
-            .stmt_after
-            .get(&id)
-            .expect("stmt after-structure not populated")
-    }
-
-    pub(super) fn push(&mut self, structure: Structure) -> StructureId {
-        let id = StructureId(self.arena.len());
-        self.arena.push(structure);
-        id
-    }
-}

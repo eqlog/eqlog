@@ -1,48 +1,75 @@
 //! Turns AST rule bodies into algebraic data.
 //!
-//! [`build_structures`] walks each rule body and assigns a before-structure
-//! and an after-structure to every statement. The after-structure is produced
-//! by cloning the before-structure and adding whatever the statement
-//! contributes. Equality atoms and the `var := term` form of `then` defined
-//! atoms are turned into calls to [`Structure::equate`]. Once a rule has
-//! been walked in full, every structure it produced is closed in place via
-//! [`Structure::close`] before moving on to the next rule.
+//! [`build_structures`] walks each rule body and, for every statement,
+//! records a before-snapshot and an after-snapshot of the rule's
+//! [`Structure`]. Each [`Snapshot`] bundles the [`Structure`] with a
+//! `semantic_el: BTreeMap<TermId, ElId>` that tracks which element every
+//! term occurrence evaluates to. Snapshots are grouped per-rule in
+//! [`RuleStructures`].
+//!
+//! Equality atoms and the `var := term` form of `then` defined atoms are
+//! turned into calls to [`Structure::equate`]. Once a rule has been walked
+//! in full, every structure it produced is closed in place via
+//! [`Structure::close`] and any resulting [`TypeConflict`]s are translated
+//! to [`CompileError`]s using that snapshot's `semantic_el` map.
+
+use std::collections::BTreeMap;
 
 use crate::algebra::signature::{Signature, TypeId};
 use crate::algebra::structure::{
-    ConcreteType, ElId, FuncApp, PredApp, Structure, Structures, TypeConflict,
+    ConcreteType, ElId, FuncApp, PredApp, Structure, TypeConflict,
 };
 use crate::ast::*;
 use crate::error::CompileError;
 use crate::scopes::{ScopeId, Scopes, Symbol};
 
-/// Walks `ast` rooted at `module`, assigns a before-structure and an
-/// after-structure to every statement in every rule, and closes each
-/// structure. The accompanying errors collect every type conflict
-/// discovered while closing.
+/// One algebraic snapshot: the [`Structure`] itself plus a map tracking
+/// which element every term occurrence so far evaluates to. Cloning the
+/// snapshot clones both parts together, so the term-to-element mapping
+/// stays in lockstep with the structure.
+#[derive(Clone, Debug, Default)]
+pub struct Snapshot {
+    pub structure: Structure,
+    /// Many-to-one map from term occurrences to the element they evaluate
+    /// to. Mirrors eqlog.eql's `semantic_el(TermNode, Structure) -> El`.
+    pub semantic_el: BTreeMap<TermId, ElId>,
+}
+
+/// All snapshots produced for one rule: the initial state plus a
+/// before-snapshot and an after-snapshot for every statement in the body.
+#[derive(Clone, Debug, Default)]
+pub struct RuleStructures {
+    pub initial: Snapshot,
+    pub stmt_before: BTreeMap<StmtId, Snapshot>,
+    pub stmt_after: BTreeMap<StmtId, Snapshot>,
+}
+
+/// Walks `ast` rooted at `module`, builds a [`RuleStructures`] for every
+/// rule and closes each of its snapshots in place. The accompanying
+/// errors collect every type conflict discovered while closing.
 pub fn build_structures(
     ast: &Ast,
     scopes: &Scopes,
     signature: &Signature,
     module: ModuleId,
-) -> (Structures, Vec<CompileError>) {
+) -> (BTreeMap<RuleDeclId, RuleStructures>, Vec<CompileError>) {
     let mut builder = Builder {
         ast,
         scopes,
         signature,
-        structures: Structures::default(),
+        rules: BTreeMap::new(),
         errors: Vec::new(),
     };
     let decls = ast.module(module).decls.clone();
     builder.walk_decls(&decls, &[]);
-    (builder.structures, builder.errors)
+    (builder.rules, builder.errors)
 }
 
 struct Builder<'a> {
     ast: &'a Ast,
     scopes: &'a Scopes,
     signature: &'a Signature,
-    structures: Structures,
+    rules: BTreeMap<RuleDeclId, RuleStructures>,
     errors: Vec<CompileError>,
 }
 
@@ -73,92 +100,61 @@ impl<'a> Builder<'a> {
     }
 
     fn walk_rule(&mut self, rid: RuleDeclId, enclosing_models: &[TypeId]) {
-        let start = self.structures.arena.len();
-
-        let mut initial = Structure::default();
+        let mut initial = Snapshot::default();
         let mut ambient: Vec<ElId> = Vec::new();
         for &model_tid in enclosing_models {
-            let el_id = initial.push_el();
-            initial.els.insert(
+            let el_id = initial.structure.push_el();
+            initial.structure.els.insert(
                 el_id,
                 Some(ConcreteType {
                     typ: model_tid,
                     parents: ambient.clone(),
                 }),
             );
-            initial.ambient_model_els.insert(el_id);
+            initial.structure.ambient_model_els.insert(el_id);
             ambient.push(el_id);
         }
 
-        let initial_id = self.structures.push(initial.clone());
-        self.structures.rule_initial.insert(rid, initial_id);
+        let mut rule = RuleStructures {
+            initial: initial.clone(),
+            stmt_before: BTreeMap::new(),
+            stmt_after: BTreeMap::new(),
+        };
 
         let body = self.ast.rule_decl(rid).body.clone();
         let mut state = RuleState { ambient };
-        self.walk_stmt_block(&body, initial, &mut state);
+        self.walk_stmt_block(&body, initial, &mut rule, &mut state);
 
-        // Close every structure that belongs to this rule before moving on,
-        // translating each type conflict to a CompileError using the just-
-        // closed structure's semantic_el map.
-        let end = self.structures.arena.len();
-        for i in start..end {
-            let conflicts = self.structures.arena[i].close(self.signature);
-            for conflict in conflicts {
-                self.errors
-                    .push(self.conflict_to_error(&self.structures.arena[i], conflict));
-            }
+        // Close every snapshot in the rule, translating each type conflict
+        // to a CompileError using that snapshot's own semantic_el.
+        let ast = self.ast;
+        let signature = self.signature;
+        let errors = &mut self.errors;
+        close_snapshot(ast, signature, &mut rule.initial, errors);
+        for snap in rule.stmt_before.values_mut() {
+            close_snapshot(ast, signature, snap, errors);
         }
+        for snap in rule.stmt_after.values_mut() {
+            close_snapshot(ast, signature, snap, errors);
+        }
+
+        self.rules.insert(rid, rule);
     }
 
-    /// Picks a term in `structure.semantic_el` whose element shares a
-    /// class with the conflict's `el` and emits
-    /// [`CompileError::ConflictingTermType`] at that term's location.
-    /// Panics if no such term exists; the message distinguishes ambient
-    /// model elements to help diagnose the invariant violation.
-    fn conflict_to_error(&self, structure: &Structure, conflict: TypeConflict) -> CompileError {
-        let TypeConflict { el, types } = conflict;
-        let term_id = structure
-            .semantic_el
-            .iter()
-            .find(|(_, &e)| structure.unification.root_const(e) == el)
-            .map(|(t, _)| *t)
-            .unwrap_or_else(|| {
-                let is_ambient = structure
-                    .ambient_model_els
-                    .iter()
-                    .any(|&e| structure.unification.root_const(e) == el);
-                panic!(
-                    "type conflict on class {el:?} has no term in semantic_el \
-                     (ambient model el: {is_ambient})"
-                );
-            });
-        CompileError::ConflictingTermType {
-            types: vec![
-                self.signature.type_name(self.ast, types.0),
-                self.signature.type_name(self.ast, types.1),
-            ],
-            location: self.ast.loc(term_id),
-        }
-    }
-
-    /// Walks `stmts` in order, threading structures so that each stmt's
-    /// after-structure becomes the next stmt's before-structure. Returns
-    /// the final after-structure (for the caller to use as its own after,
-    /// if it wants to chain).
+    /// Walks `stmts` in order, threading the current snapshot so each
+    /// stmt's after-snapshot becomes the next stmt's before-snapshot.
+    /// Returns the final after-snapshot.
     fn walk_stmt_block(
         &mut self,
         stmts: &[StmtId],
-        mut current: Structure,
+        mut current: Snapshot,
+        rule: &mut RuleStructures,
         state: &mut RuleState,
-    ) -> Structure {
+    ) -> Snapshot {
         for stmt in stmts {
-            let before_id = self.structures.push(current.clone());
-            self.structures.stmt_before.insert(*stmt, before_id);
-
-            current = self.walk_stmt(*stmt, current, state);
-
-            let after_id = self.structures.push(current.clone());
-            self.structures.stmt_after.insert(*stmt, after_id);
+            rule.stmt_before.insert(*stmt, current.clone());
+            current = self.walk_stmt(*stmt, current, rule, state);
+            rule.stmt_after.insert(*stmt, current.clone());
         }
         current
     }
@@ -166,9 +162,10 @@ impl<'a> Builder<'a> {
     fn walk_stmt(
         &mut self,
         stmt: StmtId,
-        mut current: Structure,
+        mut current: Snapshot,
+        rule: &mut RuleStructures,
         state: &mut RuleState,
-    ) -> Structure {
+    ) -> Snapshot {
         match *self.ast.stmt(stmt) {
             Stmt::If(id) => {
                 let atom = self.ast.if_stmt(id).atom;
@@ -181,10 +178,10 @@ impl<'a> Builder<'a> {
             Stmt::Branch(id) => {
                 let blocks = self.ast.branch_stmt(id).blocks.clone();
                 for block in &blocks {
-                    // Each block starts from the shared before-structure.
+                    // Each block starts from the shared before-snapshot.
                     // We don't merge block afters back into `current` because
                     // that needs morphisms and this pass has none.
-                    self.walk_stmt_block(block, current.clone(), state);
+                    self.walk_stmt_block(block, current.clone(), rule, state);
                 }
             }
             Stmt::Match(id) => {
@@ -197,20 +194,20 @@ impl<'a> Builder<'a> {
                     let MatchCase { pattern, body } = self.ast.match_case(*case).clone();
                     let mut case_current = current.clone();
                     self.walk_term(pattern, &mut case_current, state);
-                    self.walk_stmt_block(&body, case_current, state);
+                    self.walk_stmt_block(&body, case_current, rule, state);
                 }
             }
         }
         current
     }
 
-    fn walk_if_atom(&mut self, atom: IfAtomId, current: &mut Structure, state: &mut RuleState) {
+    fn walk_if_atom(&mut self, atom: IfAtomId, current: &mut Snapshot, state: &mut RuleState) {
         match *self.ast.if_atom(atom) {
             IfAtom::Equal(id) => {
                 let EqualAtom { lhs, rhs } = *self.ast.equal_atom(id);
                 let lhs_el = self.walk_term(lhs, current, state);
                 let rhs_el = self.walk_term(rhs, current, state);
-                current.equate(lhs_el, rhs_el);
+                current.structure.equate(lhs_el, rhs_el);
             }
             IfAtom::Defined(id) => {
                 let DefinedIfAtom { term } = *self.ast.defined_if_atom(id);
@@ -223,30 +220,31 @@ impl<'a> Builder<'a> {
                 let VarIfAtom { term, typ } = *self.ast.var_if_atom(id);
                 let typ_id = self.resolve_type_expr(typ);
                 let ct = self.concrete_type_for(typ_id, state);
-                let el_id = current.push_el();
-                current.els.insert(el_id, ct);
+                let el_id = current.structure.push_el();
+                current.structure.els.insert(el_id, ct);
                 current.semantic_el.insert(term, el_id);
                 if let Term::Var(vid) = *self.ast.term(term) {
-                    current.var_els.insert(vid, el_id);
+                    let name = self.ast.var_term(vid).name.clone();
+                    current.structure.var_els.insert(name, el_id);
                 }
             }
         }
     }
 
-    fn walk_then_atom(&mut self, atom: ThenAtomId, current: &mut Structure, state: &mut RuleState) {
+    fn walk_then_atom(&mut self, atom: ThenAtomId, current: &mut Snapshot, state: &mut RuleState) {
         match *self.ast.then_atom(atom) {
             ThenAtom::Equal(id) => {
                 let EqualAtom { lhs, rhs } = *self.ast.equal_atom(id);
                 let lhs_el = self.walk_term(lhs, current, state);
                 let rhs_el = self.walk_term(rhs, current, state);
-                current.equate(lhs_el, rhs_el);
+                current.structure.equate(lhs_el, rhs_el);
             }
             ThenAtom::Defined(id) => {
                 let DefinedThenAtom { var, term } = *self.ast.defined_then_atom(id);
                 let var_el = var.map(|v| self.walk_term(v, current, state));
                 let term_el = self.walk_term(term, current, state);
                 if let Some(var_el) = var_el {
-                    current.equate(var_el, term_el);
+                    current.structure.equate(var_el, term_el);
                 }
             }
             ThenAtom::Pred(id) => {
@@ -255,7 +253,7 @@ impl<'a> Builder<'a> {
         }
     }
 
-    fn walk_pred_atom(&mut self, id: PredAtomId, current: &mut Structure, state: &mut RuleState) {
+    fn walk_pred_atom(&mut self, id: PredAtomId, current: &mut Snapshot, state: &mut RuleState) {
         let PredAtom { pred, args } = *self.ast.pred_atom(id);
         let arg_terms = self.ast.term_list(args).terms.clone();
         let arg_els: Vec<ElId> = arg_terms
@@ -283,38 +281,31 @@ impl<'a> Builder<'a> {
             return;
         }
 
-        current.pred_apps.insert(PredApp {
+        current.structure.pred_apps.insert(PredApp {
             pred: pred_id,
             parents,
             args: arg_els,
         });
     }
 
-    /// Walks `term`, materialising any Els it needs in `current`, and
-    /// returns the El that represents this term occurrence. Also records
-    /// the mapping in `current.semantic_el`. Repeated variable occurrences
-    /// resolve to the same El via `current.var_els`. Wildcards, app-term
-    /// results, and dom/cod/mor-app results each produce a fresh El.
-    fn walk_term(&mut self, term: TermId, current: &mut Structure, state: &mut RuleState) -> ElId {
+    /// Walks `term`, materialising any Els it needs in the current
+    /// snapshot, records `term -> el` in `semantic_el`, and returns the
+    /// El. Repeated variable occurrences resolve to the same El via
+    /// `var_els` (keyed by source name). Wildcards, app-term results, and
+    /// dom/cod/mor-app results each produce a fresh El.
+    fn walk_term(&mut self, term: TermId, current: &mut Snapshot, state: &mut RuleState) -> ElId {
         let el = match *self.ast.term(term) {
             Term::Var(vid) => {
-                let entry_scope = self.scopes.entry(vid);
                 let name = self.ast.var_term(vid).name.clone();
-                let binding_id = match self.scopes.lookup(entry_scope, &name) {
-                    Some(Symbol::Var(bid)) => bid,
-                    // Var not yet bound at this scope: this is the binding
-                    // occurrence. Use its own id as the key.
-                    _ => vid,
-                };
-                if let Some(&el_id) = current.var_els.get(&binding_id) {
+                if let Some(&el_id) = current.structure.var_els.get(&name) {
                     el_id
                 } else {
-                    let el_id = current.push_el();
-                    current.var_els.insert(binding_id, el_id);
+                    let el_id = current.structure.push_el();
+                    current.structure.var_els.insert(name, el_id);
                     el_id
                 }
             }
-            Term::Wildcard => current.push_el(),
+            Term::Wildcard => current.structure.push_el(),
             Term::App(aid) => {
                 let AppTerm { func, args } = *self.ast.app_term(aid);
                 let arg_terms = self.ast.term_list(args).terms.clone();
@@ -327,18 +318,18 @@ impl<'a> Builder<'a> {
             Term::Dom(did) => {
                 let DomTerm { arg } = *self.ast.dom_term(did);
                 self.walk_term(arg, current, state);
-                current.push_el()
+                current.structure.push_el()
             }
             Term::Cod(cid) => {
                 let CodTerm { arg } = *self.ast.cod_term(cid);
                 self.walk_term(arg, current, state);
-                current.push_el()
+                current.structure.push_el()
             }
             Term::MorApp(mid) => {
                 let MorAppTerm { mor, arg } = *self.ast.mor_app_term(mid);
                 self.walk_term(mor, current, state);
                 self.walk_term(arg, current, state);
-                current.push_el()
+                current.structure.push_el()
             }
         };
         current.semantic_el.insert(term, el);
@@ -353,7 +344,7 @@ impl<'a> Builder<'a> {
         &mut self,
         func: FuncExprId,
         arg_els: Vec<ElId>,
-        current: &mut Structure,
+        current: &mut Snapshot,
         state: &mut RuleState,
     ) -> ElId {
         let resolved = match *self.ast.func_expr(func) {
@@ -370,20 +361,20 @@ impl<'a> Builder<'a> {
         };
 
         let Some(func_id) = resolved else {
-            return current.push_el();
+            return current.structure.push_el();
         };
 
         let func_data = self.signature.func(func_id);
         if arg_els.len() != func_data.domain.len() {
-            return current.push_el();
+            return current.structure.push_el();
         }
 
         let parents = self.parents_prefix(func_data.parents.len(), state);
         let codomain = func_data.codomain;
         let result_ct = self.concrete_type_for(Some(codomain), state);
-        let result_id = current.push_el();
-        current.els.insert(result_id, result_ct);
-        current.func_apps.insert(
+        let result_id = current.structure.push_el();
+        current.structure.els.insert(result_id, result_ct);
+        current.structure.func_apps.insert(
             FuncApp {
                 func: func_id,
                 parents,
@@ -447,5 +438,54 @@ impl<'a> Builder<'a> {
         } else {
             state.ambient[..needed].to_vec()
         }
+    }
+}
+
+fn close_snapshot(
+    ast: &Ast,
+    signature: &Signature,
+    snapshot: &mut Snapshot,
+    errors: &mut Vec<CompileError>,
+) {
+    let conflicts = snapshot.structure.close(signature);
+    for conflict in conflicts {
+        errors.push(conflict_to_error(ast, signature, snapshot, conflict));
+    }
+}
+
+/// Picks a term in `snapshot.semantic_el` whose element shares a class
+/// with the conflict's `el` and emits
+/// [`CompileError::ConflictingTermType`] at that term's location. Panics
+/// if no such term exists; the message distinguishes ambient model
+/// elements to help diagnose the invariant violation.
+fn conflict_to_error(
+    ast: &Ast,
+    signature: &Signature,
+    snapshot: &Snapshot,
+    conflict: TypeConflict,
+) -> CompileError {
+    let TypeConflict { el, types } = conflict;
+    let term_id = snapshot
+        .semantic_el
+        .iter()
+        .find(|(_, &e)| snapshot.structure.unification.root_const(e) == el)
+        .map(|(t, _)| *t)
+        .unwrap_or_else(|| {
+            let is_ambient = snapshot
+                .structure
+                .ambient_model_els
+                .iter()
+                .any(|&e| snapshot.structure.unification.root_const(e) == el);
+            panic!(
+                "type conflict on class {el:?} has no term in semantic_el \
+                 (ambient model el: {is_ambient})"
+            );
+        });
+    CompileError::ConflictingTermType {
+        types: vec![
+            signature.type_name(ast, types.0),
+            signature.type_name(ast, types.1),
+        ],
+        location: ast.loc(term_id),
     }
 }

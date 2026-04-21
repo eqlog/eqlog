@@ -1,5 +1,19 @@
-Rename TypeConflict.cls to TypeConflict.el
+Drop AST dep from structure.rs
 
-Drop the `cls` abbreviation in favour of `el`. Same meaning: the
-equivalence-class root ElId where two incompatible TypeIds landed.
-Updates both the struct and the translator in algebraize.
+structure.rs no longer imports anything from crate::ast. var_els is
+keyed by the variable's source name (String) instead of VarTermId.
+semantic_el moved out of Structure; Structures and StructureId are
+gone.
+
+algebraize.rs now owns the AST-facing plumbing:
+  - Snapshot { structure, semantic_el: BTreeMap<TermId, ElId> }
+    bundles a Structure with its term-to-element provenance.
+  - RuleStructures { initial, stmt_before, stmt_after } groups all
+    snapshots for one rule, keyed by StmtId.
+  - build_structures returns
+    (BTreeMap<RuleDeclId, RuleStructures>, Vec<CompileError>).
+  - Walkers thread &mut Snapshot as `current` and insert Snapshot
+    clones into the RuleStructures tables directly.
+  - close_snapshot closes one snapshot's Structure and translates
+    every returned TypeConflict to a CompileError using that
+    snapshot's own semantic_el.
