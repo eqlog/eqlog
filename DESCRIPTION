@@ -1,15 +1,5 @@
-Move error translation out of structure.rs
+Rename TypeConflict.cls to TypeConflict.el
 
-structure.rs no longer imports `Ast` or `CompileError`. close() takes
-just the signature and returns `Vec<TypeConflict>`, where a
-TypeConflict is `{ cls: ElId, types: (TypeId, TypeId) }`. The helper
-emit_type_conflict is gone; drain_equalities and impose_concrete_type
-push TypeConflicts directly onto the returned vec.
-
-algebraize's Builder owns the translation: for each closed structure,
-it iterates the returned conflicts and builds
-`CompileError::ConflictingTermType` using the structure's own
-`semantic_el` to pick a term and `ast.loc` for the location.
-ambient_model_els stays on Structure so the translator can still
-print its invariant-violation panic with ambient vs non-ambient
-context.
+Drop the `cls` abbreviation in favour of `el`. Same meaning: the
+equivalence-class root ElId where two incompatible TypeIds landed.
+Updates both the struct and the translator in algebraize.

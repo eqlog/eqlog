@@ -117,14 +117,14 @@ impl Default for Structure {
 }
 
 /// A type disagreement discovered during [`Structure::close`]: two
-/// incompatible [`TypeId`]s got assigned to the same equivalence class
-/// rooted at `cls`. The caller is responsible for turning this into a
+/// incompatible [`TypeId`]s got assigned to the equivalence class rooted
+/// at `el`. The caller is responsible for turning this into a
 /// user-facing [`crate::error::CompileError`]; typically it looks up a
-/// term in [`Structure::semantic_el`] whose element falls in `cls` and
-/// emits `ConflictingTermType` at that term's location.
+/// term in [`Structure::semantic_el`] whose element falls in `el`'s class
+/// and emits `ConflictingTermType` at that term's location.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TypeConflict {
-    pub cls: ElId,
+    pub el: ElId,
     pub types: (TypeId, TypeId),
 }
 
@@ -211,7 +211,7 @@ impl Structure {
                 (Some(k), Some(d)) => {
                     if k.typ != d.typ {
                         conflicts.push(TypeConflict {
-                            cls: keep,
+                            el: keep,
                             types: (k.typ, d.typ),
                         });
                         Some(k)
@@ -332,7 +332,7 @@ impl Structure {
             Some(existing) => {
                 if existing.typ != ct.typ {
                     conflicts.push(TypeConflict {
-                        cls: root,
+                        el: root,
                         types: (existing.typ, ct.typ),
                     });
                     return false;

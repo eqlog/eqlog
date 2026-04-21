@@ -110,25 +110,25 @@ impl<'a> Builder<'a> {
         }
     }
 
-    /// Picks a term in `structure.semantic_el` whose element is the
-    /// conflict class and emits [`CompileError::ConflictingTermType`] at
-    /// that term's location. Panics if no such term exists; the message
-    /// distinguishes ambient model elements to help diagnose the invariant
-    /// violation.
+    /// Picks a term in `structure.semantic_el` whose element shares a
+    /// class with the conflict's `el` and emits
+    /// [`CompileError::ConflictingTermType`] at that term's location.
+    /// Panics if no such term exists; the message distinguishes ambient
+    /// model elements to help diagnose the invariant violation.
     fn conflict_to_error(&self, structure: &Structure, conflict: TypeConflict) -> CompileError {
-        let TypeConflict { cls, types } = conflict;
+        let TypeConflict { el, types } = conflict;
         let term_id = structure
             .semantic_el
             .iter()
-            .find(|(_, &el)| structure.unification.root_const(el) == cls)
+            .find(|(_, &e)| structure.unification.root_const(e) == el)
             .map(|(t, _)| *t)
             .unwrap_or_else(|| {
                 let is_ambient = structure
                     .ambient_model_els
                     .iter()
-                    .any(|&e| structure.unification.root_const(e) == cls);
+                    .any(|&e| structure.unification.root_const(e) == el);
                 panic!(
-                    "type conflict on class {cls:?} has no term in semantic_el \
+                    "type conflict on class {el:?} has no term in semantic_el \
                      (ambient model el: {is_ambient})"
                 );
             });
