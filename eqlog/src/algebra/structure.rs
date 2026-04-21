@@ -1,4 +1,4 @@
-//! Per-snapshot algebraic data and the saturation pass that closes it
+//! Per-rule algebraic data and the saturation pass that closes it
 //! under functionality and signature typing.
 //!
 //! A [`Structure`] over a [`crate::algebra::signature::Signature`] records
@@ -11,7 +11,7 @@
 //! are plain data, keyed by their own contents, so two calls with
 //! identical parents and arguments collapse naturally.
 //!
-//! Grouping structures by rule, mapping AST nodes to snapshots and
+//! Grouping structures by rule, mapping AST nodes to structures and
 //! tracking `semantic_el` provenance all live in
 //! [`crate::algebra::algebraize`], not here. This module has no AST
 //! dependency by design.

@@ -3,12 +3,12 @@
 //! [`build_structures`] walks each rule body and assigns a `before`
 //! [`StructureId`] and an `after` [`StructureId`] to every statement,
 //! pointing into per-rule flat vectors of [`Structure`]s and
-//! `semantic_el` maps. Walking happens by mutating the current
-//! [`StructureId`]'s contents in place; a stmt that modifies state
-//! first forks (pushes a clone into the arena) so its `before` entry
-//! stays immutable. As a result `stmt_after[stmt[i]]` and
-//! `stmt_before[stmt[i+1]]` point to the *same* arena entry, avoiding
-//! the double-clone at each transition.
+//! `semantic_el` maps. Walking mutates the current [`StructureId`]'s
+//! contents in place; a stmt that modifies state first forks (pushes
+//! a clone into the arena) so its `before` entry stays immutable. As
+//! a result `stmt_after[stmt[i]]` and `stmt_before[stmt[i+1]]` point
+//! to the *same* arena entry, avoiding the double-clone at each
+//! transition.
 //!
 //! Equality atoms and the `var := term` form of `then` defined atoms
 //! are turned into calls to [`Structure::equate`]. Once a rule has
@@ -32,12 +32,12 @@ use crate::scopes::{ScopeId, Scopes, Symbol};
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct StructureId(pub usize);
 
-/// All algebraic snapshots produced for one rule.
+/// All algebraic structures produced for one rule.
 ///
 /// `structures` and `semantic_els` are parallel flat vectors: index `i`
-/// is the `i`-th snapshot of this rule. Indices flow in mutation order,
-/// so `stmt_after[stmt[i]] == stmt_before[stmt[i+1]]` for consecutive
-/// statements inside the same block.
+/// is the `i`-th structure of this rule. Indices flow in mutation
+/// order, so `stmt_after[stmt[i]] == stmt_before[stmt[i+1]]` for
+/// consecutive statements inside the same block.
 #[derive(Clone, Debug, Default)]
 pub struct RuleStructures {
     pub structures: Vec<Structure>,
@@ -60,7 +60,7 @@ impl RuleStructures {
     }
 
     /// Appends a clone of the entry at `id` and returns the fresh
-    /// [`StructureId`]. Used when a walk is about to mutate a snapshot
+    /// [`StructureId`]. Used when a walk is about to mutate an entry
     /// that is already committed to a before/after map.
     fn fork(&mut self, id: StructureId) -> StructureId {
         let new_id = StructureId(self.structures.len());
@@ -130,7 +130,7 @@ impl<'a> Builder<'a> {
         let initial = rule.push_blank();
         rule.initial = initial;
 
-        // Populate the initial snapshot with ambient-model elements.
+        // Populate the initial structure with ambient-model elements.
         let mut ambient: Vec<ElId> = Vec::new();
         let init = &mut rule.structures[initial.0];
         for &model_tid in enclosing_models {
@@ -150,8 +150,8 @@ impl<'a> Builder<'a> {
         let mut state = RuleState { ambient };
         self.walk_stmt_block(&body, initial, &mut rule, &mut state);
 
-        // Close every snapshot in this rule and translate conflicts
-        // using the snapshot's own semantic_el.
+        // Close every structure in this rule and translate conflicts
+        // using the matching semantic_el.
         let ast = self.ast;
         let signature = self.signature;
         let errors = &mut self.errors;
@@ -173,10 +173,10 @@ impl<'a> Builder<'a> {
         self.rules.insert(rid, rule);
     }
 
-    /// Walks `stmts` in order. `current` is the id of the snapshot that
-    /// represents state just before the next statement; each statement
-    /// updates it to the id of its after-snapshot (typically a fork of
-    /// the before-snapshot). Returns the final after-id.
+    /// Walks `stmts` in order. `current` is the id of the structure
+    /// that represents state just before the next statement; each
+    /// statement updates it to the id of its after-structure (typically
+    /// a fork of the before-structure). Returns the final after-id.
     fn walk_stmt_block(
         &mut self,
         stmts: &[StmtId],
@@ -201,7 +201,7 @@ impl<'a> Builder<'a> {
     ) -> StructureId {
         match *self.ast.stmt(stmt) {
             Stmt::If(id) => {
-                // Fork first: `current` is the committed before-snapshot
+                // Fork first: `current` is the committed before-structure
                 // and must stay immutable.
                 let fork = rule.fork(current);
                 let atom = self.ast.if_stmt(id).atom;
@@ -218,7 +218,7 @@ impl<'a> Builder<'a> {
                 let blocks = self.ast.branch_stmt(id).blocks.clone();
                 for block in &blocks {
                     // Each block starts from a fork of the shared
-                    // before-snapshot. Block afters are not merged back
+                    // before-structure. Block afters are not merged back
                     // because that needs morphisms and this pass has none.
                     let fork = rule.fork(current);
                     self.walk_stmt_block(block, fork, rule, state);
@@ -350,10 +350,10 @@ impl<'a> Builder<'a> {
     }
 
     /// Walks `term`, materialising any Els it needs in the current
-    /// snapshot, records `term -> el` in `semantic_el`, and returns the
-    /// El. Repeated variable occurrences resolve to the same El via
-    /// `var_els` (keyed by source name). Wildcards, app-term results,
-    /// and dom/cod/mor-app results each produce a fresh El.
+    /// structure, records `term -> el` in `semantic_el`, and returns
+    /// the El. Repeated variable occurrences resolve to the same El
+    /// via `var_els` (keyed by source name). Wildcards, app-term
+    /// results, and dom/cod/mor-app results each produce a fresh El.
     fn walk_term(
         &mut self,
         term: TermId,

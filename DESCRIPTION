@@ -1,29 +1,5 @@
-Flatten RuleStructures; drop the Snapshot wrapper
+Drop "snapshot" terminology
 
-RuleStructures now holds two parallel flat vectors alongside the
-before/after index maps:
-
-    pub struct RuleStructures {
-        pub structures: Vec<Structure>,
-        pub semantic_els: Vec<BTreeMap<TermId, ElId>>,
-        pub initial: StructureId,
-        pub stmt_before: BTreeMap<StmtId, StructureId>,
-        pub stmt_after: BTreeMap<StmtId, StructureId>,
-    }
-
-where `StructureId(usize)` indexes both vectors. The invariant
-`structures.len() == semantic_els.len()` is maintained by pushing
-through `push_blank` and `fork` helpers that touch both.
-
-Walking now threads a `StructureId` instead of cloning Structures by
-value. A stmt that mutates state (If/Then, Match scrutinee, branch or
-match-case bodies) forks current into a new arena entry and mutates
-the fork; stmts that have no effect on current's post-state (Branch's
-outer effect) leave it alone. The net effect is that consecutive
-statements within a block share the transition snapshot:
-`stmt_after[stmt[i]] == stmt_before[stmt[i+1]]`, eliminating the
-double clone at each transition.
-
-The Snapshot wrapper is gone. conflict_to_error is a module-level
-function that takes `&Structure` and `&BTreeMap<TermId, ElId>`
-separately, matching the flat-vector layout.
+Purely a naming cleanup: replace every "snapshot" in doc and code
+comments with "structure" (or "entry" where it referred to an arena
+slot). No type names changed in the previous commit's flat layout.
