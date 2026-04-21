@@ -1,4 +1,6 @@
-Trim RuleStructures doc
+Rename fork to clone_structure
 
-Drop the stale "structures/semantic_els indexed by statement position"
-gloss. It was misleading since stmts nest.
+RuleStructures::fork becomes RuleStructures::clone_structure (named
+to not clash with Clone::clone). Local variables renamed away from
+"fork" to match: `next`, `block_start`, `after_scrutinee`,
+`case_start`.

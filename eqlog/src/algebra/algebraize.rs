@@ -40,7 +40,7 @@ impl RuleStructures {
     /// Appends a clone of the entry at `id` and returns the fresh
     /// [`StructureId`]. Used when a walk is about to mutate an entry
     /// that is already committed to a before/after map.
-    fn fork(&mut self, id: StructureId) -> StructureId {
+    fn clone_structure(&mut self, id: StructureId) -> StructureId {
         let new_id = StructureId(self.structures.len());
         self.structures.push(self.structures[id.0].clone());
         self.semantic_els.push(self.semantic_els[id.0].clone());
@@ -154,7 +154,7 @@ impl<'a> Builder<'a> {
     /// Walks `stmts` in order. `current` is the id of the structure
     /// that represents state just before the next statement; each
     /// statement updates it to the id of its after-structure (typically
-    /// a fork of the before-structure). Returns the final after-id.
+    /// a clone of the before-structure). Returns the final after-id.
     fn walk_stmt_block(
         &mut self,
         stmts: &[StmtId],
@@ -179,27 +179,27 @@ impl<'a> Builder<'a> {
     ) -> StructureId {
         match *self.ast.stmt(stmt) {
             Stmt::If(id) => {
-                // Fork first: `current` is the committed before-structure
+                // Clone first: `current` is the committed before-structure
                 // and must stay immutable.
-                let fork = rule.fork(current);
+                let next = rule.clone_structure(current);
                 let atom = self.ast.if_stmt(id).atom;
-                self.walk_if_atom(atom, fork, rule, state);
-                fork
+                self.walk_if_atom(atom, next, rule, state);
+                next
             }
             Stmt::Then(id) => {
-                let fork = rule.fork(current);
+                let next = rule.clone_structure(current);
                 let atom = self.ast.then_stmt(id).atom;
-                self.walk_then_atom(atom, fork, rule, state);
-                fork
+                self.walk_then_atom(atom, next, rule, state);
+                next
             }
             Stmt::Branch(id) => {
                 let blocks = self.ast.branch_stmt(id).blocks.clone();
                 for block in &blocks {
-                    // Each block starts from a fork of the shared
+                    // Each block starts from a clone of the shared
                     // before-structure. Block afters are not merged back
                     // because that needs morphisms and this pass has none.
-                    let fork = rule.fork(current);
-                    self.walk_stmt_block(block, fork, rule, state);
+                    let block_start = rule.clone_structure(current);
+                    self.walk_stmt_block(block, block_start, rule, state);
                 }
                 current
             }
@@ -208,15 +208,15 @@ impl<'a> Builder<'a> {
                 let term = *term;
                 let cases = cases.clone();
                 // Scrutinee is evaluated once, before any case branches.
-                let fork = rule.fork(current);
-                self.walk_term(term, fork, rule, state);
+                let after_scrutinee = rule.clone_structure(current);
+                self.walk_term(term, after_scrutinee, rule, state);
                 for case in &cases {
                     let MatchCase { pattern, body } = self.ast.match_case(*case).clone();
-                    let case_fork = rule.fork(fork);
-                    self.walk_term(pattern, case_fork, rule, state);
-                    self.walk_stmt_block(&body, case_fork, rule, state);
+                    let case_start = rule.clone_structure(after_scrutinee);
+                    self.walk_term(pattern, case_start, rule, state);
+                    self.walk_stmt_block(&body, case_start, rule, state);
                 }
-                fork
+                after_scrutinee
             }
         }
     }
