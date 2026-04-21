@@ -67,11 +67,15 @@ impl<'a> Builder<'a> {
         let mut initial = Structure::default();
         let mut ambient: Vec<ElId> = Vec::new();
         for &model_tid in enclosing_models {
-            let ct = ConcreteType {
-                typ: model_tid,
-                parents: ambient.clone(),
-            };
-            ambient.push(initial.push_el(Some(ct)));
+            let el_id = initial.push_el();
+            initial.els.insert(
+                el_id,
+                Some(ConcreteType {
+                    typ: model_tid,
+                    parents: ambient.clone(),
+                }),
+            );
+            ambient.push(el_id);
         }
 
         let initial_id = self.structures.push(initial.clone());
@@ -163,7 +167,8 @@ impl<'a> Builder<'a> {
                 let VarIfAtom { term, typ } = *self.ast.var_if_atom(id);
                 let typ_id = self.resolve_type_expr(typ);
                 let ct = self.concrete_type_for(typ_id, state);
-                let el_id = current.push_el(ct);
+                let el_id = current.push_el();
+                current.els.insert(el_id, ct);
                 if let Term::Var(vid) = *self.ast.term(term) {
                     current.var_els.insert(vid, el_id);
                 }
@@ -244,11 +249,11 @@ impl<'a> Builder<'a> {
                 if let Some(&el_id) = current.var_els.get(&binding_id) {
                     return el_id;
                 }
-                let el_id = current.push_el(None);
+                let el_id = current.push_el();
                 current.var_els.insert(binding_id, el_id);
                 el_id
             }
-            Term::Wildcard => current.push_el(None),
+            Term::Wildcard => current.push_el(),
             Term::App(aid) => {
                 let AppTerm { func, args } = *self.ast.app_term(aid);
                 let arg_terms = self.ast.term_list(args).terms.clone();
@@ -261,18 +266,18 @@ impl<'a> Builder<'a> {
             Term::Dom(did) => {
                 let DomTerm { arg } = *self.ast.dom_term(did);
                 self.walk_term(arg, current, state);
-                current.push_el(None)
+                current.push_el()
             }
             Term::Cod(cid) => {
                 let CodTerm { arg } = *self.ast.cod_term(cid);
                 self.walk_term(arg, current, state);
-                current.push_el(None)
+                current.push_el()
             }
             Term::MorApp(mid) => {
                 let MorAppTerm { mor, arg } = *self.ast.mor_app_term(mid);
                 self.walk_term(mor, current, state);
                 self.walk_term(arg, current, state);
-                current.push_el(None)
+                current.push_el()
             }
         }
     }
@@ -302,18 +307,19 @@ impl<'a> Builder<'a> {
         };
 
         let Some(func_id) = resolved else {
-            return current.push_el(None);
+            return current.push_el();
         };
 
         let func_data = self.signature.func(func_id);
         if arg_els.len() != func_data.domain.len() {
-            return current.push_el(None);
+            return current.push_el();
         }
 
         let parents = self.parents_prefix(func_data.parents.len(), state);
         let codomain = func_data.codomain;
         let result_ct = self.concrete_type_for(Some(codomain), state);
-        let result_id = current.push_el(result_ct);
+        let result_id = current.push_el();
+        current.els.insert(result_id, result_ct);
         current.func_apps.insert(
             FuncApp {
                 func: func_id,
