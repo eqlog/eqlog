@@ -1,18 +1,15 @@
-Surface CompileError from Structure::close
+Track per-term provenance on Structure
 
-TypeConflict is gone. close() takes the AST and a
-`errors: &mut Vec<CompileError>` sink, and emits
-`CompileError::ConflictingTermType` directly when merging two concrete
-types with different TypeIds.
+Structure now carries a many-to-one map
+`semantic_el: BTreeMap<TermId, ElId>`, mirroring eqlog.eql's
+`semantic_el(TermNode, Structure) -> El`. algebraize records every
+term occurrence it walks (including the explicit var in an IfAtom::Var
+binding). canonicalise_refs rewrites its values to class roots, same
+as var_els.
 
-Added `Signature::type_name(&Ast, TypeId) -> String` for formatting the
-`types` field on the error. Morphism companions render as `Mor<...>`.
-
-Locations are still a placeholder (`Location(0, 0)`) with a TODO
-explaining that the self-hosted pass emits one error per source term
-that resolves to the conflicting class, which needs per-element
-provenance tracking on Structure.
-
-build_structures returns (Structures, Vec<CompileError>); build.rs
-destructures both but doesn't yet fold the errors into the main
-stream (same TODO reason).
+emit_type_conflict moved onto Structure as a method. On detecting a
+type mismatch, it iterates semantic_el and emits one
+CompileError::ConflictingTermType per term whose element is currently
+in the conflicting class, using `ast.loc(term_id)` as the error
+location. A fallback with Location(0, 0) is kept for classes with no
+recorded term (e.g. ambient model elements).

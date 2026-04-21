@@ -185,6 +185,7 @@ impl<'a> Builder<'a> {
                 let ct = self.concrete_type_for(typ_id, state);
                 let el_id = current.push_el();
                 current.els.insert(el_id, ct);
+                current.semantic_el.insert(term, el_id);
                 if let Term::Var(vid) = *self.ast.term(term) {
                     current.var_els.insert(vid, el_id);
                 }
@@ -249,12 +250,13 @@ impl<'a> Builder<'a> {
         });
     }
 
-    /// Walks `term`, materialising any Els it needs in `current`, and returns
-    /// the El that represents this term occurrence. Repeated variable
-    /// occurrences resolve to the same El via `current.var_els`. Wildcards,
-    /// app-term results, and dom/cod/mor-app results each produce a fresh El.
+    /// Walks `term`, materialising any Els it needs in `current`, and
+    /// returns the El that represents this term occurrence. Also records
+    /// the mapping in `current.semantic_el`. Repeated variable occurrences
+    /// resolve to the same El via `current.var_els`. Wildcards, app-term
+    /// results, and dom/cod/mor-app results each produce a fresh El.
     fn walk_term(&mut self, term: TermId, current: &mut Structure, state: &mut RuleState) -> ElId {
-        match *self.ast.term(term) {
+        let el = match *self.ast.term(term) {
             Term::Var(vid) => {
                 let entry_scope = self.scopes.entry(vid);
                 let name = self.ast.var_term(vid).name.clone();
@@ -265,11 +267,12 @@ impl<'a> Builder<'a> {
                     _ => vid,
                 };
                 if let Some(&el_id) = current.var_els.get(&binding_id) {
-                    return el_id;
+                    el_id
+                } else {
+                    let el_id = current.push_el();
+                    current.var_els.insert(binding_id, el_id);
+                    el_id
                 }
-                let el_id = current.push_el();
-                current.var_els.insert(binding_id, el_id);
-                el_id
             }
             Term::Wildcard => current.push_el(),
             Term::App(aid) => {
@@ -297,7 +300,9 @@ impl<'a> Builder<'a> {
                 self.walk_term(arg, current, state);
                 current.push_el()
             }
-        }
+        };
+        current.semantic_el.insert(term, el);
+        el
     }
 
     /// Resolves the func expression and, on success, emits the [`FuncApp`]

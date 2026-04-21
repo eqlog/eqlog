@@ -22,7 +22,7 @@ use std::mem;
 use eqlog_runtime::Unification;
 
 use crate::algebra::signature::{FuncId, PredId, Signature, TypeId};
-use crate::ast::{Ast, RuleDeclId, StmtId, VarTermId};
+use crate::ast::{Ast, RuleDeclId, StmtId, TermId, VarTermId};
 use crate::error::CompileError;
 use crate::grammar_util::Location;
 
@@ -82,6 +82,11 @@ pub struct Structure {
     /// the `Symbol::Var` payload). Analogous to
     /// `var(Structure, ElName) -> El` in eqlog.eql.
     pub var_els: BTreeMap<VarTermId, ElId>,
+    /// Many-to-one map from term occurrences to the element they evaluate
+    /// to. Used to attribute locations when reporting errors about an
+    /// element. Analogous to `semantic_el(TermNode, Structure) -> El` in
+    /// eqlog.eql.
+    pub semantic_el: BTreeMap<TermId, ElId>,
     /// Equivalence relation on [`ElId`]s. New ElIds start out in their own
     /// class; [`Structure::close`] may merge classes under functionality.
     pub unification: Unification<ElId>,
@@ -99,6 +104,7 @@ impl Default for Structure {
             pred_apps: BTreeSet::new(),
             func_apps: BTreeMap::new(),
             var_els: BTreeMap::new(),
+            semantic_el: BTreeMap::new(),
             unification: Unification::new(),
             pending_equalities: Vec::new(),
         }
@@ -192,7 +198,7 @@ impl Structure {
                 (Some(x), None) | (None, Some(x)) => Some(x),
                 (Some(k), Some(d)) => {
                     if k.typ != d.typ {
-                        emit_type_conflict(signature, ast, k.typ, d.typ, errors);
+                        self.emit_type_conflict(signature, ast, keep, k.typ, d.typ, errors);
                         Some(k)
                     } else {
                         let n = k.parents.len().min(d.parents.len());
@@ -317,7 +323,7 @@ impl Structure {
             }
             Some(existing) => {
                 if existing.typ != ct.typ {
-                    emit_type_conflict(signature, ast, existing.typ, ct.typ, errors);
+                    self.emit_type_conflict(signature, ast, root, existing.typ, ct.typ, errors);
                     return false;
                 }
                 let n = existing.parents.len().min(ct.parents.len());
@@ -336,8 +342,9 @@ impl Structure {
     }
 
     /// Final pass: rewrite every remaining reference (pred app parents and
-    /// args, var-el values, [`ConcreteType`] parents) to the root of its
-    /// current class, and drop non-root entries from `els`.
+    /// args, var-el values, semantic-el values, [`ConcreteType`] parents)
+    /// to the root of its current class, and drop non-root entries from
+    /// `els`.
     fn canonicalise_refs(&mut self) {
         let old_pred_apps = mem::take(&mut self.pred_apps);
         for app in old_pred_apps {
@@ -348,10 +355,14 @@ impl Structure {
             });
         }
 
-        let values: Vec<(VarTermId, ElId)> =
-            self.var_els.iter().map(|(k, v)| (*k, *v)).collect();
+        let values: Vec<(VarTermId, ElId)> = self.var_els.iter().map(|(k, v)| (*k, *v)).collect();
         for (k, v) in values {
             self.var_els.insert(k, self.root(v));
+        }
+
+        let sem: Vec<(TermId, ElId)> = self.semantic_el.iter().map(|(k, v)| (*k, *v)).collect();
+        for (k, v) in sem {
+            self.semantic_el.insert(k, self.root(v));
         }
 
         let old_els = mem::take(&mut self.els);
@@ -371,6 +382,38 @@ impl Structure {
     fn root(&self, id: ElId) -> ElId {
         self.unification.root_const(id)
     }
+
+    /// Emits one [`CompileError::ConflictingTermType`] per term whose
+    /// recorded element falls in the class `cls`. Falls back to a single
+    /// error with a placeholder location if no term maps to the class
+    /// (e.g. an anonymous ambient-model element).
+    fn emit_type_conflict(
+        &self,
+        signature: &Signature,
+        ast: &Ast,
+        cls: ElId,
+        a: TypeId,
+        b: TypeId,
+        errors: &mut Vec<CompileError>,
+    ) {
+        let types = vec![signature.type_name(ast, a), signature.type_name(ast, b)];
+        let mut emitted = false;
+        for (term_id, &el) in &self.semantic_el {
+            if self.unification.root_const(el) == cls {
+                errors.push(CompileError::ConflictingTermType {
+                    types: types.clone(),
+                    location: ast.loc(*term_id),
+                });
+                emitted = true;
+            }
+        }
+        if !emitted {
+            errors.push(CompileError::ConflictingTermType {
+                types,
+                location: Location(0, 0),
+            });
+        }
+    }
 }
 
 /// Materialises the [`ConcreteType`] a given [`TypeId`] has inside a relation
@@ -386,24 +429,6 @@ fn concrete_type_at(signature: &Signature, tid: TypeId, parents: &[ElId]) -> Opt
         typ: tid,
         parents: parents[..n].to_vec(),
     })
-}
-
-/// Emits a [`CompileError::ConflictingTermType`] for two disagreeing types.
-// TODO: we emit one error per conflict with a placeholder location. The
-// self-hosted pass emits one error per source term whose element resolves
-// to the conflicting class; wiring that up requires per-element provenance
-// tracking on Structure.
-fn emit_type_conflict(
-    signature: &Signature,
-    ast: &Ast,
-    a: TypeId,
-    b: TypeId,
-    errors: &mut Vec<CompileError>,
-) {
-    errors.push(CompileError::ConflictingTermType {
-        types: vec![signature.type_name(ast, a), signature.type_name(ast, b)],
-        location: Location(0, 0),
-    });
 }
 
 #[derive(Clone, Debug, Default)]
