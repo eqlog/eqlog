@@ -24,7 +24,6 @@ use eqlog_runtime::Unification;
 use crate::algebra::signature::{FuncId, PredId, Signature, TypeId};
 use crate::ast::{Ast, RuleDeclId, StmtId, TermId, VarTermId};
 use crate::error::CompileError;
-use crate::grammar_util::Location;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ElId(pub(super) usize);
@@ -87,6 +86,12 @@ pub struct Structure {
     /// element. Analogous to `semantic_el(TermNode, Structure) -> El` in
     /// eqlog.eql.
     pub semantic_el: BTreeMap<TermId, ElId>,
+    /// Elements introduced as ambient model instances by the rule's
+    /// enclosing-model scopes. Every entry here has a fixed [`ConcreteType`]
+    /// for the corresponding model type; these elements have no
+    /// [`TermId`] in `semantic_el` and should never legitimately take part
+    /// in a type conflict.
+    pub ambient_model_els: BTreeSet<ElId>,
     /// Equivalence relation on [`ElId`]s. New ElIds start out in their own
     /// class; [`Structure::close`] may merge classes under functionality.
     pub unification: Unification<ElId>,
@@ -105,6 +110,7 @@ impl Default for Structure {
             func_apps: BTreeMap::new(),
             var_els: BTreeMap::new(),
             semantic_el: BTreeMap::new(),
+            ambient_model_els: BTreeSet::new(),
             unification: Unification::new(),
             pending_equalities: Vec::new(),
         }
@@ -383,10 +389,11 @@ impl Structure {
         self.unification.root_const(id)
     }
 
-    /// Emits one [`CompileError::ConflictingTermType`] per term whose
-    /// recorded element falls in the class `cls`. Falls back to a single
-    /// error with a placeholder location if no term maps to the class
-    /// (e.g. an anonymous ambient-model element).
+    /// Emits a single [`CompileError::ConflictingTermType`] attributed to
+    /// some term in `semantic_el` whose element falls in `cls`. Panics if
+    /// no such term exists; the panic message distinguishes ambient model
+    /// elements from ordinary ones to help diagnose the invariant
+    /// violation.
     fn emit_type_conflict(
         &self,
         signature: &Signature,
@@ -396,23 +403,25 @@ impl Structure {
         b: TypeId,
         errors: &mut Vec<CompileError>,
     ) {
-        let types = vec![signature.type_name(ast, a), signature.type_name(ast, b)];
-        let mut emitted = false;
-        for (term_id, &el) in &self.semantic_el {
-            if self.unification.root_const(el) == cls {
-                errors.push(CompileError::ConflictingTermType {
-                    types: types.clone(),
-                    location: ast.loc(*term_id),
-                });
-                emitted = true;
-            }
-        }
-        if !emitted {
-            errors.push(CompileError::ConflictingTermType {
-                types,
-                location: Location(0, 0),
+        let term_id = self
+            .semantic_el
+            .iter()
+            .find(|(_, &el)| self.unification.root_const(el) == cls)
+            .map(|(t, _)| *t)
+            .unwrap_or_else(|| {
+                let is_ambient = self
+                    .ambient_model_els
+                    .iter()
+                    .any(|&e| self.unification.root_const(e) == cls);
+                panic!(
+                    "type conflict on class {cls:?} has no term in semantic_el \
+                     (ambient model el: {is_ambient})"
+                );
             });
-        }
+        errors.push(CompileError::ConflictingTermType {
+            types: vec![signature.type_name(ast, a), signature.type_name(ast, b)],
+            location: ast.loc(term_id),
+        });
     }
 }
 

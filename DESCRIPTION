@@ -1,15 +1,13 @@
-Track per-term provenance on Structure
+Track ambient model els on Structure
 
-Structure now carries a many-to-one map
-`semantic_el: BTreeMap<TermId, ElId>`, mirroring eqlog.eql's
-`semantic_el(TermNode, Structure) -> El`. algebraize records every
-term occurrence it walks (including the explicit var in an IfAtom::Var
-binding). canonicalise_refs rewrites its values to class roots, same
-as var_els.
+Structure grows `pub ambient_model_els: BTreeSet<ElId>`. walk_rule
+inserts the enclosing-model elements it seeds there. These are the
+only elements that have no recorded term in semantic_el and, by
+construction, never legitimately land in a type conflict class.
 
-emit_type_conflict moved onto Structure as a method. On detecting a
-type mismatch, it iterates semantic_el and emits one
-CompileError::ConflictingTermType per term whose element is currently
-in the conflicting class, using `ast.loc(term_id)` as the error
-location. A fallback with Location(0, 0) is kept for classes with no
-recorded term (e.g. ambient model elements).
+emit_type_conflict simplifies: it picks one term in semantic_el
+whose class is the conflict class and emits a single
+CompileError::ConflictingTermType at that term's location. If no
+such term exists the function panics, distinguishing ambient from
+non-ambient classes in the message to help diagnose the invariant
+violation. No fallback Location(0, 0) anymore.

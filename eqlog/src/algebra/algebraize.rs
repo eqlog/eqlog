@@ -84,6 +84,7 @@ impl<'a> Builder<'a> {
                     parents: ambient.clone(),
                 }),
             );
+            initial.ambient_model_els.insert(el_id);
             ambient.push(el_id);
         }
 
