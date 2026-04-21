@@ -1,21 +1,4 @@
 //! Turns AST rule bodies into algebraic data.
-//!
-//! [`build_structures`] walks each rule body and assigns a `before`
-//! [`StructureId`] and an `after` [`StructureId`] to every statement,
-//! pointing into per-rule flat vectors of [`Structure`]s and
-//! `semantic_el` maps. Walking mutates the current [`StructureId`]'s
-//! contents in place; a stmt that modifies state first forks (pushes
-//! a clone into the arena) so its `before` entry stays immutable. As
-//! a result `stmt_after[stmt[i]]` and `stmt_before[stmt[i+1]]` point
-//! to the *same* arena entry, avoiding the double-clone at each
-//! transition.
-//!
-//! Equality atoms and the `var := term` form of `then` defined atoms
-//! are turned into calls to [`Structure::equate`]. Once a rule has
-//! been walked in full, every structure it produced is closed in place
-//! via [`Structure::close`] and any resulting [`TypeConflict`]s are
-//! translated to [`CompileError`]s using that structure's own
-//! `semantic_el` map.
 
 use std::collections::BTreeMap;
 

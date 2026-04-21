@@ -1,5 +1,4 @@
-Drop "snapshot" terminology
+Trim algebraize module doc
 
-Purely a naming cleanup: replace every "snapshot" in doc and code
-comments with "structure" (or "entry" where it referred to an arena
-slot). No type names changed in the previous commit's flat layout.
+Keeps only the one-line summary; the rest was restating what the
+types and function names already say.
