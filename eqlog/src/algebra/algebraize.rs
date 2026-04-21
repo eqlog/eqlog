@@ -9,32 +9,31 @@
 //! [`Structure::close`] before moving on to the next rule.
 
 use crate::algebra::signature::{Signature, TypeId};
-use crate::algebra::structure::{
-    ConcreteType, ElId, FuncApp, PredApp, Structure, Structures, TypeConflict,
-};
+use crate::algebra::structure::{ConcreteType, ElId, FuncApp, PredApp, Structure, Structures};
 use crate::ast::*;
+use crate::error::CompileError;
 use crate::scopes::{ScopeId, Scopes, Symbol};
 
 /// Walks `ast` rooted at `module`, assigns a before-structure and an
 /// after-structure to every statement in every rule, and closes each
-/// structure. The accompanying [`TypeConflict`]s collect every type
-/// disagreement discovered along the way.
+/// structure. The accompanying errors collect every type conflict
+/// discovered while closing.
 pub fn build_structures(
     ast: &Ast,
     scopes: &Scopes,
     signature: &Signature,
     module: ModuleId,
-) -> (Structures, Vec<TypeConflict>) {
+) -> (Structures, Vec<CompileError>) {
     let mut builder = Builder {
         ast,
         scopes,
         signature,
         structures: Structures::default(),
-        conflicts: Vec::new(),
+        errors: Vec::new(),
     };
     let decls = ast.module(module).decls.clone();
     builder.walk_decls(&decls, &[]);
-    (builder.structures, builder.conflicts)
+    (builder.structures, builder.errors)
 }
 
 struct Builder<'a> {
@@ -42,7 +41,7 @@ struct Builder<'a> {
     scopes: &'a Scopes,
     signature: &'a Signature,
     structures: Structures,
-    conflicts: Vec<TypeConflict>,
+    errors: Vec<CompileError>,
 }
 
 /// Per-rule state the stmt walker threads through recursive calls.
@@ -98,7 +97,7 @@ impl<'a> Builder<'a> {
         // Close every structure that belongs to this rule before moving on.
         let end = self.structures.arena.len();
         for i in start..end {
-            self.structures.arena[i].close(self.signature, &mut self.conflicts);
+            self.structures.arena[i].close(self.signature, self.ast, &mut self.errors);
         }
     }
 

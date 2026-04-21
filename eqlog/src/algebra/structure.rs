@@ -22,7 +22,9 @@ use std::mem;
 use eqlog_runtime::Unification;
 
 use crate::algebra::signature::{FuncId, PredId, Signature, TypeId};
-use crate::ast::{RuleDeclId, StmtId, VarTermId};
+use crate::ast::{Ast, RuleDeclId, StmtId, VarTermId};
+use crate::error::CompileError;
+use crate::grammar_util::Location;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ElId(pub(super) usize);
@@ -103,16 +105,6 @@ impl Default for Structure {
     }
 }
 
-/// A type conflict detected while closing a [`Structure`]: element `el`
-/// ended up carrying two incompatible [`TypeId`]s. Caller translates this
-/// into a user-facing error.
-#[allow(dead_code)]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TypeConflict {
-    pub el: ElId,
-    pub types: (TypeId, TypeId),
-}
-
 impl Structure {
     /// Allocates a fresh [`ElId`], registers it with the unification and
     /// records it in `els` with no concrete type yet. Callers that know a
@@ -138,10 +130,10 @@ impl Structure {
     ///   - `functionality`: canonicalise every [`FuncApp`] key and merge
     ///     duplicates by unioning their result elements.
     ///   - `typing`: walk every [`FuncApp`] and [`PredApp`] and impose the
-    ///     type each argument (and the result, for funcs) is required to have
-    ///     by the signature. If an element already has an incompatible type,
-    ///     record a [`TypeConflict`]; otherwise enqueue the corresponding
-    ///     parent pairs onto `pending_equalities`.
+    ///     type each argument (and the result, for funcs) is required to
+    ///     have by the signature. If an element already has an incompatible
+    ///     type, emit a [`CompileError::ConflictingTermType`]; otherwise
+    ///     enqueue the corresponding parent pairs onto `pending_equalities`.
     ///   - `drain_equalities`: pop pairs from `pending_equalities`, union
     ///     their classes and merge their `els` entries (which may enqueue
     ///     further parent pairs until it settles).
@@ -154,11 +146,15 @@ impl Structure {
     /// remaining reference in `pred_apps`, `var_els` and in [`ConcreteType`]
     /// parents is rewritten to the root of its class, with non-root entries
     /// dropped from `els`.
-    pub fn close(&mut self, signature: &Signature, conflicts: &mut Vec<TypeConflict>) {
+    ///
+    /// `ast` is used only for resolving type names when formatting error
+    /// messages. Errors carry a placeholder location until per-element
+    /// provenance is wired up; see the TODO in `emit_type_conflict`.
+    pub fn close(&mut self, signature: &Signature, ast: &Ast, errors: &mut Vec<CompileError>) {
         loop {
-            let drained = self.drain_equalities(conflicts);
+            let drained = self.drain_equalities(signature, ast, errors);
             let func_changed = self.functionality();
-            let type_changed = self.typing(signature, conflicts);
+            let type_changed = self.typing(signature, ast, errors);
             if !drained && !func_changed && !type_changed {
                 break;
             }
@@ -167,10 +163,15 @@ impl Structure {
     }
 
     /// Drains `pending_equalities` down to empty, performing the union and
-    /// merging `els` entries for each pair. Reports type conflicts, and
-    /// enqueues further pairs as parent lists of matching types are
-    /// reconciled. Returns true iff at least one class merge happened.
-    fn drain_equalities(&mut self, conflicts: &mut Vec<TypeConflict>) -> bool {
+    /// merging `els` entries for each pair. Emits conflicts and enqueues
+    /// further pairs as parent lists of matching types are reconciled.
+    /// Returns true iff at least one class merge happened.
+    fn drain_equalities(
+        &mut self,
+        signature: &Signature,
+        ast: &Ast,
+        errors: &mut Vec<CompileError>,
+    ) -> bool {
         let mut changed = false;
         while let Some((a, b)) = self.pending_equalities.pop() {
             let a = self.root(a);
@@ -191,10 +192,7 @@ impl Structure {
                 (Some(x), None) | (None, Some(x)) => Some(x),
                 (Some(k), Some(d)) => {
                     if k.typ != d.typ {
-                        conflicts.push(TypeConflict {
-                            el: keep,
-                            types: (k.typ, d.typ),
-                        });
+                        emit_type_conflict(signature, ast, k.typ, d.typ, errors);
                         Some(k)
                     } else {
                         let n = k.parents.len().min(d.parents.len());
@@ -248,7 +246,12 @@ impl Structure {
     /// signature demands for every argument (and for the result of a func).
     /// Returns true iff anything changed (either a fresh type got recorded
     /// or a parent pair got enqueued on `pending_equalities`).
-    fn typing(&mut self, signature: &Signature, conflicts: &mut Vec<TypeConflict>) -> bool {
+    fn typing(
+        &mut self,
+        signature: &Signature,
+        ast: &Ast,
+        errors: &mut Vec<CompileError>,
+    ) -> bool {
         let mut changed = false;
 
         let apps: Vec<(FuncApp, ElId)> = self
@@ -259,7 +262,7 @@ impl Structure {
         for (app, result) in apps {
             let func_data = signature.func(app.func);
             if let Some(ct) = concrete_type_at(signature, func_data.codomain, &app.parents) {
-                if self.impose_concrete_type(result, ct, conflicts) {
+                if self.impose_concrete_type(signature, ast, result, ct, errors) {
                     changed = true;
                 }
             }
@@ -268,7 +271,7 @@ impl Structure {
                     break;
                 };
                 if let Some(ct) = concrete_type_at(signature, dom_tid, &app.parents) {
-                    if self.impose_concrete_type(arg, ct, conflicts) {
+                    if self.impose_concrete_type(signature, ast, arg, ct, errors) {
                         changed = true;
                     }
                 }
@@ -283,7 +286,7 @@ impl Structure {
                     break;
                 };
                 if let Some(ct) = concrete_type_at(signature, arity_tid, &app.parents) {
-                    if self.impose_concrete_type(arg, ct, conflicts) {
+                    if self.impose_concrete_type(signature, ast, arg, ct, errors) {
                         changed = true;
                     }
                 }
@@ -293,16 +296,18 @@ impl Structure {
         changed
     }
 
-    /// Asserts that `el`'s type is `ct`. On mismatch records a
-    /// [`TypeConflict`] and leaves the existing entry in place. On match,
-    /// enqueues the pairwise parent equalities onto `pending_equalities`.
-    /// Returns true iff the entry was freshly populated or at least one
-    /// parent pair was enqueued.
+    /// Asserts that `el`'s type is `ct`. On mismatch emits a conflict error
+    /// and leaves the existing entry in place. On match, enqueues the
+    /// pairwise parent equalities onto `pending_equalities`. Returns true
+    /// iff the entry was freshly populated or at least one parent pair was
+    /// enqueued.
     fn impose_concrete_type(
         &mut self,
+        signature: &Signature,
+        ast: &Ast,
         el: ElId,
         ct: ConcreteType,
-        conflicts: &mut Vec<TypeConflict>,
+        errors: &mut Vec<CompileError>,
     ) -> bool {
         let root = self.root(el);
         match self.els.get(&root).cloned().flatten() {
@@ -312,10 +317,7 @@ impl Structure {
             }
             Some(existing) => {
                 if existing.typ != ct.typ {
-                    conflicts.push(TypeConflict {
-                        el: root,
-                        types: (existing.typ, ct.typ),
-                    });
+                    emit_type_conflict(signature, ast, existing.typ, ct.typ, errors);
                     return false;
                 }
                 let n = existing.parents.len().min(ct.parents.len());
@@ -384,6 +386,24 @@ fn concrete_type_at(signature: &Signature, tid: TypeId, parents: &[ElId]) -> Opt
         typ: tid,
         parents: parents[..n].to_vec(),
     })
+}
+
+/// Emits a [`CompileError::ConflictingTermType`] for two disagreeing types.
+// TODO: we emit one error per conflict with a placeholder location. The
+// self-hosted pass emits one error per source term whose element resolves
+// to the conflicting class; wiring that up requires per-element provenance
+// tracking on Structure.
+fn emit_type_conflict(
+    signature: &Signature,
+    ast: &Ast,
+    a: TypeId,
+    b: TypeId,
+    errors: &mut Vec<CompileError>,
+) {
+    errors.push(CompileError::ConflictingTermType {
+        types: vec![signature.type_name(ast, a), signature.type_name(ast, b)],
+        location: Location(0, 0),
+    });
 }
 
 #[derive(Clone, Debug, Default)]
