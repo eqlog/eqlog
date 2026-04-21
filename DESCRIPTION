@@ -1,19 +1,26 @@
-Add algebra::close
+Integrate close into algebraize, per-rule
 
-Saturates a Structure under functionality and signature-imposed typing.
-Structure now carries an eqlog_runtime::Unification<ElId> tracking
-equality between elements, and els turns into a
-BTreeMap<ElId, Option<ConcreteType>> where a ConcreteType pairs a
-non-optional TypeId with its parent-model elements. After close, only
-equivalence-class roots remain as els keys and every FuncApp, PredApp,
-var-el value and ConcreteType.parents reference points at a canonical
-root.
+Structure exposes an equate(a, b, conflicts) method that declares two
+elements equal. It unifies their equivalence classes and merges their
+concrete-type entries (propagating along parents of matching types)
+but does not run the functionality/typing fixed point. close() is
+still the caller's job.
 
-Close runs the fixed point of two passes until both settle:
-functionality rebuilds func_apps with canonical keys and unions
-duplicate results, and typing walks every func/pred app and imposes
-the type the signature demands on each argument (and on the result,
-for funcs). Unifying two elements also unifies the parents of their
-types and reports a TypeConflict when types disagree. Close is not
-yet wired into build.rs; the caller will translate TypeConflicts into
-user-facing errors.
+algebraize wires this up for IfAtom::Equal, ThenAtom::Equal and the
+`var := term` form of ThenAtom::Defined. build_structures now
+accumulates a Vec<TypeConflict> alongside Structures and returns both.
+
+Rule processing is one rule at a time: walk the rule body (which
+pushes rule_initial plus every stmt's before/after into the arena),
+then close every structure produced during that walk before moving on
+to the next rule.
+
+close() switched to a sink-style `conflicts: &mut Vec<TypeConflict>`
+parameter to match equate().
+
+Structure carries an eqlog_runtime::Unification<ElId> tracking
+equality between elements, and els is a BTreeMap<ElId,
+Option<ConcreteType>> where ConcreteType pairs a non-optional TypeId
+with its parent-model elements. After close, only equivalence-class
+roots remain as els keys and every FuncApp, PredApp, var-el value and
+ConcreteType.parents reference points at a canonical root.

@@ -473,7 +473,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     let binding_errors = check_bindings(&ast, &scopes, module);
     let occurrence_err = check_occurrences(&ast, &scopes, module).err();
     let (signature, signature_errors) = build_signature(&ast, &scopes, module);
-    let _structures = build_structures(&ast, &scopes, &signature, module);
+    let (_structures, _conflicts) = build_structures(&ast, &scopes, &signature, module);
 
     let (mut eqlog, identifiers, locations, _module) = populate_eqlog(&ast, module);
     eqlog.close();

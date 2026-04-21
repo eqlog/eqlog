@@ -118,6 +118,16 @@ impl Structure {
         id
     }
 
+    /// Declares that `a` and `b` are equal. Unifies their equivalence
+    /// classes and merges their concrete-type entries, which in turn
+    /// propagates along the parents of matching types. Does not run the
+    /// functionality/typing fixed point; call [`Structure::close`] when the
+    /// structure is fully built. Any type conflicts discovered while merging
+    /// concrete types are appended to `conflicts`.
+    pub fn equate(&mut self, a: ElId, b: ElId, conflicts: &mut Vec<TypeConflict>) {
+        self.union_eagerly(a, b, conflicts);
+    }
+
     /// Closes the structure under functionality and signature-imposed typing.
     ///
     /// Runs the naive fixed point of two passes until both settle:
@@ -138,18 +148,15 @@ impl Structure {
     /// After the loop exits, every remaining reference in `pred_apps`,
     /// `var_els` and in [`ConcreteType`] parents is rewritten to the root of
     /// its class, and non-root entries are dropped from `els`.
-    #[allow(dead_code)]
-    pub fn close(&mut self, signature: &Signature) -> Vec<TypeConflict> {
-        let mut conflicts = Vec::new();
+    pub fn close(&mut self, signature: &Signature, conflicts: &mut Vec<TypeConflict>) {
         loop {
-            let func_changed = self.functionality(&mut conflicts);
-            let type_changed = self.typing(signature, &mut conflicts);
+            let func_changed = self.functionality(conflicts);
+            let type_changed = self.typing(signature, conflicts);
             if !func_changed && !type_changed {
                 break;
             }
         }
         self.canonicalise_refs();
-        conflicts
     }
 
     /// Rebuilds `func_apps` with canonical keys and merges any duplicates.

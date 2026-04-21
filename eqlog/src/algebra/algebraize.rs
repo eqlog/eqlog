@@ -3,31 +3,38 @@
 //! [`build_structures`] walks each rule body and assigns a before-structure
 //! and an after-structure to every statement. The after-structure is produced
 //! by cloning the before-structure and adding whatever the statement
-//! contributes. This pass does no unification and no equating. `=` atoms are
-//! only visited so their subterm Els materialise.
+//! contributes. Equality atoms and the `var := term` form of `then` defined
+//! atoms are turned into calls to [`Structure::equate`]. Once a rule has
+//! been walked in full, every structure it produced is closed in place via
+//! [`Structure::close`] before moving on to the next rule.
 
 use crate::algebra::signature::{Signature, TypeId};
-use crate::algebra::structure::{ConcreteType, ElId, FuncApp, PredApp, Structure, Structures};
+use crate::algebra::structure::{
+    ConcreteType, ElId, FuncApp, PredApp, Structure, Structures, TypeConflict,
+};
 use crate::ast::*;
 use crate::scopes::{ScopeId, Scopes, Symbol};
 
-/// Walks `ast` rooted at `module` and assigns a before-structure and an
-/// after-structure to every statement in every rule.
+/// Walks `ast` rooted at `module`, assigns a before-structure and an
+/// after-structure to every statement in every rule, and closes each
+/// structure. The accompanying [`TypeConflict`]s collect every type
+/// disagreement discovered along the way.
 pub fn build_structures(
     ast: &Ast,
     scopes: &Scopes,
     signature: &Signature,
     module: ModuleId,
-) -> Structures {
+) -> (Structures, Vec<TypeConflict>) {
     let mut builder = Builder {
         ast,
         scopes,
         signature,
         structures: Structures::default(),
+        conflicts: Vec::new(),
     };
     let decls = ast.module(module).decls.clone();
     builder.walk_decls(&decls, &[]);
-    builder.structures
+    (builder.structures, builder.conflicts)
 }
 
 struct Builder<'a> {
@@ -35,6 +42,7 @@ struct Builder<'a> {
     scopes: &'a Scopes,
     signature: &'a Signature,
     structures: Structures,
+    conflicts: Vec<TypeConflict>,
 }
 
 /// Per-rule state the stmt walker threads through recursive calls.
@@ -64,6 +72,8 @@ impl<'a> Builder<'a> {
     }
 
     fn walk_rule(&mut self, rid: RuleDeclId, enclosing_models: &[TypeId]) {
+        let start = self.structures.arena.len();
+
         let mut initial = Structure::default();
         let mut ambient: Vec<ElId> = Vec::new();
         for &model_tid in enclosing_models {
@@ -84,6 +94,12 @@ impl<'a> Builder<'a> {
         let body = self.ast.rule_decl(rid).body.clone();
         let mut state = RuleState { ambient };
         self.walk_stmt_block(&body, initial, &mut state);
+
+        // Close every structure that belongs to this rule before moving on.
+        let end = self.structures.arena.len();
+        for i in start..end {
+            self.structures.arena[i].close(self.signature, &mut self.conflicts);
+        }
     }
 
     /// Walks `stmts` in order, threading structures so that each stmt's
@@ -153,8 +169,9 @@ impl<'a> Builder<'a> {
         match *self.ast.if_atom(atom) {
             IfAtom::Equal(id) => {
                 let EqualAtom { lhs, rhs } = *self.ast.equal_atom(id);
-                self.walk_term(lhs, current, state);
-                self.walk_term(rhs, current, state);
+                let lhs_el = self.walk_term(lhs, current, state);
+                let rhs_el = self.walk_term(rhs, current, state);
+                current.equate(lhs_el, rhs_el, &mut self.conflicts);
             }
             IfAtom::Defined(id) => {
                 let DefinedIfAtom { term } = *self.ast.defined_if_atom(id);
@@ -180,15 +197,17 @@ impl<'a> Builder<'a> {
         match *self.ast.then_atom(atom) {
             ThenAtom::Equal(id) => {
                 let EqualAtom { lhs, rhs } = *self.ast.equal_atom(id);
-                self.walk_term(lhs, current, state);
-                self.walk_term(rhs, current, state);
+                let lhs_el = self.walk_term(lhs, current, state);
+                let rhs_el = self.walk_term(rhs, current, state);
+                current.equate(lhs_el, rhs_el, &mut self.conflicts);
             }
             ThenAtom::Defined(id) => {
                 let DefinedThenAtom { var, term } = *self.ast.defined_then_atom(id);
-                if let Some(var) = var {
-                    self.walk_term(var, current, state);
+                let var_el = var.map(|v| self.walk_term(v, current, state));
+                let term_el = self.walk_term(term, current, state);
+                if let Some(var_el) = var_el {
+                    current.equate(var_el, term_el, &mut self.conflicts);
                 }
-                self.walk_term(term, current, state);
             }
             ThenAtom::Pred(id) => {
                 self.walk_pred_atom(id, current, state);
