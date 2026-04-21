@@ -1,4 +1,4 @@
-Trim algebraize module doc
+Trim RuleStructures doc
 
-Keeps only the one-line summary; the rest was restating what the
-types and function names already say.
+Drop the stale "structures/semantic_els indexed by statement position"
+gloss. It was misleading since stmts nest.

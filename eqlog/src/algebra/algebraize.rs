@@ -16,11 +16,6 @@ use crate::scopes::{ScopeId, Scopes, Symbol};
 pub struct StructureId(pub usize);
 
 /// All algebraic structures produced for one rule.
-///
-/// `structures` and `semantic_els` are parallel flat vectors: index `i`
-/// is the `i`-th structure of this rule. Indices flow in mutation
-/// order, so `stmt_after[stmt[i]] == stmt_before[stmt[i+1]]` for
-/// consecutive statements inside the same block.
 #[derive(Clone, Debug, Default)]
 pub struct RuleStructures {
     pub structures: Vec<Structure>,
