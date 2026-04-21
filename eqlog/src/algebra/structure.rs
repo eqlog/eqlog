@@ -22,8 +22,7 @@ use std::mem;
 use eqlog_runtime::Unification;
 
 use crate::algebra::signature::{FuncId, PredId, Signature, TypeId};
-use crate::ast::{Ast, RuleDeclId, StmtId, TermId, VarTermId};
-use crate::error::CompileError;
+use crate::ast::{RuleDeclId, StmtId, TermId, VarTermId};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ElId(pub(super) usize);
@@ -117,6 +116,18 @@ impl Default for Structure {
     }
 }
 
+/// A type disagreement discovered during [`Structure::close`]: two
+/// incompatible [`TypeId`]s got assigned to the same equivalence class
+/// rooted at `cls`. The caller is responsible for turning this into a
+/// user-facing [`crate::error::CompileError`]; typically it looks up a
+/// term in [`Structure::semantic_el`] whose element falls in `cls` and
+/// emits `ConflictingTermType` at that term's location.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypeConflict {
+    pub cls: ElId,
+    pub types: (TypeId, TypeId),
+}
+
 impl Structure {
     /// Allocates a fresh [`ElId`], registers it with the unification and
     /// records it in `els` with no concrete type yet. Callers that know a
@@ -144,8 +155,8 @@ impl Structure {
     ///   - `typing`: walk every [`FuncApp`] and [`PredApp`] and impose the
     ///     type each argument (and the result, for funcs) is required to
     ///     have by the signature. If an element already has an incompatible
-    ///     type, emit a [`CompileError::ConflictingTermType`]; otherwise
-    ///     enqueue the corresponding parent pairs onto `pending_equalities`.
+    ///     type, record a [`TypeConflict`]; otherwise enqueue the
+    ///     corresponding parent pairs onto `pending_equalities`.
     ///   - `drain_equalities`: pop pairs from `pending_equalities`, union
     ///     their classes and merge their `els` entries (which may enqueue
     ///     further parent pairs until it settles).
@@ -157,33 +168,28 @@ impl Structure {
     /// After the loop exits, `pending_equalities` is empty and every
     /// remaining reference in `pred_apps`, `var_els` and in [`ConcreteType`]
     /// parents is rewritten to the root of its class, with non-root entries
-    /// dropped from `els`.
-    ///
-    /// `ast` is used only for resolving type names when formatting error
-    /// messages. Errors carry a placeholder location until per-element
-    /// provenance is wired up; see the TODO in `emit_type_conflict`.
-    pub fn close(&mut self, signature: &Signature, ast: &Ast, errors: &mut Vec<CompileError>) {
+    /// dropped from `els`. Callers translate the returned [`TypeConflict`]s
+    /// into user-facing errors, typically by picking a term in
+    /// `semantic_el` whose class matches.
+    pub fn close(&mut self, signature: &Signature) -> Vec<TypeConflict> {
+        let mut conflicts = Vec::new();
         loop {
-            let drained = self.drain_equalities(signature, ast, errors);
+            let drained = self.drain_equalities(&mut conflicts);
             let func_changed = self.functionality();
-            let type_changed = self.typing(signature, ast, errors);
+            let type_changed = self.typing(signature, &mut conflicts);
             if !drained && !func_changed && !type_changed {
                 break;
             }
         }
         self.canonicalise_refs();
+        conflicts
     }
 
     /// Drains `pending_equalities` down to empty, performing the union and
-    /// merging `els` entries for each pair. Emits conflicts and enqueues
+    /// merging `els` entries for each pair. Records conflicts and enqueues
     /// further pairs as parent lists of matching types are reconciled.
     /// Returns true iff at least one class merge happened.
-    fn drain_equalities(
-        &mut self,
-        signature: &Signature,
-        ast: &Ast,
-        errors: &mut Vec<CompileError>,
-    ) -> bool {
+    fn drain_equalities(&mut self, conflicts: &mut Vec<TypeConflict>) -> bool {
         let mut changed = false;
         while let Some((a, b)) = self.pending_equalities.pop() {
             let a = self.root(a);
@@ -204,7 +210,10 @@ impl Structure {
                 (Some(x), None) | (None, Some(x)) => Some(x),
                 (Some(k), Some(d)) => {
                     if k.typ != d.typ {
-                        self.emit_type_conflict(signature, ast, keep, k.typ, d.typ, errors);
+                        conflicts.push(TypeConflict {
+                            cls: keep,
+                            types: (k.typ, d.typ),
+                        });
                         Some(k)
                     } else {
                         let n = k.parents.len().min(d.parents.len());
@@ -258,12 +267,7 @@ impl Structure {
     /// signature demands for every argument (and for the result of a func).
     /// Returns true iff anything changed (either a fresh type got recorded
     /// or a parent pair got enqueued on `pending_equalities`).
-    fn typing(
-        &mut self,
-        signature: &Signature,
-        ast: &Ast,
-        errors: &mut Vec<CompileError>,
-    ) -> bool {
+    fn typing(&mut self, signature: &Signature, conflicts: &mut Vec<TypeConflict>) -> bool {
         let mut changed = false;
 
         let apps: Vec<(FuncApp, ElId)> = self
@@ -274,7 +278,7 @@ impl Structure {
         for (app, result) in apps {
             let func_data = signature.func(app.func);
             if let Some(ct) = concrete_type_at(signature, func_data.codomain, &app.parents) {
-                if self.impose_concrete_type(signature, ast, result, ct, errors) {
+                if self.impose_concrete_type(result, ct, conflicts) {
                     changed = true;
                 }
             }
@@ -283,7 +287,7 @@ impl Structure {
                     break;
                 };
                 if let Some(ct) = concrete_type_at(signature, dom_tid, &app.parents) {
-                    if self.impose_concrete_type(signature, ast, arg, ct, errors) {
+                    if self.impose_concrete_type(arg, ct, conflicts) {
                         changed = true;
                     }
                 }
@@ -298,7 +302,7 @@ impl Structure {
                     break;
                 };
                 if let Some(ct) = concrete_type_at(signature, arity_tid, &app.parents) {
-                    if self.impose_concrete_type(signature, ast, arg, ct, errors) {
+                    if self.impose_concrete_type(arg, ct, conflicts) {
                         changed = true;
                     }
                 }
@@ -315,11 +319,9 @@ impl Structure {
     /// enqueued.
     fn impose_concrete_type(
         &mut self,
-        signature: &Signature,
-        ast: &Ast,
         el: ElId,
         ct: ConcreteType,
-        errors: &mut Vec<CompileError>,
+        conflicts: &mut Vec<TypeConflict>,
     ) -> bool {
         let root = self.root(el);
         match self.els.get(&root).cloned().flatten() {
@@ -329,7 +331,10 @@ impl Structure {
             }
             Some(existing) => {
                 if existing.typ != ct.typ {
-                    self.emit_type_conflict(signature, ast, root, existing.typ, ct.typ, errors);
+                    conflicts.push(TypeConflict {
+                        cls: root,
+                        types: (existing.typ, ct.typ),
+                    });
                     return false;
                 }
                 let n = existing.parents.len().min(ct.parents.len());
@@ -387,41 +392,6 @@ impl Structure {
 
     fn root(&self, id: ElId) -> ElId {
         self.unification.root_const(id)
-    }
-
-    /// Emits a single [`CompileError::ConflictingTermType`] attributed to
-    /// some term in `semantic_el` whose element falls in `cls`. Panics if
-    /// no such term exists; the panic message distinguishes ambient model
-    /// elements from ordinary ones to help diagnose the invariant
-    /// violation.
-    fn emit_type_conflict(
-        &self,
-        signature: &Signature,
-        ast: &Ast,
-        cls: ElId,
-        a: TypeId,
-        b: TypeId,
-        errors: &mut Vec<CompileError>,
-    ) {
-        let term_id = self
-            .semantic_el
-            .iter()
-            .find(|(_, &el)| self.unification.root_const(el) == cls)
-            .map(|(t, _)| *t)
-            .unwrap_or_else(|| {
-                let is_ambient = self
-                    .ambient_model_els
-                    .iter()
-                    .any(|&e| self.unification.root_const(e) == cls);
-                panic!(
-                    "type conflict on class {cls:?} has no term in semantic_el \
-                     (ambient model el: {is_ambient})"
-                );
-            });
-        errors.push(CompileError::ConflictingTermType {
-            types: vec![signature.type_name(ast, a), signature.type_name(ast, b)],
-            location: ast.loc(term_id),
-        });
     }
 }
 

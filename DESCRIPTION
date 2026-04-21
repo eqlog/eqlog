@@ -1,13 +1,15 @@
-Track ambient model els on Structure
+Move error translation out of structure.rs
 
-Structure grows `pub ambient_model_els: BTreeSet<ElId>`. walk_rule
-inserts the enclosing-model elements it seeds there. These are the
-only elements that have no recorded term in semantic_el and, by
-construction, never legitimately land in a type conflict class.
+structure.rs no longer imports `Ast` or `CompileError`. close() takes
+just the signature and returns `Vec<TypeConflict>`, where a
+TypeConflict is `{ cls: ElId, types: (TypeId, TypeId) }`. The helper
+emit_type_conflict is gone; drain_equalities and impose_concrete_type
+push TypeConflicts directly onto the returned vec.
 
-emit_type_conflict simplifies: it picks one term in semantic_el
-whose class is the conflict class and emits a single
-CompileError::ConflictingTermType at that term's location. If no
-such term exists the function panics, distinguishing ambient from
-non-ambient classes in the message to help diagnose the invariant
-violation. No fallback Location(0, 0) anymore.
+algebraize's Builder owns the translation: for each closed structure,
+it iterates the returned conflicts and builds
+`CompileError::ConflictingTermType` using the structure's own
+`semantic_el` to pick a term and `ast.loc` for the location.
+ambient_model_els stays on Structure so the translator can still
+print its invariant-violation panic with ambient vs non-ambient
+context.

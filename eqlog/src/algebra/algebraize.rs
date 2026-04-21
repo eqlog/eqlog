@@ -9,7 +9,9 @@
 //! [`Structure::close`] before moving on to the next rule.
 
 use crate::algebra::signature::{Signature, TypeId};
-use crate::algebra::structure::{ConcreteType, ElId, FuncApp, PredApp, Structure, Structures};
+use crate::algebra::structure::{
+    ConcreteType, ElId, FuncApp, PredApp, Structure, Structures, TypeConflict,
+};
 use crate::ast::*;
 use crate::error::CompileError;
 use crate::scopes::{ScopeId, Scopes, Symbol};
@@ -95,10 +97,47 @@ impl<'a> Builder<'a> {
         let mut state = RuleState { ambient };
         self.walk_stmt_block(&body, initial, &mut state);
 
-        // Close every structure that belongs to this rule before moving on.
+        // Close every structure that belongs to this rule before moving on,
+        // translating each type conflict to a CompileError using the just-
+        // closed structure's semantic_el map.
         let end = self.structures.arena.len();
         for i in start..end {
-            self.structures.arena[i].close(self.signature, self.ast, &mut self.errors);
+            let conflicts = self.structures.arena[i].close(self.signature);
+            for conflict in conflicts {
+                self.errors
+                    .push(self.conflict_to_error(&self.structures.arena[i], conflict));
+            }
+        }
+    }
+
+    /// Picks a term in `structure.semantic_el` whose element is the
+    /// conflict class and emits [`CompileError::ConflictingTermType`] at
+    /// that term's location. Panics if no such term exists; the message
+    /// distinguishes ambient model elements to help diagnose the invariant
+    /// violation.
+    fn conflict_to_error(&self, structure: &Structure, conflict: TypeConflict) -> CompileError {
+        let TypeConflict { cls, types } = conflict;
+        let term_id = structure
+            .semantic_el
+            .iter()
+            .find(|(_, &el)| structure.unification.root_const(el) == cls)
+            .map(|(t, _)| *t)
+            .unwrap_or_else(|| {
+                let is_ambient = structure
+                    .ambient_model_els
+                    .iter()
+                    .any(|&e| structure.unification.root_const(e) == cls);
+                panic!(
+                    "type conflict on class {cls:?} has no term in semantic_el \
+                     (ambient model el: {is_ambient})"
+                );
+            });
+        CompileError::ConflictingTermType {
+            types: vec![
+                self.signature.type_name(self.ast, types.0),
+                self.signature.type_name(self.ast, types.1),
+            ],
+            location: self.ast.loc(term_id),
         }
     }
 
