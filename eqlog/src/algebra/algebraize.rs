@@ -253,9 +253,16 @@ impl<'a> Builder<'a> {
                 let el_id = structure.push_el();
                 structure.els.insert(el_id, ct);
                 rule.semantic_els[current.0].insert(term, el_id);
-                if let Term::Var(vid) = *self.ast.term(term) {
-                    let name = self.ast.var_term(vid).name.clone();
-                    rule.structures[current.0].var_els.insert(name, el_id);
+                match *self.ast.term(term) {
+                    Term::Var(vid) => {
+                        let name = self.ast.var_term(vid).name.clone();
+                        rule.structures[current.0].var_els.insert(name, el_id);
+                    }
+                    Term::Wildcard => {}
+                    // Rejected by check_syntactic::check_if_var_lhs.
+                    Term::App(_) | Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => unreachable!(
+                        "VarIfAtom lhs must be a variable or wildcard; enforced by syntactic.rs"
+                    ),
                 }
             }
         }

@@ -1,26 +1,14 @@
-todo!() for dom/cod/@ in algebraize::walk_term
+Syntactic check for VarIfAtom lhs
 
-The Dom/Cod/MorApp branches in walk_term no longer materialise a
-fresh untyped El. That was wrong in the absence of proper operator
-support, so collapse all three into a single `todo!()` branch with
-a TODO comment explaining the gap.
+Add CompileError::IfVarLhsNotVarOrWildcard, emitted by
+check_syntactic when the left-hand side of an if-side `term : Type`
+atom isn't a Term::Var or Term::Wildcard. Mirrors the existing
+ThenDefinedNotVar check for the then-side `var := term` form.
 
-Fallout:
+algebraize::walk_term's IfAtom::Var branch relies on the new
+invariant: the Term::Var case inserts into var_els, Term::Wildcard
+is a no-op, and the remaining term shapes unreachable!() with a
+reference to the syntactic check.
 
-- 4 compile tests exercising these operators are marked `#[ignore]`
-  with a matching reason:
-    non_mor_applied_as_mor
-    mor_applied_to_non_member
-    mor_applied_to_false_member
-    surjectivity_violation_mor_app
-
-- 5 eval `.eql` files that use dom/cod/@ are deactivated by renaming
-  to `.eql.deactivated` (matching the existing convention used by
-  indexed_set_with_total_mors.eql.deactivated). The corresponding
-  `eqlog_mod!` entries and `#[cfg(test)] mod ..._test;` lines in
-  eqlog-test-eval/src/lib.rs are commented out with the same reason.
-  Affected: indexed_abelian_group, inference, lex_category,
-  product_category, subset_rules.
-
-Tests: 42/46 compile (4 ignored), 53/73 eval (20 gone with the
-deactivated modules).
+Adds a compile test case `if-var-lhs-not-var` exercising the new
+error path.

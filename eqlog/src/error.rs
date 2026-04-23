@@ -102,6 +102,9 @@ pub enum CompileError {
     ThenDefinedNotVar {
         location: Location,
     },
+    IfVarLhsNotVarOrWildcard {
+        location: Location,
+    },
     ThenDefinedVarNotNew {
         location: Location,
     },
@@ -213,6 +216,7 @@ impl CompileError {
             CompileError::WildcardInThenStmt { location } => *location,
             CompileError::SurjectivityViolation { location } => *location,
             CompileError::ThenDefinedNotVar { location } => *location,
+            CompileError::IfVarLhsNotVarOrWildcard { location } => *location,
             CompileError::ThenDefinedVarNotNew { location } => *location,
             CompileError::EnumCtorsNotSurjective {
                 term_location,
@@ -257,6 +261,7 @@ pub enum CompileErrorKind {
     WildcardInThenStmt,
     SurjectivityViolation,
     ThenDefinedNotVar,
+    IfVarLhsNotVarOrWildcard,
     ThenDefinedVarNotNew,
     EnumCtorsNotSurjective,
     MatchPatternIsVariable,
@@ -294,6 +299,7 @@ impl From<&CompileError> for CompileErrorKind {
             WildcardInThenStmt { .. } => CompileErrorKind::WildcardInThenStmt,
             SurjectivityViolation { .. } => CompileErrorKind::SurjectivityViolation,
             ThenDefinedNotVar { .. } => CompileErrorKind::ThenDefinedNotVar,
+            IfVarLhsNotVarOrWildcard { .. } => CompileErrorKind::IfVarLhsNotVarOrWildcard,
             ThenDefinedVarNotNew { .. } => CompileErrorKind::ThenDefinedVarNotNew,
             EnumCtorsNotSurjective { .. } => CompileErrorKind::EnumCtorsNotSurjective,
             MatchPatternIsVariable { .. } => CompileErrorKind::MatchPatternIsVariable,
@@ -598,6 +604,13 @@ impl Display for CompileErrorWithContext {
             }
             ThenDefinedNotVar { location } => {
                 write!(f, "expected a variable\n")?;
+                write_loc(f, *location)?;
+            }
+            IfVarLhsNotVarOrWildcard { location } => {
+                write!(
+                    f,
+                    "the left-hand side of 'var : Type' must be a variable or wildcard\n"
+                )?;
                 write_loc(f, *location)?;
             }
             ThenDefinedVarNotNew { location } => {

@@ -231,6 +231,11 @@ fn then_defined_variable_not_new() {
 }
 
 #[test]
+fn if_var_lhs_not_var() {
+    test_case(Path::new("if-var-lhs-not-var"));
+}
+
+#[test]
 fn enum_ctors_not_surjective() {
     test_case(Path::new("enum-ctors-not-surjective"));
 }

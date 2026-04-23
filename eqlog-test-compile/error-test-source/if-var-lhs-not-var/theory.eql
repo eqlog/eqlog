@@ -1,0 +1,5 @@
+type T;
+func f(T) -> T;
+rule {
+    if f(x) : T;
+}
