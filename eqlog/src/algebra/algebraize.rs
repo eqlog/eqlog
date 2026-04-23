@@ -196,8 +196,9 @@ impl<'a> Builder<'a> {
                 let blocks = self.ast.branch_stmt(id).blocks.clone();
                 for block in &blocks {
                     // Each block starts from a clone of the shared
-                    // before-structure. Block afters are not merged back
-                    // because that needs morphisms and this pass has none.
+                    // before-structure.
+                    // TODO: after_stmt should get a morphism from the
+                    // intersection of the end structures in each branch.
                     let block_start = rule.clone_structure(current);
                     self.walk_stmt_block(block, block_start, rule, state);
                 }
@@ -211,6 +212,8 @@ impl<'a> Builder<'a> {
                 let after_scrutinee = rule.clone_structure(current);
                 self.walk_term(term, after_scrutinee, rule, state);
                 for case in &cases {
+                    // TODO: after_stmt should get a morphism from the
+                    // intersection of the end structures in each case.
                     let MatchCase { pattern, body } = self.ast.match_case(*case).clone();
                     let case_start = rule.clone_structure(after_scrutinee);
                     self.walk_term(pattern, case_start, rule, state);

@@ -1,6 +1,5 @@
-Rename fork to clone_structure
+TODO comments for Branch/Match merge-back
 
-RuleStructures::fork becomes RuleStructures::clone_structure (named
-to not clash with Clone::clone). Local variables renamed away from
-"fork" to match: `next`, `block_start`, `after_scrutinee`,
-`case_start`.
+Note that Branch's stmt_after and Match's stmt_after should eventually
+get a morphism from the intersection of the end structures in each
+branch/case. Currently they just pass through the pre-branch state.
