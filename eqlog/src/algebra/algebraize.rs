@@ -364,21 +364,11 @@ impl<'a> Builder<'a> {
                     .collect();
                 self.emit_app(func, arg_els, current, rule, state)
             }
-            Term::Dom(did) => {
-                let DomTerm { arg } = *self.ast.dom_term(did);
-                self.walk_term(arg, current, rule, state);
-                rule.structures[current.0].push_el()
-            }
-            Term::Cod(cid) => {
-                let CodTerm { arg } = *self.ast.cod_term(cid);
-                self.walk_term(arg, current, rule, state);
-                rule.structures[current.0].push_el()
-            }
-            Term::MorApp(mid) => {
-                let MorAppTerm { mor, arg } = *self.ast.mor_app_term(mid);
-                self.walk_term(mor, current, rule, state);
-                self.walk_term(arg, current, rule, state);
-                rule.structures[current.0].push_el()
+            Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => {
+                // TODO: implement once dom/cod/@ operators are defined on
+                // the structure side. The current pass was materialising a
+                // fresh untyped El, which is wrong.
+                todo!()
             }
         };
         rule.semantic_els[current.0].insert(term, el);

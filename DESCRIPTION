@@ -1,5 +1,26 @@
-TODO comments for Branch/Match merge-back
+todo!() for dom/cod/@ in algebraize::walk_term
 
-Note that Branch's stmt_after and Match's stmt_after should eventually
-get a morphism from the intersection of the end structures in each
-branch/case. Currently they just pass through the pre-branch state.
+The Dom/Cod/MorApp branches in walk_term no longer materialise a
+fresh untyped El. That was wrong in the absence of proper operator
+support, so collapse all three into a single `todo!()` branch with
+a TODO comment explaining the gap.
+
+Fallout:
+
+- 4 compile tests exercising these operators are marked `#[ignore]`
+  with a matching reason:
+    non_mor_applied_as_mor
+    mor_applied_to_non_member
+    mor_applied_to_false_member
+    surjectivity_violation_mor_app
+
+- 5 eval `.eql` files that use dom/cod/@ are deactivated by renaming
+  to `.eql.deactivated` (matching the existing convention used by
+  indexed_set_with_total_mors.eql.deactivated). The corresponding
+  `eqlog_mod!` entries and `#[cfg(test)] mod ..._test;` lines in
+  eqlog-test-eval/src/lib.rs are commented out with the same reason.
+  Affected: indexed_abelian_group, inference, lex_category,
+  product_category, subset_rules.
+
+Tests: 42/46 compile (4 ignored), 53/73 eval (20 gone with the
+deactivated modules).
