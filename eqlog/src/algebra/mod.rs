@@ -3,8 +3,10 @@
 //!
 //! [`signature`] builds the dependent signature (types, preds, funcs) from
 //! the AST. [`structure`] holds the per-rule and per-statement structure
-//! data; [`algebraize`] populates it by walking the AST rule bodies. Future
-//! passes (morphism construction, unification) will live alongside them.
+//! data, including the close pass that saturates it under functionality and
+//! signature-imposed typing. [`algebraize`] populates the initial structure
+//! by walking the AST rule bodies. Future passes (morphism construction)
+//! will live alongside them.
 
 pub mod algebraize;
 pub mod signature;

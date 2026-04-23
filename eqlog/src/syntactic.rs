@@ -87,7 +87,10 @@ impl<'a> SyntacticChecker<'a> {
 
     fn walk_stmt(&self, stmt: StmtId) -> Check {
         match *self.ast.stmt(stmt) {
-            Stmt::If(_) => Ok(()),
+            Stmt::If(id) => {
+                let atom = self.ast.if_stmt(id).atom;
+                self.check_if_atom(atom)
+            }
             Stmt::Then(id) => {
                 let atom = self.ast.then_stmt(id).atom;
                 self.check_then_atom(atom)
@@ -105,6 +108,29 @@ impl<'a> SyntacticChecker<'a> {
                     self.walk_stmt_block(&body)?;
                 }
                 Ok(())
+            }
+        }
+    }
+
+    fn check_if_atom(&self, atom: IfAtomId) -> Check {
+        match *self.ast.if_atom(atom) {
+            IfAtom::Var(id) => {
+                let VarIfAtom { term, .. } = *self.ast.var_if_atom(id);
+                self.check_if_var_lhs(term)
+            }
+            IfAtom::Equal(_) | IfAtom::Defined(_) | IfAtom::Pred(_) => Ok(()),
+        }
+    }
+
+    /// The left-hand side of an if-side `var : Type` atom must be a
+    /// variable or wildcard.
+    fn check_if_var_lhs(&self, var_term: TermId) -> Check {
+        match *self.ast.term(var_term) {
+            Term::Var(_) | Term::Wildcard => Ok(()),
+            Term::App(_) | Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => {
+                Err(CompileError::IfVarLhsNotVarOrWildcard {
+                    location: self.ast.loc(var_term),
+                })
             }
         }
     }

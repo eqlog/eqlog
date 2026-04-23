@@ -150,6 +150,31 @@ impl Signature {
         self.ctor_decls.get(&id).copied()
     }
 
+    /// Human-readable name for `tid`, suitable for diagnostic messages.
+    /// Uses the AST to resolve the decl that introduced the type. Morphism
+    /// companions are rendered as `Mor<ModelName>`; if the decl for `tid`
+    /// cannot be found, returns `"?"`.
+    pub fn type_name(&self, ast: &Ast, tid: TypeId) -> String {
+        match self.type_(tid).kind {
+            TypeKind::Plain => self
+                .type_decls
+                .iter()
+                .find_map(|(d, t)| (*t == tid).then(|| ast.type_decl(*d).name.clone()))
+                .unwrap_or_else(|| "?".into()),
+            TypeKind::Enum => self
+                .enum_decls
+                .iter()
+                .find_map(|(d, t)| (*t == tid).then(|| ast.enum_decl(*d).name.clone()))
+                .unwrap_or_else(|| "?".into()),
+            TypeKind::Model => self
+                .model_decls
+                .iter()
+                .find_map(|(d, ids)| (ids.type_ == tid).then(|| ast.model_decl(*d).name.clone()))
+                .unwrap_or_else(|| "?".into()),
+            TypeKind::Mor(inner) => format!("Mor<{}>", self.type_name(ast, inner)),
+        }
+    }
+
     fn push_type(&mut self, t: Type) -> TypeId {
         let id = TypeId(self.types.len());
         self.types.push(t);
