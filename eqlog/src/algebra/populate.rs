@@ -10,22 +10,19 @@
 use std::collections::BTreeMap;
 
 use crate::algebra::signature::{Signature, TypeId};
-use crate::algebra::structure::{ConcreteType, ElId, FuncApp, PredApp, Structure};
+use crate::algebra::structure::{
+    ConcreteType, ElId, ElMap, FuncApp, PredApp, Structure, StructureCat, StructureId,
+};
 use crate::ast::*;
 use crate::scopes::{ScopeId, Scopes, Symbol};
 
-/// An index into one rule's flat arena of structures. Only valid within
-/// the [`RuleStructures`] that produced it.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct StructureId(pub usize);
-
 /// All algebraic structures produced for one rule. The initial structure
-/// (state before any statement has executed) is `structures[0]`.
+/// (state before any statement has executed) is `cat.structures[0]`.
 #[derive(Clone, Debug, Default)]
 pub struct RuleStructures {
-    pub structures: Vec<Structure>,
-    /// Invariant: `semantic_els.len() == structures.len()`. Entry `i` is
-    /// the term-to-element provenance map for `structures[i]`.
+    pub cat: StructureCat,
+    /// Invariant: `semantic_els.len() == cat.structures.len()`. Entry `i`
+    /// is the term-to-element provenance map for `cat.structures[i]`.
     pub semantic_els: Vec<BTreeMap<TermId, ElId>>,
     pub stmt_before: BTreeMap<StmtId, StructureId>,
     pub stmt_after: BTreeMap<StmtId, StructureId>,
@@ -35,21 +32,31 @@ impl RuleStructures {
     /// Appends a blank [`Structure`] with an empty `semantic_el` and
     /// returns its fresh [`StructureId`].
     fn push_blank(&mut self) -> StructureId {
-        let id = StructureId(self.structures.len());
-        self.structures.push(Structure::default());
+        let id = self.cat.push(Structure::default());
         self.semantic_els.push(BTreeMap::new());
         id
     }
 
-    /// Appends a clone of the entry at `id` and returns the fresh
-    /// [`StructureId`]. Used when a walk is about to mutate an entry
-    /// that is already committed to a before/after map.
+    /// Appends a clone of the structure at `id`, adds the identity
+    /// inclusion morphism from `id` to the new structure, and returns the
+    /// fresh [`StructureId`]. Used when a walk is about to mutate an
+    /// entry that is already committed to a before/after map.
     fn clone_structure(&mut self, id: StructureId) -> StructureId {
-        let new_id = StructureId(self.structures.len());
-        self.structures.push(self.structures[id.0].clone());
+        let clone = self.cat.structures[id.0].clone();
+        let identity = identity_elmap(&clone);
+        let new_id = self.cat.push(clone);
         self.semantic_els.push(self.semantic_els[id.0].clone());
+        self.cat.add_morphism(id, new_id, identity);
         new_id
     }
+}
+
+/// Identity map on every element of `s`. Suitable for the inclusion
+/// morphism into a clone of `s`, which shares the same [`ElId`]s. At
+/// populate time no [`Structure::close`] has run yet, so `els` still has
+/// one entry per allocated element.
+fn identity_elmap(s: &Structure) -> ElMap {
+    s.els.keys().map(|&el| (el, el)).collect()
 }
 
 /// Populates `rule` with the structures and term mappings derived from
@@ -63,12 +70,12 @@ pub fn walk_rule(
     scopes: &Scopes,
     signature: &Signature,
 ) {
-    let initial = if rule.structures.is_empty() {
+    let initial = if rule.cat.structures.is_empty() {
         rule.push_blank()
     } else {
         StructureId(0)
     };
-    ensure_ambient_els(&mut rule.structures[initial.0], enclosing_models);
+    ensure_ambient_els(&mut rule.cat.structures[initial.0], enclosing_models);
 
     let body = ast.rule_decl(rid).body.clone();
     walk_stmt_block(&body, initial, rule, ast, scopes, signature);
@@ -127,13 +134,17 @@ fn walk_stmt(
             let blocks = ast.branch_stmt(id).blocks.clone();
             for block in &blocks {
                 // Each block starts from a clone of the shared
-                // before-structure.
-                // TODO: after_stmt should get a morphism from the
-                // intersection of the end structures in each branch.
+                // before-structure, inclusion from `current`.
                 let block_start = rule.clone_structure(current);
                 walk_stmt_block(block, block_start, rule, ast, scopes, signature);
             }
-            current
+            // The after-structure is a separate clone of the
+            // before-structure; it receives an inclusion from `current`
+            // but is deliberately disconnected from the individual
+            // branches.
+            // TODO: after_stmt should get a morphism from the
+            // intersection of the end structures in each branch.
+            rule.clone_structure(current)
         }
         Stmt::Match(id) => {
             let MatchStmt { term, cases } = ast.match_stmt(id);
@@ -143,14 +154,17 @@ fn walk_stmt(
             let after_scrutinee = rule.clone_structure(current);
             walk_term(term, after_scrutinee, rule, ast, scopes, signature);
             for case in &cases {
-                // TODO: after_stmt should get a morphism from the
-                // intersection of the end structures in each case.
                 let MatchCase { pattern, body } = ast.match_case(*case).clone();
                 let case_start = rule.clone_structure(after_scrutinee);
                 walk_term(pattern, case_start, rule, ast, scopes, signature);
                 walk_stmt_block(&body, case_start, rule, ast, scopes, signature);
             }
-            after_scrutinee
+            // Likewise, the match's after-structure is a fresh clone of
+            // `after_scrutinee` (so the scrutinee's effects carry through),
+            // disconnected from the case bodies.
+            // TODO: after_stmt should get a morphism from the intersection
+            // of the end structures in each case.
+            rule.clone_structure(after_scrutinee)
         }
     }
 }
@@ -168,7 +182,7 @@ fn walk_if_atom(
             let EqualAtom { lhs, rhs } = *ast.equal_atom(id);
             let lhs_el = walk_term(lhs, current, rule, ast, scopes, signature);
             let rhs_el = walk_term(rhs, current, rule, ast, scopes, signature);
-            rule.structures[current.0].equate(lhs_el, rhs_el);
+            rule.cat.structures[current.0].equate(lhs_el, rhs_el);
         }
         IfAtom::Defined(id) => {
             let DefinedIfAtom { term } = *ast.defined_if_atom(id);
@@ -186,7 +200,7 @@ fn walk_if_atom(
                 return;
             }
             let typ_id = resolve_type_expr(typ, ast, scopes, signature);
-            let structure = &mut rule.structures[current.0];
+            let structure = &mut rule.cat.structures[current.0];
             let ct = concrete_type_for(signature, typ_id, structure);
             let el_id = structure.push_el();
             structure.els.insert(el_id, ct);
@@ -194,7 +208,7 @@ fn walk_if_atom(
             match *ast.term(term) {
                 Term::Var(vid) => {
                     let name = ast.var_term(vid).name.clone();
-                    rule.structures[current.0].var_els.insert(name, el_id);
+                    rule.cat.structures[current.0].var_els.insert(name, el_id);
                 }
                 Term::Wildcard => {}
                 // Rejected by check_syntactic::check_if_var_lhs.
@@ -219,14 +233,14 @@ fn walk_then_atom(
             let EqualAtom { lhs, rhs } = *ast.equal_atom(id);
             let lhs_el = walk_term(lhs, current, rule, ast, scopes, signature);
             let rhs_el = walk_term(rhs, current, rule, ast, scopes, signature);
-            rule.structures[current.0].equate(lhs_el, rhs_el);
+            rule.cat.structures[current.0].equate(lhs_el, rhs_el);
         }
         ThenAtom::Defined(id) => {
             let DefinedThenAtom { var, term } = *ast.defined_then_atom(id);
             let var_el = var.map(|v| walk_term(v, current, rule, ast, scopes, signature));
             let term_el = walk_term(term, current, rule, ast, scopes, signature);
             if let Some(var_el) = var_el {
-                rule.structures[current.0].equate(var_el, term_el);
+                rule.cat.structures[current.0].equate(var_el, term_el);
             }
         }
         ThenAtom::Pred(id) => {
@@ -269,7 +283,7 @@ fn walk_pred_atom(
     if arg_els.len() != pred_data.arity.len() {
         return;
     }
-    let structure = &mut rule.structures[current.0];
+    let structure = &mut rule.cat.structures[current.0];
     let parents = structure.ambient_parents(&pred_data.parents);
     structure.pred_apps.insert(PredApp {
         pred: pred_id,
@@ -297,7 +311,7 @@ fn walk_term(
     let el = match *ast.term(term) {
         Term::Var(vid) => {
             let name = ast.var_term(vid).name.clone();
-            let structure = &mut rule.structures[current.0];
+            let structure = &mut rule.cat.structures[current.0];
             if let Some(&el_id) = structure.var_els.get(&name) {
                 el_id
             } else {
@@ -306,7 +320,7 @@ fn walk_term(
                 el_id
             }
         }
-        Term::Wildcard => rule.structures[current.0].push_el(),
+        Term::Wildcard => rule.cat.structures[current.0].push_el(),
         Term::App(aid) => {
             let AppTerm { func, args } = *ast.app_term(aid);
             let arg_terms = ast.term_list(args).terms.clone();
@@ -354,16 +368,16 @@ fn emit_app(
     };
 
     let Some(func_id) = resolved else {
-        return rule.structures[current.0].push_el();
+        return rule.cat.structures[current.0].push_el();
     };
 
     let func_data = signature.func(func_id);
     if arg_els.len() != func_data.domain.len() {
-        return rule.structures[current.0].push_el();
+        return rule.cat.structures[current.0].push_el();
     }
 
     let codomain = func_data.codomain;
-    let structure = &mut rule.structures[current.0];
+    let structure = &mut rule.cat.structures[current.0];
     let parents = structure.ambient_parents(&func_data.parents);
     let result_ct = concrete_type_for(signature, Some(codomain), structure);
     let result_id = structure.push_el();

@@ -11,6 +11,12 @@
 //! are plain data, keyed by their own contents, so two calls with
 //! identical parents and arguments collapse naturally.
 //!
+//! A [`StructureCat`] bundles an indexed family of structures together
+//! with a forward-only set of morphisms between them. The entailed close
+//! pass settles each structure in turn, pushing shared data forward along
+//! outgoing morphisms, and then walks backward to pull type information
+//! from codomains into domains.
+//!
 //! Grouping structures by rule, mapping AST nodes to structures and
 //! tracking `semantic_el` provenance all live in [`crate::algebra`] and
 //! [`crate::algebra::populate`], not here. This module has no AST
@@ -26,6 +32,16 @@ use crate::algebra::signature::{FuncId, PredId, Signature, TypeId};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ElId(pub(super) usize);
+
+/// Index into a [`StructureCat`]'s flat arena of structures.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct StructureId(pub usize);
+
+/// A mathematical function on [`ElId`]s sending elements of a domain
+/// structure to elements of a codomain structure. After
+/// [`StructureCat::close`], keys are all roots of the domain's
+/// unification and values are all roots of the codomain's.
+pub type ElMap = BTreeMap<ElId, ElId>;
 
 impl From<u32> for ElId {
     fn from(x: u32) -> Self {
@@ -390,6 +406,325 @@ impl Structure {
 
     fn root(&self, id: ElId) -> ElId {
         self.unification.root_const(id)
+    }
+}
+
+/// A finite direct category of [`Structure`]s: a flat arena of structures
+/// with a set of morphisms between them that always point forward in the
+/// arena (the domain's [`StructureId`] is strictly smaller than the
+/// codomain's).
+///
+/// Each morphism is stored as an [`ElMap`] on elements; the [`Structure`]
+/// invariants (preserving `pred_apps`, `func_apps`, `var_els` and
+/// `ambient_model_els` under the map) are maintained by
+/// [`StructureCat::close`] rather than baked into the data structure.
+#[derive(Clone, Debug, Default)]
+pub struct StructureCat {
+    pub structures: Vec<Structure>,
+    /// Keyed by `(domain, codomain)`. `domain.0 < codomain.0` always.
+    pub morphisms: BTreeMap<(StructureId, StructureId), ElMap>,
+}
+
+impl StructureCat {
+    /// Appends `structure` and returns its fresh [`StructureId`].
+    pub fn push(&mut self, structure: Structure) -> StructureId {
+        let id = StructureId(self.structures.len());
+        self.structures.push(structure);
+        id
+    }
+
+    /// Registers a morphism from `src` to `tgt` with element map `map`.
+    /// Panics if `src.0 >= tgt.0` or if a morphism with the same endpoints
+    /// already exists.
+    pub fn add_morphism(&mut self, src: StructureId, tgt: StructureId, map: ElMap) {
+        assert!(
+            src.0 < tgt.0,
+            "morphisms must point forward: {src:?} -> {tgt:?}"
+        );
+        let prev = self.morphisms.insert((src, tgt), map);
+        assert!(prev.is_none(), "duplicate morphism {src:?} -> {tgt:?}");
+    }
+
+    /// Closes every structure under functionality and typing and propagates
+    /// shared data along the morphisms.
+    ///
+    /// Two passes:
+    ///
+    ///   - Forward: walk structures in arena order. Close each structure,
+    ///     then push its `pred_apps`, `func_apps`, `var_els` and
+    ///     `ambient_model_els` along every outgoing morphism, canonicalising
+    ///     the [`ElMap`]'s keys under the now-settled domain unification and
+    ///     enqueueing equalities on the codomain when two keys collapse to
+    ///     the same root or when a pushed entry clashes with an existing
+    ///     one in the codomain. The codomain is not re-closed eagerly; it
+    ///     will be closed when its own iteration arrives.
+    ///
+    ///   - Backward: walk structures in reverse. For each outgoing morphism,
+    ///     pull type information from the codomain back into the domain for
+    ///     every mapped element whose [`ConcreteType`] parents are all
+    ///     ambient model elements (so their preimages in the domain are
+    ///     unambiguous — the domain's own ambient els of the same types).
+    ///     Equality, predicate and function data are not propagated
+    ///     backwards. Re-close the domain afterwards so any equalities
+    ///     induced by newly imposed types settle. Because only type info
+    ///     flows backwards — and only into the domain, whose forward
+    ///     outputs have already been consumed — no second forward pass is
+    ///     needed.
+    ///
+    /// After both passes a final canonicalisation rewrites every
+    /// [`ElMap`]'s keys and values to their respective roots.
+    ///
+    /// Returns every [`TypeConflict`] discovered, tagged with the
+    /// [`StructureId`] of the structure in which it occurred, so callers
+    /// can attribute diagnostics.
+    pub fn close(&mut self, signature: &Signature) -> Vec<(StructureId, TypeConflict)> {
+        let mut conflicts: Vec<(StructureId, TypeConflict)> = Vec::new();
+        let n = self.structures.len();
+
+        for i in 0..n {
+            let id = StructureId(i);
+            for c in self.structures[i].close(signature) {
+                conflicts.push((id, c));
+            }
+            self.push_forward(id);
+        }
+
+        for i in (0..n).rev() {
+            let id = StructureId(i);
+            self.pull_types_backward(id, &mut conflicts);
+            for c in self.structures[i].close(signature) {
+                conflicts.push((id, c));
+            }
+        }
+
+        self.canonicalise_morphisms();
+        conflicts
+    }
+
+    /// Lists every outgoing morphism codomain for `src` in ascending order.
+    fn outgoing(&self, src: StructureId) -> Vec<StructureId> {
+        self.morphisms
+            .keys()
+            .filter_map(|&(a, b)| (a == src).then_some(b))
+            .collect()
+    }
+
+    /// Pushes shared data from `src` along every outgoing morphism.
+    fn push_forward(&mut self, src: StructureId) {
+        for tgt in self.outgoing(src) {
+            self.push_morphism(src, tgt);
+        }
+    }
+
+    /// Carries data from `src` into `tgt` along the `(src, tgt)` morphism.
+    /// Rewrites the [`ElMap`]'s keys to their roots in `src`, enqueues
+    /// equalities on `tgt` when two keys collapse, and inserts the images
+    /// of `src`'s `pred_apps`, `func_apps`, `var_els` and
+    /// `ambient_model_els` into `tgt`.
+    fn push_morphism(&mut self, src: StructureId, tgt: StructureId) {
+        let StructureCat {
+            structures,
+            morphisms,
+        } = self;
+        let (left, right) = structures.split_at_mut(tgt.0);
+        let src_st = &left[src.0];
+        let tgt_st = &mut right[0];
+        let map = morphisms
+            .get_mut(&(src, tgt))
+            .expect("morphism disappeared");
+
+        let old = mem::take(map);
+        for (k, v) in old {
+            let root_k = src_st.unification.root_const(k);
+            match map.entry(root_k) {
+                Entry::Vacant(vac) => {
+                    vac.insert(v);
+                }
+                Entry::Occupied(occ) => {
+                    let existing = *occ.get();
+                    if existing != v {
+                        tgt_st.equate(existing, v);
+                    }
+                }
+            }
+        }
+
+        let image = |e: ElId| -> ElId {
+            *map.get(&src_st.unification.root_const(e))
+                .expect("morphism not defined on element")
+        };
+
+        for pa in &src_st.pred_apps {
+            tgt_st.pred_apps.insert(PredApp {
+                pred: pa.pred,
+                parents: pa.parents.iter().copied().map(image).collect(),
+                args: pa.args.iter().copied().map(image).collect(),
+            });
+        }
+
+        let src_func_apps: Vec<(FuncApp, ElId)> = src_st
+            .func_apps
+            .iter()
+            .map(|(a, r)| (a.clone(), *r))
+            .collect();
+        for (fa, result) in src_func_apps {
+            let mapped = FuncApp {
+                func: fa.func,
+                parents: fa.parents.iter().copied().map(image).collect(),
+                args: fa.args.iter().copied().map(image).collect(),
+            };
+            let mapped_result = image(result);
+            match tgt_st.func_apps.entry(mapped) {
+                Entry::Vacant(vac) => {
+                    vac.insert(mapped_result);
+                }
+                Entry::Occupied(occ) => {
+                    let existing = *occ.get();
+                    if existing != mapped_result {
+                        tgt_st.equate(existing, mapped_result);
+                    }
+                }
+            }
+        }
+
+        let src_var_els: Vec<(String, ElId)> = src_st
+            .var_els
+            .iter()
+            .map(|(n, e)| (n.clone(), *e))
+            .collect();
+        for (name, el) in src_var_els {
+            let mapped_el = image(el);
+            match tgt_st.var_els.entry(name) {
+                Entry::Vacant(vac) => {
+                    vac.insert(mapped_el);
+                }
+                Entry::Occupied(occ) => {
+                    let existing = *occ.get();
+                    if existing != mapped_el {
+                        tgt_st.equate(existing, mapped_el);
+                    }
+                }
+            }
+        }
+
+        let src_ambient: Vec<(TypeId, ElId)> = src_st
+            .ambient_model_els
+            .iter()
+            .map(|(t, e)| (*t, *e))
+            .collect();
+        for (typ, el) in src_ambient {
+            let mapped_el = image(el);
+            match tgt_st.ambient_model_els.entry(typ) {
+                Entry::Vacant(vac) => {
+                    vac.insert(mapped_el);
+                }
+                Entry::Occupied(occ) => {
+                    let existing = *occ.get();
+                    if existing != mapped_el {
+                        tgt_st.equate(existing, mapped_el);
+                    }
+                }
+            }
+        }
+    }
+
+    /// For each outgoing morphism `(src, tgt)`, imposes on `src` the type
+    /// of every mapped codomain element whose parents are all ambient
+    /// model elements in `tgt`. The preimages of those parents in `src`
+    /// are read off `src.ambient_model_els` by type.
+    fn pull_types_backward(
+        &mut self,
+        src: StructureId,
+        conflicts: &mut Vec<(StructureId, TypeConflict)>,
+    ) {
+        for tgt in self.outgoing(src) {
+            self.pull_morphism_types(src, tgt, conflicts);
+        }
+    }
+
+    fn pull_morphism_types(
+        &mut self,
+        src: StructureId,
+        tgt: StructureId,
+        conflicts: &mut Vec<(StructureId, TypeConflict)>,
+    ) {
+        let StructureCat {
+            structures,
+            morphisms,
+        } = self;
+        let (left, right) = structures.split_at_mut(tgt.0);
+        let src_st = &mut left[src.0];
+        let tgt_st = &right[0];
+        let map = morphisms.get(&(src, tgt)).expect("morphism disappeared");
+
+        // Index tgt's ambient els by root for quick type lookup.
+        let tgt_ambient_by_root: BTreeMap<ElId, TypeId> = tgt_st
+            .ambient_model_els
+            .iter()
+            .map(|(t, e)| (tgt_st.unification.root_const(*e), *t))
+            .collect();
+
+        for (&src_el, &tgt_el) in map.iter() {
+            let tgt_root = tgt_st.unification.root_const(tgt_el);
+            let Some(Some(ct)) = tgt_st.els.get(&tgt_root) else {
+                continue;
+            };
+
+            let parent_types: Option<Vec<TypeId>> = ct
+                .parents
+                .iter()
+                .map(|p| {
+                    tgt_ambient_by_root
+                        .get(&tgt_st.unification.root_const(*p))
+                        .copied()
+                })
+                .collect();
+            let Some(parent_types) = parent_types else {
+                continue;
+            };
+
+            let new_parents: Option<Vec<ElId>> = parent_types
+                .iter()
+                .map(|t| src_st.ambient_model_els.get(t).copied())
+                .collect();
+            let Some(new_parents) = new_parents else {
+                continue;
+            };
+
+            let new_ct = ConcreteType {
+                typ: ct.typ,
+                parents: new_parents,
+            };
+            let mut local_conflicts = Vec::new();
+            src_st.impose_concrete_type(src_el, new_ct, &mut local_conflicts);
+            for c in local_conflicts {
+                conflicts.push((src, c));
+            }
+        }
+    }
+
+    /// Rewrites every [`ElMap`] so its keys are roots in the domain's
+    /// unification and its values are roots in the codomain's. Collapses
+    /// colliding keys by dropping duplicates — by the time this runs the
+    /// values for those collisions have already been unified, so dropping
+    /// is safe.
+    fn canonicalise_morphisms(&mut self) {
+        let keys: Vec<(StructureId, StructureId)> = self.morphisms.keys().copied().collect();
+        for (src, tgt) in keys {
+            let StructureCat {
+                structures,
+                morphisms,
+            } = self;
+            let src_st = &structures[src.0];
+            let tgt_st = &structures[tgt.0];
+            let map = morphisms.get_mut(&(src, tgt)).unwrap();
+            let old = mem::take(map);
+            for (k, v) in old {
+                let root_k = src_st.unification.root_const(k);
+                let root_v = tgt_st.unification.root_const(v);
+                map.insert(root_k, root_v);
+            }
+        }
     }
 }
 
