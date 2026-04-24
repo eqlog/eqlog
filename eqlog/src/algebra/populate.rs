@@ -8,11 +8,9 @@
 //! element it produced previously instead of creating a fresh one. App
 //! terms and predicate atoms are always re-walked so that a func or pred
 //! reference whose resolution depended on type info gets a chance to
-//! emit its [`FuncApp`] or [`PredApp`] on a later pass.
-//!
-//! [`walk_rule`] returns true iff some allocation, insertion or non-trivial
-//! equate happened during this call. Callers iterate populate/close until
-//! both report no work.
+//! emit its [`FuncApp`] or [`PredApp`] on a later pass. [`walk_rule`]
+//! returns true iff some allocation, insertion or non-trivial equate
+//! happened during this call.
 
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
