@@ -49,19 +49,20 @@ pub fn build_structures(
         let mut rule = RuleStructures::default();
         walk_rule(&mut rule, rid, &enclosing_models, ast, scopes, signature);
 
-        let mut errors = Vec::new();
-        for (structure, semantic_el) in rule.structures.iter_mut().zip(rule.semantic_els.iter()) {
-            for conflict in structure.close(signature) {
-                errors.push(conflict_to_error(
-                    ast,
-                    signature,
-                    structure,
-                    semantic_el,
-                    conflict,
-                ));
-            }
-        }
-        if !errors.is_empty() {
+        let conflicts = rule.cat.close(signature);
+        if !conflicts.is_empty() {
+            let errors: Vec<CompileError> = conflicts
+                .into_iter()
+                .map(|(sid, conflict)| {
+                    conflict_to_error(
+                        ast,
+                        signature,
+                        &rule.cat.structures[sid.0],
+                        &rule.semantic_els[sid.0],
+                        conflict,
+                    )
+                })
+                .collect();
             return Err(errors);
         }
 

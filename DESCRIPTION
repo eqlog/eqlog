@@ -1,0 +1,26 @@
+Add StructureCat and morphism machinery
+
+Introduce a `StructureCat` in `algebra/structure.rs` that bundles a
+flat arena of `Structure`s with a set of forward-only element-level
+morphisms `(StructureId, StructureId) -> ElMap`.
+`StructureCat::close` runs the per-structure saturation in arena
+order, pushing `pred_apps`, `func_apps`, `var_els` and
+`ambient_model_els` along every outgoing morphism and enqueueing
+equalities on the codomain when a pushed entry clashes. It then
+walks backward and pulls type information from each codomain back
+into the domain for mapped elements whose `ConcreteType` parents are
+all ambient model elements (so their preimages in the domain are
+unambiguous), re-closing the domain once type info has been imposed.
+A final canonicalisation pass rewrites every `ElMap` so keys are
+roots in the domain's unification and values are roots in the
+codomain's.
+
+`RuleStructures` now stores its structures on a `StructureCat` field
+rather than an inline `Vec<Structure>`. `clone_structure` registers
+the inclusion as an identity morphism on the source's elements, so
+every `If`/`Then`/branch/case/after clone produced by `populate`
+ships with a morphism from its predecessor. Branch and match
+statements additionally clone a dedicated after-structure (so the
+after is a concrete node in the category rather than the reused
+predecessor id); the existing TODOs about merging branch/case ends
+into the after are preserved.
