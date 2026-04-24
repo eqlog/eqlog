@@ -149,8 +149,15 @@ impl Structure {
     /// Declares that `a` and `b` are equal. Just enqueues the pair on
     /// `pending_equalities`; the actual class merge and any cascading
     /// parent unifications happen during [`Structure::close`].
-    pub fn equate(&mut self, a: ElId, b: ElId) {
+    ///
+    /// Returns true iff `a` and `b` currently live in distinct equivalence
+    /// classes, i.e. the eventual drain has work to do. Callers that drive
+    /// an outer fixed point use this to avoid spinning on no-op equates.
+    pub fn equate(&mut self, a: ElId, b: ElId) -> bool {
+        let ra = self.unification.root(a);
+        let rb = self.unification.root(b);
         self.pending_equalities.push((a, b));
+        ra != rb
     }
 
     /// Looks up one ambient el per entry in `parent_types`. Panics if
@@ -192,8 +199,14 @@ impl Structure {
     /// dropped from `els`. Callers translate the returned [`TypeConflict`]s
     /// into user-facing errors, typically by picking a term in
     /// `semantic_el` whose class matches.
-    pub fn close(&mut self, signature: &Signature) -> Vec<TypeConflict> {
+    ///
+    /// Returns `(changed, conflicts)`. `changed` is true iff at least one
+    /// inner pass merged a class, found a duplicate or imposed a fresh type,
+    /// so callers driving an outer fixed point can stop when both populate
+    /// and close report no work.
+    pub fn close(&mut self, signature: &Signature) -> (bool, Vec<TypeConflict>) {
         let mut conflicts = Vec::new();
+        let mut changed = false;
         loop {
             let drained = self.drain_equalities(&mut conflicts);
             let func_changed = self.functionality();
@@ -201,9 +214,10 @@ impl Structure {
             if !drained && !func_changed && !type_changed {
                 break;
             }
+            changed = true;
         }
         self.canonicalise_refs();
-        conflicts
+        (changed, conflicts)
     }
 
     /// Drains `pending_equalities` down to empty, performing the union and
@@ -474,31 +488,39 @@ impl StructureCat {
     /// After both passes a final canonicalisation rewrites every
     /// [`ElMap`]'s keys and values to their respective roots.
     ///
-    /// Returns every [`TypeConflict`] discovered, tagged with the
-    /// [`StructureId`] of the structure in which it occurred, so callers
-    /// can attribute diagnostics.
-    pub fn close(&mut self, signature: &Signature) -> Vec<(StructureId, TypeConflict)> {
+    /// Returns `(changed, conflicts)`. `conflicts` is every
+    /// [`TypeConflict`] discovered, tagged with the [`StructureId`] of the
+    /// structure in which it occurred, so callers can attribute diagnostics.
+    /// `changed` is true iff at least one structure-level close, push or
+    /// pull observed work, so an enclosing populate/close fixed point can
+    /// stop when both report no change.
+    pub fn close(&mut self, signature: &Signature) -> (bool, Vec<(StructureId, TypeConflict)>) {
         let mut conflicts: Vec<(StructureId, TypeConflict)> = Vec::new();
+        let mut changed = false;
         let n = self.structures.len();
 
         for i in 0..n {
             let id = StructureId(i);
-            for c in self.structures[i].close(signature) {
+            let (c_changed, cs) = self.structures[i].close(signature);
+            changed |= c_changed;
+            for c in cs {
                 conflicts.push((id, c));
             }
-            self.push_forward(id);
+            changed |= self.push_forward(id);
         }
 
         for i in (0..n).rev() {
             let id = StructureId(i);
-            self.pull_types_backward(id, &mut conflicts);
-            for c in self.structures[i].close(signature) {
+            changed |= self.pull_types_backward(id, &mut conflicts);
+            let (c_changed, cs) = self.structures[i].close(signature);
+            changed |= c_changed;
+            for c in cs {
                 conflicts.push((id, c));
             }
         }
 
         self.canonicalise_morphisms();
-        conflicts
+        (changed, conflicts)
     }
 
     /// Lists every outgoing morphism codomain for `src` in ascending order.
@@ -509,11 +531,15 @@ impl StructureCat {
             .collect()
     }
 
-    /// Pushes shared data from `src` along every outgoing morphism.
-    fn push_forward(&mut self, src: StructureId) {
+    /// Pushes shared data from `src` along every outgoing morphism. Returns
+    /// true iff at least one morphism observed any logical insertion or
+    /// non-trivial equate.
+    fn push_forward(&mut self, src: StructureId) -> bool {
+        let mut changed = false;
         for tgt in self.outgoing(src) {
-            self.push_morphism(src, tgt);
+            changed |= self.push_morphism(src, tgt);
         }
+        changed
     }
 
     /// Carries data from `src` into `tgt` along the `(src, tgt)` morphism.
@@ -521,7 +547,12 @@ impl StructureCat {
     /// equalities on `tgt` when two keys collapse, and inserts the images
     /// of `src`'s `pred_apps`, `func_apps`, `var_els` and
     /// `ambient_model_els` into `tgt`.
-    fn push_morphism(&mut self, src: StructureId, tgt: StructureId) {
+    ///
+    /// Returns true iff a previously-absent entry was inserted into `tgt`,
+    /// or an equate was enqueued on `tgt` whose pair lives in distinct
+    /// equivalence classes. Idempotent re-runs that only re-canonicalise
+    /// the morphism's keys report false.
+    fn push_morphism(&mut self, src: StructureId, tgt: StructureId) -> bool {
         let StructureCat {
             structures,
             morphisms,
@@ -533,6 +564,8 @@ impl StructureCat {
             .get_mut(&(src, tgt))
             .expect("morphism disappeared");
 
+        let mut changed = false;
+
         let old = mem::take(map);
         for (k, v) in old {
             let root_k = src_st.unification.root_const(k);
@@ -542,8 +575,8 @@ impl StructureCat {
                 }
                 Entry::Occupied(occ) => {
                     let existing = *occ.get();
-                    if existing != v {
-                        tgt_st.equate(existing, v);
+                    if existing != v && tgt_st.equate(existing, v) {
+                        changed = true;
                     }
                 }
             }
@@ -555,7 +588,7 @@ impl StructureCat {
         };
 
         for pa in &src_st.pred_apps {
-            tgt_st.pred_apps.insert(PredApp {
+            changed |= tgt_st.pred_apps.insert(PredApp {
                 pred: pa.pred,
                 parents: pa.parents.iter().copied().map(image).collect(),
                 args: pa.args.iter().copied().map(image).collect(),
@@ -577,11 +610,12 @@ impl StructureCat {
             match tgt_st.func_apps.entry(mapped) {
                 Entry::Vacant(vac) => {
                     vac.insert(mapped_result);
+                    changed = true;
                 }
                 Entry::Occupied(occ) => {
                     let existing = *occ.get();
                     if existing != mapped_result {
-                        tgt_st.equate(existing, mapped_result);
+                        changed |= tgt_st.equate(existing, mapped_result);
                     }
                 }
             }
@@ -597,11 +631,12 @@ impl StructureCat {
             match tgt_st.var_els.entry(name) {
                 Entry::Vacant(vac) => {
                     vac.insert(mapped_el);
+                    changed = true;
                 }
                 Entry::Occupied(occ) => {
                     let existing = *occ.get();
                     if existing != mapped_el {
-                        tgt_st.equate(existing, mapped_el);
+                        changed |= tgt_st.equate(existing, mapped_el);
                     }
                 }
             }
@@ -617,29 +652,36 @@ impl StructureCat {
             match tgt_st.ambient_model_els.entry(typ) {
                 Entry::Vacant(vac) => {
                     vac.insert(mapped_el);
+                    changed = true;
                 }
                 Entry::Occupied(occ) => {
                     let existing = *occ.get();
                     if existing != mapped_el {
-                        tgt_st.equate(existing, mapped_el);
+                        changed |= tgt_st.equate(existing, mapped_el);
                     }
                 }
             }
         }
+
+        changed
     }
 
     /// For each outgoing morphism `(src, tgt)`, imposes on `src` the type
     /// of every mapped codomain element whose parents are all ambient
     /// model elements in `tgt`. The preimages of those parents in `src`
-    /// are read off `src.ambient_model_els` by type.
+    /// are read off `src.ambient_model_els` by type. Returns true iff at
+    /// least one such imposition recorded a fresh type or enqueued a
+    /// parent equality on `src`.
     fn pull_types_backward(
         &mut self,
         src: StructureId,
         conflicts: &mut Vec<(StructureId, TypeConflict)>,
-    ) {
+    ) -> bool {
+        let mut changed = false;
         for tgt in self.outgoing(src) {
-            self.pull_morphism_types(src, tgt, conflicts);
+            changed |= self.pull_morphism_types(src, tgt, conflicts);
         }
+        changed
     }
 
     fn pull_morphism_types(
@@ -647,7 +689,7 @@ impl StructureCat {
         src: StructureId,
         tgt: StructureId,
         conflicts: &mut Vec<(StructureId, TypeConflict)>,
-    ) {
+    ) -> bool {
         let StructureCat {
             structures,
             morphisms,
@@ -656,6 +698,8 @@ impl StructureCat {
         let src_st = &mut left[src.0];
         let tgt_st = &right[0];
         let map = morphisms.get(&(src, tgt)).expect("morphism disappeared");
+
+        let mut changed = false;
 
         // Index tgt's ambient els by root for quick type lookup.
         let tgt_ambient_by_root: BTreeMap<ElId, TypeId> = tgt_st
@@ -696,11 +740,12 @@ impl StructureCat {
                 parents: new_parents,
             };
             let mut local_conflicts = Vec::new();
-            src_st.impose_concrete_type(src_el, new_ct, &mut local_conflicts);
+            changed |= src_st.impose_concrete_type(src_el, new_ct, &mut local_conflicts);
             for c in local_conflicts {
                 conflicts.push((src, c));
             }
         }
+        changed
     }
 
     /// Rewrites every [`ElMap`] so its keys are roots in the domain's

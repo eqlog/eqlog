@@ -47,11 +47,18 @@ pub fn build_structures(
     } in rule_nodes
     {
         let mut rule = RuleStructures::default();
-        walk_rule(&mut rule, rid, &enclosing_models, ast, scopes, signature);
+        let mut last_conflicts;
+        loop {
+            let walk_changed = walk_rule(&mut rule, rid, &enclosing_models, ast, scopes, signature);
+            let (close_changed, conflicts) = rule.cat.close(signature);
+            last_conflicts = conflicts;
+            if !walk_changed && !close_changed {
+                break;
+            }
+        }
 
-        let conflicts = rule.cat.close(signature);
-        if !conflicts.is_empty() {
-            let errors: Vec<CompileError> = conflicts
+        if !last_conflicts.is_empty() {
+            let errors: Vec<CompileError> = last_conflicts
                 .into_iter()
                 .map(|(sid, conflict)| {
                     conflict_to_error(
