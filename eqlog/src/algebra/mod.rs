@@ -30,13 +30,6 @@ struct RuleNode {
 
 /// Builds and closes a [`RuleStructures`] for every rule reachable from
 /// `module`. Bails on the first rule whose close pass reports conflicts.
-///
-/// For each rule, drives an outer fixed point of `walk_rule` followed by
-/// `StructureCat::close`. A pass of close may settle types that resolve a
-/// previously-blocked func or pred reference; the next walk_rule then
-/// emits the corresponding [`crate::algebra::structure::FuncApp`] or
-/// [`crate::algebra::structure::PredApp`]. We stop once both report no
-/// work in the same iteration.
 pub fn build_structures(
     ast: &Ast,
     scopes: &Scopes,
