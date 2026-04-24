@@ -154,8 +154,8 @@ impl Structure {
     /// classes, i.e. the eventual drain has work to do. Callers that drive
     /// an outer fixed point use this to avoid spinning on no-op equates.
     pub fn equate(&mut self, a: ElId, b: ElId) -> bool {
-        let ra = self.unification.root_const(a);
-        let rb = self.unification.root_const(b);
+        let ra = self.unification.root(a);
+        let rb = self.unification.root(b);
         self.pending_equalities.push((a, b));
         ra != rb
     }

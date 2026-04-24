@@ -424,11 +424,11 @@ fn walk_pred_atom(
     let parents: Vec<ElId> = structure
         .ambient_parents(&pred_data.parents)
         .into_iter()
-        .map(|e| structure.unification.root_const(e))
+        .map(|e| structure.unification.root(e))
         .collect();
     let canonical_args: Vec<ElId> = arg_els
         .iter()
-        .map(|e| structure.unification.root_const(*e))
+        .map(|e| structure.unification.root(*e))
         .collect();
     if structure.pred_apps.insert(PredApp {
         pred: pred_id,
@@ -572,11 +572,11 @@ fn emit_app(
     let parents: Vec<ElId> = structure
         .ambient_parents(&func_data.parents)
         .into_iter()
-        .map(|e| structure.unification.root_const(e))
+        .map(|e| structure.unification.root(e))
         .collect();
     let canonical_args: Vec<ElId> = arg_els
         .iter()
-        .map(|e| structure.unification.root_const(*e))
+        .map(|e| structure.unification.root(*e))
         .collect();
     let app_key = FuncApp {
         func: func_id,
