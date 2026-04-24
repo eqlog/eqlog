@@ -16,6 +16,7 @@ RUN export DEBIAN_FRONTEND=noninteractive \
         ca-certificates \
         sudo \
         locales \
+        procps \
     && rm -rf /var/lib/apt/lists/*
 
 ARG USER=user
