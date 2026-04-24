@@ -96,13 +96,11 @@ pub fn walk_rule(
     } else {
         StructureId(0)
     };
-    if ensure_ambient_els(&mut rule.cat.structures[initial.0], enclosing_models) {
-        changed = true;
-    }
+    changed |= ensure_ambient_els(&mut rule.cat.structures[initial.0], enclosing_models);
 
     let body = ast.rule_decl(rid).body.clone();
     let (_after, walk_changed) = walk_stmt_block(&body, initial, rule, ast, scopes, signature);
-    changed || walk_changed
+    changed | walk_changed
 }
 
 /// Walks `stmts` in order. `current` is the id of the structure that
@@ -133,9 +131,7 @@ fn walk_stmt_block(
             "stmt_before for {stmt:?} drifted between populate calls"
         );
         let (after, stmt_changed) = walk_stmt(*stmt, before, rule, ast, scopes, signature);
-        if stmt_changed {
-            changed = true;
-        }
+        changed |= stmt_changed;
         current = after;
     }
     (current, changed)
@@ -153,17 +149,13 @@ fn walk_stmt(
         Stmt::If(id) => {
             let (next, mut changed) = ensure_stmt_after(rule, stmt, current);
             let atom = ast.if_stmt(id).atom;
-            if walk_if_atom(atom, next, rule, ast, scopes, signature) {
-                changed = true;
-            }
+            changed |= walk_if_atom(atom, next, rule, ast, scopes, signature);
             (next, changed)
         }
         Stmt::Then(id) => {
             let (next, mut changed) = ensure_stmt_after(rule, stmt, current);
             let atom = ast.then_stmt(id).atom;
-            if walk_then_atom(atom, next, rule, ast, scopes, signature) {
-                changed = true;
-            }
+            changed |= walk_then_atom(atom, next, rule, ast, scopes, signature);
             (next, changed)
         }
         Stmt::Branch(id) => {
@@ -171,14 +163,10 @@ fn walk_stmt(
             let mut changed = false;
             for (idx, block) in blocks.iter().enumerate() {
                 let (block_start, c1) = ensure_branch_block_start(rule, id, idx, current);
-                if c1 {
-                    changed = true;
-                }
+                changed |= c1;
                 let (_after, c2) =
                     walk_stmt_block(block, block_start, rule, ast, scopes, signature);
-                if c2 {
-                    changed = true;
-                }
+                changed |= c2;
             }
             // The branch's after-structure is a separate clone of the
             // shared before-structure; it receives an inclusion from
@@ -187,9 +175,7 @@ fn walk_stmt(
             // TODO: after_stmt should get a morphism from the
             // intersection of the end structures in each branch.
             let (after, c3) = ensure_stmt_after(rule, stmt, current);
-            if c3 {
-                changed = true;
-            }
+            changed |= c3;
             (after, changed)
         }
         Stmt::Match(id) => {
@@ -198,23 +184,15 @@ fn walk_stmt(
             let cases = cases.clone();
             let (after_scrutinee, mut changed) = ensure_match_after_scrutinee(rule, id, current);
             let (_el, c1) = walk_term(term, after_scrutinee, rule, ast, scopes, signature);
-            if c1 {
-                changed = true;
-            }
+            changed |= c1;
             for case in &cases {
                 let MatchCase { pattern, body } = ast.match_case(*case).clone();
                 let (case_start, c2) = ensure_match_case_start(rule, *case, after_scrutinee);
-                if c2 {
-                    changed = true;
-                }
+                changed |= c2;
                 let (_el, c3) = walk_term(pattern, case_start, rule, ast, scopes, signature);
-                if c3 {
-                    changed = true;
-                }
+                changed |= c3;
                 let (_after, c4) = walk_stmt_block(&body, case_start, rule, ast, scopes, signature);
-                if c4 {
-                    changed = true;
-                }
+                changed |= c4;
             }
             // Likewise, the match's after-structure is a fresh clone of
             // `after_scrutinee` (so the scrutinee's effects carry through),
@@ -222,9 +200,7 @@ fn walk_stmt(
             // TODO: after_stmt should get a morphism from the intersection
             // of the end structures in each case.
             let (after, c5) = ensure_stmt_after(rule, stmt, after_scrutinee);
-            if c5 {
-                changed = true;
-            }
+            changed |= c5;
             (after, changed)
         }
     }
@@ -359,21 +335,15 @@ fn walk_then_atom(
             let mut changed = false;
             let var_el = if let Some(v) = var {
                 let (e, c) = walk_term(v, current, rule, ast, scopes, signature);
-                if c {
-                    changed = true;
-                }
+                changed |= c;
                 Some(e)
             } else {
                 None
             };
             let (term_el, c) = walk_term(term, current, rule, ast, scopes, signature);
-            if c {
-                changed = true;
-            }
+            changed |= c;
             if let Some(var_el) = var_el {
-                if rule.cat.structures[current.0].equate(var_el, term_el) {
-                    changed = true;
-                }
+                changed |= rule.cat.structures[current.0].equate(var_el, term_el);
             }
             changed
         }
@@ -396,9 +366,7 @@ fn walk_pred_atom(
         .iter()
         .map(|t| {
             let (e, c) = walk_term(*t, current, rule, ast, scopes, signature);
-            if c {
-                changed = true;
-            }
+            changed |= c;
             e
         })
         .collect();
@@ -432,13 +400,11 @@ fn walk_pred_atom(
         .iter()
         .map(|e| structure.unification.root(*e))
         .collect();
-    if structure.pred_apps.insert(PredApp {
+    changed |= structure.pred_apps.insert(PredApp {
         pred: pred_id,
         parents,
         args: canonical_args,
-    }) {
-        changed = true;
-    }
+    });
     changed
 }
 
@@ -493,16 +459,12 @@ fn walk_term(
                 .iter()
                 .map(|t| {
                     let (e, c) = walk_term(*t, current, rule, ast, scopes, signature);
-                    if c {
-                        changed = true;
-                    }
+                    changed |= c;
                     e
                 })
                 .collect();
             let (e, c) = emit_app(func, arg_els, cached, current, rule, ast, scopes, signature);
-            if c {
-                changed = true;
-            }
+            changed |= c;
             e
         }
         Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => {
@@ -590,8 +552,8 @@ fn emit_app(
     let result_id = match structure.func_apps.get(&app_key).copied() {
         Some(existing) => match expected {
             Some(exp) => {
-                if exp != existing && structure.equate(exp, existing) {
-                    changed = true;
+                if exp != existing {
+                    changed |= structure.equate(exp, existing);
                 }
                 exp
             }

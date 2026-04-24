@@ -506,16 +506,12 @@ impl StructureCat {
             for c in cs {
                 conflicts.push((id, c));
             }
-            if self.push_forward(id) {
-                changed = true;
-            }
+            changed |= self.push_forward(id);
         }
 
         for i in (0..n).rev() {
             let id = StructureId(i);
-            if self.pull_types_backward(id, &mut conflicts) {
-                changed = true;
-            }
+            changed |= self.pull_types_backward(id, &mut conflicts);
             let (c_changed, cs) = self.structures[i].close(signature);
             changed |= c_changed;
             for c in cs {
@@ -541,9 +537,7 @@ impl StructureCat {
     fn push_forward(&mut self, src: StructureId) -> bool {
         let mut changed = false;
         for tgt in self.outgoing(src) {
-            if self.push_morphism(src, tgt) {
-                changed = true;
-            }
+            changed |= self.push_morphism(src, tgt);
         }
         changed
     }
@@ -594,13 +588,11 @@ impl StructureCat {
         };
 
         for pa in &src_st.pred_apps {
-            if tgt_st.pred_apps.insert(PredApp {
+            changed |= tgt_st.pred_apps.insert(PredApp {
                 pred: pa.pred,
                 parents: pa.parents.iter().copied().map(image).collect(),
                 args: pa.args.iter().copied().map(image).collect(),
-            }) {
-                changed = true;
-            }
+            });
         }
 
         let src_func_apps: Vec<(FuncApp, ElId)> = src_st
@@ -622,8 +614,8 @@ impl StructureCat {
                 }
                 Entry::Occupied(occ) => {
                     let existing = *occ.get();
-                    if existing != mapped_result && tgt_st.equate(existing, mapped_result) {
-                        changed = true;
+                    if existing != mapped_result {
+                        changed |= tgt_st.equate(existing, mapped_result);
                     }
                 }
             }
@@ -643,8 +635,8 @@ impl StructureCat {
                 }
                 Entry::Occupied(occ) => {
                     let existing = *occ.get();
-                    if existing != mapped_el && tgt_st.equate(existing, mapped_el) {
-                        changed = true;
+                    if existing != mapped_el {
+                        changed |= tgt_st.equate(existing, mapped_el);
                     }
                 }
             }
@@ -664,8 +656,8 @@ impl StructureCat {
                 }
                 Entry::Occupied(occ) => {
                     let existing = *occ.get();
-                    if existing != mapped_el && tgt_st.equate(existing, mapped_el) {
-                        changed = true;
+                    if existing != mapped_el {
+                        changed |= tgt_st.equate(existing, mapped_el);
                     }
                 }
             }
@@ -687,9 +679,7 @@ impl StructureCat {
     ) -> bool {
         let mut changed = false;
         for tgt in self.outgoing(src) {
-            if self.pull_morphism_types(src, tgt, conflicts) {
-                changed = true;
-            }
+            changed |= self.pull_morphism_types(src, tgt, conflicts);
         }
         changed
     }
@@ -750,9 +740,7 @@ impl StructureCat {
                 parents: new_parents,
             };
             let mut local_conflicts = Vec::new();
-            if src_st.impose_concrete_type(src_el, new_ct, &mut local_conflicts) {
-                changed = true;
-            }
+            changed |= src_st.impose_concrete_type(src_el, new_ct, &mut local_conflicts);
             for c in local_conflicts {
                 conflicts.push((src, c));
             }
