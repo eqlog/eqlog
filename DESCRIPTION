@@ -1,0 +1,24 @@
+Split algebraize into mod.rs + populate.rs
+
+Move `RuleStructures`, `StructureId`, `push_blank` and
+`clone_structure` into the new `algebra/populate.rs` alongside the
+AST walk that fills them in (`walk_rule` plus `walk_stmt_block`,
+`walk_stmt`, `walk_if_atom`, `walk_then_atom`, `walk_pred_atom`,
+`walk_term`, `emit_app`). The walk is idempotent at statement and
+term granularity: a statement with an existing `stmt_after` is
+skipped, a term already in `semantic_els` for the current structure
+is reused, and the initial structure's ambient model els are left
+alone if already present.
+
+`algebra/mod.rs` drives the pipeline: `collect_rules` flattens the
+module decl tree into a `Vec<RuleNode>`, then `build_structures`
+walks that vec, invoking `walk_rule` and then closing the resulting
+structures. It returns `Result<_, Vec<CompileError>>` and bails on
+the first rule whose close pass reports conflicts.
+
+Structure changes: `ambient_model_els` is now `BTreeMap<TypeId,
+ElId>` so each Structure knows which el represents which enclosing
+model, and a new `Structure::ambient_parents` method reads parent
+els straight off the current structure (panics if a type is
+missing). This replaces the per-walk `RuleState` that used to
+thread an ambient vector.

@@ -12,8 +12,8 @@
 //! identical parents and arguments collapse naturally.
 //!
 //! Grouping structures by rule, mapping AST nodes to structures and
-//! tracking `semantic_el` provenance all live in
-//! [`crate::algebra::algebraize`], not here. This module has no AST
+//! tracking `semantic_el` provenance all live in [`crate::algebra`] and
+//! [`crate::algebra::populate`], not here. This module has no AST
 //! dependency by design.
 
 use std::collections::btree_map::Entry;
@@ -79,10 +79,10 @@ pub struct Structure {
     /// is equivalent to binding-id-keying.
     pub var_els: BTreeMap<String, ElId>,
     /// Elements introduced as ambient model instances by the rule's
-    /// enclosing-model scopes. These elements have a fixed
-    /// [`ConcreteType`] for the corresponding model type; they are never
-    /// referenced by any surface term.
-    pub ambient_model_els: BTreeSet<ElId>,
+    /// enclosing-model scopes, keyed by the model type. These elements
+    /// have a fixed [`ConcreteType`] for the corresponding model type;
+    /// they are never referenced by any surface term.
+    pub ambient_model_els: BTreeMap<TypeId, ElId>,
     /// Equivalence relation on [`ElId`]s. New ElIds start out in their own
     /// class; [`Structure::close`] may merge classes under functionality.
     pub unification: Unification<ElId>,
@@ -100,7 +100,7 @@ impl Default for Structure {
             pred_apps: BTreeSet::new(),
             func_apps: BTreeMap::new(),
             var_els: BTreeMap::new(),
-            ambient_model_els: BTreeSet::new(),
+            ambient_model_els: BTreeMap::new(),
             unification: Unification::new(),
             pending_equalities: Vec::new(),
         }
@@ -135,6 +135,20 @@ impl Structure {
     /// parent unifications happen during [`Structure::close`].
     pub fn equate(&mut self, a: ElId, b: ElId) {
         self.pending_equalities.push((a, b));
+    }
+
+    /// Looks up one ambient el per entry in `parent_types`. Panics if
+    /// any type is missing from `ambient_model_els`.
+    pub fn ambient_parents(&self, parent_types: &[TypeId]) -> Vec<ElId> {
+        parent_types
+            .iter()
+            .map(|tid| {
+                *self
+                    .ambient_model_els
+                    .get(tid)
+                    .expect("ambient model el missing for type")
+            })
+            .collect()
     }
 
     /// Closes the structure under functionality and signature-imposed typing.
@@ -393,4 +407,3 @@ fn concrete_type_at(signature: &Signature, tid: TypeId, parents: &[ElId]) -> Opt
         parents: parents[..n].to_vec(),
     })
 }
-

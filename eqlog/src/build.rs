@@ -1,4 +1,4 @@
-use crate::algebra::algebraize::build_structures;
+use crate::algebra::build_structures;
 use crate::algebra::signature::build_signature;
 use crate::ast::{Ast, ModuleId};
 use crate::ast_to_eqlog::populate_eqlog;
@@ -475,7 +475,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     let (signature, signature_errors) = build_signature(&ast, &scopes, module);
     // TODO: merge structure_errors into the main error stream once close
     // emits them with real locations.
-    let (_structures, _structure_errors) = build_structures(&ast, &scopes, &signature, module);
+    let _structures = build_structures(&ast, &scopes, &signature, module);
 
     let (mut eqlog, identifiers, locations, _module) = populate_eqlog(&ast, module);
     eqlog.close();
