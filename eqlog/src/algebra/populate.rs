@@ -33,12 +33,16 @@ pub struct RuleStructures {
     pub stmt_before: BTreeMap<StmtId, StructureId>,
     pub stmt_after: BTreeMap<StmtId, StructureId>,
     /// The cloned start structure of each block of a `branch` statement,
-    /// keyed by `(branch, index_within_branch)`.
+    /// keyed by `(branch, index_within_branch)`. Distinct from the first
+    /// statement's `stmt_before` because a block may be empty, leaving no
+    /// statement to anchor the start structure to.
     pub branch_block_starts: BTreeMap<(BranchStmtId, usize), StructureId>,
     /// The post-scrutinee structure of each `match`, evaluated once per
     /// match before any case body.
     pub match_after_scrutinee: BTreeMap<MatchStmtId, StructureId>,
-    /// The cloned start structure of each `match` case body.
+    /// The cloned start structure of each `match` case body. Same reason
+    /// as `branch_block_starts`: an empty case body has no first
+    /// statement to anchor the start structure to.
     pub match_case_starts: BTreeMap<MatchCaseId, StructureId>,
 }
 
