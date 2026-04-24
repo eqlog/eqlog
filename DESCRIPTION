@@ -1,0 +1,20 @@
+Iterate populate/close to a fixed point
+
+Make walk_rule re-entrant: it now traverses the entire rule body on
+every call instead of short-circuiting at statements with a recorded
+stmt_after, and re-attempts func/pred resolution at every app term and
+pred atom so a reference that was unresolvable on the first pass gets
+emitted once close has settled enough type information.
+
+Structure::equate, Structure::close and StructureCat::close now report
+whether they observed any work, and walk_rule does the same.
+build_structures loops walk_rule + close until both report no change in
+the same iteration.
+
+Per-AST-site memoisation: RuleStructures gains branch_block_starts,
+match_after_scrutinee and match_case_starts so cloned structures for
+those sites are reused rather than re-created on each pass. App-term
+result els fed through walk_term's semantic_els cache are propagated
+into emit_app as the expected result, so re-resolution writes the new
+FuncApp against the cached el (with an equate to any pre-existing
+entry).
