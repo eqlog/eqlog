@@ -29,12 +29,9 @@ pub struct RuleStructures {
     pub cat: StructureCat,
     /// Invariant: `semantic_els.len() == cat.structures.len()`. Entry
     /// `i` maps each [`TermId`] whose lexical position lies inside the
-    /// scope walked into [`cat.structures[i]`] to the [`ElId`] that
-    /// term resolved to. Terms walked into an earlier structure live
-    /// in that earlier structure's entry only — the map is not
-    /// propagated forward when [`clone_structure`] is called. Cross-
-    /// structure el equality is reconstructed through morphisms by
-    /// callers that need it (see [`crate::algebra::find_term`]).
+    /// scope walked into `cat.structures[i]` to its [`ElId`]. Per-
+    /// structure only; cross-structure el equality is reconstructed
+    /// via morphisms.
     pub semantic_els: Vec<BTreeMap<TermId, ElId>>,
     pub stmt_before: BTreeMap<StmtId, StructureId>,
     pub stmt_after: BTreeMap<StmtId, StructureId>,
@@ -64,12 +61,7 @@ impl RuleStructures {
     /// Appends a clone of the structure at `id`, adds the identity
     /// inclusion morphism from `id` to the new structure, and returns
     /// the fresh [`StructureId`]. The new structure starts with an
-    /// empty `semantic_els` map: terms walked into earlier structures
-    /// remain in those structures' entries, and any term walked
-    /// through the new structure gets recorded under it. Cross-
-    /// structure el dedup for [`Term::Var`] is provided by the
-    /// cloned [`Structure::var_els`]; for [`Term::App`] by the cloned
-    /// [`Structure::func_apps`].
+    /// empty `semantic_els` map.
     fn clone_structure(&mut self, id: StructureId) -> StructureId {
         let clone = self.cat.structures[id.0].clone();
         let identity = identity_elmap(&clone);
@@ -474,21 +466,12 @@ fn resolve_pred_expr(
 /// Walks `term`, materialising any Els it needs in the current
 /// structure, records `term -> el` in `semantic_el`, and returns the El.
 ///
-/// `prior_el` is whatever el this exact `(current, term)` resolved to
-/// on an earlier `walk_rule` pass, read off `semantic_els` before
-/// dispatching. The outer populate/close loop in [`build_structures`]
-/// re-walks every rule body until no progress, so this function is
-/// re-entrant per `(current, term)`; reusing `prior_el` is what keeps
-/// the el identity stable across passes (otherwise each pass would
-/// allocate a fresh el for the same term and leak). It is required for
-/// correctness, not a perf shortcut.
-///
-/// `Var` and `Wildcard` terms reuse `prior_el` when present. App terms
-/// always recurse into their arguments and re-attempt resolution of
-/// the func reference, so that a [`FuncApp`] missed on a previous
-/// pass (because the func was unresolvable at the time) gets emitted
-/// now. The result el of an App is still `prior_el` when present, so
-/// callers' chains remain stable.
+/// `prior_el` is the el this `(current, term)` resolved to on an earlier
+/// pass, if any. Reusing it keeps el identity stable across re-walks.
+/// `Var` and `Wildcard` reuse it directly; `App` recurses into its
+/// arguments and re-attempts func resolution so a previously-unresolvable
+/// [`FuncApp`] gets emitted now, while the result el still falls back to
+/// `prior_el` when present.
 fn walk_term(
     term: TermId,
     current: StructureId,
@@ -626,11 +609,7 @@ fn emit_app(
             };
             structure.func_apps.insert(app_key, id);
             // Allocating an el or inserting a new func_app entry is
-            // always observable change. The codomain type is deferred
-            // to `Structure::close`'s typing pass so that argument
-            // types from other apps land first; this mirrors the
-            // eqlog-side rule order and keeps `Could be ...` lines
-            // sequenced like the existing diagnostics.
+            // always observable change.
             changed = true;
             id
         }

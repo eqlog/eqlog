@@ -99,15 +99,11 @@ fn collect_rules(
     }
 }
 
-/// Lowers a [`TypeConflict`] to a user-facing [`CompileError`].
-///
-/// Always emits [`CompileError::ConflictingTermType`], anchored on a
-/// term whose element shares a class with `conflict.el`. The term is
-/// located via [`find_term`], which walks back through morphisms to
-/// find a structure that natively records a term mapping to (a
-/// preimage of) `el`. Each [`ConcreteType`] is rendered as `TypeName`
-/// for global types or `parent_name.TypeName` for member types,
-/// matching the format the eqlog-side conflict pass uses.
+/// Lowers a [`TypeConflict`] to a [`CompileError::ConflictingTermType`],
+/// anchored on a term whose element shares a class with `conflict.el`
+/// (located via [`find_term`]). Each [`ConcreteType`] renders as
+/// `TypeName` for global types or `parent_name.TypeName` for member
+/// types.
 ///
 /// Panics if no term backs `el` in any reachable structure.
 fn conflict_to_error(
@@ -157,25 +153,10 @@ fn concrete_type_to_string(
 }
 
 /// Locates a term whose element shares a class with `target` in the
-/// structure at `sid`, possibly by walking back through incoming
-/// morphisms to an earlier structure that natively records such a
-/// term.
-///
-/// `RuleStructures::semantic_els[sid]` only holds terms whose lexical
-/// position lies in the scope walked into structure `sid` itself; an
-/// earlier structure's terms live in that earlier structure's entry.
-/// Conflicts can be detected at any structure in the cat — including
-/// ones that received `target` only as the image of an earlier
-/// structure's element under a morphism — so a direct lookup in
-/// `semantic_els[sid]` may miss. The walk handles this by enumerating
-/// preimages of the conflicting class along incoming morphisms and
-/// recursing on the source structure.
-///
-/// Implementation: BFS over `(StructureId, ElId)` pairs, with each
-/// pair canonicalised by the corresponding structure's unification.
-/// At each pair, scan `semantic_els[s]` for a hit; on miss, expand
-/// the frontier through incoming morphisms by mapping the current
-/// `el` back to its preimages in each source structure.
+/// structure at `sid`. Conflicts can surface in a structure that
+/// received `target` only as a morphism image, so on miss in
+/// `semantic_els[sid]` the search expands through incoming morphisms
+/// to preimages in source structures.
 ///
 /// Panics if no reachable structure backs the class with a term.
 fn find_term(rule: &RuleStructures, sid: StructureId, target: ElId) -> TermId {

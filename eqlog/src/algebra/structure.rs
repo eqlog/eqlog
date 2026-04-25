@@ -328,14 +328,9 @@ impl Structure {
 
     /// Walks each func/pred application and propagates the type the
     /// signature demands for every argument (and for the result of a func).
-    /// Imposes argument (domain) types first across all func/pred apps,
-    /// then codomain types — so when the same el receives both an arg
-    /// type and a codomain type from different apps, the arg type is the
-    /// one already in place at the conflict and the codomain type is the
-    /// new arrival. This matches the order the eqlog-side typing pass
-    /// uses and keeps `Could be ...` lines in the same sequence as the
-    /// existing diagnostics. Returns true iff a fresh concrete type got
-    /// recorded.
+    /// Domain types are imposed before codomain types so a conflicting
+    /// el attributes the codomain as the new arrival. Returns true iff a
+    /// fresh concrete type got recorded.
     fn typing(
         &mut self,
         signature: &Signature,
