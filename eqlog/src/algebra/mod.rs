@@ -16,7 +16,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::algebra::populate::{walk_rule, RuleStructures};
 use crate::algebra::signature::{Signature, TypeId};
-use crate::algebra::structure::{ConcreteType, ElId, Structure, TypeConflict};
+use crate::algebra::structure::{ConcreteType, ElId, Structure, StructureId, TypeConflict};
 use crate::ast::*;
 use crate::error::CompileError;
 use crate::scopes::Scopes;
@@ -60,16 +60,7 @@ pub fn build_structures(
         if !last_conflicts.is_empty() {
             let errors: Vec<CompileError> = last_conflicts
                 .into_iter()
-                .map(|(sid, conflict)| {
-                    conflict_to_error(
-                        ast,
-                        signature,
-                        &rule.cat.structures[sid.0],
-                        &rule.semantic_els[sid.0],
-                        &rule.native_terms[sid.0],
-                        conflict,
-                    )
-                })
+                .map(|(sid, conflict)| conflict_to_error(ast, signature, &rule, sid, conflict))
                 .collect();
             return Err(errors);
         }
@@ -111,26 +102,24 @@ fn collect_rules(
 /// Lowers a [`TypeConflict`] to a user-facing [`CompileError`].
 ///
 /// Always emits [`CompileError::ConflictingTermType`], anchored on a
-/// term native to the conflict's structure whose element shares a
-/// class with `conflict.el`. Restricting to native terms avoids
-/// pointing at terms inherited via cloning from earlier structures —
-/// those live at unrelated source locations. Each [`ConcreteType`] is
-/// rendered as `TypeName` for global types or `parent_name.TypeName`
-/// for member types, matching the format the eqlog-side conflict pass
-/// uses.
+/// term whose element shares a class with `conflict.el`. The term is
+/// located via [`find_term`], which walks back through morphisms to
+/// find a structure that natively records a term mapping to (a
+/// preimage of) `el`. Each [`ConcreteType`] is rendered as `TypeName`
+/// for global types or `parent_name.TypeName` for member types,
+/// matching the format the eqlog-side conflict pass uses.
 ///
-/// Panics if no native term backs `el`; the message distinguishes
-/// ambient model elements to help diagnose the invariant violation.
+/// Panics if no term backs `el` in any reachable structure.
 fn conflict_to_error(
     ast: &Ast,
     signature: &Signature,
-    structure: &Structure,
-    semantic_el: &BTreeMap<TermId, ElId>,
-    native_terms: &BTreeSet<TermId>,
+    rule: &RuleStructures,
+    sid: StructureId,
     conflict: TypeConflict,
 ) -> CompileError {
     let TypeConflict { el, a, b } = conflict;
-    let term_id = find_term(structure, semantic_el, native_terms, el);
+    let structure = &rule.cat.structures[sid.0];
+    let term_id = find_term(rule, sid, el);
     CompileError::ConflictingTermType {
         types: vec![
             concrete_type_to_string(ast, signature, structure, &a),
@@ -167,36 +156,69 @@ fn concrete_type_to_string(
     format!("{parent_name}.{type_name}")
 }
 
-/// Locates a native term whose element shares a class with `target`
-/// under `structure`'s unification. Considers only terms in
-/// `native_terms` so the diagnostic anchors at source recorded by this
-/// structure's own walk, not at terms inherited from a cloned earlier
-/// structure. Panics if no such term exists, with a message that flags
-/// ambient model elements to help diagnose the invariant violation.
-fn find_term(
-    structure: &Structure,
-    semantic_el: &BTreeMap<TermId, ElId>,
-    native_terms: &BTreeSet<TermId>,
-    target: ElId,
-) -> TermId {
-    let target_root = structure.unification.root_const(target);
-    native_terms
-        .iter()
-        .copied()
-        .find(|t| {
-            semantic_el
-                .get(t)
-                .map(|&e| structure.unification.root_const(e) == target_root)
-                .unwrap_or(false)
-        })
-        .unwrap_or_else(|| {
-            let is_ambient = structure
-                .ambient_model_els
-                .values()
-                .any(|&e| structure.unification.root_const(e) == target_root);
-            panic!(
-                "conflict on class {target:?} has no native term in semantic_el \
-                 (ambient model el: {is_ambient})"
-            );
-        })
+/// Locates a term whose element shares a class with `target` in the
+/// structure at `sid`, possibly by walking back through incoming
+/// morphisms to an earlier structure that natively records such a
+/// term.
+///
+/// `RuleStructures::semantic_els[sid]` only holds terms whose lexical
+/// position lies in the scope walked into structure `sid` itself; an
+/// earlier structure's terms live in that earlier structure's entry.
+/// Conflicts can be detected at any structure in the cat — including
+/// ones that received `target` only as the image of an earlier
+/// structure's element under a morphism — so a direct lookup in
+/// `semantic_els[sid]` may miss. The walk handles this by enumerating
+/// preimages of the conflicting class along incoming morphisms and
+/// recursing on the source structure.
+///
+/// Implementation: BFS over `(StructureId, ElId)` pairs, with each
+/// pair canonicalised by the corresponding structure's unification.
+/// At each pair, scan `semantic_els[s]` for a hit; on miss, expand
+/// the frontier through incoming morphisms by mapping the current
+/// `el` back to its preimages in each source structure.
+///
+/// Panics if no reachable structure backs the class with a term.
+fn find_term(rule: &RuleStructures, sid: StructureId, target: ElId) -> TermId {
+    let start_root = rule.cat.structures[sid.0].unification.root_const(target);
+    let mut visited: BTreeSet<(StructureId, ElId)> = BTreeSet::new();
+    let mut worklist: Vec<(StructureId, ElId)> = vec![(sid, start_root)];
+
+    while let Some((s, el_root)) = worklist.pop() {
+        if !visited.insert((s, el_root)) {
+            continue;
+        }
+
+        let s_st = &rule.cat.structures[s.0];
+        if let Some((&term, _)) = rule.semantic_els[s.0]
+            .iter()
+            .find(|(_, &e)| s_st.unification.root_const(e) == el_root)
+        {
+            return term;
+        }
+
+        for (&(src, tgt), elmap) in &rule.cat.morphisms {
+            if tgt != s {
+                continue;
+            }
+            let src_st = &rule.cat.structures[src.0];
+            for (&src_el, &tgt_el) in elmap {
+                if s_st.unification.root_const(tgt_el) != el_root {
+                    continue;
+                }
+                let src_root = src_st.unification.root_const(src_el);
+                if !visited.contains(&(src, src_root)) {
+                    worklist.push((src, src_root));
+                }
+            }
+        }
+    }
+
+    let is_ambient_at_sid = rule.cat.structures[sid.0]
+        .ambient_model_els
+        .values()
+        .any(|&e| rule.cat.structures[sid.0].unification.root_const(e) == start_root);
+    panic!(
+        "conflict on class {target:?} at {sid:?} has no term in any reachable structure \
+         (ambient model el at sid: {is_ambient_at_sid})"
+    );
 }
