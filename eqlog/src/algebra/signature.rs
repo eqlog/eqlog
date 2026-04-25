@@ -159,6 +159,15 @@ impl Signature {
         self.ctor_decls.get(&id).copied()
     }
 
+    /// Inverse of [`Self::type_for_enum_decl`]. Returns the [`EnumDeclId`]
+    /// whose registered type is `tid`, or `None` if `tid` is not an enum
+    /// type.
+    pub fn enum_decl_for_type(&self, tid: TypeId) -> Option<EnumDeclId> {
+        self.enum_decls
+            .iter()
+            .find_map(|(d, t)| (*t == tid).then_some(*d))
+    }
+
     /// Human-readable name for `tid`, suitable for diagnostic messages.
     /// Uses the AST to resolve the decl that introduced the type. Morphism
     /// companions are rendered as `Mor<ModelName>`; if the decl for `tid`

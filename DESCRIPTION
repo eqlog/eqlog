@@ -1,0 +1,32 @@
+Move match exhaustiveness check into algebra/
+
+Add `algebra/match_check.rs` with `check_rule_matches`, a per-rule pass
+over the AST and `Signature` that emits `MatchConflictingEnum` and
+`MatchNotExhaustive`. For each `match` statement in the rule's body it
+resolves each case's pattern to a constructor via `Scopes::lookup`,
+groups the constructors by their enum and reports a conflict when more
+than one enum is involved or a missing constructor when the enum's
+full ctor list is not covered.
+
+Invoke it from `build_structures` after the populate/close fixed point
+converges for each rule, so match diagnostics participate in the same
+per-rule error vector as type conflicts and arg-count mismatches.
+`build_structures` already bails on the first rule with errors, so a
+match error in an earlier rule short-circuits the same way a type
+conflict would, and a later rule's diagnostics never mask an earlier
+rule's broken match.
+
+Drop the corresponding eqlog-side machinery from eqlog.eql:
+case_pattern_is_*, pattern_ctor_arg_*, match_case_pattern_ctor,
+cases_contain_ctor, match_stmt_contains_ctor_of_enum,
+cases_determined_enum, match_term_type_if_cases_determine_enum,
+match_stmt_should_contain_ctor and match_stmt_contains_ctor, together
+with their defining rules. case_pattern_app_should_be_constructor
+stays since it feeds the generic should_be_symbol lookup. Regenerate
+prebuilt/eqlog.rs. Drop iter_match_conflicting_enum and
+iter_match_stmt_contains_ctor_of_enum from semantics::check_eqlog,
+the only Rust consumers of the removed eqlog state.
+
+Add Signature::enum_decl_for_type to invert type_for_enum_decl, used
+by the new pass to map a constructor's codomain back to its enum
+declaration.

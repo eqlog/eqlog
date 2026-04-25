@@ -8,12 +8,14 @@
 //! in each [`RuleStructures`]. Future passes (morphism construction) will
 //! live alongside them.
 
+pub mod match_check;
 pub mod populate;
 pub mod signature;
 pub mod structure;
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::algebra::match_check::check_rule_matches;
 use crate::algebra::populate::{walk_rule, RuleStructures};
 use crate::algebra::signature::{Signature, TypeId};
 use crate::algebra::structure::{ConcreteType, ElId, Structure, StructureId, TypeConflict};
@@ -75,6 +77,7 @@ pub fn build_structures(
             .map(|(sid, conflict)| conflict_to_error(ast, signature, &rule, sid, conflict))
             .collect();
         errors.extend(last_arg_num_errors);
+        check_rule_matches(rid, ast, scopes, signature, &mut errors);
         if !errors.is_empty() {
             return Err(errors);
         }
