@@ -1,10 +1,7 @@
-mod check_epic;
-
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::iter;
 
-use check_epic::*;
 use itertools::Itertools;
 
 use crate::eqlog_util::*;
@@ -336,7 +333,6 @@ pub fn check_eqlog(
         .chain(iter_match_conflicting_enum(eqlog, locations))
         .chain(iter_match_stmt_contains_ctor_of_enum(eqlog, locations))
         .chain(iter_undetermined_type_errors(eqlog, locations))
-        .chain(iter_surjectivity_errors(eqlog, locations))
         .chain(iter_enum_ctors_not_surjective_errors(
             eqlog,
             identifiers,

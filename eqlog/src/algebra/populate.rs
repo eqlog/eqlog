@@ -23,6 +23,29 @@ use crate::ast::*;
 use crate::error::CompileError;
 use crate::scopes::{Scope, ScopeId, Scopes, Symbol};
 
+/// Origin tag for the morphism associated with a statement. Mirrors
+/// `if_morphism` / `surj_then_morphism` / `non_surj_then_morphism` /
+/// `noop_morphism` in `eqlog.eql`. A property of how the morphism arose
+/// from the AST, not an algebraic property of the morphism itself —
+/// surjectivity in particular is not essentially-algebraic.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum MorphismKind {
+    /// `if`-stmt or `match`-stmt morphism. Source embeds into target;
+    /// target may have new elements (existentially quantified).
+    If,
+    /// `then`-equal or `then`-pred atom morphism. Target shares the
+    /// source's elements; only equalities and predicate insertions
+    /// distinguish them.
+    SurjThen,
+    /// `then`-defined atom morphism. Target may introduce one new
+    /// element (the result of the defined term).
+    NonSurjThen,
+    /// `branch`-stmt after-morphism. Target is a clone of source with
+    /// no extra constraints — the actual branch bodies hang off
+    /// `branch_block_starts`.
+    Noop,
+}
+
 /// All algebraic structures produced for one rule. The initial structure
 /// (state before any statement has executed) is `cat.structures[0]`.
 #[derive(Clone, Debug, Default)]
@@ -36,6 +59,13 @@ pub struct RuleStructures {
     pub semantic_els: Vec<BTreeMap<TermId, ElId>>,
     pub stmt_before: BTreeMap<StmtId, StructureId>,
     pub stmt_after: BTreeMap<StmtId, StructureId>,
+    /// Origin tag for each statement's morphism, keyed by the
+    /// `(stmt_before, stmt_after)` endpoints that index into
+    /// `cat.morphisms`. Only statement-level morphisms appear here;
+    /// the auxiliary morphisms into `branch_block_starts`,
+    /// `match_after_scrutinee` and `match_case_starts` are deliberately
+    /// untagged (they have no analogue in `eqlog.eql`'s tagging).
+    pub morphism_kinds: BTreeMap<(StructureId, StructureId), MorphismKind>,
     /// The cloned start structure of each block of a `branch` statement,
     /// keyed by `(branch, index_within_branch)`. Distinct from the first
     /// statement's `stmt_before` because a block may be empty, leaving no
@@ -159,14 +189,18 @@ fn walk_stmt(
 ) -> (StructureId, bool) {
     match *ast.stmt(stmt) {
         Stmt::If(id) => {
-            let (next, mut changed) = ensure_stmt_after(rule, stmt, current);
+            let (next, mut changed) = ensure_stmt_after(rule, stmt, current, MorphismKind::If);
             let atom = ast.if_stmt(id).atom;
             changed |= walk_if_atom(atom, next, rule, ast, scopes, signature, errors);
             (next, changed)
         }
         Stmt::Then(id) => {
-            let (next, mut changed) = ensure_stmt_after(rule, stmt, current);
             let atom = ast.then_stmt(id).atom;
+            let kind = match *ast.then_atom(atom) {
+                ThenAtom::Equal(_) | ThenAtom::Pred(_) => MorphismKind::SurjThen,
+                ThenAtom::Defined(_) => MorphismKind::NonSurjThen,
+            };
+            let (next, mut changed) = ensure_stmt_after(rule, stmt, current, kind);
             changed |= walk_then_atom(atom, next, rule, ast, scopes, signature, errors);
             (next, changed)
         }
@@ -186,7 +220,7 @@ fn walk_stmt(
             // individual branches.
             // TODO: after_stmt should get a morphism from the
             // intersection of the end structures in each branch.
-            let (after, c3) = ensure_stmt_after(rule, stmt, current);
+            let (after, c3) = ensure_stmt_after(rule, stmt, current, MorphismKind::Noop);
             changed |= c3;
             (after, changed)
         }
@@ -213,7 +247,7 @@ fn walk_stmt(
             // disconnected from the case bodies.
             // TODO: after_stmt should get a morphism from the intersection
             // of the end structures in each case.
-            let (after, c5) = ensure_stmt_after(rule, stmt, after_scrutinee);
+            let (after, c5) = ensure_stmt_after(rule, stmt, after_scrutinee, MorphismKind::If);
             changed |= c5;
             (after, changed)
         }
@@ -221,18 +255,20 @@ fn walk_stmt(
 }
 
 /// Returns the structure recorded as `stmt_after[stmt]`, allocating a clone
-/// of `src` for it on the first visit. The bool indicates whether a fresh
-/// clone was created.
+/// of `src` for it on the first visit and tagging the resulting morphism
+/// with `kind`. The bool indicates whether a fresh clone was created.
 fn ensure_stmt_after(
     rule: &mut RuleStructures,
     stmt: StmtId,
     src: StructureId,
+    kind: MorphismKind,
 ) -> (StructureId, bool) {
     if let Some(&id) = rule.stmt_after.get(&stmt) {
         return (id, false);
     }
     let id = rule.clone_structure(src);
     rule.stmt_after.insert(stmt, id);
+    rule.morphism_kinds.insert((src, id), kind);
     (id, true)
 }
 

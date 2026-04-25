@@ -14,7 +14,7 @@ pub mod structure;
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::algebra::populate::{walk_rule, RuleStructures};
+use crate::algebra::populate::{walk_rule, MorphismKind, RuleStructures};
 use crate::algebra::signature::{Signature, TypeId};
 use crate::algebra::structure::{ConcreteType, ElId, Structure, StructureId, TypeConflict};
 use crate::ast::*;
@@ -75,6 +75,12 @@ pub fn build_structures(
             .map(|(sid, conflict)| conflict_to_error(ast, signature, &rule, sid, conflict))
             .collect();
         errors.extend(last_arg_num_errors);
+        // Only run the surjectivity check when the structures are at a
+        // settled, conflict-free state; type conflicts can leave the
+        // morphisms in shapes that would produce noisy false positives.
+        if errors.is_empty() {
+            errors.extend(surjectivity_errors(ast, &rule));
+        }
         if !errors.is_empty() {
             return Err(errors);
         }
@@ -83,6 +89,82 @@ pub fn build_structures(
         assert!(prev.is_none(), "rule {rid:?} visited twice in decl tree");
     }
     Ok(rules)
+}
+
+/// Reports surjectivity violations for `then`-atom morphisms. A
+/// `SurjThen` morphism (from a `then`-equal or `then`-pred atom) must be
+/// surjective on elements: every element of the target structure must
+/// have a preimage under the morphism. A `NonSurjThen` morphism (from a
+/// `then`-defined atom) has the same requirement, except the element
+/// backing the defined-then atom's term is exempt.
+///
+/// Mirrors eqlog.eql's `el_should_be_surjective_ok` /
+/// `el_is_surjective_ok` rules. The diagnostic is anchored on a term
+/// in the target structure whose semantic el is the offender.
+fn surjectivity_errors(ast: &Ast, rule: &RuleStructures) -> Vec<CompileError> {
+    let mut errors = Vec::new();
+    for (&stmt_id, &tgt) in &rule.stmt_after {
+        let Some(&src) = rule.stmt_before.get(&stmt_id) else {
+            continue;
+        };
+        let kind = match rule.morphism_kinds.get(&(src, tgt)) {
+            Some(k) => *k,
+            None => continue,
+        };
+        let exempt = match (kind, *ast.stmt(stmt_id)) {
+            (MorphismKind::SurjThen, _) => None,
+            (MorphismKind::NonSurjThen, Stmt::Then(then_id)) => {
+                let atom = ast.then_stmt(then_id).atom;
+                let ThenAtom::Defined(def_id) = *ast.then_atom(atom) else {
+                    unreachable!("NonSurjThen morphism must come from a defined-then atom")
+                };
+                let term = ast.defined_then_atom(def_id).term;
+                rule.semantic_els[tgt.0]
+                    .get(&term)
+                    .copied()
+                    .map(|e| rule.cat.structures[tgt.0].unification.root_const(e))
+            }
+            _ => continue,
+        };
+
+        let Some(elmap) = rule.cat.morphisms.get(&(src, tgt)) else {
+            continue;
+        };
+        let tgt_st = &rule.cat.structures[tgt.0];
+        let img: BTreeSet<ElId> = elmap
+            .values()
+            .map(|&e| tgt_st.unification.root_const(e))
+            .collect();
+
+        for &el_root in tgt_st.els.keys() {
+            if img.contains(&el_root) {
+                continue;
+            }
+            if exempt == Some(el_root) {
+                continue;
+            }
+            let term = find_term_at(rule, tgt, el_root);
+            errors.push(CompileError::SurjectivityViolation {
+                location: ast.loc(term),
+            });
+        }
+    }
+    errors
+}
+
+/// Locates a term in `rule.semantic_els[sid]` whose el shares a class
+/// with `target` under the structure's unification. Every newly-introduced
+/// element in a then-stmt's target structure must back at least one
+/// surface term, so this never fails on inputs from
+/// [`surjectivity_errors`].
+fn find_term_at(rule: &RuleStructures, sid: StructureId, target: ElId) -> TermId {
+    let st = &rule.cat.structures[sid.0];
+    let target_root = st.unification.root_const(target);
+    rule.semantic_els[sid.0]
+        .iter()
+        .find(|(_, &e)| st.unification.root_const(e) == target_root)
+        .map(|(&t, _)| t)
+        .expect("surjectivity-offending el should back a term in the target structure")
 }
 
 /// Walks `decls` and appends one [`RuleNode`] per rule declaration

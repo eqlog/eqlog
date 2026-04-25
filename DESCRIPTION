@@ -1,0 +1,12 @@
+Move morphism kinds and surjectivity to algebra/
+
+MorphismKind { If, SurjThen, NonSurjThen, Noop } and morphism_kinds on
+RuleStructures, populated as walk_stmt clones each statement's
+after-structure. The kind is metadata about the AST construct that
+produced the morphism, not an algebraic property of the morphism itself.
+
+Port the el_should_be_surjective_ok / el_is_surjective_ok check from
+eqlog.eql to a Rust-side scan in algebra/build_structures: every element
+of a then-atom morphism's target must be in the morphism's image, with
+the defined-then atom's term el exempt for NonSurjThen. Drop the
+now-redundant eqlog.eql rules and the iter_surjectivity_errors consumer.
