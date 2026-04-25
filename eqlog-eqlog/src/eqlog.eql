@@ -1917,34 +1917,6 @@ rule type_list_len_snoc {
     then len = succ(init_len);
 }
 
-func term_list_len(TermListNode) -> Nat;
-rule term_list_len_total {
-    if terms: TermListNode;
-    then term_list_len(terms)!;
-}
-rule term_list_len_nil {
-    if nil_term_list_node(terms);
-    if len = term_list_len(terms);
-    then len = zero();
-}
-rule term_list_len_cons {
-    if cons_term_list_node(terms, _, tail);
-    if len = term_list_len(terms);
-    if tail_len = term_list_len(tail);
-    then len = succ(tail_len);
-}
-
-pred pred_arg_num_should_match(
-    got: Nat,
-    expected: Nat,
-    usage: Loc
-);
-pred func_arg_num_should_match(
-    got: Nat,
-    expected: Nat,
-    usage: Loc
-);
-
 func semantic_pred_expr(PredExprNode, Structure) -> DepPred;
 
 rule semantic_ambient_global_pred_expr_rule {
@@ -2057,32 +2029,6 @@ rule semantic_morphism_type_expr_rule {
     if type_expr_structure(type_expr, structure);
     then dep_type := GlobalType(mor_typ)!;
     then semantic_type_expr(type_expr, structure) = dep_type;
-}
-
-rule pred_if_atom_arg_num_should_match {
-    if pred_if_atom_node(atom, pred_expr, args);
-    if got_len = term_list_len(args);
-    if p = underlying_pred(semantic_pred_expr(pred_expr, _));
-    if expected_len = type_list_len(pred_arity(p));
-    if loc = if_atom_node_loc(atom);
-    then pred_arg_num_should_match(got_len, expected_len, loc);
-}
-rule pred_then_atom_arg_num_should_match {
-    if pred_then_atom_node(atom, pred_expr, args);
-    if got_len = term_list_len(args);
-    if p = underlying_pred(semantic_pred_expr(pred_expr, _));
-    if expected_len = type_list_len(pred_arity(p));
-    if loc = then_atom_node_loc(atom);
-    then pred_arg_num_should_match(got_len, expected_len, loc);
-}
-
-rule app_term_arg_num_should_match {
-    if app_term_node(tm, func_expr, args);
-    if got_len = term_list_len(args);
-    if f = underlying_func(semantic_func_expr(func_expr, _));
-    if expected_len = type_list_len(domain(f));
-    if loc = term_node_loc(tm);
-    then func_arg_num_should_match(got_len, expected_len, loc);
 }
 
 // ## Control flow graph
