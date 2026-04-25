@@ -182,39 +182,6 @@ pub fn iter_undetermined_type_errors<'a>(
         })
 }
 
-pub fn iter_symbol_declared_twice_errors<'a>(
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-    locations: &'a BTreeMap<Loc, Location>,
-) -> impl 'a + Iterator<Item = CompileError> {
-    let mut symbols: BTreeMap<(SymbolScope, Ident), Vec<Loc>> = BTreeMap::new();
-    for (scope, name, _, loc) in eqlog.iter_accessible_symbol() {
-        symbols.entry((scope, name)).or_insert(Vec::new()).push(loc);
-    }
-
-    symbols.into_iter().filter_map(|((_, ident), locs)| {
-        if locs.len() <= 1 {
-            return None;
-        }
-
-        let mut locations: Vec<Location> = locs
-            .into_iter()
-            .map(|loc| *locations.get(&loc).unwrap())
-            .collect();
-        locations.sort_by_key(|location| location.1);
-        assert!(locations.len() > 1);
-        let first_declaration = locations[0];
-        let second_declaration = locations[1];
-
-        let name: String = identifiers.get(&ident).unwrap().to_string();
-        Some(CompileError::SymbolDeclaredTwice {
-            name,
-            first_declaration,
-            second_declaration,
-        })
-    })
-}
-
 pub fn iter_symbol_lookup_errors<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
@@ -408,11 +375,6 @@ pub fn check_eqlog(
     locations: &BTreeMap<Loc, Location>,
 ) -> Result<(), CompileError> {
     let first_error: Option<CompileError> = iter::empty()
-        .chain(iter_symbol_declared_twice_errors(
-            eqlog,
-            identifiers,
-            locations,
-        ))
         .chain(iter_symbol_lookup_errors(eqlog, identifiers, locations))
         .chain(iter_pred_arg_number_errors(eqlog, locations))
         .chain(iter_func_arg_number_errors(eqlog, locations))
