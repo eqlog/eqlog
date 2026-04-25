@@ -13,7 +13,7 @@
 //! happened during this call.
 
 use std::collections::btree_map::Entry;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::algebra::signature::{FuncId, PredId, Signature, TypeId};
 use crate::algebra::structure::{
@@ -28,8 +28,16 @@ use crate::scopes::{Scope, ScopeId, Scopes, Symbol};
 pub struct RuleStructures {
     pub cat: StructureCat,
     /// Invariant: `semantic_els.len() == cat.structures.len()`. Entry `i`
-    /// is the term-to-element provenance map for `cat.structures[i]`.
+    /// is the term-to-element provenance map for `cat.structures[i]`,
+    /// including terms inherited from clones.
     pub semantic_els: Vec<BTreeMap<TermId, ElId>>,
+    /// Invariant: `native_terms.len() == cat.structures.len()`. Entry
+    /// `i` is the subset of `semantic_els[i]`'s keys that were inserted
+    /// directly while walking statement `i`'s scope, i.e. not carried
+    /// over from a clone of an earlier structure. Diagnostics anchor
+    /// errors at native terms only — terms inherited via cloning live
+    /// in earlier structures and would point at unrelated source.
+    pub native_terms: Vec<BTreeSet<TermId>>,
     pub stmt_before: BTreeMap<StmtId, StructureId>,
     pub stmt_after: BTreeMap<StmtId, StructureId>,
     /// The cloned start structure of each block of a `branch` statement,
@@ -52,19 +60,35 @@ impl RuleStructures {
     fn push_blank(&mut self) -> StructureId {
         let id = self.cat.push(Structure::default());
         self.semantic_els.push(BTreeMap::new());
+        self.native_terms.push(BTreeSet::new());
         id
     }
 
     /// Appends a clone of the structure at `id`, adds the identity
     /// inclusion morphism from `id` to the new structure, and returns the
-    /// fresh [`StructureId`].
+    /// fresh [`StructureId`]. The new structure inherits the source's
+    /// `semantic_els` map but starts with an empty `native_terms` set,
+    /// so any term recorded later through this entry counts as native.
     fn clone_structure(&mut self, id: StructureId) -> StructureId {
         let clone = self.cat.structures[id.0].clone();
         let identity = identity_elmap(&clone);
         let new_id = self.cat.push(clone);
         self.semantic_els.push(self.semantic_els[id.0].clone());
+        self.native_terms.push(BTreeSet::new());
         self.cat.add_morphism(id, new_id, identity);
         new_id
+    }
+
+    /// Records `term -> el` in `current`'s `semantic_els` and marks
+    /// `term` as native to `current`. Idempotent: a second call with
+    /// the same `(current, term)` is a no-op. Returns true iff this
+    /// call inserted a fresh entry.
+    fn record_term(&mut self, current: StructureId, term: TermId, el: ElId) -> bool {
+        let inserted = self.semantic_els[current.0].insert(term, el).is_none();
+        if inserted {
+            self.native_terms[current.0].insert(term);
+        }
+        inserted
     }
 }
 
@@ -297,7 +321,7 @@ fn walk_if_atom(
             let ct = concrete_type_for(signature, typ_id, structure);
             let el_id = structure.push_el();
             structure.els.insert(el_id, ct);
-            rule.semantic_els[current.0].insert(term, el_id);
+            rule.record_term(current, term, el_id);
             match *ast.term(term) {
                 Term::Var(vid) => {
                     let name = ast.var_term(vid).name.clone();
@@ -526,7 +550,7 @@ fn walk_term(
         }
     };
     if cached.is_none() {
-        rule.semantic_els[current.0].insert(term, el);
+        rule.record_term(current, term, el);
         changed = true;
     }
     (el, changed)
@@ -572,7 +596,6 @@ fn emit_app(
         };
     }
 
-    let codomain = func_data.codomain;
     let parents: Vec<ElId> = parents
         .into_iter()
         .map(|e| structure.unification.root(e))
@@ -602,16 +625,13 @@ fn emit_app(
                 Some(el) => el,
                 None => structure.push_el(),
             };
-            let result_ct = codomain_concrete_type(signature, codomain, &app_key.parents);
-            if let Some(ct) = result_ct {
-                let entry = structure.els.entry(id).or_insert(None);
-                if entry.is_none() {
-                    *entry = Some(ct);
-                }
-            }
             structure.func_apps.insert(app_key, id);
-            // Allocating an el, recording a fresh type or inserting a new
-            // func_app entry is always observable change.
+            // Allocating an el or inserting a new func_app entry is
+            // always observable change. The codomain type is deferred
+            // to `Structure::close`'s typing pass so that argument
+            // types from other apps land first; this mirrors the
+            // eqlog-side rule order and keeps `Could be ...` lines
+            // sequenced like the existing diagnostics.
             changed = true;
             id
         }
@@ -734,27 +754,6 @@ fn concrete_type_for(
     Some(ConcreteType {
         typ: tid,
         parents: structure.ambient_parents(&signature.type_(tid).parents),
-    })
-}
-
-/// Materialises the [`ConcreteType`] of a func's codomain inside an
-/// application whose enclosing-model parent els are `app_parents`. The
-/// codomain's own parent chain is always a prefix of the function's, so
-/// reading off `app_parents[..codomain.parents.len()]` recovers the
-/// parent els that pin its [`ConcreteType`]. Returns `None` when
-/// `app_parents` is too short, which only happens for malformed programs.
-fn codomain_concrete_type(
-    signature: &Signature,
-    codomain: TypeId,
-    app_parents: &[ElId],
-) -> Option<ConcreteType> {
-    let n = signature.type_(codomain).parents.len();
-    if n > app_parents.len() {
-        return None;
-    }
-    Some(ConcreteType {
-        typ: codomain,
-        parents: app_parents[..n].to_vec(),
     })
 }
 

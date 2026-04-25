@@ -12,7 +12,7 @@ pub mod populate;
 pub mod signature;
 pub mod structure;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::algebra::populate::{walk_rule, RuleStructures};
 use crate::algebra::signature::{Signature, TypeId};
@@ -66,6 +66,7 @@ pub fn build_structures(
                         signature,
                         &rule.cat.structures[sid.0],
                         &rule.semantic_els[sid.0],
+                        &rule.native_terms[sid.0],
                         conflict,
                     )
                 })
@@ -109,82 +110,92 @@ fn collect_rules(
 
 /// Lowers a [`TypeConflict`] to a user-facing [`CompileError`].
 ///
-/// When the two [`ConcreteType`]s disagree on [`TypeId`] the result is
-/// [`CompileError::ConflictingTermType`], anchored on the term in
-/// `semantic_el` whose element shares a class with `conflict.el`. When
-/// the [`TypeId`]s agree but parents diverge, the result is
-/// [`CompileError::ConflictingParentEl`], anchored on the two terms
-/// whose elements share classes with the innermost differing pair of
-/// parent elements (last index in the parent list, since parents are
-/// outermost first).
+/// Always emits [`CompileError::ConflictingTermType`], anchored on a
+/// term native to the conflict's structure whose element shares a
+/// class with `conflict.el`. Restricting to native terms avoids
+/// pointing at terms inherited via cloning from earlier structures —
+/// those live at unrelated source locations. Each [`ConcreteType`] is
+/// rendered as `TypeName` for global types or `parent_name.TypeName`
+/// for member types, matching the format the eqlog-side conflict pass
+/// uses.
 ///
-/// Panics if no term backs the chosen elements; the message
-/// distinguishes ambient model elements to help diagnose the invariant
-/// violation.
+/// Panics if no native term backs `el`; the message distinguishes
+/// ambient model elements to help diagnose the invariant violation.
 fn conflict_to_error(
     ast: &Ast,
     signature: &Signature,
     structure: &Structure,
     semantic_el: &BTreeMap<TermId, ElId>,
+    native_terms: &BTreeSet<TermId>,
     conflict: TypeConflict,
 ) -> CompileError {
     let TypeConflict { el, a, b } = conflict;
-    if a.typ != b.typ {
-        let term_id = find_term(structure, semantic_el, el);
-        return CompileError::ConflictingTermType {
-            types: vec![
-                signature.type_name(ast, a.typ),
-                signature.type_name(ast, b.typ),
-            ],
-            location: ast.loc(term_id),
-        };
-    }
-
-    let (pa, pb) = innermost_differing_parents(structure, &a, &b)
-        .expect("parent-mismatch conflict has no differing parent");
-    let pa_term = find_term(structure, semantic_el, structure.unification.root_const(pa));
-    let pb_term = find_term(structure, semantic_el, structure.unification.root_const(pb));
-    CompileError::ConflictingParentEl {
-        type_name: signature.type_name(ast, a.typ),
-        parent_locations: (ast.loc(pa_term), ast.loc(pb_term)),
+    let term_id = find_term(structure, semantic_el, native_terms, el);
+    CompileError::ConflictingTermType {
+        types: vec![
+            concrete_type_to_string(ast, signature, structure, &a),
+            concrete_type_to_string(ast, signature, structure, &b),
+        ],
+        location: ast.loc(term_id),
     }
 }
 
-/// Returns the deepest (highest-index) pair of parents whose classes
-/// disagree under `structure`'s unification, or `None` if all
-/// overlapping positions agree. Parents are outermost first, so the
-/// highest index is the innermost ambient model — usually the most
-/// useful place to anchor a diagnostic.
-fn innermost_differing_parents(
+/// Renders a [`ConcreteType`] for a diagnostic message. Global types
+/// render as just the type name. Member types render as
+/// `parent_name.TypeName`, where `parent_name` is the source name of
+/// the innermost parent (read off `structure.var_els` by class), or
+/// `?` for parents not bound to any variable (e.g. ambient model els
+/// introduced by enclosing-model scopes).
+fn concrete_type_to_string(
+    ast: &Ast,
+    signature: &Signature,
     structure: &Structure,
-    a: &ConcreteType,
-    b: &ConcreteType,
-) -> Option<(ElId, ElId)> {
-    let n = a.parents.len().min(b.parents.len());
-    (0..n).rev().find_map(|i| {
-        let ra = structure.unification.root_const(a.parents[i]);
-        let rb = structure.unification.root_const(b.parents[i]);
-        (ra != rb).then_some((a.parents[i], b.parents[i]))
-    })
+    ct: &ConcreteType,
+) -> String {
+    let type_name = signature.type_name(ast, ct.typ);
+    let Some(&parent) = ct.parents.last() else {
+        return type_name;
+    };
+    let parent_root = structure.unification.root_const(parent);
+    let parent_name = structure
+        .var_els
+        .iter()
+        .find_map(|(name, &el)| {
+            (structure.unification.root_const(el) == parent_root).then_some(name.as_str())
+        })
+        .unwrap_or("?");
+    format!("{parent_name}.{type_name}")
 }
 
-/// Locates a term whose element shares a class with `target` under
-/// `structure`'s unification. Panics if no such term exists, with a
-/// message that flags ambient model elements to help diagnose the
-/// invariant violation.
-fn find_term(structure: &Structure, semantic_el: &BTreeMap<TermId, ElId>, target: ElId) -> TermId {
+/// Locates a native term whose element shares a class with `target`
+/// under `structure`'s unification. Considers only terms in
+/// `native_terms` so the diagnostic anchors at source recorded by this
+/// structure's own walk, not at terms inherited from a cloned earlier
+/// structure. Panics if no such term exists, with a message that flags
+/// ambient model elements to help diagnose the invariant violation.
+fn find_term(
+    structure: &Structure,
+    semantic_el: &BTreeMap<TermId, ElId>,
+    native_terms: &BTreeSet<TermId>,
+    target: ElId,
+) -> TermId {
     let target_root = structure.unification.root_const(target);
-    semantic_el
+    native_terms
         .iter()
-        .find(|(_, &e)| structure.unification.root_const(e) == target_root)
-        .map(|(t, _)| *t)
+        .copied()
+        .find(|t| {
+            semantic_el
+                .get(t)
+                .map(|&e| structure.unification.root_const(e) == target_root)
+                .unwrap_or(false)
+        })
         .unwrap_or_else(|| {
             let is_ambient = structure
                 .ambient_model_els
                 .values()
                 .any(|&e| structure.unification.root_const(e) == target_root);
             panic!(
-                "conflict on class {target:?} has no term in semantic_el \
+                "conflict on class {target:?} has no native term in semantic_el \
                  (ambient model el: {is_ambient})"
             );
         })
