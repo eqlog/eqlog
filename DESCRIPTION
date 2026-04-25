@@ -1,14 +1,14 @@
 Detect arg-count mismatches in algebra/populate
 
-Add a `arg_num_errors` map to `RuleStructures`, keyed by AST node id of
-the offending site (`PredAtomId` for pred atoms, `AppTermId` for func
-applications), and populate it from `walk_pred_atom` and `emit_app`
-whenever a resolved pred or func disagrees on argument count. Resolution
-of member preds/funcs depends on type info that propagates over the
-populate/close fixed point, so re-walks can flip a previously
-unresolvable site into a checked one — keying by node id keeps the
-diagnostic idempotent across iterations. `build_structures` surfaces
-these alongside type conflicts.
+Thread `errors: &mut Vec<CompileError>` through `walk_rule` and its
+helpers. `walk_pred_atom` and `emit_app` push
+`PredicateArgumentNumber`/`FunctionArgumentNumber` onto it whenever a
+resolved pred or func disagrees on argument count. Resolution of member
+preds/funcs depends on type info that propagates over the populate/close
+fixed point, so re-walks can flip a previously unresolvable site into a
+checked one. `build_structures` resets the Vec at the start of each
+iteration and uses the final-iteration Vec as the ground truth, then
+appends it to the conflict-derived errors.
 
 Stop iterating `pred_arg_num_should_match` /
 `func_arg_num_should_match` from `semantics::check_eqlog`; the

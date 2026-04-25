@@ -48,8 +48,21 @@ pub fn build_structures(
     {
         let mut rule = RuleStructures::default();
         let mut last_conflicts;
+        let mut last_arg_num_errors;
         loop {
-            let walk_changed = walk_rule(&mut rule, rid, &enclosing_models, ast, scopes, signature);
+            // Per-iteration reset: the walker re-visits every site, so the
+            // final iteration's Vec is the ground truth at convergence;
+            // earlier iterations would just contribute stale duplicates.
+            last_arg_num_errors = Vec::new();
+            let walk_changed = walk_rule(
+                &mut rule,
+                rid,
+                &enclosing_models,
+                ast,
+                scopes,
+                signature,
+                &mut last_arg_num_errors,
+            );
             let (close_changed, conflicts) = rule.cat.close(signature);
             last_conflicts = conflicts;
             if !walk_changed && !close_changed {
@@ -61,7 +74,7 @@ pub fn build_structures(
             .into_iter()
             .map(|(sid, conflict)| conflict_to_error(ast, signature, &rule, sid, conflict))
             .collect();
-        errors.extend(rule.arg_num_errors.values().cloned());
+        errors.extend(last_arg_num_errors);
         if !errors.is_empty() {
             return Err(errors);
         }
