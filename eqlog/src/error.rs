@@ -90,10 +90,6 @@ pub enum CompileError {
         types: Vec<String>,
         location: Location,
     },
-    ConflictingParentEl {
-        type_name: String,
-        parent_locations: (Location, Location),
-    },
     VariableIntroducedInThenStmt {
         location: Location,
     },
@@ -216,9 +212,6 @@ impl CompileError {
             } => *second_declaration,
             CompileError::UndeterminedTermType { location } => *location,
             CompileError::ConflictingTermType { location, .. } => *location,
-            CompileError::ConflictingParentEl {
-                parent_locations, ..
-            } => parent_locations.0,
             CompileError::VariableIntroducedInThenStmt { location } => *location,
             CompileError::WildcardInThenStmt { location } => *location,
             CompileError::SurjectivityViolation { location } => *location,
@@ -264,7 +257,6 @@ pub enum CompileErrorKind {
     SymbolDeclaredTwice,
     UndeterminedTermType,
     ConflictingTermType,
-    ConflictingParentEl,
     VariableIntroducedInThenStmt,
     WildcardInThenStmt,
     SurjectivityViolation,
@@ -303,7 +295,6 @@ impl From<&CompileError> for CompileErrorKind {
             SymbolDeclaredTwice { .. } => CompileErrorKind::SymbolDeclaredTwice,
             UndeterminedTermType { .. } => CompileErrorKind::UndeterminedTermType,
             ConflictingTermType { .. } => CompileErrorKind::ConflictingTermType,
-            ConflictingParentEl { .. } => CompileErrorKind::ConflictingParentEl,
             VariableIntroducedInThenStmt { .. } => CompileErrorKind::VariableIntroducedInThenStmt,
             WildcardInThenStmt { .. } => CompileErrorKind::WildcardInThenStmt,
             SurjectivityViolation { .. } => CompileErrorKind::SurjectivityViolation,
@@ -598,17 +589,6 @@ impl Display for CompileErrorWithContext {
                 for ty in types {
                     write!(f, "- Could be {ty}\n")?;
                 }
-            }
-            ConflictingParentEl {
-                type_name,
-                parent_locations,
-            } => {
-                write!(
-                    f,
-                    "term of type {type_name} requires a single ambient parent, but two distinct parents are demanded:\n"
-                )?;
-                write_loc(f, parent_locations.0)?;
-                write_loc(f, parent_locations.1)?;
             }
             VariableIntroducedInThenStmt { location } => {
                 write!(f, "variable introduced in then statement\n")?;

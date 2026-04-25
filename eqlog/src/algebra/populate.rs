@@ -27,8 +27,11 @@ use crate::scopes::{Scope, ScopeId, Scopes, Symbol};
 #[derive(Clone, Debug, Default)]
 pub struct RuleStructures {
     pub cat: StructureCat,
-    /// Invariant: `semantic_els.len() == cat.structures.len()`. Entry `i`
-    /// is the term-to-element provenance map for `cat.structures[i]`.
+    /// Invariant: `semantic_els.len() == cat.structures.len()`. Entry
+    /// `i` maps each [`TermId`] whose lexical position lies inside the
+    /// scope walked into `cat.structures[i]` to its [`ElId`]. Per-
+    /// structure only; cross-structure el equality is reconstructed
+    /// via morphisms.
     pub semantic_els: Vec<BTreeMap<TermId, ElId>>,
     pub stmt_before: BTreeMap<StmtId, StructureId>,
     pub stmt_after: BTreeMap<StmtId, StructureId>,
@@ -56,13 +59,14 @@ impl RuleStructures {
     }
 
     /// Appends a clone of the structure at `id`, adds the identity
-    /// inclusion morphism from `id` to the new structure, and returns the
-    /// fresh [`StructureId`].
+    /// inclusion morphism from `id` to the new structure, and returns
+    /// the fresh [`StructureId`]. The new structure starts with an
+    /// empty `semantic_els` map.
     fn clone_structure(&mut self, id: StructureId) -> StructureId {
         let clone = self.cat.structures[id.0].clone();
         let identity = identity_elmap(&clone);
         let new_id = self.cat.push(clone);
-        self.semantic_els.push(self.semantic_els[id.0].clone());
+        self.semantic_els.push(BTreeMap::new());
         self.cat.add_morphism(id, new_id, identity);
         new_id
     }
@@ -462,12 +466,12 @@ fn resolve_pred_expr(
 /// Walks `term`, materialising any Els it needs in the current
 /// structure, records `term -> el` in `semantic_el`, and returns the El.
 ///
-/// Idempotent at the el-identity level: `Var` and `Wildcard` terms reuse
-/// the el they cached on the first walk. App terms always recurse into
-/// their arguments and re-attempt resolution of the func reference, so
-/// that a [`FuncApp`] missed on a previous pass (because the func was
-/// unresolvable at the time) gets emitted now. The result el of an App is
-/// still the cached one when present, so callers' chains remain stable.
+/// `prior_el` is the el this `(current, term)` resolved to on an earlier
+/// pass, if any. Reusing it keeps el identity stable across re-walks.
+/// `Var` and `Wildcard` reuse it directly; `App` recurses into its
+/// arguments and re-attempts func resolution so a previously-unresolvable
+/// [`FuncApp`] gets emitted now, while the result el still falls back to
+/// `prior_el` when present.
 fn walk_term(
     term: TermId,
     current: StructureId,
@@ -476,11 +480,11 @@ fn walk_term(
     scopes: &Scopes,
     signature: &Signature,
 ) -> (ElId, bool) {
-    let cached = rule.semantic_els[current.0].get(&term).copied();
+    let prior_el = rule.semantic_els[current.0].get(&term).copied();
     let mut changed = false;
     let el = match *ast.term(term) {
         Term::Var(vid) => {
-            if let Some(el) = cached {
+            if let Some(el) = prior_el {
                 el
             } else {
                 let name = ast.var_term(vid).name.clone();
@@ -496,7 +500,7 @@ fn walk_term(
             }
         }
         Term::Wildcard => {
-            if let Some(el) = cached {
+            if let Some(el) = prior_el {
                 el
             } else {
                 changed = true;
@@ -514,7 +518,9 @@ fn walk_term(
                     e
                 })
                 .collect();
-            let (e, c) = emit_app(func, arg_els, cached, current, rule, ast, scopes, signature);
+            let (e, c) = emit_app(
+                func, arg_els, prior_el, current, rule, ast, scopes, signature,
+            );
             changed |= c;
             e
         }
@@ -525,7 +531,7 @@ fn walk_term(
             todo!()
         }
     };
-    if cached.is_none() {
+    if prior_el.is_none() {
         rule.semantic_els[current.0].insert(term, el);
         changed = true;
     }
@@ -572,7 +578,6 @@ fn emit_app(
         };
     }
 
-    let codomain = func_data.codomain;
     let parents: Vec<ElId> = parents
         .into_iter()
         .map(|e| structure.unification.root(e))
@@ -602,16 +607,9 @@ fn emit_app(
                 Some(el) => el,
                 None => structure.push_el(),
             };
-            let result_ct = codomain_concrete_type(signature, codomain, &app_key.parents);
-            if let Some(ct) = result_ct {
-                let entry = structure.els.entry(id).or_insert(None);
-                if entry.is_none() {
-                    *entry = Some(ct);
-                }
-            }
             structure.func_apps.insert(app_key, id);
-            // Allocating an el, recording a fresh type or inserting a new
-            // func_app entry is always observable change.
+            // Allocating an el or inserting a new func_app entry is
+            // always observable change.
             changed = true;
             id
         }
@@ -734,27 +732,6 @@ fn concrete_type_for(
     Some(ConcreteType {
         typ: tid,
         parents: structure.ambient_parents(&signature.type_(tid).parents),
-    })
-}
-
-/// Materialises the [`ConcreteType`] of a func's codomain inside an
-/// application whose enclosing-model parent els are `app_parents`. The
-/// codomain's own parent chain is always a prefix of the function's, so
-/// reading off `app_parents[..codomain.parents.len()]` recovers the
-/// parent els that pin its [`ConcreteType`]. Returns `None` when
-/// `app_parents` is too short, which only happens for malformed programs.
-fn codomain_concrete_type(
-    signature: &Signature,
-    codomain: TypeId,
-    app_parents: &[ElId],
-) -> Option<ConcreteType> {
-    let n = signature.type_(codomain).parents.len();
-    if n > app_parents.len() {
-        return None;
-    }
-    Some(ConcreteType {
-        typ: codomain,
-        parents: app_parents[..n].to_vec(),
     })
 }
 

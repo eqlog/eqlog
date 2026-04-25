@@ -473,9 +473,11 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     let binding_errors = check_bindings(&ast, &scopes, module);
     let occurrence_err = check_occurrences(&ast, &scopes, module).err();
     let (signature, signature_errors) = build_signature(&ast, &scopes, module);
-    // TODO: merge structure_errors into the main error stream once close
-    // emits them with real locations.
-    let _structures = build_structures(&ast, &scopes, &signature, module);
+    let structure_errors: Vec<CompileError> =
+        match build_structures(&ast, &scopes, &signature, module) {
+            Ok(_) => Vec::new(),
+            Err(errs) => errs,
+        };
 
     let (mut eqlog, identifiers, locations, _module) = populate_eqlog(&ast, module);
     eqlog.close();
@@ -502,6 +504,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
         .chain(signature_errors)
         .chain(casing_err)
         .chain(occurrence_err)
+        .chain(structure_errors)
         .chain(eqlog_err)
         .min()
     {

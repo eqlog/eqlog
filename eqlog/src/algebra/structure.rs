@@ -328,7 +328,9 @@ impl Structure {
 
     /// Walks each func/pred application and propagates the type the
     /// signature demands for every argument (and for the result of a func).
-    /// Returns true iff a fresh concrete type got recorded.
+    /// Domain types are imposed before codomain types so a conflicting
+    /// el attributes the codomain as the new arrival. Returns true iff a
+    /// fresh concrete type got recorded.
     fn typing(
         &mut self,
         signature: &Signature,
@@ -342,13 +344,8 @@ impl Structure {
             .iter()
             .map(|(a, r)| (a.clone(), *r))
             .collect();
-        for (app, result) in apps {
+        for (app, _result) in &apps {
             let func_data = signature.func(app.func);
-            if let Some(ct) = concrete_type_at(signature, func_data.codomain, &app.parents) {
-                if self.impose_concrete_type(result, ct, conflicts, parent_checks) {
-                    changed = true;
-                }
-            }
             for (i, &arg) in app.args.iter().enumerate() {
                 let Some(&dom_tid) = func_data.domain.get(i) else {
                     break;
@@ -362,7 +359,7 @@ impl Structure {
         }
 
         let pred_apps: Vec<PredApp> = self.pred_apps.iter().cloned().collect();
-        for app in pred_apps {
+        for app in &pred_apps {
             let pred_data = signature.pred(app.pred);
             for (i, &arg) in app.args.iter().enumerate() {
                 let Some(&arity_tid) = pred_data.arity.get(i) else {
@@ -372,6 +369,15 @@ impl Structure {
                     if self.impose_concrete_type(arg, ct, conflicts, parent_checks) {
                         changed = true;
                     }
+                }
+            }
+        }
+
+        for (app, result) in apps {
+            let func_data = signature.func(app.func);
+            if let Some(ct) = concrete_type_at(signature, func_data.codomain, &app.parents) {
+                if self.impose_concrete_type(result, ct, conflicts, parent_checks) {
+                    changed = true;
                 }
             }
         }
