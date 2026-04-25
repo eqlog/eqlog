@@ -20,6 +20,7 @@ use crate::algebra::structure::{
     ConcreteType, ElId, ElMap, FuncApp, PredApp, Structure, StructureCat, StructureId,
 };
 use crate::ast::*;
+use crate::error::CompileError;
 use crate::scopes::{Scope, ScopeId, Scopes, Symbol};
 
 /// All algebraic structures produced for one rule. The initial structure
@@ -80,7 +81,10 @@ fn identity_elmap(s: &Structure) -> ElMap {
 
 /// Populates `rule` with the structures and term mappings derived from
 /// walking rule `rid`'s body. `enclosing_models` is the chain of model
-/// types the rule is nested inside, outermost first.
+/// types the rule is nested inside, outermost first. Argument-count
+/// mismatches at resolved pred/func application sites are appended to
+/// `errors`. The walker may emit duplicates across re-walks of the same
+/// site.
 ///
 /// Returns true iff at least one site produced something it had not
 /// produced on previous calls. A `false` return means the rule is at a
@@ -92,6 +96,7 @@ pub fn walk_rule(
     ast: &Ast,
     scopes: &Scopes,
     signature: &Signature,
+    errors: &mut Vec<CompileError>,
 ) -> bool {
     let mut changed = false;
     let initial = if rule.cat.structures.is_empty() {
@@ -103,7 +108,8 @@ pub fn walk_rule(
     changed |= ensure_ambient_els(&mut rule.cat.structures[initial.0], enclosing_models);
 
     let body = ast.rule_decl(rid).body.clone();
-    let (_after, walk_changed) = walk_stmt_block(&body, initial, rule, ast, scopes, signature);
+    let (_after, walk_changed) =
+        walk_stmt_block(&body, initial, rule, ast, scopes, signature, errors);
     changed | walk_changed
 }
 
@@ -119,6 +125,7 @@ fn walk_stmt_block(
     ast: &Ast,
     scopes: &Scopes,
     signature: &Signature,
+    errors: &mut Vec<CompileError>,
 ) -> (StructureId, bool) {
     let mut changed = false;
     for stmt in stmts {
@@ -134,7 +141,7 @@ fn walk_stmt_block(
             before, current,
             "stmt_before for {stmt:?} drifted between populate calls"
         );
-        let (after, stmt_changed) = walk_stmt(*stmt, before, rule, ast, scopes, signature);
+        let (after, stmt_changed) = walk_stmt(*stmt, before, rule, ast, scopes, signature, errors);
         changed |= stmt_changed;
         current = after;
     }
@@ -148,18 +155,19 @@ fn walk_stmt(
     ast: &Ast,
     scopes: &Scopes,
     signature: &Signature,
+    errors: &mut Vec<CompileError>,
 ) -> (StructureId, bool) {
     match *ast.stmt(stmt) {
         Stmt::If(id) => {
             let (next, mut changed) = ensure_stmt_after(rule, stmt, current);
             let atom = ast.if_stmt(id).atom;
-            changed |= walk_if_atom(atom, next, rule, ast, scopes, signature);
+            changed |= walk_if_atom(atom, next, rule, ast, scopes, signature, errors);
             (next, changed)
         }
         Stmt::Then(id) => {
             let (next, mut changed) = ensure_stmt_after(rule, stmt, current);
             let atom = ast.then_stmt(id).atom;
-            changed |= walk_then_atom(atom, next, rule, ast, scopes, signature);
+            changed |= walk_then_atom(atom, next, rule, ast, scopes, signature, errors);
             (next, changed)
         }
         Stmt::Branch(id) => {
@@ -169,7 +177,7 @@ fn walk_stmt(
                 let (block_start, c1) = ensure_branch_block_start(rule, id, idx, current);
                 changed |= c1;
                 let (_after, c2) =
-                    walk_stmt_block(block, block_start, rule, ast, scopes, signature);
+                    walk_stmt_block(block, block_start, rule, ast, scopes, signature, errors);
                 changed |= c2;
             }
             // The branch's after-structure is a separate clone of the
@@ -187,15 +195,17 @@ fn walk_stmt(
             let term = *term;
             let cases = cases.clone();
             let (after_scrutinee, mut changed) = ensure_match_after_scrutinee(rule, id, current);
-            let (_el, c1) = walk_term(term, after_scrutinee, rule, ast, scopes, signature);
+            let (_el, c1) = walk_term(term, after_scrutinee, rule, ast, scopes, signature, errors);
             changed |= c1;
             for case in &cases {
                 let MatchCase { pattern, body } = ast.match_case(*case).clone();
                 let (case_start, c2) = ensure_match_case_start(rule, *case, after_scrutinee);
                 changed |= c2;
-                let (_el, c3) = walk_term(pattern, case_start, rule, ast, scopes, signature);
+                let (_el, c3) =
+                    walk_term(pattern, case_start, rule, ast, scopes, signature, errors);
                 changed |= c3;
-                let (_after, c4) = walk_stmt_block(&body, case_start, rule, ast, scopes, signature);
+                let (_after, c4) =
+                    walk_stmt_block(&body, case_start, rule, ast, scopes, signature, errors);
                 changed |= c4;
             }
             // Likewise, the match's after-structure is a fresh clone of
@@ -273,21 +283,22 @@ fn walk_if_atom(
     ast: &Ast,
     scopes: &Scopes,
     signature: &Signature,
+    errors: &mut Vec<CompileError>,
 ) -> bool {
     match *ast.if_atom(atom) {
         IfAtom::Equal(id) => {
             let EqualAtom { lhs, rhs } = *ast.equal_atom(id);
-            let (lhs_el, c1) = walk_term(lhs, current, rule, ast, scopes, signature);
-            let (rhs_el, c2) = walk_term(rhs, current, rule, ast, scopes, signature);
+            let (lhs_el, c1) = walk_term(lhs, current, rule, ast, scopes, signature, errors);
+            let (rhs_el, c2) = walk_term(rhs, current, rule, ast, scopes, signature, errors);
             let eq = rule.cat.structures[current.0].equate(lhs_el, rhs_el);
             c1 || c2 || eq
         }
         IfAtom::Defined(id) => {
             let DefinedIfAtom { term } = *ast.defined_if_atom(id);
-            let (_el, c) = walk_term(term, current, rule, ast, scopes, signature);
+            let (_el, c) = walk_term(term, current, rule, ast, scopes, signature, errors);
             c
         }
-        IfAtom::Pred(id) => walk_pred_atom(id, current, rule, ast, scopes, signature),
+        IfAtom::Pred(id) => walk_pred_atom(id, current, rule, ast, scopes, signature, errors),
         IfAtom::Var(id) => {
             let VarIfAtom { term, typ } = *ast.var_if_atom(id);
             // Idempotency: a second visit of the same VarIfAtom finds
@@ -325,12 +336,13 @@ fn walk_then_atom(
     ast: &Ast,
     scopes: &Scopes,
     signature: &Signature,
+    errors: &mut Vec<CompileError>,
 ) -> bool {
     match *ast.then_atom(atom) {
         ThenAtom::Equal(id) => {
             let EqualAtom { lhs, rhs } = *ast.equal_atom(id);
-            let (lhs_el, c1) = walk_term(lhs, current, rule, ast, scopes, signature);
-            let (rhs_el, c2) = walk_term(rhs, current, rule, ast, scopes, signature);
+            let (lhs_el, c1) = walk_term(lhs, current, rule, ast, scopes, signature, errors);
+            let (rhs_el, c2) = walk_term(rhs, current, rule, ast, scopes, signature, errors);
             let eq = rule.cat.structures[current.0].equate(lhs_el, rhs_el);
             c1 || c2 || eq
         }
@@ -338,20 +350,20 @@ fn walk_then_atom(
             let DefinedThenAtom { var, term } = *ast.defined_then_atom(id);
             let mut changed = false;
             let var_el = if let Some(v) = var {
-                let (e, c) = walk_term(v, current, rule, ast, scopes, signature);
+                let (e, c) = walk_term(v, current, rule, ast, scopes, signature, errors);
                 changed |= c;
                 Some(e)
             } else {
                 None
             };
-            let (term_el, c) = walk_term(term, current, rule, ast, scopes, signature);
+            let (term_el, c) = walk_term(term, current, rule, ast, scopes, signature, errors);
             changed |= c;
             if let Some(var_el) = var_el {
                 changed |= rule.cat.structures[current.0].equate(var_el, term_el);
             }
             changed
         }
-        ThenAtom::Pred(id) => walk_pred_atom(id, current, rule, ast, scopes, signature),
+        ThenAtom::Pred(id) => walk_pred_atom(id, current, rule, ast, scopes, signature, errors),
     }
 }
 
@@ -362,6 +374,7 @@ fn walk_pred_atom(
     ast: &Ast,
     scopes: &Scopes,
     signature: &Signature,
+    errors: &mut Vec<CompileError>,
 ) -> bool {
     let PredAtom { pred, args } = *ast.pred_atom(id);
     let arg_terms = ast.term_list(args).terms.clone();
@@ -369,13 +382,13 @@ fn walk_pred_atom(
     let arg_els: Vec<ElId> = arg_terms
         .iter()
         .map(|t| {
-            let (e, c) = walk_term(*t, current, rule, ast, scopes, signature);
+            let (e, c) = walk_term(*t, current, rule, ast, scopes, signature, errors);
             changed |= c;
             e
         })
         .collect();
 
-    let (resolved, c) = resolve_pred_expr(pred, current, rule, ast, scopes, signature);
+    let (resolved, c) = resolve_pred_expr(pred, current, rule, ast, scopes, signature, errors);
     changed |= c;
     let Some((pred_id, parents)) = resolved else {
         return changed;
@@ -383,6 +396,11 @@ fn walk_pred_atom(
 
     let pred_data = signature.pred(pred_id);
     if arg_els.len() != pred_data.arity.len() {
+        errors.push(CompileError::PredicateArgumentNumber {
+            expected: pred_data.arity.len(),
+            got: arg_els.len(),
+            location: ast.loc(id),
+        });
         return changed;
     }
     let structure = &mut rule.cat.structures[current.0];
@@ -426,6 +444,7 @@ fn resolve_pred_expr(
     ast: &Ast,
     scopes: &Scopes,
     signature: &Signature,
+    errors: &mut Vec<CompileError>,
 ) -> (Option<(PredId, Vec<ElId>)>, bool) {
     match *ast.pred_expr(pred) {
         PredExpr::Ambient(aid) => {
@@ -448,7 +467,7 @@ fn resolve_pred_expr(
                 name,
             } = ast.member_pred_expr(mid).clone();
             let (parent_el, changed) =
-                walk_term(parent_term, current, rule, ast, scopes, signature);
+                walk_term(parent_term, current, rule, ast, scopes, signature, errors);
             let resolved = member_scope_and_parents(rule, current, parent_el, scopes, signature)
                 .and_then(|(body, parents)| {
                     let pd = match body.symbols.get(&name).copied()? {
@@ -479,6 +498,7 @@ fn walk_term(
     ast: &Ast,
     scopes: &Scopes,
     signature: &Signature,
+    errors: &mut Vec<CompileError>,
 ) -> (ElId, bool) {
     let prior_el = rule.semantic_els[current.0].get(&term).copied();
     let mut changed = false;
@@ -513,13 +533,13 @@ fn walk_term(
             let arg_els: Vec<ElId> = arg_terms
                 .iter()
                 .map(|t| {
-                    let (e, c) = walk_term(*t, current, rule, ast, scopes, signature);
+                    let (e, c) = walk_term(*t, current, rule, ast, scopes, signature, errors);
                     changed |= c;
                     e
                 })
                 .collect();
             let (e, c) = emit_app(
-                func, arg_els, prior_el, current, rule, ast, scopes, signature,
+                aid, func, arg_els, prior_el, current, rule, ast, scopes, signature, errors,
             );
             changed |= c;
             e
@@ -550,6 +570,7 @@ fn walk_term(
 /// allocated a new el, inserted a new func app, recorded a fresh
 /// concrete type or enqueued a non-trivial equate.
 fn emit_app(
+    app: AppTermId,
     func: FuncExprId,
     arg_els: Vec<ElId>,
     expected: Option<ElId>,
@@ -558,12 +579,13 @@ fn emit_app(
     ast: &Ast,
     scopes: &Scopes,
     signature: &Signature,
+    errors: &mut Vec<CompileError>,
 ) -> (ElId, bool) {
-    let (resolved, mut changed) = resolve_func_expr(func, current, rule, ast, scopes, signature);
-
-    let structure = &mut rule.cat.structures[current.0];
+    let (resolved, mut changed) =
+        resolve_func_expr(func, current, rule, ast, scopes, signature, errors);
 
     let Some((func_id, parents)) = resolved else {
+        let structure = &mut rule.cat.structures[current.0];
         return match expected {
             Some(el) => (el, changed),
             None => (structure.push_el(), true),
@@ -572,11 +594,19 @@ fn emit_app(
 
     let func_data = signature.func(func_id);
     if arg_els.len() != func_data.domain.len() {
+        errors.push(CompileError::FunctionArgumentNumber {
+            expected: func_data.domain.len(),
+            got: arg_els.len(),
+            location: ast.loc(app),
+        });
+        let structure = &mut rule.cat.structures[current.0];
         return match expected {
             Some(el) => (el, changed),
             None => (structure.push_el(), true),
         };
     }
+
+    let structure = &mut rule.cat.structures[current.0];
 
     let parents: Vec<ElId> = parents
         .into_iter()
@@ -627,6 +657,7 @@ fn resolve_func_expr(
     ast: &Ast,
     scopes: &Scopes,
     signature: &Signature,
+    errors: &mut Vec<CompileError>,
 ) -> (Option<(FuncId, Vec<ElId>)>, bool) {
     match *ast.func_expr(func) {
         FuncExpr::Ambient(aid) => {
@@ -650,7 +681,7 @@ fn resolve_func_expr(
                 name,
             } = ast.member_func_expr(mid).clone();
             let (parent_el, changed) =
-                walk_term(parent_term, current, rule, ast, scopes, signature);
+                walk_term(parent_term, current, rule, ast, scopes, signature, errors);
             let resolved = member_scope_and_parents(rule, current, parent_el, scopes, signature)
                 .and_then(|(body, parents)| {
                     let fid = match body.symbols.get(&name).copied()? {

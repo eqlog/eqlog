@@ -139,19 +139,6 @@ pub fn el_type(el: El, eqlog: &Eqlog) -> Option<DepType> {
     })
 }
 
-/// An iterator yielding the natural numbers 0, 1, 2, ... for as long as there is an element
-/// representing the natural number in the provided eqlog model.
-fn nats<'a>(eqlog: &'a Eqlog) -> impl 'a + Iterator<Item = Nat> {
-    successors(eqlog.zero(), move |n| eqlog.succ(*n))
-}
-
-pub fn nat(n: Nat, eqlog: &Eqlog) -> usize {
-    nats(eqlog)
-        .enumerate()
-        .find_map(move |(k, n0)| eqlog.are_equal_nat(n0, n).then_some(k))
-        .unwrap()
-}
-
 pub fn display_type<'a>(
     typ: Type,
     eqlog: &'a Eqlog,

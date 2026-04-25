@@ -256,50 +256,6 @@ pub fn iter_symbol_lookup_errors<'a>(
         })
 }
 
-pub fn iter_pred_arg_number_errors<'a>(
-    eqlog: &'a Eqlog,
-    locations: &'a BTreeMap<Loc, Location>,
-) -> impl 'a + Iterator<Item = CompileError> {
-    eqlog
-        .iter_pred_arg_num_should_match()
-        .filter_map(|(got, expected, loc)| {
-            if eqlog.are_equal_nat(got, expected) {
-                return None;
-            }
-
-            let got = nat(got, eqlog);
-            let expected = nat(expected, eqlog);
-            let location = *locations.get(&loc).unwrap();
-            Some(CompileError::PredicateArgumentNumber {
-                expected,
-                got,
-                location,
-            })
-        })
-}
-
-pub fn iter_func_arg_number_errors<'a>(
-    eqlog: &'a Eqlog,
-    locations: &'a BTreeMap<Loc, Location>,
-) -> impl 'a + Iterator<Item = CompileError> {
-    eqlog
-        .iter_func_arg_num_should_match()
-        .filter_map(|(got, expected, loc)| {
-            if eqlog.are_equal_nat(got, expected) {
-                return None;
-            }
-
-            let got = nat(got, eqlog);
-            let expected = nat(expected, eqlog);
-            let location = *locations.get(&loc).unwrap();
-            Some(CompileError::FunctionArgumentNumber {
-                expected,
-                got,
-                location,
-            })
-        })
-}
-
 pub fn iter_enum_ctors_not_surjective_errors<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
@@ -376,8 +332,6 @@ pub fn check_eqlog(
 ) -> Result<(), CompileError> {
     let first_error: Option<CompileError> = iter::empty()
         .chain(iter_symbol_lookup_errors(eqlog, identifiers, locations))
-        .chain(iter_pred_arg_number_errors(eqlog, locations))
-        .chain(iter_func_arg_number_errors(eqlog, locations))
         .chain(iter_conflicting_type_errors(eqlog, identifiers, locations))
         .chain(iter_match_conflicting_enum(eqlog, locations))
         .chain(iter_match_stmt_contains_ctor_of_enum(eqlog, locations))
