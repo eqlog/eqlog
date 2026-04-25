@@ -486,12 +486,21 @@ fn resolve_pred_expr(
 /// Walks `term`, materialising any Els it needs in the current
 /// structure, records `term -> el` in `semantic_el`, and returns the El.
 ///
-/// Idempotent at the el-identity level: `Var` and `Wildcard` terms reuse
-/// the el they cached on the first walk. App terms always recurse into
-/// their arguments and re-attempt resolution of the func reference, so
-/// that a [`FuncApp`] missed on a previous pass (because the func was
-/// unresolvable at the time) gets emitted now. The result el of an App is
-/// still the cached one when present, so callers' chains remain stable.
+/// `prior_el` is whatever el this exact `(current, term)` resolved to
+/// on an earlier `walk_rule` pass, read off `semantic_els` before
+/// dispatching. The outer populate/close loop in [`build_structures`]
+/// re-walks every rule body until no progress, so this function is
+/// re-entrant per `(current, term)`; reusing `prior_el` is what keeps
+/// the el identity stable across passes (otherwise each pass would
+/// allocate a fresh el for the same term and leak). It is required for
+/// correctness, not a perf shortcut.
+///
+/// `Var` and `Wildcard` terms reuse `prior_el` when present. App terms
+/// always recurse into their arguments and re-attempt resolution of
+/// the func reference, so that a [`FuncApp`] missed on a previous
+/// pass (because the func was unresolvable at the time) gets emitted
+/// now. The result el of an App is still `prior_el` when present, so
+/// callers' chains remain stable.
 fn walk_term(
     term: TermId,
     current: StructureId,
@@ -500,11 +509,11 @@ fn walk_term(
     scopes: &Scopes,
     signature: &Signature,
 ) -> (ElId, bool) {
-    let cached = rule.semantic_els[current.0].get(&term).copied();
+    let prior_el = rule.semantic_els[current.0].get(&term).copied();
     let mut changed = false;
     let el = match *ast.term(term) {
         Term::Var(vid) => {
-            if let Some(el) = cached {
+            if let Some(el) = prior_el {
                 el
             } else {
                 let name = ast.var_term(vid).name.clone();
@@ -520,7 +529,7 @@ fn walk_term(
             }
         }
         Term::Wildcard => {
-            if let Some(el) = cached {
+            if let Some(el) = prior_el {
                 el
             } else {
                 changed = true;
@@ -538,7 +547,7 @@ fn walk_term(
                     e
                 })
                 .collect();
-            let (e, c) = emit_app(func, arg_els, cached, current, rule, ast, scopes, signature);
+            let (e, c) = emit_app(func, arg_els, prior_el, current, rule, ast, scopes, signature);
             changed |= c;
             e
         }
@@ -549,7 +558,7 @@ fn walk_term(
             todo!()
         }
     };
-    if cached.is_none() {
+    if prior_el.is_none() {
         rule.record_term(current, term, el);
         changed = true;
     }
