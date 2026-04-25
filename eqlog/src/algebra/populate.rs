@@ -20,6 +20,7 @@ use crate::algebra::structure::{
     ConcreteType, ElId, ElMap, FuncApp, PredApp, Structure, StructureCat, StructureId,
 };
 use crate::ast::*;
+use crate::error::CompileError;
 use crate::scopes::{Scope, ScopeId, Scopes, Symbol};
 
 /// All algebraic structures produced for one rule. The initial structure
@@ -47,6 +48,12 @@ pub struct RuleStructures {
     /// as `branch_block_starts`: an empty case body has no first
     /// statement to anchor the start structure to.
     pub match_case_starts: BTreeMap<MatchCaseId, StructureId>,
+    /// Argument-number mismatches detected at pred or func application
+    /// sites, keyed by the AST [`NodeId`] of the offending site
+    /// ([`PredAtomId`] for pred atoms, [`AppTermId`] for func
+    /// applications). Re-walks insert the same diagnostic at the same key,
+    /// keeping reporting idempotent.
+    pub arg_num_errors: BTreeMap<NodeId, CompileError>,
 }
 
 impl RuleStructures {
@@ -383,6 +390,13 @@ fn walk_pred_atom(
 
     let pred_data = signature.pred(pred_id);
     if arg_els.len() != pred_data.arity.len() {
+        rule.arg_num_errors.entry(id.into()).or_insert_with(|| {
+            CompileError::PredicateArgumentNumber {
+                expected: pred_data.arity.len(),
+                got: arg_els.len(),
+                location: ast.loc(id),
+            }
+        });
         return changed;
     }
     let structure = &mut rule.cat.structures[current.0];
@@ -519,7 +533,7 @@ fn walk_term(
                 })
                 .collect();
             let (e, c) = emit_app(
-                func, arg_els, prior_el, current, rule, ast, scopes, signature,
+                aid, func, arg_els, prior_el, current, rule, ast, scopes, signature,
             );
             changed |= c;
             e
@@ -550,6 +564,7 @@ fn walk_term(
 /// allocated a new el, inserted a new func app, recorded a fresh
 /// concrete type or enqueued a non-trivial equate.
 fn emit_app(
+    app: AppTermId,
     func: FuncExprId,
     arg_els: Vec<ElId>,
     expected: Option<ElId>,
@@ -561,9 +576,8 @@ fn emit_app(
 ) -> (ElId, bool) {
     let (resolved, mut changed) = resolve_func_expr(func, current, rule, ast, scopes, signature);
 
-    let structure = &mut rule.cat.structures[current.0];
-
     let Some((func_id, parents)) = resolved else {
+        let structure = &mut rule.cat.structures[current.0];
         return match expected {
             Some(el) => (el, changed),
             None => (structure.push_el(), true),
@@ -572,11 +586,21 @@ fn emit_app(
 
     let func_data = signature.func(func_id);
     if arg_els.len() != func_data.domain.len() {
+        rule.arg_num_errors.entry(app.into()).or_insert_with(|| {
+            CompileError::FunctionArgumentNumber {
+                expected: func_data.domain.len(),
+                got: arg_els.len(),
+                location: ast.loc(app),
+            }
+        });
+        let structure = &mut rule.cat.structures[current.0];
         return match expected {
             Some(el) => (el, changed),
             None => (structure.push_el(), true),
         };
     }
+
+    let structure = &mut rule.cat.structures[current.0];
 
     let parents: Vec<ElId> = parents
         .into_iter()

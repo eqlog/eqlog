@@ -57,11 +57,12 @@ pub fn build_structures(
             }
         }
 
-        if !last_conflicts.is_empty() {
-            let errors: Vec<CompileError> = last_conflicts
-                .into_iter()
-                .map(|(sid, conflict)| conflict_to_error(ast, signature, &rule, sid, conflict))
-                .collect();
+        let mut errors: Vec<CompileError> = last_conflicts
+            .into_iter()
+            .map(|(sid, conflict)| conflict_to_error(ast, signature, &rule, sid, conflict))
+            .collect();
+        errors.extend(rule.arg_num_errors.values().cloned());
+        if !errors.is_empty() {
             return Err(errors);
         }
 
