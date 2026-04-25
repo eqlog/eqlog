@@ -4,6 +4,7 @@ This includes:
 - cargo fmt --check
 - eqlog-eqlog should have prebuilt rust committed.
   Make sure to regenerate with `eqlog eqlog-eqlog/src eqlog-eqlog/prebuilt/` if necessary.
+  Don't use the `eqlog` binary built from your checkout, use the one installed in your env already.
 - Review your changes relative to the merge base of your upstream.
   You usually want to spawn a subagent for this.
   Check which files you touched, then invoke git diff once per file.
