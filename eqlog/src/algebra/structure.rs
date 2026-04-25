@@ -107,6 +107,30 @@ pub struct Structure {
     /// rest of the structure have not yet been drained. Always empty
     /// after [`Structure::close`] returns.
     pub(super) pending_equalities: Vec<(ElId, ElId)>,
+    /// Parent disagreements observed when two [`ConcreteType`]s with
+    /// matching [`TypeId`]s were assigned to the same equivalence class.
+    /// They are deferred (not immediately turned into conflicts) because
+    /// a still-queued equality on `pending_equalities` may later put the
+    /// disagreeing parents into the same class. [`Structure::close`]
+    /// drains this queue once the drain/functionality/typing fixed
+    /// point has converged and only emits a [`TypeConflict`] for entries
+    /// whose parents are still in distinct classes. Always empty after
+    /// [`Structure::close`] returns.
+    pub(super) pending_parent_checks: Vec<DeferredParentCheck>,
+}
+
+/// A parent-disagreement observation queued by
+/// [`Structure::drain_equalities`] or [`Structure::impose_concrete_type`]
+/// for re-evaluation at the end of [`Structure::close`]. The two
+/// [`ConcreteType`]s share a [`TypeId`] — only the parent lists are in
+/// question. `el` is the equivalence-class root they were assigned to at
+/// observation time; the final check uses the unification's current root
+/// for diagnostic purposes only.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct DeferredParentCheck {
+    pub el: ElId,
+    pub a: ConcreteType,
+    pub b: ConcreteType,
 }
 
 impl Default for Structure {
@@ -119,6 +143,7 @@ impl Default for Structure {
             ambient_model_els: BTreeMap::new(),
             unification: Unification::new(),
             pending_equalities: Vec::new(),
+            pending_parent_checks: Vec::new(),
         }
     }
 }
@@ -192,24 +217,32 @@ impl Structure {
     ///     duplicates by unioning their result elements.
     ///   - `typing`: walk every [`FuncApp`] and [`PredApp`] and impose the
     ///     type each argument (and the result, for funcs) is required to
-    ///     have by the signature. Records a [`TypeConflict`] if an element
-    ///     already has an incompatible type (different [`TypeId`], or the
-    ///     same one with a parent that lives in a different class).
+    ///     have by the signature. Records a [`TypeConflict`] for [`TypeId`]
+    ///     mismatches and queues a [`DeferredParentCheck`] when only the
+    ///     parents diverge.
     ///   - `drain_equalities`: pop pairs from `pending_equalities`, union
-    ///     their classes and merge their `els` entries, recording a
-    ///     [`TypeConflict`] when the merged entries disagree on type or on
-    ///     any parent class.
+    ///     their classes and merge their `els` entries. Records a
+    ///     [`TypeConflict`] for [`TypeId`] mismatches and queues a
+    ///     [`DeferredParentCheck`] when only the parents diverge.
     ///
     /// The fixed point terminates because the number of equivalence classes
     /// plus the size of `pending_equalities` strictly decreases across
-    /// iterations that do any work.
+    /// iterations that do any work. Deferred parent checks do not feed back
+    /// into the fixed point — they are terminal observations.
     ///
-    /// After the loop exits, `pending_equalities` is empty and every
-    /// remaining reference in `pred_apps`, `var_els` and in [`ConcreteType`]
-    /// parents is rewritten to the root of its class, with non-root entries
-    /// dropped from `els`. Callers translate the returned [`TypeConflict`]s
-    /// into user-facing errors, typically by picking a term in
-    /// `semantic_el` whose class matches.
+    /// Once the fixed point has converged, every queued
+    /// [`DeferredParentCheck`] is re-evaluated under the final unification.
+    /// Only the entries whose parents still disagree turn into a
+    /// [`TypeConflict`]; the rest were races where a later equate brought
+    /// the disagreeing parents into the same class.
+    ///
+    /// After the loop exits, `pending_equalities` and
+    /// `pending_parent_checks` are empty and every remaining reference in
+    /// `pred_apps`, `var_els` and in [`ConcreteType`] parents is rewritten
+    /// to the root of its class, with non-root entries dropped from `els`.
+    /// Callers translate the returned [`TypeConflict`]s into user-facing
+    /// errors, typically by picking a term in `semantic_el` whose class
+    /// matches.
     ///
     /// Returns `(changed, conflicts)`. `changed` is true iff at least one
     /// inner pass merged a class, found a duplicate or imposed a fresh type,
@@ -227,15 +260,34 @@ impl Structure {
             }
             changed = true;
         }
+        self.resolve_parent_checks(&mut conflicts);
         self.canonicalise_refs();
         (changed, conflicts)
     }
 
+    /// Drains `pending_parent_checks`. For each entry that still has a
+    /// parent disagreement under the final unification, emits a
+    /// [`TypeConflict`]. Entries whose parents have since been put into
+    /// the same class by a subsequent equate are silently discarded.
+    fn resolve_parent_checks(&mut self, conflicts: &mut Vec<TypeConflict>) {
+        for check in mem::take(&mut self.pending_parent_checks) {
+            if !parents_match(&self.unification, &check.a.parents, &check.b.parents) {
+                conflicts.push(TypeConflict {
+                    el: self.root(check.el),
+                    a: check.a,
+                    b: check.b,
+                });
+            }
+        }
+    }
+
     /// Drains `pending_equalities` down to empty, performing the union
     /// and merging `els` entries for each pair. Records a
-    /// [`TypeConflict`] when the merged entries disagree on [`TypeId`]
-    /// or on any parent class. Returns true iff at least one class merge
-    /// happened.
+    /// [`TypeConflict`] when the merged entries disagree on [`TypeId`].
+    /// Parent disagreements are queued on `pending_parent_checks` for
+    /// re-evaluation after the close fixed point converges, since a
+    /// still-pending equate may yet put the disagreeing parents into the
+    /// same class. Returns true iff at least one class merge happened.
     fn drain_equalities(&mut self, conflicts: &mut Vec<TypeConflict>) -> bool {
         let mut changed = false;
         while let Some((a, b)) = self.pending_equalities.pop() {
@@ -256,8 +308,14 @@ impl Structure {
                 (None, None) => None,
                 (Some(x), None) | (None, Some(x)) => Some(x),
                 (Some(k), Some(d)) => {
-                    if k.typ != d.typ || !parents_match(&self.unification, &k.parents, &d.parents) {
+                    if k.typ != d.typ {
                         conflicts.push(TypeConflict {
+                            el: keep,
+                            a: k.clone(),
+                            b: d,
+                        });
+                    } else if !parents_match(&self.unification, &k.parents, &d.parents) {
+                        self.pending_parent_checks.push(DeferredParentCheck {
                             el: keep,
                             a: k.clone(),
                             b: d,
@@ -352,10 +410,13 @@ impl Structure {
     }
 
     /// Asserts that `el`'s type is `ct`. Records a [`TypeConflict`] when
-    /// the existing entry's [`TypeId`] differs, or when its [`TypeId`]
-    /// matches but some parent element falls in a different class than
-    /// the corresponding entry in `ct.parents`. Returns true iff a fresh
-    /// concrete type was recorded.
+    /// the existing entry's [`TypeId`] differs. When the [`TypeId`]s
+    /// match but some parent element falls in a different class than the
+    /// corresponding entry in `ct.parents`, queues a
+    /// [`DeferredParentCheck`] on `pending_parent_checks` for
+    /// re-evaluation after the close fixed point converges, since a
+    /// still-queued equate may yet put the disagreeing parents into the
+    /// same class. Returns true iff a fresh concrete type was recorded.
     fn impose_concrete_type(
         &mut self,
         el: ElId,
@@ -369,10 +430,14 @@ impl Structure {
                 true
             }
             Some(existing) => {
-                if existing.typ != ct.typ
-                    || !parents_match(&self.unification, &existing.parents, &ct.parents)
-                {
+                if existing.typ != ct.typ {
                     conflicts.push(TypeConflict {
+                        el: root,
+                        a: existing,
+                        b: ct,
+                    });
+                } else if !parents_match(&self.unification, &existing.parents, &ct.parents) {
+                    self.pending_parent_checks.push(DeferredParentCheck {
                         el: root,
                         a: existing,
                         b: ct,

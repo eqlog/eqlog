@@ -1,19 +1,22 @@
-Flag parent-element mismatch as type conflict
+Defer parent-mismatch detection
 
-When two ConcreteTypes with the same TypeId get assigned to the same
-equivalence class but their parent elements live in distinct classes,
-Structure::close used to enqueue pairwise parent equalities, silently
-collapsing the ambient parents. That is wrong: distinct ambient
-parents must not be unified just because a type was imposed twice.
+drain_equalities pops pending equalities one at a time. If a member-el
+equate (e.g. t_a = t_b, parents [e_a] vs [e_b]) is processed before
+the equate that would unify the parents (e_a = e_b), the parent
+disagreement looked like a real conflict and got reported. Reordering
+the queue would have made the same input pass cleanly. The same race
+existed in impose_concrete_type, since typing runs interleaved with
+drain_equalities inside the close fixed point.
 
-drain_equalities and impose_concrete_type now record a TypeConflict
-in that case and leave the parents alone. Parents are only ever
-compared by class, never enqueued for unification.
+Add a pending_parent_checks queue to Structure holding
+DeferredParentCheck entries. drain_equalities and impose_concrete_type
+now push onto this queue when only the parents disagree (typ
+mismatches stay immediate, since TypeId is immutable). After the
+drain/functionality/typing fixed point converges, Structure::close
+walks the deferred checks under the final unification and only emits
+a TypeConflict for entries whose parents still disagree.
 
-TypeConflict carries both ConcreteTypes (not just TypeIds) so callers
-can inspect parent lists. conflict_to_error in algebra/mod.rs branches
-on whether the TypeIds disagree: when they do it emits the existing
-ConflictingTermType anchored on a term in el's class; when only the
-parents disagree it emits a new ConflictingParentEl variant whose two
-locations point at terms backing the innermost differing pair of
-parent elements (last index in the parent list).
+Deferred checks do not feed back into the fixed point — they are
+terminal observations. The queue is mem::taken at the end so each
+Structure::close call (e.g. forward and backward pass in
+StructureCat::close) starts fresh.
