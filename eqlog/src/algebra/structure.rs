@@ -125,18 +125,24 @@ impl Default for Structure {
 
 /// A type disagreement discovered during [`Structure::close`]: two
 /// incompatible [`ConcreteType`]s got assigned to the equivalence class
-/// rooted at `el`. Either the two [`TypeId`]s differ, or they agree but
-/// some parent element falls in a different equivalence class than the
-/// corresponding parent of the other [`ConcreteType`]. In the latter case
-/// `types` carries the same [`TypeId`] twice. The caller is responsible
-/// for turning this into a user-facing [`crate::error::CompileError`];
-/// typically it looks up a term in [`Structure::semantic_el`] whose
-/// element falls in `el`'s class and emits `ConflictingTermType` at that
-/// term's location.
+/// rooted at `el`. Either `a.typ != b.typ`, or the [`TypeId`]s agree but
+/// some parent of `a` falls in a different equivalence class than the
+/// corresponding parent of `b`.
+///
+/// Parents inside `a` and `b` are not canonicalised; the caller compares
+/// them through the [`Structure`]'s unification when it needs class
+/// identity.
+///
+/// The caller is responsible for turning this into a user-facing
+/// [`crate::error::CompileError`]; typically it looks up a term in
+/// [`Structure::semantic_el`] whose element falls in `el`'s class (for
+/// type mismatches) or in a differing parent's class (for parent
+/// mismatches).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TypeConflict {
     pub el: ElId,
-    pub types: (TypeId, TypeId),
+    pub a: ConcreteType,
+    pub b: ConcreteType,
 }
 
 impl Structure {
@@ -250,15 +256,11 @@ impl Structure {
                 (None, None) => None,
                 (Some(x), None) | (None, Some(x)) => Some(x),
                 (Some(k), Some(d)) => {
-                    if k.typ != d.typ {
+                    if k.typ != d.typ || !parents_match(&self.unification, &k.parents, &d.parents) {
                         conflicts.push(TypeConflict {
                             el: keep,
-                            types: (k.typ, d.typ),
-                        });
-                    } else if !parents_match(&self.unification, &k.parents, &d.parents) {
-                        conflicts.push(TypeConflict {
-                            el: keep,
-                            types: (k.typ, d.typ),
+                            a: k.clone(),
+                            b: d,
                         });
                     }
                     Some(k)
@@ -367,15 +369,13 @@ impl Structure {
                 true
             }
             Some(existing) => {
-                if existing.typ != ct.typ {
+                if existing.typ != ct.typ
+                    || !parents_match(&self.unification, &existing.parents, &ct.parents)
+                {
                     conflicts.push(TypeConflict {
                         el: root,
-                        types: (existing.typ, ct.typ),
-                    });
-                } else if !parents_match(&self.unification, &existing.parents, &ct.parents) {
-                    conflicts.push(TypeConflict {
-                        el: root,
-                        types: (existing.typ, ct.typ),
+                        a: existing,
+                        b: ct,
                     });
                 }
                 false

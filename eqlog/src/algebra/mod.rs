@@ -16,7 +16,7 @@ use std::collections::BTreeMap;
 
 use crate::algebra::populate::{walk_rule, RuleStructures};
 use crate::algebra::signature::{Signature, TypeId};
-use crate::algebra::structure::{ElId, Structure, TypeConflict};
+use crate::algebra::structure::{ConcreteType, ElId, Structure, TypeConflict};
 use crate::ast::*;
 use crate::error::CompileError;
 use crate::scopes::Scopes;
@@ -107,9 +107,18 @@ fn collect_rules(
     }
 }
 
-/// Picks a term in `semantic_el` whose element shares a class with the
-/// conflict's `el` and emits [`CompileError::ConflictingTermType`] at
-/// that term's location. Panics if no such term exists; the message
+/// Lowers a [`TypeConflict`] to a user-facing [`CompileError`].
+///
+/// When the two [`ConcreteType`]s disagree on [`TypeId`] the result is
+/// [`CompileError::ConflictingTermType`], anchored on the term in
+/// `semantic_el` whose element shares a class with `conflict.el`. When
+/// the [`TypeId`]s agree but parents diverge, the result is
+/// [`CompileError::ConflictingParentEl`], anchored on the two terms
+/// whose elements share classes with the innermost differing pair of
+/// parent elements (last index in the parent list, since parents are
+/// outermost first).
+///
+/// Panics if no term backs the chosen elements; the message
 /// distinguishes ambient model elements to help diagnose the invariant
 /// violation.
 fn conflict_to_error(
@@ -119,26 +128,64 @@ fn conflict_to_error(
     semantic_el: &BTreeMap<TermId, ElId>,
     conflict: TypeConflict,
 ) -> CompileError {
-    let TypeConflict { el, types } = conflict;
-    let term_id = semantic_el
+    let TypeConflict { el, a, b } = conflict;
+    if a.typ != b.typ {
+        let term_id = find_term(structure, semantic_el, el);
+        return CompileError::ConflictingTermType {
+            types: vec![
+                signature.type_name(ast, a.typ),
+                signature.type_name(ast, b.typ),
+            ],
+            location: ast.loc(term_id),
+        };
+    }
+
+    let (pa, pb) = innermost_differing_parents(structure, &a, &b)
+        .expect("parent-mismatch conflict has no differing parent");
+    let pa_term = find_term(structure, semantic_el, structure.unification.root_const(pa));
+    let pb_term = find_term(structure, semantic_el, structure.unification.root_const(pb));
+    CompileError::ConflictingParentEl {
+        type_name: signature.type_name(ast, a.typ),
+        parent_locations: (ast.loc(pa_term), ast.loc(pb_term)),
+    }
+}
+
+/// Returns the deepest (highest-index) pair of parents whose classes
+/// disagree under `structure`'s unification, or `None` if all
+/// overlapping positions agree. Parents are outermost first, so the
+/// highest index is the innermost ambient model — usually the most
+/// useful place to anchor a diagnostic.
+fn innermost_differing_parents(
+    structure: &Structure,
+    a: &ConcreteType,
+    b: &ConcreteType,
+) -> Option<(ElId, ElId)> {
+    let n = a.parents.len().min(b.parents.len());
+    (0..n).rev().find_map(|i| {
+        let ra = structure.unification.root_const(a.parents[i]);
+        let rb = structure.unification.root_const(b.parents[i]);
+        (ra != rb).then_some((a.parents[i], b.parents[i]))
+    })
+}
+
+/// Locates a term whose element shares a class with `target` under
+/// `structure`'s unification. Panics if no such term exists, with a
+/// message that flags ambient model elements to help diagnose the
+/// invariant violation.
+fn find_term(structure: &Structure, semantic_el: &BTreeMap<TermId, ElId>, target: ElId) -> TermId {
+    let target_root = structure.unification.root_const(target);
+    semantic_el
         .iter()
-        .find(|(_, &e)| structure.unification.root_const(e) == el)
+        .find(|(_, &e)| structure.unification.root_const(e) == target_root)
         .map(|(t, _)| *t)
         .unwrap_or_else(|| {
             let is_ambient = structure
                 .ambient_model_els
                 .values()
-                .any(|&e| structure.unification.root_const(e) == el);
+                .any(|&e| structure.unification.root_const(e) == target_root);
             panic!(
-                "type conflict on class {el:?} has no term in semantic_el \
+                "conflict on class {target:?} has no term in semantic_el \
                  (ambient model el: {is_ambient})"
             );
-        });
-    CompileError::ConflictingTermType {
-        types: vec![
-            signature.type_name(ast, types.0),
-            signature.type_name(ast, types.1),
-        ],
-        location: ast.loc(term_id),
-    }
+        })
 }
