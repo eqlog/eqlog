@@ -132,6 +132,15 @@ impl Signature {
             .expect("model decl was not registered")
     }
 
+    /// Inverse of [`Self::types_for_model_decl`] on the model type itself.
+    /// Returns the [`ModelDeclId`] whose model-instance type is `tid`, or
+    /// `None` if `tid` is not a model-instance type.
+    pub fn model_decl_for_type(&self, tid: TypeId) -> Option<ModelDeclId> {
+        self.model_decls
+            .iter()
+            .find_map(|(d, ids)| (ids.type_ == tid).then_some(*d))
+    }
+
     /// Returns the [`PredId`] for `id`, or `None` if the pred decl is
     /// malformed (e.g. one of its arg types failed to resolve).
     pub fn pred_for_pred_decl(&self, id: PredDeclId) -> Option<PredId> {
