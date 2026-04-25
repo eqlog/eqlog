@@ -1,18 +1,7 @@
-Localise pending_parent_checks to close()
+Trim Structure::close docstring
 
-The deferred-parent-check queue's lifetime is exactly one
-Structure::close invocation, so it has no business sitting on
-Structure as a field. Lift it to a local Vec<DeferredParentCheck> in
-close() and thread it through drain_equalities, typing, and
-impose_concrete_type as a &mut parameter alongside the existing
-conflicts vec.
-
-resolve_parent_checks now takes the queue by value (and &self) instead
-of mem::taking it from a field. The DeferredParentCheck struct loses
-its pub(super) since it is private to the module again.
-
-pull_morphism_types in StructureCat creates its own local queue,
-imposes via impose_concrete_type, and resolves immediately. That
-shortcut is sound because pull_types_backward only runs after a full
-Structure::close has drained pending_equalities, so no later equate
-can fire to rescue a queued parent disagreement on src_st.
+The previous docstring was a step-by-step rundown of the inner
+fixed-point passes, the deferred-parent-check queue, and the post-loop
+canonicalisation — most of it implementation detail that lives in the
+code below. Keep just the contract: saturate, canonicalise, return
+conflicts, and what `changed` means for an outer fixed point.

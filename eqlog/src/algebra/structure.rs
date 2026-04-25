@@ -198,44 +198,13 @@ impl Structure {
             .collect()
     }
 
-    /// Closes the structure under functionality and signature-imposed typing.
+    /// Saturates the structure under functionality and signature-imposed
+    /// typing, canonicalises every reference to its class root, and
+    /// returns any [`TypeConflict`]s observed along the way.
     ///
-    /// Runs the naive fixed point of two passes until both settle:
-    ///
-    ///   - `functionality`: canonicalise every [`FuncApp`] key and merge
-    ///     duplicates by unioning their result elements.
-    ///   - `typing`: walk every [`FuncApp`] and [`PredApp`] and impose the
-    ///     type each argument (and the result, for funcs) is required to
-    ///     have by the signature. Records a [`TypeConflict`] for [`TypeId`]
-    ///     mismatches and queues a [`DeferredParentCheck`] when only the
-    ///     parents diverge.
-    ///   - `drain_equalities`: pop pairs from `pending_equalities`, union
-    ///     their classes and merge their `els` entries. Records a
-    ///     [`TypeConflict`] for [`TypeId`] mismatches and queues a
-    ///     [`DeferredParentCheck`] when only the parents diverge.
-    ///
-    /// The fixed point terminates because the number of equivalence classes
-    /// plus the size of `pending_equalities` strictly decreases across
-    /// iterations that do any work. Deferred parent checks do not feed back
-    /// into the fixed point — they are terminal observations.
-    ///
-    /// Once the fixed point has converged, every queued
-    /// [`DeferredParentCheck`] is re-evaluated under the final unification.
-    /// Only the entries whose parents still disagree turn into a
-    /// [`TypeConflict`]; the rest were races where a later equate brought
-    /// the disagreeing parents into the same class.
-    ///
-    /// After the loop exits, `pending_equalities` is empty and every
-    /// remaining reference in `pred_apps`, `var_els` and in
-    /// [`ConcreteType`] parents is rewritten to the root of its class,
-    /// with non-root entries dropped from `els`. Callers translate the
-    /// returned [`TypeConflict`]s into user-facing errors, typically by
-    /// picking a term in `semantic_el` whose class matches.
-    ///
-    /// Returns `(changed, conflicts)`. `changed` is true iff at least one
-    /// inner pass merged a class, found a duplicate or imposed a fresh type,
-    /// so callers driving an outer fixed point can stop when both populate
-    /// and close report no work.
+    /// `changed` is true iff at least one inner pass did work, so callers
+    /// driving an outer populate/close fixed point can stop when both
+    /// report no change.
     pub fn close(&mut self, signature: &Signature) -> (bool, Vec<TypeConflict>) {
         let mut conflicts = Vec::new();
         let mut parent_checks: Vec<DeferredParentCheck> = Vec::new();
