@@ -8,25 +8,32 @@ binding/signature/casing/eqlog errors so the user actually sees them.
 To match the existing eqlog-side conflict format the algebra path now
 emits a single CompileError variant: ConflictingTermType. Drop the
 recently-introduced ConflictingParentEl variant and lower every
-TypeConflict — both same-TypeId-with-differing-parents and outright
-TypeId mismatch — through one path. ConcreteTypes render as `TypeName`
-for global types or `parent_name.TypeName` for member types, with
-`parent_name` looked up in the structure's var_els (or `?` for ambient
-els not bound to a variable).
+TypeConflict -- both same-TypeId-with-differing-parents and outright
+TypeId mismatch -- through one path. ConcreteTypes render as
+`TypeName` for global types or `parent_name.TypeName` for member
+types, with `parent_name` looked up in the structure's var_els (or
+`?` for ambient els not bound to a variable).
 
 Two adjustments line the algebra-side output up with the existing
 eqlog-side diagnostics:
 
-  - RuleStructures gains a per-structure `native_terms` set tracking
-    which term ids were inserted directly into a structure (vs.
-    inherited from a clone of an earlier structure). conflict_to_error
-    anchors only at native terms; without this filter the diagnostic
-    points at terms cloned forward from an earlier statement, at a
-    location unrelated to the conflict.
+  - RuleStructures::semantic_els is now per-structure: each entry
+    holds only terms whose lexical position lies in the scope walked
+    into that structure. clone_structure used to deep-copy the
+    parent's map forward, which made conflict anchoring pick up
+    inherited terms (smaller TermIds, earlier in iteration order) at
+    locations unrelated to the conflict. find_term now does a BFS
+    over (StructureId, ElId) pairs starting at the conflict's
+    structure: at each pair it scans semantic_els[s] for a class
+    hit, and on miss expands through incoming morphisms by mapping
+    back to preimages in each source structure. Cross-structure el
+    dedup for Term::Var still goes through Structure::var_els (which
+    is cloned with the rest of Structure), and for Term::App through
+    Structure::func_apps.
 
   - Structure::close's typing pass now imposes argument types across
     every func/pred app before it imposes any codomain type. emit_app
-    no longer eagerly writes the codomain into els at allocation time
-    — it leaves that to typing — so the existing/new ordering on a
-    conflicting el matches the order the eqlog-side typing rules use,
-    and the `Could be ...` lines come out in the same sequence.
+    no longer eagerly writes the codomain into els at allocation
+    time -- it leaves that to typing -- so the existing/new ordering
+    on a conflicting el matches the order the eqlog-side typing rules
+    use, and the `Could be ...` lines come out in the same sequence.
