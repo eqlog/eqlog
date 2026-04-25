@@ -1,42 +1,24 @@
-Rust-native compiler front-end pipeline
+Parent-element mismatch as a type conflict
 
-The compiler front-end used to lower the surface AST into eqlog-eqlog
-nodes and let downstream passes consume them as eqlog facts. This
-branch replaces that path with plain Rust passes operating on a flat
-id-based arena, retiring the eqlog-eqlog grammar bridge for the
-front-end.
+When two ConcreteTypes get assigned to the same equivalence class with
+the same TypeId but parent elements that fall in distinct classes,
+Structure::close used to enqueue pairwise parent equalities, silently
+collapsing the ambient parents. That is wrong in the multi-model
+setting: distinct ambient parents must not be unified just because a
+type was imposed twice.
 
-New passes (each in its own module under eqlog/src/):
+drain_equalities and impose_concrete_type now leave parents alone and
+record a TypeConflict instead. Detection is deferred: the merge step
+queues a DeferredParentCheck (local to Structure::close) whenever the
+TypeIds match but parents currently disagree, and after the
+drain/functionality/typing fixed point converges the queue is
+re-evaluated under the final unification. Only entries whose parents
+still disagree become a TypeConflict, so a still-pending equate that
+brings the parents together is no longer mistaken for a conflict.
 
-  - ast.rs: id-based arena AST built directly by the lalrpop grammar.
-  - scopes.rs: scope resolution to symbols, with per-decl entries.
-  - casing.rs, scope_checks/, syntactic.rs: casing, occurrence,
-    binding and structural checks emitting CompileErrors.
-  - algebra/signature.rs: dependent signature (types, preds, funcs)
-    derived from the AST.
-  - algebra/populate.rs: walks rule bodies into per-rule
-    RuleStructures, mapping AST terms to Els and recording statement
-    before/after structures.
-  - algebra/structure.rs: per-rule Structures with element
-    unification, FuncApp/PredApp tables, and a Structure::close pass
-    that saturates under functionality and signature-imposed typing.
-    StructureCat layers a forward-only family of morphisms on top and
-    propagates shared data between structures.
-  - algebra/mod.rs: drives populate and close to a joint fixed point
-    and lowers per-rule TypeConflicts into user-facing CompileErrors.
-
-TypeConflict carries both ConcreteTypes (TypeId plus parent ElId
-list). When two ConcreteTypes get assigned to the same equivalence
-class with the same TypeId but parents in distinct classes, the close
-pass records a parent disagreement instead of silently unifying the
-parents — the previous behaviour collapsed distinct ambient parents,
-which is wrong in the multi-model setting. Parent disagreements are
-deferred during the close fixed point and re-evaluated under the
-final unification, so observation order on pending_equalities does
-not matter. A new CompileError::ConflictingParentEl variant reports
-the locations of the two terms backing the innermost differing
-parent.
-
-The legacy eqlog-eqlog semantics module and ast_to_eqlog helper
-remain for the parts that still need them, but front-end checks no
-longer route through eqlog facts.
+TypeConflict now carries both full ConcreteTypes (TypeId plus parent
+ElId list) so callers can inspect the offending parents. A new
+CompileError::ConflictingParentEl variant reports the locations of
+the two terms backing the innermost (highest-index) differing pair of
+parent elements; the existing ConflictingTermType is kept for true
+TypeId mismatches.
