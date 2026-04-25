@@ -11,7 +11,8 @@ iteration and uses the final-iteration Vec as the ground truth, then
 appends it to the conflict-derived errors.
 
 Stop iterating `pred_arg_num_should_match` /
-`func_arg_num_should_match` from `semantics::check_eqlog`; the
-eqlog-side rules and predicates remain defined in eqlog.eql but no
-longer feed compile errors. Drop the `nat`/`nats` helpers in
-`eqlog_util`, which were only consumed by the removed iterators.
+`func_arg_num_should_match` from `semantics::check_eqlog`, then drop
+the predicates, the rules that populated them and the `term_list_len`
+helper from eqlog.eql. Regenerate prebuilt/eqlog.rs accordingly. Drop
+the `nat`/`nats` helpers in `eqlog_util`, which were only consumed by
+the removed iterators.
