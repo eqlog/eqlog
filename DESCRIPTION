@@ -1,7 +1,42 @@
-Trim Structure::close docstring
+Rust-native compiler front-end pipeline
 
-The previous docstring was a step-by-step rundown of the inner
-fixed-point passes, the deferred-parent-check queue, and the post-loop
-canonicalisation — most of it implementation detail that lives in the
-code below. Keep just the contract: saturate, canonicalise, return
-conflicts, and what `changed` means for an outer fixed point.
+The compiler front-end used to lower the surface AST into eqlog-eqlog
+nodes and let downstream passes consume them as eqlog facts. This
+branch replaces that path with plain Rust passes operating on a flat
+id-based arena, retiring the eqlog-eqlog grammar bridge for the
+front-end.
+
+New passes (each in its own module under eqlog/src/):
+
+  - ast.rs: id-based arena AST built directly by the lalrpop grammar.
+  - scopes.rs: scope resolution to symbols, with per-decl entries.
+  - casing.rs, scope_checks/, syntactic.rs: casing, occurrence,
+    binding and structural checks emitting CompileErrors.
+  - algebra/signature.rs: dependent signature (types, preds, funcs)
+    derived from the AST.
+  - algebra/populate.rs: walks rule bodies into per-rule
+    RuleStructures, mapping AST terms to Els and recording statement
+    before/after structures.
+  - algebra/structure.rs: per-rule Structures with element
+    unification, FuncApp/PredApp tables, and a Structure::close pass
+    that saturates under functionality and signature-imposed typing.
+    StructureCat layers a forward-only family of morphisms on top and
+    propagates shared data between structures.
+  - algebra/mod.rs: drives populate and close to a joint fixed point
+    and lowers per-rule TypeConflicts into user-facing CompileErrors.
+
+TypeConflict carries both ConcreteTypes (TypeId plus parent ElId
+list). When two ConcreteTypes get assigned to the same equivalence
+class with the same TypeId but parents in distinct classes, the close
+pass records a parent disagreement instead of silently unifying the
+parents — the previous behaviour collapsed distinct ambient parents,
+which is wrong in the multi-model setting. Parent disagreements are
+deferred during the close fixed point and re-evaluated under the
+final unification, so observation order on pending_equalities does
+not matter. A new CompileError::ConflictingParentEl variant reports
+the locations of the two terms backing the innermost differing
+parent.
+
+The legacy eqlog-eqlog semantics module and ast_to_eqlog helper
+remain for the parts that still need them, but front-end checks no
+longer route through eqlog facts.
