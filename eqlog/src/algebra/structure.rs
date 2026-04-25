@@ -107,30 +107,20 @@ pub struct Structure {
     /// rest of the structure have not yet been drained. Always empty
     /// after [`Structure::close`] returns.
     pub(super) pending_equalities: Vec<(ElId, ElId)>,
-    /// Parent disagreements observed when two [`ConcreteType`]s with
-    /// matching [`TypeId`]s were assigned to the same equivalence class.
-    /// They are deferred (not immediately turned into conflicts) because
-    /// a still-queued equality on `pending_equalities` may later put the
-    /// disagreeing parents into the same class. [`Structure::close`]
-    /// drains this queue once the drain/functionality/typing fixed
-    /// point has converged and only emits a [`TypeConflict`] for entries
-    /// whose parents are still in distinct classes. Always empty after
-    /// [`Structure::close`] returns.
-    pub(super) pending_parent_checks: Vec<DeferredParentCheck>,
 }
 
 /// A parent-disagreement observation queued by
 /// [`Structure::drain_equalities`] or [`Structure::impose_concrete_type`]
-/// for re-evaluation at the end of [`Structure::close`]. The two
+/// for re-evaluation once no further equates can fire. The two
 /// [`ConcreteType`]s share a [`TypeId`] — only the parent lists are in
-/// question. `el` is the equivalence-class root they were assigned to at
-/// observation time; the final check uses the unification's current root
-/// for diagnostic purposes only.
+/// question. `el` is the equivalence-class root they were assigned to
+/// at observation time; later resolution canonicalises through the
+/// unification's current root.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) struct DeferredParentCheck {
-    pub el: ElId,
-    pub a: ConcreteType,
-    pub b: ConcreteType,
+struct DeferredParentCheck {
+    el: ElId,
+    a: ConcreteType,
+    b: ConcreteType,
 }
 
 impl Default for Structure {
@@ -143,7 +133,6 @@ impl Default for Structure {
             ambient_model_els: BTreeMap::new(),
             unification: Unification::new(),
             pending_equalities: Vec::new(),
-            pending_parent_checks: Vec::new(),
         }
     }
 }
@@ -236,13 +225,12 @@ impl Structure {
     /// [`TypeConflict`]; the rest were races where a later equate brought
     /// the disagreeing parents into the same class.
     ///
-    /// After the loop exits, `pending_equalities` and
-    /// `pending_parent_checks` are empty and every remaining reference in
-    /// `pred_apps`, `var_els` and in [`ConcreteType`] parents is rewritten
-    /// to the root of its class, with non-root entries dropped from `els`.
-    /// Callers translate the returned [`TypeConflict`]s into user-facing
-    /// errors, typically by picking a term in `semantic_el` whose class
-    /// matches.
+    /// After the loop exits, `pending_equalities` is empty and every
+    /// remaining reference in `pred_apps`, `var_els` and in
+    /// [`ConcreteType`] parents is rewritten to the root of its class,
+    /// with non-root entries dropped from `els`. Callers translate the
+    /// returned [`TypeConflict`]s into user-facing errors, typically by
+    /// picking a term in `semantic_el` whose class matches.
     ///
     /// Returns `(changed, conflicts)`. `changed` is true iff at least one
     /// inner pass merged a class, found a duplicate or imposed a fresh type,
@@ -250,27 +238,32 @@ impl Structure {
     /// and close report no work.
     pub fn close(&mut self, signature: &Signature) -> (bool, Vec<TypeConflict>) {
         let mut conflicts = Vec::new();
+        let mut parent_checks: Vec<DeferredParentCheck> = Vec::new();
         let mut changed = false;
         loop {
-            let drained = self.drain_equalities(&mut conflicts);
+            let drained = self.drain_equalities(&mut conflicts, &mut parent_checks);
             let func_changed = self.functionality();
-            let type_changed = self.typing(signature, &mut conflicts);
+            let type_changed = self.typing(signature, &mut conflicts, &mut parent_checks);
             if !drained && !func_changed && !type_changed {
                 break;
             }
             changed = true;
         }
-        self.resolve_parent_checks(&mut conflicts);
+        self.resolve_parent_checks(parent_checks, &mut conflicts);
         self.canonicalise_refs();
         (changed, conflicts)
     }
 
-    /// Drains `pending_parent_checks`. For each entry that still has a
-    /// parent disagreement under the final unification, emits a
+    /// Walks `parent_checks`. For each entry that still has a parent
+    /// disagreement under the unification's current state, pushes a
     /// [`TypeConflict`]. Entries whose parents have since been put into
-    /// the same class by a subsequent equate are silently discarded.
-    fn resolve_parent_checks(&mut self, conflicts: &mut Vec<TypeConflict>) {
-        for check in mem::take(&mut self.pending_parent_checks) {
+    /// the same class are silently discarded.
+    fn resolve_parent_checks(
+        &self,
+        parent_checks: Vec<DeferredParentCheck>,
+        conflicts: &mut Vec<TypeConflict>,
+    ) {
+        for check in parent_checks {
             if !parents_match(&self.unification, &check.a.parents, &check.b.parents) {
                 conflicts.push(TypeConflict {
                     el: self.root(check.el),
@@ -284,11 +277,15 @@ impl Structure {
     /// Drains `pending_equalities` down to empty, performing the union
     /// and merging `els` entries for each pair. Records a
     /// [`TypeConflict`] when the merged entries disagree on [`TypeId`].
-    /// Parent disagreements are queued on `pending_parent_checks` for
+    /// Parent disagreements are queued on `parent_checks` for
     /// re-evaluation after the close fixed point converges, since a
     /// still-pending equate may yet put the disagreeing parents into the
     /// same class. Returns true iff at least one class merge happened.
-    fn drain_equalities(&mut self, conflicts: &mut Vec<TypeConflict>) -> bool {
+    fn drain_equalities(
+        &mut self,
+        conflicts: &mut Vec<TypeConflict>,
+        parent_checks: &mut Vec<DeferredParentCheck>,
+    ) -> bool {
         let mut changed = false;
         while let Some((a, b)) = self.pending_equalities.pop() {
             let a = self.root(a);
@@ -315,7 +312,7 @@ impl Structure {
                             b: d,
                         });
                     } else if !parents_match(&self.unification, &k.parents, &d.parents) {
-                        self.pending_parent_checks.push(DeferredParentCheck {
+                        parent_checks.push(DeferredParentCheck {
                             el: keep,
                             a: k.clone(),
                             b: d,
@@ -362,9 +359,13 @@ impl Structure {
 
     /// Walks each func/pred application and propagates the type the
     /// signature demands for every argument (and for the result of a func).
-    /// Returns true iff anything changed (either a fresh type got recorded
-    /// or a parent pair got enqueued on `pending_equalities`).
-    fn typing(&mut self, signature: &Signature, conflicts: &mut Vec<TypeConflict>) -> bool {
+    /// Returns true iff a fresh concrete type got recorded.
+    fn typing(
+        &mut self,
+        signature: &Signature,
+        conflicts: &mut Vec<TypeConflict>,
+        parent_checks: &mut Vec<DeferredParentCheck>,
+    ) -> bool {
         let mut changed = false;
 
         let apps: Vec<(FuncApp, ElId)> = self
@@ -375,7 +376,7 @@ impl Structure {
         for (app, result) in apps {
             let func_data = signature.func(app.func);
             if let Some(ct) = concrete_type_at(signature, func_data.codomain, &app.parents) {
-                if self.impose_concrete_type(result, ct, conflicts) {
+                if self.impose_concrete_type(result, ct, conflicts, parent_checks) {
                     changed = true;
                 }
             }
@@ -384,7 +385,7 @@ impl Structure {
                     break;
                 };
                 if let Some(ct) = concrete_type_at(signature, dom_tid, &app.parents) {
-                    if self.impose_concrete_type(arg, ct, conflicts) {
+                    if self.impose_concrete_type(arg, ct, conflicts, parent_checks) {
                         changed = true;
                     }
                 }
@@ -399,7 +400,7 @@ impl Structure {
                     break;
                 };
                 if let Some(ct) = concrete_type_at(signature, arity_tid, &app.parents) {
-                    if self.impose_concrete_type(arg, ct, conflicts) {
+                    if self.impose_concrete_type(arg, ct, conflicts, parent_checks) {
                         changed = true;
                     }
                 }
@@ -413,15 +414,16 @@ impl Structure {
     /// the existing entry's [`TypeId`] differs. When the [`TypeId`]s
     /// match but some parent element falls in a different class than the
     /// corresponding entry in `ct.parents`, queues a
-    /// [`DeferredParentCheck`] on `pending_parent_checks` for
-    /// re-evaluation after the close fixed point converges, since a
-    /// still-queued equate may yet put the disagreeing parents into the
-    /// same class. Returns true iff a fresh concrete type was recorded.
+    /// [`DeferredParentCheck`] on `parent_checks` for re-evaluation
+    /// after the surrounding fixed point converges, since a still-queued
+    /// equate may yet put the disagreeing parents into the same class.
+    /// Returns true iff a fresh concrete type was recorded.
     fn impose_concrete_type(
         &mut self,
         el: ElId,
         ct: ConcreteType,
         conflicts: &mut Vec<TypeConflict>,
+        parent_checks: &mut Vec<DeferredParentCheck>,
     ) -> bool {
         let root = self.root(el);
         match self.els.get(&root).cloned().flatten() {
@@ -437,7 +439,7 @@ impl Structure {
                         b: ct,
                     });
                 } else if !parents_match(&self.unification, &existing.parents, &ct.parents) {
-                    self.pending_parent_checks.push(DeferredParentCheck {
+                    parent_checks.push(DeferredParentCheck {
                         el: root,
                         a: existing,
                         b: ct,
@@ -801,7 +803,18 @@ impl StructureCat {
                 parents: new_parents,
             };
             let mut local_conflicts = Vec::new();
-            changed |= src_st.impose_concrete_type(src_el, new_ct, &mut local_conflicts);
+            let mut local_parent_checks = Vec::new();
+            changed |= src_st.impose_concrete_type(
+                src_el,
+                new_ct,
+                &mut local_conflicts,
+                &mut local_parent_checks,
+            );
+            // No equates pending on `src_st` at this point (callers run
+            // pull_types_backward only after a full close), so no later
+            // unification can rescue a queued parent disagreement —
+            // resolve immediately.
+            src_st.resolve_parent_checks(local_parent_checks, &mut local_conflicts);
             for c in local_conflicts {
                 conflicts.push((src, c));
             }

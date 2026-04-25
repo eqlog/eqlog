@@ -1,22 +1,18 @@
-Defer parent-mismatch detection
+Localise pending_parent_checks to close()
 
-drain_equalities pops pending equalities one at a time. If a member-el
-equate (e.g. t_a = t_b, parents [e_a] vs [e_b]) is processed before
-the equate that would unify the parents (e_a = e_b), the parent
-disagreement looked like a real conflict and got reported. Reordering
-the queue would have made the same input pass cleanly. The same race
-existed in impose_concrete_type, since typing runs interleaved with
-drain_equalities inside the close fixed point.
+The deferred-parent-check queue's lifetime is exactly one
+Structure::close invocation, so it has no business sitting on
+Structure as a field. Lift it to a local Vec<DeferredParentCheck> in
+close() and thread it through drain_equalities, typing, and
+impose_concrete_type as a &mut parameter alongside the existing
+conflicts vec.
 
-Add a pending_parent_checks queue to Structure holding
-DeferredParentCheck entries. drain_equalities and impose_concrete_type
-now push onto this queue when only the parents disagree (typ
-mismatches stay immediate, since TypeId is immutable). After the
-drain/functionality/typing fixed point converges, Structure::close
-walks the deferred checks under the final unification and only emits
-a TypeConflict for entries whose parents still disagree.
+resolve_parent_checks now takes the queue by value (and &self) instead
+of mem::taking it from a field. The DeferredParentCheck struct loses
+its pub(super) since it is private to the module again.
 
-Deferred checks do not feed back into the fixed point — they are
-terminal observations. The queue is mem::taken at the end so each
-Structure::close call (e.g. forward and backward pass in
-StructureCat::close) starts fresh.
+pull_morphism_types in StructureCat creates its own local queue,
+imposes via impose_concrete_type, and resolves immediately. That
+shortcut is sound because pull_types_backward only runs after a full
+Structure::close has drained pending_equalities, so no later equate
+can fire to rescue a queued parent disagreement on src_st.
