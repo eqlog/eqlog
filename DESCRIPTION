@@ -1,0 +1,14 @@
+Drop redundant SymbolDeclaredTwice eqlog check
+
+`resolve_scopes` already detects duplicate decl-level symbols via
+`insert_decl_symbol` and bails on the first conflict, well before
+`check_eqlog` runs. The eqlog-side `iter_symbol_declared_twice_errors`
+in `eqlog/src/semantics/mod.rs` was therefore unreachable for any
+program reaching that pass.
+
+Remove the iter and its entry in `check_eqlog`. The
+`accessible_symbol` machinery in `eqlog.eql` stays — it's still needed
+by `iter_symbol_lookup_errors` for `UndeclaredSymbol`/`BadSymbolKind`.
+
+The two `symbol_declared_twice_*` compile-error tests continue to pass
+unchanged, served entirely by the Rust-side scope pass.
