@@ -1,0 +1,23 @@
+Resolve member pred/func apps in algebra/populate
+
+walk_pred_atom and emit_app used to skip every PredExpr::Member /
+FuncExpr::Member, leaving member predicates and member functions out of
+the populated structure entirely. They now walk the receiver term, look
+up its type's ConcreteType in the current structure, find the matching
+ModelDeclId via the new Signature::model_decl_for_type lookup, and
+resolve the member name against the model body's own scope (not the
+parent chain, so an enclosing-scope symbol cannot accidentally satisfy
+a member access). When the receiver's type is not yet known the call
+is left unresolved as before, so a later iteration of populate/close
+can pick it up.
+
+The PredApp/FuncApp parents are built from the receiver's
+ConcreteType.parents with the receiver el itself appended, matching
+the parent chain the signature records for any pred/func declared
+inside that model.
+
+A second fix changes the codomain ConcreteType in emit_app from
+concrete_type_for (which reads ambient_model_els and panicked for
+member calls outside any enclosing model) to a new
+codomain_concrete_type helper that takes its parent els from the
+application itself.

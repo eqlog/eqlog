@@ -15,7 +15,7 @@
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 
-use crate::algebra::signature::{Signature, TypeId};
+use crate::algebra::signature::{FuncId, PredId, Signature, TypeId};
 use crate::algebra::structure::{
     ConcreteType, ElId, ElMap, FuncApp, PredApp, Structure, StructureCat, StructureId,
 };
@@ -371,18 +371,31 @@ fn walk_pred_atom(
         })
         .collect();
 
-    let resolved = match *ast.pred_expr(pred) {
+    let resolved: Option<(PredId, Vec<ElId>)> = match *ast.pred_expr(pred) {
         PredExpr::Ambient(aid) => {
             let scope = scopes.entry(aid);
             let name = ast.ambient_pred_expr(aid).name.clone();
-            match scopes.lookup(scope, &name) {
+            let pred_id = match scopes.lookup(scope, &name) {
                 Some(Symbol::Pred(pd)) => signature.pred_for_pred_decl(pd),
                 _ => None,
-            }
+            };
+            pred_id.map(|pid| {
+                let pred_data = signature.pred(pid);
+                let parents = rule.cat.structures[current.0].ambient_parents(&pred_data.parents);
+                (pid, parents)
+            })
         }
-        PredExpr::Member(_) => None,
+        PredExpr::Member(mid) => {
+            let MemberPredExpr {
+                term: recv_term,
+                name,
+            } = ast.member_pred_expr(mid).clone();
+            let (recv_el, c) = walk_term(recv_term, current, rule, ast, scopes, signature);
+            changed |= c;
+            resolve_member_pred(rule, current, recv_el, &name, scopes, signature)
+        }
     };
-    let Some(pred_id) = resolved else {
+    let Some((pred_id, parents)) = resolved else {
         return changed;
     };
 
@@ -391,8 +404,7 @@ fn walk_pred_atom(
         return changed;
     }
     let structure = &mut rule.cat.structures[current.0];
-    let parents: Vec<ElId> = structure
-        .ambient_parents(&pred_data.parents)
+    let parents: Vec<ElId> = parents
         .into_iter()
         .map(|e| structure.unification.root(e))
         .collect();
@@ -406,6 +418,38 @@ fn walk_pred_atom(
         args: canonical_args,
     });
     changed
+}
+
+/// Resolves a member pred reference `recv.name` to the corresponding
+/// [`PredId`] together with the parent el chain to use when emitting a
+/// [`PredApp`]. The parent chain is `recv`'s [`ConcreteType`] parents plus
+/// `recv` itself, matching the order the signature records for the
+/// member's enclosing-models chain.
+///
+/// Returns `None` if `recv`'s type is not yet known, is not a model type,
+/// the model has no symbol with this name, the symbol is not a pred, or
+/// the pred decl failed to register on the signature.
+fn resolve_member_pred(
+    rule: &RuleStructures,
+    current: StructureId,
+    recv_el: ElId,
+    name: &str,
+    scopes: &Scopes,
+    signature: &Signature,
+) -> Option<(PredId, Vec<ElId>)> {
+    let structure = &rule.cat.structures[current.0];
+    let recv_root = structure.unification.root_const(recv_el);
+    let ct = structure.els.get(&recv_root)?.clone()?;
+    let model_decl = signature.model_decl_for_type(ct.typ)?;
+    let body_scope = scopes.unordered(model_decl);
+    let pd = match scopes.scope(body_scope).symbols.get(name).copied()? {
+        Symbol::Pred(pd) => pd,
+        _ => return None,
+    };
+    let pid = signature.pred_for_pred_decl(pd)?;
+    let mut parents = ct.parents;
+    parents.push(recv_el);
+    Some((pid, parents))
 }
 
 /// Walks `term`, materialising any Els it needs in the current
@@ -502,24 +546,38 @@ fn emit_app(
     scopes: &Scopes,
     signature: &Signature,
 ) -> (ElId, bool) {
-    let resolved = match *ast.func_expr(func) {
+    let mut changed = false;
+    let resolved: Option<(FuncId, Vec<ElId>)> = match *ast.func_expr(func) {
         FuncExpr::Ambient(aid) => {
             let scope = scopes.entry(aid);
             let name = ast.ambient_func_expr(aid).name.clone();
-            match scopes.lookup(scope, &name) {
+            let func_id = match scopes.lookup(scope, &name) {
                 Some(Symbol::Func(fd)) => signature.func_for_func_decl(fd),
                 Some(Symbol::Ctor(cd)) => signature.func_for_ctor_decl(cd),
                 _ => None,
-            }
+            };
+            func_id.map(|fid| {
+                let func_data = signature.func(fid);
+                let parents = rule.cat.structures[current.0].ambient_parents(&func_data.parents);
+                (fid, parents)
+            })
         }
-        FuncExpr::Member(_) => None,
+        FuncExpr::Member(mid) => {
+            let MemberFuncExpr {
+                term: recv_term,
+                name,
+            } = ast.member_func_expr(mid).clone();
+            let (recv_el, c) = walk_term(recv_term, current, rule, ast, scopes, signature);
+            changed |= c;
+            resolve_member_func(rule, current, recv_el, &name, scopes, signature)
+        }
     };
 
     let structure = &mut rule.cat.structures[current.0];
 
-    let Some(func_id) = resolved else {
+    let Some((func_id, parents)) = resolved else {
         return match expected {
-            Some(el) => (el, false),
+            Some(el) => (el, changed),
             None => (structure.push_el(), true),
         };
     };
@@ -527,14 +585,13 @@ fn emit_app(
     let func_data = signature.func(func_id);
     if arg_els.len() != func_data.domain.len() {
         return match expected {
-            Some(el) => (el, false),
+            Some(el) => (el, changed),
             None => (structure.push_el(), true),
         };
     }
 
     let codomain = func_data.codomain;
-    let parents: Vec<ElId> = structure
-        .ambient_parents(&func_data.parents)
+    let parents: Vec<ElId> = parents
         .into_iter()
         .map(|e| structure.unification.root(e))
         .collect();
@@ -548,7 +605,6 @@ fn emit_app(
         args: canonical_args,
     };
 
-    let mut changed = false;
     let result_id = match structure.func_apps.get(&app_key).copied() {
         Some(existing) => match expected {
             Some(exp) => {
@@ -564,7 +620,7 @@ fn emit_app(
                 Some(el) => el,
                 None => structure.push_el(),
             };
-            let result_ct = concrete_type_for(signature, Some(codomain), structure);
+            let result_ct = codomain_concrete_type(signature, codomain, &app_key.parents);
             if let Some(ct) = result_ct {
                 let entry = structure.els.entry(id).or_insert(None);
                 if entry.is_none() {
@@ -579,6 +635,38 @@ fn emit_app(
         }
     };
     (result_id, changed)
+}
+
+/// Resolves a member func reference `recv.name` to the corresponding
+/// [`FuncId`] together with the parent el chain to use when emitting a
+/// [`FuncApp`]. Like [`resolve_member_pred`], the parent chain is
+/// `recv`'s [`ConcreteType`] parents plus `recv` itself. Member funcs and
+/// member ctors are both accepted.
+///
+/// Returns `None` if `recv`'s type is not yet known, is not a model type,
+/// the model has no symbol with this name, the symbol is not a func or
+/// ctor, or the decl failed to register on the signature.
+fn resolve_member_func(
+    rule: &RuleStructures,
+    current: StructureId,
+    recv_el: ElId,
+    name: &str,
+    scopes: &Scopes,
+    signature: &Signature,
+) -> Option<(FuncId, Vec<ElId>)> {
+    let structure = &rule.cat.structures[current.0];
+    let recv_root = structure.unification.root_const(recv_el);
+    let ct = structure.els.get(&recv_root)?.clone()?;
+    let model_decl = signature.model_decl_for_type(ct.typ)?;
+    let body_scope = scopes.unordered(model_decl);
+    let fid = match scopes.scope(body_scope).symbols.get(name).copied()? {
+        Symbol::Func(fd) => signature.func_for_func_decl(fd)?,
+        Symbol::Ctor(cd) => signature.func_for_ctor_decl(cd)?,
+        _ => return None,
+    };
+    let mut parents = ct.parents;
+    parents.push(recv_el);
+    Some((fid, parents))
 }
 
 fn resolve_type_expr(
@@ -621,6 +709,27 @@ fn concrete_type_for(
     Some(ConcreteType {
         typ: tid,
         parents: structure.ambient_parents(&signature.type_(tid).parents),
+    })
+}
+
+/// Materialises the [`ConcreteType`] of a func's codomain inside an
+/// application whose enclosing-model parent els are `app_parents`. The
+/// codomain's own parent chain is always a prefix of the function's, so
+/// reading off `app_parents[..codomain.parents.len()]` recovers the
+/// parent els that pin its [`ConcreteType`]. Returns `None` when
+/// `app_parents` is too short, which only happens for malformed programs.
+fn codomain_concrete_type(
+    signature: &Signature,
+    codomain: TypeId,
+    app_parents: &[ElId],
+) -> Option<ConcreteType> {
+    let n = signature.type_(codomain).parents.len();
+    if n > app_parents.len() {
+        return None;
+    }
+    Some(ConcreteType {
+        typ: codomain,
+        parents: app_parents[..n].to_vec(),
     })
 }
 
