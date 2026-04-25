@@ -83,9 +83,8 @@ fn identity_elmap(s: &Structure) -> ElMap {
 /// walking rule `rid`'s body. `enclosing_models` is the chain of model
 /// types the rule is nested inside, outermost first. Argument-count
 /// mismatches at resolved pred/func application sites are appended to
-/// `errors`; the walker may emit duplicates across re-walks of the same
-/// site, which the caller is expected to dedupe (or ignore — duplicates
-/// are harmless beyond reporting noise).
+/// `errors`. The walker may emit duplicates across re-walks of the same
+/// site.
 ///
 /// Returns true iff at least one site produced something it had not
 /// produced on previous calls. A `false` return means the rule is at a

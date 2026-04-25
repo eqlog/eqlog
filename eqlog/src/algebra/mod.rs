@@ -50,9 +50,9 @@ pub fn build_structures(
         let mut last_conflicts;
         let mut last_arg_num_errors;
         loop {
-            // Per-iteration reset: the walker re-visits every site, so the
-            // final iteration's Vec is the ground truth at convergence;
-            // earlier iterations would just contribute stale duplicates.
+            // Per-iteration reset. The walker re-visits every site, so the
+            // final iteration's Vec is the ground truth at convergence.
+            // Earlier iterations would just contribute stale duplicates.
             last_arg_num_errors = Vec::new();
             let walk_changed = walk_rule(
                 &mut rule,
