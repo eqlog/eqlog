@@ -1,0 +1,10 @@
+Flag parent-element mismatch as type conflict
+
+When two ConcreteTypes with the same TypeId get assigned to the same
+equivalence class but their parent elements live in distinct classes,
+Structure::close used to enqueue pairwise parent equalities, silently
+collapsing the parents. This is wrong for the multi-model setting:
+distinct ambient parents should not be unified by an inferred type.
+Now drain_equalities and impose_concrete_type record a TypeConflict
+in that case, leaving the parents untouched. TypeConflict's docstring
+notes that types may carry the same TypeId twice.
