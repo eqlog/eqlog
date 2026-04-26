@@ -1,0 +1,13 @@
+model M {
+    type S;
+    type T;
+
+    func f(x: S) -> S;
+}
+
+rule {
+    if m: M;
+    if m.f(x)!;
+    if x: m.T;
+    then x = x;
+}

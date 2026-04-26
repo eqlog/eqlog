@@ -3,22 +3,23 @@ Wire member type exprs through algebra/
 `walk_if_atom`'s `IfAtom::Var` branch was previously skipping member
 type annotations: `resolve_type_expr` returned `None` for
 `TypeExpr::Member`, so the annotated el ended up with no concrete
-type and the close pass had nothing to propagate. Now
-`walk_var_type_expr` resolves all three type-expr kinds, and for
-`e.Name` it walks `e`, looks up `Name` in `e`'s model body via
-`member_scope_and_parents`, and builds a `ConcreteType` whose parent
-chain is `e`'s parents with `e` itself appended.
+type. Now `walk_var_type_expr` resolves all three type-expr kinds,
+and for `e.Name` it walks `e`, looks up `Name` in `e`'s model body
+via `member_scope_and_parents`, and builds a `ConcreteType` whose
+parent chain is `e`'s parents with `e` itself appended.
 
-The var-if-atom site is reworked to be re-entrant: el allocation and
-`semantic_els` insertion stay idempotent, and the concrete type is
-recorded only once it resolves. A member annotation whose parent's
-type is not yet known leaves the el untyped on this pass; a later
-iteration retries after close has propagated more typing information.
+Annotated types now flow through a new
+`Structure::pending_type_impositions` queue rather than being
+written directly to `els`. Populate enqueues an `(el, ct)` pair via
+`Structure::impose_type`, and `Structure::close` applies them all
+once equality, functionality and signature-derived typing have
+settled. A var-if-atom annotation that disagrees with an inferred
+type is therefore reported with the inferred type as `a` and the
+annotation as `b`. Idempotency is preserved across the populate/close
+fixed-point loop by canonicalising and de-duplicating entries on
+push, and `canonicalise_refs` rewrites pending impositions to current
+roots.
 
-A side effect is that the algebra side now detects the conflict in
-`bad-dep-func-result-type` (where an explicit `s_1.El` annotation
-clashes with an `s_0.El` constraint imposed by a func-arg). Because
-algebra-side errors come before eqlog-side errors in the iterator
-chain in `build.rs`, the algebra rendering wins on ties; its type
-ordering is driven by close-pass timing rather than source order. The
-expected output is updated accordingly.
+A regression test `conflicting-term-type-member-annotation` exercises
+the new branch: a member-typed func argument forces one type onto a
+variable whose annotation asserts a different member type.

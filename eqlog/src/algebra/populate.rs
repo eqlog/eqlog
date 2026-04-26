@@ -367,19 +367,16 @@ fn walk_if_atom(
                     el_id
                 }
             };
-            // Record the concrete type once it resolves. A member annotation
-            // may stay unresolved until a later pass settles its parent's
-            // type; until then the el simply has no concrete type, like any
-            // unannotated el. Once a type is in place we leave it untouched
-            // so re-walks remain idempotent and conflict reporting is left
-            // to the close pass.
+            // Queue the annotation for the close pass to apply. A member
+            // annotation may stay unresolved until a later pass settles
+            // its parent's type; until then the el simply has no concrete
+            // type, like any unannotated el. The close pass applies queued
+            // impositions after equality/functionality/typing have settled,
+            // so an annotation that disagrees with an inferred type is
+            // reported with the inferred type as the `a` slot of the
+            // resulting conflict.
             if let Some(ct) = ct_opt {
-                let structure = &mut rule.cat.structures[current.0];
-                let root = structure.unification.root_const(el_id);
-                if matches!(structure.els.get(&root), Some(None)) {
-                    structure.els.insert(root, Some(ct));
-                    changed = true;
-                }
+                changed |= rule.cat.structures[current.0].impose_type(el_id, ct);
             }
             changed
         }
