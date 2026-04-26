@@ -107,6 +107,9 @@ pub struct Structure {
     /// rest of the structure have not yet been drained. Always empty
     /// after [`Structure::close`] returns.
     pub(super) pending_equalities: Vec<(ElId, ElId)>,
+    /// Pending [`Structure::impose_type`] assertions. Persists across
+    /// `close` calls; canonicalised alongside `els`.
+    pub(super) pending_type_impositions: Vec<(ElId, ConcreteType)>,
 }
 
 /// A parent-disagreement observation queued by
@@ -133,6 +136,7 @@ impl Default for Structure {
             ambient_model_els: BTreeMap::new(),
             unification: Unification::new(),
             pending_equalities: Vec::new(),
+            pending_type_impositions: Vec::new(),
         }
     }
 }
@@ -168,6 +172,31 @@ impl Structure {
         self.unification.increase_size_to(id.0 + 1);
         self.els.insert(id, None);
         id
+    }
+
+    /// Declares that `el` should have concrete type `ct`. Applied at the
+    /// end of [`Structure::close`], after inferred typing has settled, so
+    /// a disagreement surfaces as a [`TypeConflict`] with the inferred
+    /// type in `a` and `ct` in `b`. Returns true iff a fresh entry was
+    /// queued; idempotent on `(el, ct)` already enqueued.
+    pub fn impose_type(&mut self, el: ElId, mut ct: ConcreteType) -> bool {
+        // Canonicalise to the current roots before comparing. Existing
+        // entries were canonicalised at the end of the previous `close`,
+        // and no equates have been drained since (callers run during
+        // populate), so this puts the new entry on the same footing.
+        let el = self.unification.root_const(el);
+        for p in ct.parents.iter_mut() {
+            *p = self.unification.root_const(*p);
+        }
+        if self
+            .pending_type_impositions
+            .iter()
+            .any(|(e, c)| *e == el && c == &ct)
+        {
+            return false;
+        }
+        self.pending_type_impositions.push((el, ct));
+        true
     }
 
     /// Declares that `a` and `b` are equal. Just enqueues the pair on
@@ -218,9 +247,36 @@ impl Structure {
             }
             changed = true;
         }
+        // Apply pending type impositions after the equality/functionality/
+        // typing fixed point has settled. This puts any inferred type into
+        // the `existing` slot of `impose_concrete_type`, so a conflict with
+        // an annotation surfaces as `a = inferred, b = annotated`.
+        changed |= self.apply_pending_type_impositions(&mut conflicts, &mut parent_checks);
         self.resolve_parent_checks(parent_checks, &mut conflicts);
         self.canonicalise_refs();
         (changed, conflicts)
+    }
+
+    /// Imposes every `(el, ct)` queued via [`Structure::impose_type`] on the
+    /// corresponding equivalence class, accumulating any
+    /// [`TypeConflict`]s and parent-disagreement deferrals. The queue is
+    /// not drained: the same impositions are reapplied on every `close`
+    /// so a conflict that materialises only after a later equate still
+    /// surfaces. Returns true iff any imposition recorded a fresh
+    /// concrete type.
+    fn apply_pending_type_impositions(
+        &mut self,
+        conflicts: &mut Vec<TypeConflict>,
+        parent_checks: &mut Vec<DeferredParentCheck>,
+    ) -> bool {
+        let impositions = self.pending_type_impositions.clone();
+        let mut changed = false;
+        for (el, ct) in impositions {
+            if self.impose_concrete_type(el, ct, conflicts, parent_checks) {
+                changed = true;
+            }
+        }
+        changed
     }
 
     /// Walks `parent_checks`. For each entry that still has a parent
@@ -453,6 +509,13 @@ impl Structure {
                 parents: ct.parents.into_iter().map(|e| self.root(e)).collect(),
             });
             self.els.insert(id, ct);
+        }
+
+        for (el, ct) in self.pending_type_impositions.iter_mut() {
+            *el = self.unification.root_const(*el);
+            for p in ct.parents.iter_mut() {
+                *p = self.unification.root_const(*p);
+            }
         }
     }
 
