@@ -188,7 +188,7 @@ fn collect_rules(
             }),
             Decl::Model(mid) => {
                 let body = ast.model_decl(mid).body.clone();
-                let model_tid = signature.types_for_model_decl(mid).type_;
+                let model_tid = signature.ids_for_model_decl(mid).type_;
                 let mut nested = enclosing_models.to_vec();
                 nested.push(model_tid);
                 collect_rules(ast, signature, &body, &nested, out);

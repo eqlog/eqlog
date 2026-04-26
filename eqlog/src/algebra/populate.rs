@@ -822,7 +822,7 @@ fn walk_var_type_expr(
             let tid = match scopes.lookup(scope, name) {
                 Some(Symbol::Type(td)) => Some(signature.type_for_type_decl(td)),
                 Some(Symbol::Enum(ed)) => Some(signature.type_for_enum_decl(ed)),
-                Some(Symbol::Model(md)) => Some(signature.types_for_model_decl(md).type_),
+                Some(Symbol::Model(md)) => Some(signature.ids_for_model_decl(md).type_),
                 _ => None,
             };
             let structure = &rule.cat.structures[current.0];
@@ -831,7 +831,7 @@ fn walk_var_type_expr(
         TypeExpr::Mor(id) => {
             let name = &ast.mor_type_expr(id).name;
             let tid = match scopes.lookup(scope, name) {
-                Some(Symbol::Model(md)) => Some(signature.types_for_model_decl(md).mor),
+                Some(Symbol::Model(md)) => Some(signature.ids_for_model_decl(md).mor),
                 _ => None,
             };
             let structure = &rule.cat.structures[current.0];
@@ -849,7 +849,7 @@ fn walk_var_type_expr(
                     let tid = match body.symbols.get(&name).copied()? {
                         Symbol::Type(td) => signature.type_for_type_decl(td),
                         Symbol::Enum(ed) => signature.type_for_enum_decl(ed),
-                        Symbol::Model(md) => signature.types_for_model_decl(md).type_,
+                        Symbol::Model(md) => signature.ids_for_model_decl(md).type_,
                         _ => return None,
                     };
                     Some(ConcreteType { typ: tid, parents })
