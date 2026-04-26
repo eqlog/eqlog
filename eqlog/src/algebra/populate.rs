@@ -778,21 +778,10 @@ fn member_scope_and_parents<'a>(
 }
 
 /// Resolves a [`TypeExprId`] in a var-if-atom annotation position to the
-/// [`ConcreteType`] it imposes on the annotated el.
-///
-/// Ambient and mor type exprs resolve through the surrounding scope and
-/// take their parent chain from `structure.ambient_model_els`. A member
-/// type expr `e.Name` walks `e` first to obtain its el, then looks up
-/// `Name` in the model body of `e`'s [`ConcreteType`]; the parent chain
-/// is `e`'s [`ConcreteType`] parents with `e` itself appended, mirroring
-/// how the signature parameterises a member type.
-///
-/// Returns `None` when resolution fails: the annotation references an
-/// undeclared name or the wrong symbol kind, or `e`'s type is not yet
-/// known (in which case a later pass will retry once the close pass has
-/// propagated more typing information). The bool component reports
-/// whether walking `e` itself produced any allocation; ambient/mor
-/// resolution never mutates and reports `false` there.
+/// [`ConcreteType`] it imposes on the annotated el. Returns `None` when
+/// resolution fails or, for a member type, when the parent's type is
+/// not yet known. The bool reports whether walking the parent term
+/// produced an allocation.
 fn walk_var_type_expr(
     type_expr: TypeExprId,
     current: StructureId,
