@@ -1,0 +1,12 @@
+Add morphism operations to algebra::signature
+
+For every model `M`, register the dom and cod projections (each typed
+`Mor<M> -> M`) as Funcs alongside the model and mor type ids on
+`ModelIds` (renamed from `ModelTypeIds`, since it now carries func ids
+too). For every member type `T` of a model `M`, register a `mor_app`
+Func typed `(Mor<M>, T) -> T` in a new
+`Signature::mor_app_func_for_type` lookup.
+
+These funcs are created in pass 1 of `build_signature` next to the
+types they project from, before the user-declared funcs registered in
+pass 2.

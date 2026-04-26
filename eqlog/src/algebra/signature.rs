@@ -11,12 +11,18 @@
 //!
 //! 1. Walk the AST and register one [`Type`] per `type` / `enum` / `model`
 //!    declaration, plus the auto-generated mor companion type for every
-//!    model. This produces lookups from AST decl ids to [`TypeId`]s, exposed
-//!    via [`Signature::type_for_type_decl`] and friends.
-//! 2. Walk the AST again to register [`Pred`]s and [`Func`]s. Type-name
-//!    references in pred/func/ctor arg decls (and func result types) are
-//!    resolved against the ambient [`crate::scopes::Scopes`] entry of the
-//!    relevant AST node, then translated through the pass-1 lookups.
+//!    model. The same pass also registers the morphism operations that
+//!    every model implies: the `dom`/`cod` projections (one [`Func`] each
+//!    per model, on [`ModelIds`]) and the `mor_app` functions (one
+//!    [`Func`] per member type, on
+//!    [`Signature::mor_app_func_for_type`]). Produces lookups from AST
+//!    decl ids to ids, exposed via [`Signature::type_for_type_decl`] and
+//!    friends.
+//! 2. Walk the AST again to register the user-declared [`Pred`]s and
+//!    [`Func`]s. Type-name references in pred/func/ctor arg decls (and
+//!    func result types) are resolved against the ambient
+//!    [`crate::scopes::Scopes`] entry of the relevant AST node, then
+//!    translated through the pass-1 lookups.
 //!
 //! Symbol-resolution failures (undeclared names, names that resolve to a
 //! non-type symbol) are accumulated as [`CompileError`]s and returned
@@ -77,12 +83,17 @@ pub struct Func {
     pub codomain: TypeId,
 }
 
-/// The pair of [`TypeId`]s a `model` declaration produces: the model type
-/// itself and its auto-generated morphism-type companion.
+/// The ids a `model` declaration produces: the model type itself, its
+/// auto-generated morphism-type companion, and the dom/cod projections
+/// that read the source/target model instance from a morphism. The
+/// per-member-type morphism-application functions live separately on
+/// [`Signature::mor_app_func_for_type`], keyed by member type.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct ModelTypeIds {
+pub struct ModelIds {
     pub type_: TypeId,
     pub mor: TypeId,
+    pub dom: FuncId,
+    pub cod: FuncId,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -92,10 +103,15 @@ pub struct Signature {
     funcs: Vec<Func>,
     type_decls: BTreeMap<TypeDeclId, TypeId>,
     enum_decls: BTreeMap<EnumDeclId, TypeId>,
-    model_decls: BTreeMap<ModelDeclId, ModelTypeIds>,
+    model_decls: BTreeMap<ModelDeclId, ModelIds>,
     pred_decls: BTreeMap<PredDeclId, PredId>,
     func_decls: BTreeMap<FuncDeclId, FuncId>,
     ctor_decls: BTreeMap<CtorDeclId, FuncId>,
+    /// Per-member-type morphism-application function. Keyed by the
+    /// member type `T`. The function takes `(Mor<M>, T)` and returns
+    /// `T`, where `M` is the model containing `T`. Populated for every
+    /// type whose `parents` ends in a model type.
+    mor_app_funcs: BTreeMap<TypeId, FuncId>,
 }
 
 impl Signature {
@@ -125,20 +141,29 @@ impl Signature {
             .expect("enum decl was not registered")
     }
 
-    pub fn types_for_model_decl(&self, id: ModelDeclId) -> ModelTypeIds {
+    pub fn ids_for_model_decl(&self, id: ModelDeclId) -> ModelIds {
         *self
             .model_decls
             .get(&id)
             .expect("model decl was not registered")
     }
 
-    /// Inverse of [`Self::types_for_model_decl`] on the model type itself.
+    /// Inverse of [`Self::ids_for_model_decl`] on the model type itself.
     /// Returns the [`ModelDeclId`] whose model-instance type is `tid`, or
     /// `None` if `tid` is not a model-instance type.
     pub fn model_decl_for_type(&self, tid: TypeId) -> Option<ModelDeclId> {
         self.model_decls
             .iter()
             .find_map(|(d, ids)| (ids.type_ == tid).then_some(*d))
+    }
+
+    /// Returns the morphism-application function for `tid`, or `None`
+    /// if `tid` is not a member type (i.e. its `parents` is empty).
+    /// The returned function has signature `(Mor<M>, T) -> T`, where
+    /// `M` is the innermost enclosing model and `T = tid`.
+    #[allow(dead_code)]
+    pub fn mor_app_func_for_type(&self, tid: TypeId) -> Option<FuncId> {
+        self.mor_app_funcs.get(&tid).copied()
     }
 
     /// Returns the [`PredId`] for `id`, or `None` if the pred decl is
@@ -249,39 +274,40 @@ struct Builder<'a> {
 
 impl<'a> Builder<'a> {
     /// Pass 1: walk the AST registering one [`Type`] per `type`/`enum`/`model`
-    /// declaration (plus the mor companion of each model) and recording the
-    /// AST-id to [`TypeId`] lookups on [`Signature`].
+    /// declaration (plus the mor companion of each model) and the morphism
+    /// operations (`dom`, `cod` per model and `mor_app` per member type),
+    /// recording the AST-id to [`TypeId`] lookups on [`Signature`].
     fn populate_types(&mut self, decls: &[DeclId], parents: &[TypeId]) {
         for decl in decls {
             match *self.ast.decl(*decl) {
                 Decl::Type(id) => {
-                    let tid = self.signature.push_type(Type {
-                        kind: TypeKind::Plain,
-                        parents: parents.to_vec(),
-                    });
+                    let tid = self.push_member_type(TypeKind::Plain, parents);
                     self.signature.type_decls.insert(id, tid);
                 }
                 Decl::Enum(id) => {
-                    let tid = self.signature.push_type(Type {
-                        kind: TypeKind::Enum,
-                        parents: parents.to_vec(),
-                    });
+                    let tid = self.push_member_type(TypeKind::Enum, parents);
                     self.signature.enum_decls.insert(id, tid);
                 }
                 Decl::Model(id) => {
-                    let model_tid = self.signature.push_type(Type {
-                        kind: TypeKind::Model,
+                    let model_tid = self.push_member_type(TypeKind::Model, parents);
+                    let mor_tid = self.push_member_type(TypeKind::Mor(model_tid), parents);
+                    let dom = self.signature.push_func(Func {
                         parents: parents.to_vec(),
+                        domain: vec![mor_tid],
+                        codomain: model_tid,
                     });
-                    let mor_tid = self.signature.push_type(Type {
-                        kind: TypeKind::Mor(model_tid),
+                    let cod = self.signature.push_func(Func {
                         parents: parents.to_vec(),
+                        domain: vec![mor_tid],
+                        codomain: model_tid,
                     });
                     self.signature.model_decls.insert(
                         id,
-                        ModelTypeIds {
+                        ModelIds {
                             type_: model_tid,
                             mor: mor_tid,
+                            dom,
+                            cod,
                         },
                     );
                     let body = self.ast.model_decl(id).body.clone();
@@ -292,6 +318,31 @@ impl<'a> Builder<'a> {
                 Decl::Pred(_) | Decl::Func(_) | Decl::Rule(_) => {}
             }
         }
+    }
+
+    /// Pushes a [`Type`] with the given kind and parents and, when
+    /// `parents` is non-empty (i.e. the type lives inside a model),
+    /// registers the corresponding `mor_app` [`Func`] for it.
+    fn push_member_type(&mut self, kind: TypeKind, parents: &[TypeId]) -> TypeId {
+        let tid = self.signature.push_type(Type {
+            kind,
+            parents: parents.to_vec(),
+        });
+        if let Some((parent_model, outer)) = parents.split_last() {
+            let parent_mor = self
+                .signature
+                .model_decls
+                .values()
+                .find_map(|ids| (ids.type_ == *parent_model).then_some(ids.mor))
+                .expect("enclosing model registered before its body is walked");
+            let fid = self.signature.push_func(Func {
+                parents: outer.to_vec(),
+                domain: vec![parent_mor, tid],
+                codomain: tid,
+            });
+            self.signature.mor_app_funcs.insert(tid, fid);
+        }
+        tid
     }
 
     /// Pass 2: walk the AST again registering [`Pred`]s and [`Func`]s.
@@ -339,7 +390,7 @@ impl<'a> Builder<'a> {
                     }
                 }
                 Decl::Model(id) => {
-                    let model_tid = self.signature.types_for_model_decl(id).type_;
+                    let model_tid = self.signature.ids_for_model_decl(id).type_;
                     let body = self.ast.model_decl(id).body.clone();
                     let mut new_parents = parents.to_vec();
                     new_parents.push(model_tid);
@@ -380,7 +431,7 @@ impl<'a> Builder<'a> {
                 match self.scopes.lookup(scope, &name) {
                     Some(Symbol::Type(td)) => Some(self.signature.type_for_type_decl(td)),
                     Some(Symbol::Enum(ed)) => Some(self.signature.type_for_enum_decl(ed)),
-                    Some(Symbol::Model(md)) => Some(self.signature.types_for_model_decl(md).type_),
+                    Some(Symbol::Model(md)) => Some(self.signature.ids_for_model_decl(md).type_),
                     Some(other) => {
                         // Sig-position ambient accepts type, enum or model.
                         // Mirror eqlog.eql's `should_be_symbol_3(name, type_kind, enum_kind, model_kind, ...)`
@@ -399,7 +450,7 @@ impl<'a> Builder<'a> {
                 let used_at = self.ast.loc(id);
                 let name = self.ast.mor_type_expr(id).name.clone();
                 match self.scopes.lookup(scope, &name) {
-                    Some(Symbol::Model(md)) => Some(self.signature.types_for_model_decl(md).mor),
+                    Some(Symbol::Model(md)) => Some(self.signature.ids_for_model_decl(md).mor),
                     Some(other) => {
                         // Mirrors eqlog.eql's `should_be_symbol(model_ty_ident, model_kind, ...)`
                         // for sig-position mor type expressions.

@@ -772,14 +772,14 @@ fn resolve_type_expr(
             match scopes.lookup(scope, name) {
                 Some(Symbol::Type(td)) => Some(signature.type_for_type_decl(td)),
                 Some(Symbol::Enum(ed)) => Some(signature.type_for_enum_decl(ed)),
-                Some(Symbol::Model(md)) => Some(signature.types_for_model_decl(md).type_),
+                Some(Symbol::Model(md)) => Some(signature.ids_for_model_decl(md).type_),
                 _ => None,
             }
         }
         TypeExpr::Mor(id) => {
             let name = &ast.mor_type_expr(id).name;
             match scopes.lookup(scope, name) {
-                Some(Symbol::Model(md)) => Some(signature.types_for_model_decl(md).mor),
+                Some(Symbol::Model(md)) => Some(signature.ids_for_model_decl(md).mor),
                 _ => None,
             }
         }
