@@ -470,11 +470,35 @@ impl Structure {
 /// invariants (preserving `pred_apps`, `func_apps`, `var_els` and
 /// `ambient_model_els` under the map) are maintained by
 /// [`StructureCat::close`] rather than baked into the data structure.
+///
+/// `under_prods` is a separate registry of "wide pullback" relationships
+/// among the structures. It does not own morphisms; the formal
+/// `top -> meet` and `meet -> end_i` morphisms live in `morphisms`. The
+/// registry is what tells [`StructureCat::close`] which structures are
+/// meant to receive saturated facts (equalities, pred_apps, func_apps)
+/// that hold in every `end_i`.
 #[derive(Clone, Debug, Default)]
 pub struct StructureCat {
     pub structures: Vec<Structure>,
     /// Keyed by `(domain, codomain)`. `domain.0 < codomain.0` always.
     pub morphisms: BTreeMap<(StructureId, StructureId), ElMap>,
+    pub under_prods: Vec<UnderProd>,
+}
+
+/// A "product in the under-category over `top`": the universal structure
+/// `meet` extending `top` and embedding into every `end_i`. This is the
+/// after-structure of a `branch`/`match` statement: it captures the data
+/// that holds no matter which branch was taken.
+///
+/// `top` is recorded for traceability only. The saturation pass driving
+/// `meet` only consults `meet` and the `end_i`s; the `top -> meet`
+/// morphism in [`StructureCat::morphisms`] is what keeps `top`'s data
+/// flowing into `meet` via the ordinary forward push.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UnderProd {
+    pub top: StructureId,
+    pub meet: StructureId,
+    pub ends: Vec<StructureId>,
 }
 
 impl StructureCat {
@@ -497,10 +521,19 @@ impl StructureCat {
         assert!(prev.is_none(), "duplicate morphism {src:?} -> {tgt:?}");
     }
 
+    /// Records a wide-pullback relationship among already-existing
+    /// structures: `meet` is to be saturated by facts holding in every
+    /// `end_i`. The caller is responsible for having allocated `top`,
+    /// `meet` and the `end_i`s and for having registered the appropriate
+    /// `top -> meet` and `meet -> end_i` morphisms in `morphisms`.
+    pub fn add_under_prod(&mut self, top: StructureId, meet: StructureId, ends: Vec<StructureId>) {
+        self.under_prods.push(UnderProd { top, meet, ends });
+    }
+
     /// Closes every structure under functionality and typing and propagates
-    /// shared data along the morphisms.
+    /// shared data along the morphisms, iterating to a fixed point.
     ///
-    /// Two passes:
+    /// Each cycle consists of:
     ///
     ///   - Forward: walk structures in arena order. Close each structure,
     ///     then push its `pred_apps`, `func_apps`, `var_els` and
@@ -517,43 +550,56 @@ impl StructureCat {
     ///     ambient model elements (so their preimages in the domain are
     ///     unambiguous — the domain's own ambient els of the same types).
     ///     Equality, predicate and function data are not propagated
-    ///     backwards. Re-close the domain afterwards so any equalities
-    ///     induced by newly imposed types settle. Because only type info
-    ///     flows backwards — and only into the domain, whose forward
-    ///     outputs have already been consumed — no second forward pass is
-    ///     needed.
+    ///     backwards by this step. Re-close the domain afterwards so any
+    ///     equalities induced by newly imposed types settle.
     ///
-    /// After both passes a final canonicalisation rewrites every
-    /// [`ElMap`]'s keys and values to their respective roots.
+    ///   - Under-prod saturation: for each registered [`UnderProd`], pull
+    ///     equalities, pred_apps and func_apps that hold in every `end_i`
+    ///     back into `meet`.
+    ///
+    /// The cycle repeats until none of the three steps reports any change.
+    /// A final canonicalisation rewrites every [`ElMap`]'s keys and values
+    /// to their respective roots.
     ///
     /// Returns `(changed, conflicts)`. `conflicts` is every
     /// [`TypeConflict`] discovered, tagged with the [`StructureId`] of the
     /// structure in which it occurred, so callers can attribute diagnostics.
-    /// `changed` is true iff at least one structure-level close, push or
-    /// pull observed work, so an enclosing populate/close fixed point can
-    /// stop when both report no change.
+    /// `changed` is true iff at least one cycle observed work, so an
+    /// enclosing populate/close fixed point can stop when both report no
+    /// change.
     pub fn close(&mut self, signature: &Signature) -> (bool, Vec<(StructureId, TypeConflict)>) {
         let mut conflicts: Vec<(StructureId, TypeConflict)> = Vec::new();
         let mut changed = false;
         let n = self.structures.len();
 
-        for i in 0..n {
-            let id = StructureId(i);
-            let (c_changed, cs) = self.structures[i].close(signature);
-            changed |= c_changed;
-            for c in cs {
-                conflicts.push((id, c));
-            }
-            changed |= self.push_forward(id);
-        }
+        loop {
+            let mut cycle = false;
 
-        for i in (0..n).rev() {
-            let id = StructureId(i);
-            changed |= self.pull_types_backward(id, &mut conflicts);
-            let (c_changed, cs) = self.structures[i].close(signature);
-            changed |= c_changed;
-            for c in cs {
-                conflicts.push((id, c));
+            for i in 0..n {
+                let id = StructureId(i);
+                let (c_changed, cs) = self.structures[i].close(signature);
+                cycle |= c_changed;
+                for c in cs {
+                    conflicts.push((id, c));
+                }
+                cycle |= self.push_forward(id);
+            }
+
+            for i in (0..n).rev() {
+                let id = StructureId(i);
+                cycle |= self.pull_types_backward(id, &mut conflicts);
+                let (c_changed, cs) = self.structures[i].close(signature);
+                cycle |= c_changed;
+                for c in cs {
+                    conflicts.push((id, c));
+                }
+            }
+
+            cycle |= self.saturate_under_prods();
+
+            changed |= cycle;
+            if !cycle {
+                break;
             }
         }
 
@@ -581,19 +627,20 @@ impl StructureCat {
     }
 
     /// Carries data from `src` into `tgt` along the `(src, tgt)` morphism.
-    /// Rewrites the [`ElMap`]'s keys to their roots in `src`, enqueues
-    /// equalities on `tgt` when two keys collapse, and inserts the images
-    /// of `src`'s `pred_apps`, `func_apps`, `var_els` and
-    /// `ambient_model_els` into `tgt`.
+    /// Rewrites the [`ElMap`]'s keys to their roots in `src` and its
+    /// values to their roots in `tgt`, enqueues equalities on `tgt` when
+    /// two keys collapse, and inserts the images of `src`'s `pred_apps`,
+    /// `func_apps`, `var_els` and `ambient_model_els` into `tgt`.
     ///
     /// Returns true iff a previously-absent entry was inserted into `tgt`,
     /// or an equate was enqueued on `tgt` whose pair lives in distinct
     /// equivalence classes. Idempotent re-runs that only re-canonicalise
-    /// the morphism's keys report false.
+    /// the morphism's keys and values report false.
     fn push_morphism(&mut self, src: StructureId, tgt: StructureId) -> bool {
         let StructureCat {
             structures,
             morphisms,
+            ..
         } = self;
         let (left, right) = structures.split_at_mut(tgt.0);
         let src_st = &left[src.0];
@@ -604,16 +651,23 @@ impl StructureCat {
 
         let mut changed = false;
 
+        // Canonicalise both keys (under src's unification) and values
+        // (under tgt's unification) so the entries seen below — and the
+        // images derived from them — match `tgt`'s post-close form.
+        // Without canonicalising values, repeated push calls would keep
+        // inserting pred_app/func_app entries with stale element ids,
+        // each time reporting `changed = true`.
         let old = mem::take(map);
         for (k, v) in old {
             let root_k = src_st.unification.root_const(k);
+            let root_v = tgt_st.unification.root_const(v);
             match map.entry(root_k) {
                 Entry::Vacant(vac) => {
-                    vac.insert(v);
+                    vac.insert(root_v);
                 }
                 Entry::Occupied(occ) => {
                     let existing = *occ.get();
-                    if existing != v && tgt_st.equate(existing, v) {
+                    if existing != root_v && tgt_st.equate(existing, root_v) {
                         changed = true;
                     }
                 }
@@ -731,6 +785,7 @@ impl StructureCat {
         let StructureCat {
             structures,
             morphisms,
+            ..
         } = self;
         let (left, right) = structures.split_at_mut(tgt.0);
         let src_st = &mut left[src.0];
@@ -797,6 +852,316 @@ impl StructureCat {
         changed
     }
 
+    /// Saturates each registered [`UnderProd`]'s `meet` with equalities,
+    /// pred_apps and func_apps that hold in every `end_i`. Each call
+    /// processes every under-prod once; the surrounding fixed-point loop
+    /// in [`Self::close`] re-runs as long as any cycle reports change.
+    fn saturate_under_prods(&mut self) -> bool {
+        let mut changed = false;
+        let n = self.under_prods.len();
+        for i in 0..n {
+            let up = self.under_prods[i].clone();
+            changed |= self.saturate_one_under_prod(&up);
+        }
+        changed
+    }
+
+    fn saturate_one_under_prod(&mut self, up: &UnderProd) -> bool {
+        if up.ends.is_empty() {
+            return false;
+        }
+        for &end_id in &up.ends {
+            if !self.morphisms.contains_key(&(up.meet, end_id)) {
+                return false;
+            }
+        }
+        let mut changed = false;
+        changed |= self.saturate_under_prod_equalities(up);
+        changed |= self.saturate_under_prod_pred_apps(up);
+        changed |= self.saturate_under_prod_func_apps(up);
+        changed
+    }
+
+    /// Equates pairs of meet elements whose canonical images coincide in
+    /// every `end_i`. Computed by partitioning meet's roots by the tuple
+    /// `(root in end_1, root in end_2, …)` and equating within each
+    /// resulting group.
+    fn saturate_under_prod_equalities(&mut self, up: &UnderProd) -> bool {
+        let groups = self.group_meet_roots_by_end_images(up);
+        let mut changed = false;
+        let meet_st = &mut self.structures[up.meet.0];
+        for (_, members) in groups {
+            if members.len() < 2 {
+                continue;
+            }
+            let first = members[0];
+            for &m in &members[1..] {
+                if meet_st.equate(first, m) {
+                    changed = true;
+                }
+            }
+        }
+        changed
+    }
+
+    fn group_meet_roots_by_end_images(&self, up: &UnderProd) -> BTreeMap<Vec<ElId>, Vec<ElId>> {
+        let meet_st = &self.structures[up.meet.0];
+        let mut groups: BTreeMap<Vec<ElId>, Vec<ElId>> = BTreeMap::new();
+        for &m in meet_st.els.keys() {
+            if meet_st.unification.root_const(m) != m {
+                continue;
+            }
+            let mut key = Vec::with_capacity(up.ends.len());
+            let mut ok = true;
+            for &end_id in &up.ends {
+                let map = self.morphisms.get(&(up.meet, end_id)).unwrap();
+                let Some(&img) = map.get(&m) else {
+                    ok = false;
+                    break;
+                };
+                key.push(self.structures[end_id.0].unification.root_const(img));
+            }
+            if ok {
+                groups.entry(key).or_default().push(m);
+            }
+        }
+        groups
+    }
+
+    /// Inserts into `meet` every pred_app of `end_0` that translates back
+    /// through the projection and is matched in every other end. When
+    /// several meet roots project to the same `end_0` root,
+    /// [`Self::invert_projection`] keeps only the smallest, so a few
+    /// pred_apps may go unsaturated; nothing wrong is ever added.
+    fn saturate_under_prod_pred_apps(&mut self, up: &UnderProd) -> bool {
+        let end_0 = up.ends[0];
+        let inv = self.invert_projection(up.meet, end_0);
+        let candidates: Vec<PredApp> = self.structures[end_0.0].pred_apps.iter().cloned().collect();
+
+        let mut to_insert: Vec<PredApp> = Vec::new();
+        for pa in &candidates {
+            let Some(meet_parents) = self.preimage_seq(end_0, &inv, &pa.parents) else {
+                continue;
+            };
+            let Some(meet_args) = self.preimage_seq(end_0, &inv, &pa.args) else {
+                continue;
+            };
+
+            let mut all_ends_have = true;
+            for &end_j in &up.ends[1..] {
+                let Some(translated_parents) = self.project_seq(up.meet, end_j, &meet_parents)
+                else {
+                    all_ends_have = false;
+                    break;
+                };
+                let Some(translated_args) = self.project_seq(up.meet, end_j, &meet_args) else {
+                    all_ends_have = false;
+                    break;
+                };
+                let candidate = PredApp {
+                    pred: pa.pred,
+                    parents: translated_parents,
+                    args: translated_args,
+                };
+                if !self.structures[end_j.0].pred_apps.contains(&candidate) {
+                    all_ends_have = false;
+                    break;
+                }
+            }
+
+            if all_ends_have {
+                to_insert.push(PredApp {
+                    pred: pa.pred,
+                    parents: meet_parents,
+                    args: meet_args,
+                });
+            }
+        }
+
+        let mut changed = false;
+        let meet_st = &mut self.structures[up.meet.0];
+        for pa in to_insert {
+            let canon = PredApp {
+                pred: pa.pred,
+                parents: pa
+                    .parents
+                    .iter()
+                    .map(|e| meet_st.unification.root_const(*e))
+                    .collect(),
+                args: pa
+                    .args
+                    .iter()
+                    .map(|e| meet_st.unification.root_const(*e))
+                    .collect(),
+            };
+            if meet_st.pred_apps.insert(canon) {
+                changed = true;
+            }
+        }
+        changed
+    }
+
+    /// Inserts into `meet` every func_app of `end_0` that translates back
+    /// through the projection and matches in every other end. When the
+    /// translated key has no result yet in `meet`, allocates a fresh one
+    /// and extends each `meet -> end_j` projection with the freshly
+    /// allocated element pointing at the corresponding end's result.
+    fn saturate_under_prod_func_apps(&mut self, up: &UnderProd) -> bool {
+        let end_0 = up.ends[0];
+        let inv = self.invert_projection(up.meet, end_0);
+        let candidates: Vec<(FuncApp, ElId)> = self.structures[end_0.0]
+            .func_apps
+            .iter()
+            .map(|(a, r)| (a.clone(), *r))
+            .collect();
+
+        let mut to_add: Vec<(FuncApp, Vec<ElId>)> = Vec::new();
+        for (fa, r0) in &candidates {
+            let Some(meet_parents) = self.preimage_seq(end_0, &inv, &fa.parents) else {
+                continue;
+            };
+            let Some(meet_args) = self.preimage_seq(end_0, &inv, &fa.args) else {
+                continue;
+            };
+
+            let mut end_results: Vec<ElId> = Vec::with_capacity(up.ends.len());
+            end_results.push(self.structures[end_0.0].unification.root_const(*r0));
+
+            let mut ok = true;
+            for &end_j in &up.ends[1..] {
+                let Some(translated_parents) = self.project_seq(up.meet, end_j, &meet_parents)
+                else {
+                    ok = false;
+                    break;
+                };
+                let Some(translated_args) = self.project_seq(up.meet, end_j, &meet_args) else {
+                    ok = false;
+                    break;
+                };
+                let candidate = FuncApp {
+                    func: fa.func,
+                    parents: translated_parents,
+                    args: translated_args,
+                };
+                match self.structures[end_j.0].func_apps.get(&candidate) {
+                    Some(&r) => {
+                        end_results.push(self.structures[end_j.0].unification.root_const(r));
+                    }
+                    None => {
+                        ok = false;
+                        break;
+                    }
+                }
+            }
+
+            if ok {
+                to_add.push((
+                    FuncApp {
+                        func: fa.func,
+                        parents: meet_parents,
+                        args: meet_args,
+                    },
+                    end_results,
+                ));
+            }
+        }
+
+        let mut changed = false;
+        for (meet_app, end_results) in to_add {
+            let canon_app = {
+                let meet_st = &self.structures[up.meet.0];
+                FuncApp {
+                    func: meet_app.func,
+                    parents: meet_app
+                        .parents
+                        .iter()
+                        .map(|e| meet_st.unification.root_const(*e))
+                        .collect(),
+                    args: meet_app
+                        .args
+                        .iter()
+                        .map(|e| meet_st.unification.root_const(*e))
+                        .collect(),
+                }
+            };
+            if self.structures[up.meet.0]
+                .func_apps
+                .contains_key(&canon_app)
+            {
+                continue;
+            }
+            let r = self.structures[up.meet.0].push_el();
+            self.structures[up.meet.0].func_apps.insert(canon_app, r);
+            changed = true;
+            for (j, &end_id) in up.ends.iter().enumerate() {
+                let map = self
+                    .morphisms
+                    .get_mut(&(up.meet, end_id))
+                    .expect("projection missing");
+                map.insert(r, end_results[j]);
+            }
+        }
+        changed
+    }
+
+    /// Inverts a `meet -> end` projection: each end-root maps to the
+    /// smallest meet-root that projects to it. Multi-preimage entries
+    /// keep only the smallest meet-root, so saturations that would have
+    /// required a different preimage are silently skipped — soundness is
+    /// preserved (we only add facts that the projection witnesses).
+    fn invert_projection(&self, meet: StructureId, end: StructureId) -> BTreeMap<ElId, ElId> {
+        let map = self
+            .morphisms
+            .get(&(meet, end))
+            .expect("projection missing");
+        let meet_st = &self.structures[meet.0];
+        let end_st = &self.structures[end.0];
+        let mut inv: BTreeMap<ElId, ElId> = BTreeMap::new();
+        for (&m, &e) in map {
+            let canon_m = meet_st.unification.root_const(m);
+            let canon_e = end_st.unification.root_const(e);
+            inv.entry(canon_e)
+                .and_modify(|cur| {
+                    if canon_m < *cur {
+                        *cur = canon_m;
+                    }
+                })
+                .or_insert(canon_m);
+        }
+        inv
+    }
+
+    /// Translates a sequence of end-side elements back to meet-side
+    /// elements through `inv`. Returns `None` if any element has no
+    /// preimage.
+    fn preimage_seq(
+        &self,
+        end: StructureId,
+        inv: &BTreeMap<ElId, ElId>,
+        xs: &[ElId],
+    ) -> Option<Vec<ElId>> {
+        let end_st = &self.structures[end.0];
+        xs.iter()
+            .map(|e| inv.get(&end_st.unification.root_const(*e)).copied())
+            .collect()
+    }
+
+    /// Projects a sequence of meet-side elements forward through the
+    /// `meet -> end` projection. Returns `None` if any element has no
+    /// image in the projection map.
+    fn project_seq(&self, meet: StructureId, end: StructureId, xs: &[ElId]) -> Option<Vec<ElId>> {
+        let map = self.morphisms.get(&(meet, end))?;
+        let meet_st = &self.structures[meet.0];
+        let end_st = &self.structures[end.0];
+        xs.iter()
+            .map(|m| {
+                let canon_m = meet_st.unification.root_const(*m);
+                let img = map.get(&canon_m).copied()?;
+                Some(end_st.unification.root_const(img))
+            })
+            .collect()
+    }
+
     /// Rewrites every [`ElMap`] so its keys are roots in the domain's
     /// unification and its values are roots in the codomain's. Collapses
     /// colliding keys by dropping duplicates — by the time this runs the
@@ -808,6 +1173,7 @@ impl StructureCat {
             let StructureCat {
                 structures,
                 morphisms,
+                ..
             } = self;
             let src_st = &structures[src.0];
             let tgt_st = &structures[tgt.0];

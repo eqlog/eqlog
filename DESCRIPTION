@@ -1,0 +1,37 @@
+Saturate branch/match after via UnderProd
+
+The after-structure of a `branch` or `match` was previously a noop clone
+of the before-structure, with no morphisms tying it to the branch ends.
+This change turns the after-structure into the meet of the branch ends
+in the lattice of extensions of the before-structure  equivalently, the
+product in the under-category `before/Struct`. Concretely the
+after-structure now receives every equality, pred_app and func_app that
+holds in every branch/case end.
+
+The mechanics:
+
+  - `StructureCat` gains an `under_prods: Vec<UnderProd>` registry
+    pairing each `meet` with its `top` and the list of `end_i`s. The
+    `top -> meet` and `meet -> end_i` morphisms live in the existing
+    `morphisms` map; the registry is what tells the close pass which
+    structures to saturate.
+
+  - `StructureCat::close` now iterates forward + backward + saturate to
+    a fixed point. Saturation pulls equalities, pred_apps and func_apps
+    from the ends back into the meet whenever the fact holds in every
+    end. Func_app saturation may allocate a fresh meet element for the
+    result and extends each `meet -> end_i` projection accordingly.
+
+  - `algebra::populate` pre-allocates the after-structure for `branch`
+    and `match` before walking the bodies, so the projection morphisms
+    `meet -> end_i` point forward in the arena. `Branch` and `Match`
+    both use `MorphismKind::Noop` for the `top -> meet` morphism now;
+    `Match` previously used `If` which was a misnomer (the existential
+    element from the scrutinee lives in `match_after_scrutinee`, not in
+    the after-stmt structure).
+
+  - `push_morphism` now canonicalises ElMap values through the target's
+    unification, not just the keys through the source's. Without this,
+    repeated push calls in the new fixed-point loop would re-insert
+    pred_app/func_app entries with stale element ids and never report
+    `changed = false`.

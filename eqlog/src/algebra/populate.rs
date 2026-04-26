@@ -30,8 +30,8 @@ use crate::scopes::{Scope, ScopeId, Scopes, Symbol};
 /// Surjectivity in particular is not essentially-algebraic.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum MorphismKind {
-    /// `if`-stmt or `match`-stmt morphism. Source embeds into target.
-    /// Target may have new elements (existentially quantified).
+    /// `if`-stmt morphism. Source embeds into target. Target may have
+    /// new elements (existentially quantified).
     If,
     /// `then`-equal or `then`-pred atom morphism. Target shares the
     /// source's elements. Only equalities and predicate insertions
@@ -40,9 +40,14 @@ pub enum MorphismKind {
     /// `then`-defined atom morphism. Target may introduce one new
     /// element (the result of the defined term).
     NonSurjThen,
-    /// `branch`-stmt after-morphism. Target is a clone of source with
-    /// no extra constraints. The actual branch bodies hang off
-    /// `branch_block_starts`.
+    /// `branch`-stmt or `match`-stmt after-morphism. The morphism itself
+    /// is a clone-with-identity: its [`ElMap`] imposes nothing beyond
+    /// `top -> meet` element identity. The branch/case bodies hang off
+    /// `branch_block_starts` / `match_case_starts`, and the projections
+    /// `meet -> end_i` live in `StructureCat::morphisms` as separate
+    /// entries. Facts common to every end are pulled into `meet` by the
+    /// saturation pass driven by `StructureCat::under_prods`, not by
+    /// this morphism.
     Noop,
 }
 
@@ -107,6 +112,24 @@ impl RuleStructures {
 /// morphism into a clone of `s`, which shares the same [`ElId`]s.
 fn identity_elmap(s: &Structure) -> ElMap {
     s.els.keys().map(|&el| (el, el)).collect()
+}
+
+/// Registers the projection morphisms `meet -> end_i` and the
+/// [`UnderProd`] entry that ties `meet` to its `top` and the `end_i`s.
+/// Each projection starts as the identity on `meet`'s elements: both
+/// sides descend from `top` via clones so their inherited [`ElId`]s
+/// coincide.
+fn register_under_prod_projections(
+    rule: &mut RuleStructures,
+    top: StructureId,
+    meet: StructureId,
+    ends: &[StructureId],
+) {
+    for &end in ends {
+        let map = identity_elmap(&rule.cat.structures[meet.0]);
+        rule.cat.add_morphism(meet, end, map);
+    }
+    rule.cat.add_under_prod(top, meet, ends.to_vec());
 }
 
 /// Populates `rule` with the structures and term mappings derived from
@@ -206,22 +229,24 @@ fn walk_stmt(
         }
         Stmt::Branch(id) => {
             let blocks = ast.branch_stmt(id).blocks.clone();
-            let mut changed = false;
+            // Pre-allocate the after-structure before walking the blocks
+            // so its arena id precedes each block-end's. This satisfies
+            // the forward-pointing invariant for the projection morphisms
+            // `after -> block_end_i` registered below.
+            let (after, after_was_new) = ensure_stmt_after(rule, stmt, current, MorphismKind::Noop);
+            let mut changed = after_was_new;
+            let mut block_ends: Vec<StructureId> = Vec::with_capacity(blocks.len());
             for (idx, block) in blocks.iter().enumerate() {
                 let (block_start, c1) = ensure_branch_block_start(rule, id, idx, current);
                 changed |= c1;
-                let (_after, c2) =
+                let (block_end, c2) =
                     walk_stmt_block(block, block_start, rule, ast, scopes, signature, errors);
                 changed |= c2;
+                block_ends.push(block_end);
             }
-            // The branch's after-structure is a separate clone of the
-            // shared before-structure; it receives an inclusion from
-            // `current` but is deliberately disconnected from the
-            // individual branches.
-            // TODO: after_stmt should get a morphism from the
-            // intersection of the end structures in each branch.
-            let (after, c3) = ensure_stmt_after(rule, stmt, current, MorphismKind::Noop);
-            changed |= c3;
+            if after_was_new {
+                register_under_prod_projections(rule, current, after, &block_ends);
+            }
             (after, changed)
         }
         Stmt::Match(id) => {
@@ -231,6 +256,13 @@ fn walk_stmt(
             let (after_scrutinee, mut changed) = ensure_match_after_scrutinee(rule, id, current);
             let (_el, c1) = walk_term(term, after_scrutinee, rule, ast, scopes, signature, errors);
             changed |= c1;
+            // Same pre-allocation pattern as for `Branch`: the match's
+            // after-structure must precede every case-end in arena order
+            // so the projection morphisms point forward.
+            let (after, after_was_new) =
+                ensure_stmt_after(rule, stmt, after_scrutinee, MorphismKind::Noop);
+            changed |= after_was_new;
+            let mut case_ends: Vec<StructureId> = Vec::with_capacity(cases.len());
             for case in &cases {
                 let MatchCase { pattern, body } = ast.match_case(*case).clone();
                 let (case_start, c2) = ensure_match_case_start(rule, *case, after_scrutinee);
@@ -238,17 +270,14 @@ fn walk_stmt(
                 let (_el, c3) =
                     walk_term(pattern, case_start, rule, ast, scopes, signature, errors);
                 changed |= c3;
-                let (_after, c4) =
+                let (case_end, c4) =
                     walk_stmt_block(&body, case_start, rule, ast, scopes, signature, errors);
                 changed |= c4;
+                case_ends.push(case_end);
             }
-            // Likewise, the match's after-structure is a fresh clone of
-            // `after_scrutinee` (so the scrutinee's effects carry through),
-            // disconnected from the case bodies.
-            // TODO: after_stmt should get a morphism from the intersection
-            // of the end structures in each case.
-            let (after, c5) = ensure_stmt_after(rule, stmt, after_scrutinee, MorphismKind::If);
-            changed |= c5;
+            if after_was_new {
+                register_under_prod_projections(rule, after_scrutinee, after, &case_ends);
+            }
             (after, changed)
         }
     }
