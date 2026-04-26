@@ -24,24 +24,24 @@ use crate::error::CompileError;
 use crate::scopes::{Scope, ScopeId, Scopes, Symbol};
 
 /// Origin tag for the morphism associated with a statement. Mirrors
-/// `if_morphism` / `surj_then_morphism` / `non_surj_then_morphism` /
+/// `if_morphism`, `surj_then_morphism`, `non_surj_then_morphism` and
 /// `noop_morphism` in `eqlog.eql`. A property of how the morphism arose
-/// from the AST, not an algebraic property of the morphism itself —
-/// surjectivity in particular is not essentially-algebraic.
+/// from the AST, not an algebraic property of the morphism itself.
+/// Surjectivity in particular is not essentially-algebraic.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum MorphismKind {
-    /// `if`-stmt or `match`-stmt morphism. Source embeds into target;
-    /// target may have new elements (existentially quantified).
+    /// `if`-stmt or `match`-stmt morphism. Source embeds into target.
+    /// Target may have new elements (existentially quantified).
     If,
     /// `then`-equal or `then`-pred atom morphism. Target shares the
-    /// source's elements; only equalities and predicate insertions
+    /// source's elements. Only equalities and predicate insertions
     /// distinguish them.
     SurjThen,
     /// `then`-defined atom morphism. Target may introduce one new
     /// element (the result of the defined term).
     NonSurjThen,
     /// `branch`-stmt after-morphism. Target is a clone of source with
-    /// no extra constraints — the actual branch bodies hang off
+    /// no extra constraints. The actual branch bodies hang off
     /// `branch_block_starts`.
     Noop,
 }
@@ -61,8 +61,8 @@ pub struct RuleStructures {
     pub stmt_after: BTreeMap<StmtId, StructureId>,
     /// Origin tag for each statement's morphism, keyed by the
     /// `(stmt_before, stmt_after)` endpoints that index into
-    /// `cat.morphisms`. Only statement-level morphisms appear here;
-    /// the auxiliary morphisms into `branch_block_starts`,
+    /// `cat.morphisms`. Only statement-level morphisms appear here.
+    /// The auxiliary morphisms into `branch_block_starts`,
     /// `match_after_scrutinee` and `match_case_starts` are deliberately
     /// untagged (they have no analogue in `eqlog.eql`'s tagging).
     pub morphism_kinds: BTreeMap<(StructureId, StructureId), MorphismKind>,

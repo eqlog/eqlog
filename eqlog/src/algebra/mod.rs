@@ -76,7 +76,7 @@ pub fn build_structures(
             .collect();
         errors.extend(last_arg_num_errors);
         // Only run the surjectivity check when the structures are at a
-        // settled, conflict-free state; type conflicts can leave the
+        // settled, conflict-free state. Type conflicts can leave the
         // morphisms in shapes that would produce noisy false positives.
         if errors.is_empty() {
             errors.extend(surjectivity_errors(ast, &rule));
