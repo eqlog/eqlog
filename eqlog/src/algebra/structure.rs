@@ -107,14 +107,8 @@ pub struct Structure {
     /// rest of the structure have not yet been drained. Always empty
     /// after [`Structure::close`] returns.
     pub(super) pending_equalities: Vec<(ElId, ElId)>,
-    /// Type assertions declared via [`Structure::impose_type`] (typically
-    /// from a var-if-atom annotation in the rule body). Applied at the
-    /// end of [`Structure::close`], after equalities, functionality and
-    /// signature-derived typing have settled, so a conflicting annotation
-    /// is reported with the inferred type as `a` and the annotation as
-    /// `b`. Entries persist across `close` calls and are canonicalised
-    /// alongside `els`; populate is responsible for not enqueueing the
-    /// same `(el, ct)` pair twice.
+    /// Pending [`Structure::impose_type`] assertions. Persists across
+    /// `close` calls; canonicalised alongside `els`.
     pub(super) pending_type_impositions: Vec<(ElId, ConcreteType)>,
 }
 
