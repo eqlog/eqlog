@@ -40,14 +40,9 @@ pub enum MorphismKind {
     /// `then`-defined atom morphism. Target may introduce one new
     /// element (the result of the defined term).
     NonSurjThen,
-    /// `branch`-stmt or `match`-stmt after-morphism. The morphism itself
-    /// is a clone-with-identity: its [`ElMap`] imposes nothing beyond
-    /// `top -> meet` element identity. The branch/case bodies hang off
-    /// `branch_block_starts` / `match_case_starts`, and the projections
-    /// `meet -> end_i` live in `StructureCat::morphisms` as separate
-    /// entries. Facts common to every end are pulled into `meet` by the
-    /// saturation pass driven by `StructureCat::under_prods`, not by
-    /// this morphism.
+    /// `branch`-stmt or `match`-stmt after-morphism. A clone-with-identity
+    /// from `top` to `meet`; the saturation pass driven by
+    /// `StructureCat::under_prods` is what actually fills `meet`.
     Noop,
 }
 
