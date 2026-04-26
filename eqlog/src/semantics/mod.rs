@@ -9,70 +9,6 @@ use crate::error::*;
 use crate::grammar_util::*;
 use eqlog_eqlog::*;
 
-fn iter_match_conflicting_enum<'a>(
-    eqlog: &'a Eqlog,
-    locations: &'a BTreeMap<Loc, Location>,
-) -> impl 'a + Iterator<Item = CompileError> {
-    let mut match_stmt_contains_ctor_of_enum: Vec<(StmtNode, CtorDeclNode, EnumDeclNode)> =
-        eqlog.iter_match_stmt_contains_ctor_of_enum().collect();
-    match_stmt_contains_ctor_of_enum.sort_by_key(|(match_stmt, _, _)| *match_stmt);
-
-    match_stmt_contains_ctor_of_enum
-        .into_iter()
-        .chunk_by(|(match_stmt, _, _)| *match_stmt)
-        .into_iter()
-        .filter_map(move |(match_stmt, rows)| {
-            let enum_ctors: BTreeMap<EnumDeclNode, CtorDeclNode> = rows
-                .map(|(_, ctor_node, enum_node)| (enum_node, ctor_node))
-                .collect();
-
-            let mut enum_ctors_iter = enum_ctors.into_iter();
-            let (_, first_ctor) = enum_ctors_iter.next()?;
-            let (_, second_ctor) = enum_ctors_iter.next()?;
-
-            let match_stmt_location = *locations
-                .get(&eqlog.stmt_node_loc(match_stmt).unwrap())
-                .unwrap();
-            let first_ctor_decl_location = *locations
-                .get(&eqlog.ctor_decl_node_loc(first_ctor).unwrap())
-                .unwrap();
-            let second_ctor_decl_location = *locations
-                .get(&eqlog.ctor_decl_node_loc(second_ctor).unwrap())
-                .unwrap();
-
-            Some(CompileError::MatchConflictingEnum {
-                match_stmt_location,
-                first_ctor_decl_location,
-                second_ctor_decl_location,
-            })
-        })
-        // TODO: If we don't collect here we get a lifetime error. Why?
-        .collect::<Vec<CompileError>>()
-        .into_iter()
-}
-
-fn iter_match_stmt_contains_ctor_of_enum<'a>(
-    eqlog: &'a Eqlog,
-    locations: &'a BTreeMap<Loc, Location>,
-) -> impl 'a + Iterator<Item = CompileError> {
-    eqlog
-        .iter_match_stmt_should_contain_ctor()
-        .filter_map(|(stmt, ctor)| {
-            if eqlog.match_stmt_contains_ctor(stmt, ctor) {
-                return None;
-            }
-
-            let match_location = *locations.get(&eqlog.stmt_node_loc(stmt).unwrap()).unwrap();
-            let missing_ctor_decl_location = *locations
-                .get(&eqlog.ctor_decl_node_loc(ctor).unwrap())
-                .unwrap();
-            Some(CompileError::MatchNotExhaustive {
-                match_location,
-                missing_ctor_decl_location,
-            })
-        })
-}
-
 fn element_type_to_string<'a>(
     typ: DepType,
     eqlog: &'a Eqlog,
@@ -330,8 +266,6 @@ pub fn check_eqlog(
     let first_error: Option<CompileError> = iter::empty()
         .chain(iter_symbol_lookup_errors(eqlog, identifiers, locations))
         .chain(iter_conflicting_type_errors(eqlog, identifiers, locations))
-        .chain(iter_match_conflicting_enum(eqlog, locations))
-        .chain(iter_match_stmt_contains_ctor_of_enum(eqlog, locations))
         .chain(iter_undetermined_type_errors(eqlog, locations))
         .chain(iter_enum_ctors_not_surjective_errors(
             eqlog,
