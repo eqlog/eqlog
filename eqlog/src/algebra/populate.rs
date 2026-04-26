@@ -337,30 +337,51 @@ fn walk_if_atom(
         IfAtom::Pred(id) => walk_pred_atom(id, current, rule, ast, scopes, signature, errors),
         IfAtom::Var(id) => {
             let VarIfAtom { term, typ } = *ast.var_if_atom(id);
-            // Idempotency: a second visit of the same VarIfAtom finds
-            // its term already in semantic_els and skips both the el
-            // allocation and the var_els insertion.
-            if rule.semantic_els[current.0].contains_key(&term) {
-                return false;
-            }
-            let typ_id = resolve_type_expr(typ, ast, scopes, signature);
-            let structure = &mut rule.cat.structures[current.0];
-            let ct = concrete_type_for(signature, typ_id, structure);
-            let el_id = structure.push_el();
-            structure.els.insert(el_id, ct);
-            rule.semantic_els[current.0].insert(term, el_id);
-            match *ast.term(term) {
-                Term::Var(vid) => {
-                    let name = ast.var_term(vid).name.clone();
-                    rule.cat.structures[current.0].var_els.insert(name, el_id);
+            // Resolve the annotation first: a member type expr walks its
+            // parent term, which must run on every pass so it gets re-tried
+            // once the parent's type becomes known. Ambient/Mor cases
+            // resolve immediately and don't mutate the structure.
+            let (ct_opt, mut changed) =
+                walk_var_type_expr(typ, current, rule, ast, scopes, signature, errors);
+            let el_id = match rule.semantic_els[current.0].get(&term).copied() {
+                Some(el) => el,
+                None => {
+                    let structure = &mut rule.cat.structures[current.0];
+                    let el_id = structure.push_el();
+                    rule.semantic_els[current.0].insert(term, el_id);
+                    match *ast.term(term) {
+                        Term::Var(vid) => {
+                            let name = ast.var_term(vid).name.clone();
+                            rule.cat.structures[current.0].var_els.insert(name, el_id);
+                        }
+                        Term::Wildcard => {}
+                        // Rejected by check_syntactic::check_if_var_lhs.
+                        Term::App(_) | Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => {
+                            unreachable!(
+                                "VarIfAtom lhs must be a variable or wildcard; \
+                                 enforced by syntactic.rs"
+                            )
+                        }
+                    }
+                    changed = true;
+                    el_id
                 }
-                Term::Wildcard => {}
-                // Rejected by check_syntactic::check_if_var_lhs.
-                Term::App(_) | Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => unreachable!(
-                    "VarIfAtom lhs must be a variable or wildcard; enforced by syntactic.rs"
-                ),
+            };
+            // Record the concrete type once it resolves. A member annotation
+            // may stay unresolved until a later pass settles its parent's
+            // type; until then the el simply has no concrete type, like any
+            // unannotated el. Once a type is in place we leave it untouched
+            // so re-walks remain idempotent and conflict reporting is left
+            // to the close pass.
+            if let Some(ct) = ct_opt {
+                let structure = &mut rule.cat.structures[current.0];
+                let root = structure.unification.root_const(el_id);
+                if matches!(structure.els.get(&root), Some(None)) {
+                    structure.els.insert(root, Some(ct));
+                    changed = true;
+                }
             }
-            true
+            changed
         }
     }
 }
@@ -759,31 +780,72 @@ fn member_scope_and_parents<'a>(
     Some((scopes.scope(body_scope), parents))
 }
 
-fn resolve_type_expr(
+/// Resolves a [`TypeExprId`] in a var-if-atom annotation position to the
+/// [`ConcreteType`] it imposes on the annotated el.
+///
+/// Ambient and mor type exprs resolve through the surrounding scope and
+/// take their parent chain from `structure.ambient_model_els`. A member
+/// type expr `e.Name` walks `e` first to obtain its el, then looks up
+/// `Name` in the model body of `e`'s [`ConcreteType`]; the parent chain
+/// is `e`'s [`ConcreteType`] parents with `e` itself appended, mirroring
+/// how the signature parameterises a member type.
+///
+/// Returns `None` when resolution fails: the annotation references an
+/// undeclared name or the wrong symbol kind, or `e`'s type is not yet
+/// known (in which case a later pass will retry once the close pass has
+/// propagated more typing information). The bool component reports
+/// whether walking `e` itself produced any allocation; ambient/mor
+/// resolution never mutates and reports `false` there.
+fn walk_var_type_expr(
     type_expr: TypeExprId,
+    current: StructureId,
+    rule: &mut RuleStructures,
     ast: &Ast,
     scopes: &Scopes,
     signature: &Signature,
-) -> Option<TypeId> {
+    errors: &mut Vec<CompileError>,
+) -> (Option<ConcreteType>, bool) {
     let scope: ScopeId = scopes.entry(type_expr);
     match *ast.type_expr(type_expr) {
         TypeExpr::Ambient(id) => {
             let name = &ast.ambient_type_expr(id).name;
-            match scopes.lookup(scope, name) {
+            let tid = match scopes.lookup(scope, name) {
                 Some(Symbol::Type(td)) => Some(signature.type_for_type_decl(td)),
                 Some(Symbol::Enum(ed)) => Some(signature.type_for_enum_decl(ed)),
                 Some(Symbol::Model(md)) => Some(signature.types_for_model_decl(md).type_),
                 _ => None,
-            }
+            };
+            let structure = &rule.cat.structures[current.0];
+            (concrete_type_for(signature, tid, structure), false)
         }
         TypeExpr::Mor(id) => {
             let name = &ast.mor_type_expr(id).name;
-            match scopes.lookup(scope, name) {
+            let tid = match scopes.lookup(scope, name) {
                 Some(Symbol::Model(md)) => Some(signature.types_for_model_decl(md).mor),
                 _ => None,
-            }
+            };
+            let structure = &rule.cat.structures[current.0];
+            (concrete_type_for(signature, tid, structure), false)
         }
-        TypeExpr::Member(_) => None,
+        TypeExpr::Member(mid) => {
+            let MemberTypeExpr {
+                term: parent_term,
+                name,
+            } = ast.member_type_expr(mid).clone();
+            let (parent_el, changed) =
+                walk_term(parent_term, current, rule, ast, scopes, signature, errors);
+            let resolved = member_scope_and_parents(rule, current, parent_el, scopes, signature)
+                .and_then(|(body, parents)| {
+                    let tid = match body.symbols.get(&name).copied()? {
+                        Symbol::Type(td) => signature.type_for_type_decl(td),
+                        Symbol::Enum(ed) => signature.type_for_enum_decl(ed),
+                        Symbol::Model(md) => signature.types_for_model_decl(md).type_,
+                        _ => return None,
+                    };
+                    Some(ConcreteType { typ: tid, parents })
+                });
+            (resolved, changed)
+        }
     }
 }
 

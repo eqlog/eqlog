@@ -4,5 +4,5 @@ Error: term has conflicting types:
 12 |     then el_0 = el_1;
    |          ^^^^        
    | 
-- Could be s_0.El
 - Could be s_1.El
+- Could be s_0.El
