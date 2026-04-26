@@ -180,17 +180,11 @@ impl Structure {
         id
     }
 
-    /// Declares that `el` should have concrete type `ct`. The assertion is
-    /// queued on `pending_type_impositions` and applied at the end of
-    /// [`Structure::close`], so any disagreement with a type the close
-    /// pass already inferred surfaces as a [`TypeConflict`] with the
-    /// inferred type in the `a` slot and the annotation in `b`.
-    ///
-    /// Returns true iff a fresh entry was queued, so populate-side fixed
-    /// points can stop when an idempotent re-walk produces no new
-    /// impositions. Existing entries with the same `(el, ct)` are
-    /// silently dropped, which is necessary because populate may walk
-    /// the same site many times.
+    /// Declares that `el` should have concrete type `ct`. Applied at the
+    /// end of [`Structure::close`], after inferred typing has settled, so
+    /// a disagreement surfaces as a [`TypeConflict`] with the inferred
+    /// type in `a` and `ct` in `b`. Returns true iff a fresh entry was
+    /// queued; idempotent on `(el, ct)` already enqueued.
     pub fn impose_type(&mut self, el: ElId, mut ct: ConcreteType) -> bool {
         // Canonicalise to the current roots before comparing. Existing
         // entries were canonicalised at the end of the previous `close`,
