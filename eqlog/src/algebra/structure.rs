@@ -242,7 +242,9 @@ impl Structure {
             let drained = self.drain_equalities(&mut conflicts, &mut parent_checks);
             let func_changed = self.functionality();
             let type_changed = self.typing(signature, &mut conflicts, &mut parent_checks);
-            if !drained && !func_changed && !type_changed {
+            let mor_app_changed =
+                self.morphism_app_constraints(signature, &mut conflicts, &mut parent_checks);
+            if !drained && !func_changed && !type_changed && !mor_app_changed {
                 break;
             }
             changed = true;
@@ -401,12 +403,8 @@ impl Structure {
             .map(|(a, r)| (a.clone(), *r))
             .collect();
         for (app, _result) in &apps {
-            let func_data = signature.func(app.func);
             for (i, &arg) in app.args.iter().enumerate() {
-                let Some(&dom_tid) = func_data.domain.get(i) else {
-                    break;
-                };
-                if let Some(ct) = concrete_type_at(signature, dom_tid, &app.parents) {
+                if let Some(ct) = func_domain_type_at(signature, app, i) {
                     if self.impose_concrete_type(arg, ct, conflicts, parent_checks) {
                         changed = true;
                     }
@@ -430,8 +428,7 @@ impl Structure {
         }
 
         for (app, result) in apps {
-            let func_data = signature.func(app.func);
-            if let Some(ct) = concrete_type_at(signature, func_data.codomain, &app.parents) {
+            if let Some(ct) = func_codomain_type_at(signature, &app) {
                 if self.impose_concrete_type(result, ct, conflicts, parent_checks) {
                     changed = true;
                 }
@@ -439,6 +436,136 @@ impl Structure {
         }
 
         changed
+    }
+
+    /// Enforces the dependent typing laws that are specific to generated
+    /// morphism-application functions. A `mor_app<T>(f, x)` application is
+    /// represented as an ordinary [`FuncApp`], but its argument and result
+    /// types depend on the generated `dom(f)` and `cod(f)` projections:
+    ///
+    /// - if `x : d.T`, record `dom(f) = d`;
+    /// - if `mor_app<T>(f, x) : c.T`, record `cod(f) = c`;
+    /// - if either projection is known, impose the corresponding member type.
+    fn morphism_app_constraints(
+        &mut self,
+        signature: &Signature,
+        conflicts: &mut Vec<TypeConflict>,
+        parent_checks: &mut Vec<DeferredParentCheck>,
+    ) -> bool {
+        let apps: Vec<(FuncApp, ElId)> = self
+            .func_apps
+            .iter()
+            .map(|(a, r)| (a.clone(), *r))
+            .collect();
+        let mut changed = false;
+
+        for (app, result) in apps {
+            let Some(member_tid) = signature.type_for_mor_app_func(app.func) else {
+                continue;
+            };
+            let Some(&parent_model_tid) = signature.type_(member_tid).parents.last() else {
+                continue;
+            };
+            let Some(model_ids) = signature.ids_for_model_type(parent_model_tid) else {
+                continue;
+            };
+            if app.args.len() != 2 {
+                continue;
+            }
+
+            let mor_el = self.root(app.args[0]);
+            let arg_el = self.root(app.args[1]);
+            let result = self.root(result);
+            let outer_parents: Vec<ElId> = app.parents.iter().map(|p| self.root(*p)).collect();
+
+            let dom_app = FuncApp {
+                func: model_ids.dom,
+                parents: outer_parents.clone(),
+                args: vec![mor_el],
+            };
+            let cod_app = FuncApp {
+                func: model_ids.cod,
+                parents: outer_parents.clone(),
+                args: vec![mor_el],
+            };
+
+            if let Some(domain_el) = self.member_parent_from_type(arg_el, member_tid) {
+                changed |= self.insert_func_app_or_equate(dom_app.clone(), domain_el);
+            }
+            if let Some(codomain_el) = self.member_parent_from_type(result, member_tid) {
+                changed |= self.insert_func_app_or_equate(cod_app.clone(), codomain_el);
+            }
+
+            if let Some(&domain_el) = self.func_apps.get(&dom_app) {
+                let mut parents = outer_parents.clone();
+                parents.push(self.root(domain_el));
+                if self.impose_concrete_type(
+                    arg_el,
+                    ConcreteType {
+                        typ: member_tid,
+                        parents,
+                    },
+                    conflicts,
+                    parent_checks,
+                ) {
+                    changed = true;
+                }
+            }
+
+            if let Some(&codomain_el) = self.func_apps.get(&cod_app) {
+                let mut parents = outer_parents.clone();
+                parents.push(self.root(codomain_el));
+                if self.impose_concrete_type(
+                    result,
+                    ConcreteType {
+                        typ: member_tid,
+                        parents,
+                    },
+                    conflicts,
+                    parent_checks,
+                ) {
+                    changed = true;
+                }
+            }
+        }
+
+        changed
+    }
+
+    /// Returns the innermost parent of `el` when it already has type
+    /// `member_tid`.
+    fn member_parent_from_type(&self, el: ElId, member_tid: TypeId) -> Option<ElId> {
+        let ct = self.concrete_type_of(el)?;
+        if ct.typ != member_tid {
+            return None;
+        }
+        let member_parent = *ct.parents.last()?;
+        Some(self.root(member_parent))
+    }
+
+    fn concrete_type_of(&self, el: ElId) -> Option<ConcreteType> {
+        let root = self.root(el);
+        let mut ct = self.els.get(&root)?.clone()?;
+        for parent in &mut ct.parents {
+            *parent = self.root(*parent);
+        }
+        Some(ct)
+    }
+
+    fn insert_func_app_or_equate(&mut self, app: FuncApp, result: ElId) -> bool {
+        let canon_app = FuncApp {
+            func: app.func,
+            parents: app.parents.into_iter().map(|e| self.root(e)).collect(),
+            args: app.args.into_iter().map(|e| self.root(e)).collect(),
+        };
+        let result = self.root(result);
+        match self.func_apps.get(&canon_app).copied() {
+            Some(existing) => existing != result && self.equate(existing, result),
+            None => {
+                self.func_apps.insert(canon_app, result);
+                true
+            }
+        }
     }
 
     /// Asserts that `el`'s type is `ct`. Records a [`TypeConflict`] when
@@ -1265,10 +1392,34 @@ fn parents_match(unification: &Unification<ElId>, lhs: &[ElId], rhs: &[ElId]) ->
     true
 }
 
-/// Materialises the [`ConcreteType`] a given [`TypeId`] has inside a relation
+/// Materialises the ordinary domain type of `app.args[index]`.
+///
+/// Generated `mor_app<T>` functions are not ordinary in their second
+/// argument: its type is `dom(f).T`, depending on the first argument.
+/// [`Structure::morphism_app_constraints`] handles that case explicitly.
+fn func_domain_type_at(signature: &Signature, app: &FuncApp, index: usize) -> Option<ConcreteType> {
+    if signature.type_for_mor_app_func(app.func).is_some() && index > 0 {
+        return None;
+    }
+    let tid = *signature.func(app.func).domain.get(index)?;
+    concrete_type_at(signature, tid, &app.parents)
+}
+
+/// Materialises the ordinary codomain type of `app`.
+///
+/// Generated `mor_app<T>` functions are not ordinary in their result type:
+/// the result is `cod(f).T`, depending on the first argument.
+/// [`Structure::morphism_app_constraints`] handles that case explicitly.
+fn func_codomain_type_at(signature: &Signature, app: &FuncApp) -> Option<ConcreteType> {
+    if signature.type_for_mor_app_func(app.func).is_some() {
+        return None;
+    }
+    concrete_type_at(signature, signature.func(app.func).codomain, &app.parents)
+}
+
+/// Materialises the [`ConcreteType`] a given [`TypeId`] has in a relation
 /// application whose enclosing-model elements are `parents`. Returns `None`
-/// if `parents` is too short to cover the type's parent chain, which only
-/// happens for malformed programs.
+/// when those parents do not instantiate the type's full parent chain.
 fn concrete_type_at(signature: &Signature, tid: TypeId, parents: &[ElId]) -> Option<ConcreteType> {
     let n = signature.type_(tid).parents.len();
     if n > parents.len() {
