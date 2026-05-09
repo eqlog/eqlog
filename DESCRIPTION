@@ -1,0 +1,5 @@
+Represent morphism apps in algebra structures
+
+Emit dom, cod, and morphism application terms into Rust-side algebra
+structures, and close morphism applications under their dependent source
+and target typing constraints.

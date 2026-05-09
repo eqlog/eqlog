@@ -161,9 +161,23 @@ impl Signature {
     /// if `tid` is not a member type (i.e. its `parents` is empty).
     /// The returned function has signature `(Mor<M>, T) -> T`, where
     /// `M` is the innermost enclosing model and `T = tid`.
-    #[allow(dead_code)]
     pub fn mor_app_func_for_type(&self, tid: TypeId) -> Option<FuncId> {
         self.mor_app_funcs.get(&tid).copied()
+    }
+
+    /// Inverse of [`Self::mor_app_func_for_type`].
+    pub fn type_for_mor_app_func(&self, fid: FuncId) -> Option<TypeId> {
+        self.mor_app_funcs
+            .iter()
+            .find_map(|(t, f)| (*f == fid).then_some(*t))
+    }
+
+    /// Returns the [`ModelIds`] whose model-instance type is `tid`, or
+    /// `None` if `tid` is not a model-instance type.
+    pub fn ids_for_model_type(&self, tid: TypeId) -> Option<ModelIds> {
+        self.model_decls
+            .values()
+            .find_map(|ids| (ids.type_ == tid).then_some(*ids))
     }
 
     /// Returns the [`PredId`] for `id`, or `None` if the pred decl is

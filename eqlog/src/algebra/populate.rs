@@ -15,7 +15,7 @@
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 
-use crate::algebra::signature::{FuncId, PredId, Signature, TypeId};
+use crate::algebra::signature::{FuncId, PredId, Signature, TypeId, TypeKind};
 use crate::algebra::structure::{
     ConcreteType, ElId, ElMap, FuncApp, PredApp, Structure, StructureCat, StructureId,
 };
@@ -622,11 +622,80 @@ fn walk_term(
             changed |= c;
             e
         }
-        Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => {
-            // TODO: implement once dom/cod/@ operators are defined on
-            // the structure side. The current pass was materialising a
-            // fresh untyped El, which is wrong.
-            todo!()
+        Term::Dom(did) => {
+            let DomTerm { arg } = *ast.dom_term(did);
+            let (arg_el, c) = walk_term(arg, current, rule, ast, scopes, signature, errors);
+            changed |= c;
+            match resolve_mor_projection(
+                MorProjection::Dom,
+                arg_el,
+                prior_el,
+                current,
+                rule,
+                signature,
+            ) {
+                Some((func_id, parents)) => {
+                    let (e, c) =
+                        emit_known_app(func_id, parents, vec![arg_el], prior_el, current, rule);
+                    changed |= c;
+                    e
+                }
+                None => {
+                    let (e, c) = expected_or_fresh(prior_el, current, rule);
+                    changed |= c;
+                    e
+                }
+            }
+        }
+        Term::Cod(cid) => {
+            let CodTerm { arg } = *ast.cod_term(cid);
+            let (arg_el, c) = walk_term(arg, current, rule, ast, scopes, signature, errors);
+            changed |= c;
+            match resolve_mor_projection(
+                MorProjection::Cod,
+                arg_el,
+                prior_el,
+                current,
+                rule,
+                signature,
+            ) {
+                Some((func_id, parents)) => {
+                    let (e, c) =
+                        emit_known_app(func_id, parents, vec![arg_el], prior_el, current, rule);
+                    changed |= c;
+                    e
+                }
+                None => {
+                    let (e, c) = expected_or_fresh(prior_el, current, rule);
+                    changed |= c;
+                    e
+                }
+            }
+        }
+        Term::MorApp(mid) => {
+            let MorAppTerm { mor, arg } = *ast.mor_app_term(mid);
+            let (mor_el, c1) = walk_term(mor, current, rule, ast, scopes, signature, errors);
+            let (arg_el, c2) = walk_term(arg, current, rule, ast, scopes, signature, errors);
+            changed |= c1 || c2;
+            match resolve_mor_app(arg_el, prior_el, current, rule, signature) {
+                Some((func_id, parents)) => {
+                    let (e, c) = emit_known_app(
+                        func_id,
+                        parents,
+                        vec![mor_el, arg_el],
+                        prior_el,
+                        current,
+                        rule,
+                    );
+                    changed |= c;
+                    e
+                }
+                None => {
+                    let (e, c) = expected_or_fresh(prior_el, current, rule);
+                    changed |= c;
+                    e
+                }
+            }
         }
     };
     if prior_el.is_none() {
@@ -634,6 +703,136 @@ fn walk_term(
         changed = true;
     }
     (el, changed)
+}
+
+#[derive(Copy, Clone)]
+enum MorProjection {
+    Dom,
+    Cod,
+}
+
+/// Resolves the generated `dom`/`cod` function for a term. The projection can
+/// be determined either from the argument's known `Mor<M>` type or from the
+/// result element's known model type.
+fn resolve_mor_projection(
+    projection: MorProjection,
+    arg_el: ElId,
+    result_el: Option<ElId>,
+    current: StructureId,
+    rule: &RuleStructures,
+    signature: &Signature,
+) -> Option<(FuncId, Vec<ElId>)> {
+    if let Some(ct) = concrete_type_of_el(rule, current, arg_el) {
+        if let TypeKind::Mor(model_tid) = signature.type_(ct.typ).kind {
+            let ids = signature.ids_for_model_type(model_tid)?;
+            let func = match projection {
+                MorProjection::Dom => ids.dom,
+                MorProjection::Cod => ids.cod,
+            };
+            return Some((func, ct.parents));
+        }
+    }
+
+    let result_el = result_el?;
+    let ct = concrete_type_of_el(rule, current, result_el)?;
+    let ids = signature.ids_for_model_type(ct.typ)?;
+    let func = match projection {
+        MorProjection::Dom => ids.dom,
+        MorProjection::Cod => ids.cod,
+    };
+    Some((func, ct.parents))
+}
+
+/// Resolves the generated morphism-application function. The member type can
+/// be known from the argument element or, after another close pass, from the
+/// result element.
+fn resolve_mor_app(
+    arg_el: ElId,
+    result_el: Option<ElId>,
+    current: StructureId,
+    rule: &RuleStructures,
+    signature: &Signature,
+) -> Option<(FuncId, Vec<ElId>)> {
+    if let Some(ct) = concrete_type_of_el(rule, current, arg_el) {
+        if let Some(fid) = signature.mor_app_func_for_type(ct.typ) {
+            let (_model_parent, outer_parents) = ct.parents.split_last()?;
+            return Some((fid, outer_parents.to_vec()));
+        }
+    }
+
+    let result_el = result_el?;
+    let ct = concrete_type_of_el(rule, current, result_el)?;
+    let fid = signature.mor_app_func_for_type(ct.typ)?;
+    let (_model_parent, outer_parents) = ct.parents.split_last()?;
+    Some((fid, outer_parents.to_vec()))
+}
+
+fn concrete_type_of_el(
+    rule: &RuleStructures,
+    current: StructureId,
+    el: ElId,
+) -> Option<ConcreteType> {
+    let structure = &rule.cat.structures[current.0];
+    let root = structure.unification.root_const(el);
+    let mut ct = structure.els.get(&root)?.clone()?;
+    for parent in &mut ct.parents {
+        *parent = structure.unification.root_const(*parent);
+    }
+    Some(ct)
+}
+
+fn expected_or_fresh(
+    expected: Option<ElId>,
+    current: StructureId,
+    rule: &mut RuleStructures,
+) -> (ElId, bool) {
+    match expected {
+        Some(el) => (el, false),
+        None => (rule.cat.structures[current.0].push_el(), true),
+    }
+}
+
+/// Emits an application of a generated function whose id and parent chain have
+/// already been resolved.
+fn emit_known_app(
+    func_id: FuncId,
+    parents: Vec<ElId>,
+    arg_els: Vec<ElId>,
+    expected: Option<ElId>,
+    current: StructureId,
+    rule: &mut RuleStructures,
+) -> (ElId, bool) {
+    let structure = &mut rule.cat.structures[current.0];
+    let parents: Vec<ElId> = parents
+        .into_iter()
+        .map(|e| structure.unification.root(e))
+        .collect();
+    let canonical_args: Vec<ElId> = arg_els
+        .iter()
+        .map(|e| structure.unification.root(*e))
+        .collect();
+    let app_key = FuncApp {
+        func: func_id,
+        parents,
+        args: canonical_args,
+    };
+
+    match structure.func_apps.get(&app_key).copied() {
+        Some(existing) => match expected {
+            Some(exp) => {
+                let changed = exp != existing && structure.equate(exp, existing);
+                (exp, changed)
+            }
+            None => (existing, false),
+        },
+        None => {
+            let (result, _allocated) = expected_or_fresh(expected, current, rule);
+            rule.cat.structures[current.0]
+                .func_apps
+                .insert(app_key, result);
+            (result, true)
+        }
+    }
 }
 
 /// Resolves `func` and, on success, ensures the corresponding [`FuncApp`]
