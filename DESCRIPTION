@@ -1,0 +1,5 @@
+Clarify feature-based algebra review split
+
+Make the algebra diagnostic migration plans split by independently
+reviewable diagnostic feature instead of by the files each worker
+expects to touch.
