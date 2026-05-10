@@ -110,6 +110,10 @@ pub struct Structure {
     /// Pending [`Structure::impose_type`] assertions. Persists across
     /// `close` calls; canonicalised alongside `els`.
     pub(super) pending_type_impositions: Vec<(ElId, ConcreteType)>,
+    /// Pending type assertions propagated along incoming morphisms. These
+    /// are established facts from predecessor structures, so `close`
+    /// applies them before deriving fresh local typing facts.
+    pub(super) pending_known_type_impositions: Vec<(ElId, ConcreteType)>,
 }
 
 /// A parent-disagreement observation queued by
@@ -137,6 +141,7 @@ impl Default for Structure {
             unification: Unification::new(),
             pending_equalities: Vec::new(),
             pending_type_impositions: Vec::new(),
+            pending_known_type_impositions: Vec::new(),
         }
     }
 }
@@ -199,6 +204,26 @@ impl Structure {
         true
     }
 
+    /// Declares that `el` already has concrete type `ct` by preservation
+    /// along a morphism. Unlike user annotations queued by
+    /// [`Self::impose_type`], these facts are applied before local typing
+    /// inference during [`Self::close`].
+    fn impose_known_type(&mut self, el: ElId, mut ct: ConcreteType) -> bool {
+        let el = self.unification.root_const(el);
+        for p in ct.parents.iter_mut() {
+            *p = self.unification.root_const(*p);
+        }
+        if self
+            .pending_known_type_impositions
+            .iter()
+            .any(|(e, c)| *e == el && c == &ct)
+        {
+            return false;
+        }
+        self.pending_known_type_impositions.push((el, ct));
+        true
+    }
+
     /// Declares that `a` and `b` are equal. Just enqueues the pair on
     /// `pending_equalities`; the actual class merge and any cascading
     /// parent unifications happen during [`Structure::close`].
@@ -241,10 +266,17 @@ impl Structure {
         loop {
             let drained = self.drain_equalities(&mut conflicts, &mut parent_checks);
             let func_changed = self.functionality();
+            let known_type_changed =
+                self.apply_pending_known_type_impositions(&mut conflicts, &mut parent_checks);
             let type_changed = self.typing(signature, &mut conflicts, &mut parent_checks);
             let mor_app_changed =
                 self.morphism_app_constraints(signature, &mut conflicts, &mut parent_checks);
-            if !drained && !func_changed && !type_changed && !mor_app_changed {
+            let fixed_point = !drained
+                && !func_changed
+                && !known_type_changed
+                && !type_changed
+                && !mor_app_changed;
+            if fixed_point {
                 break;
             }
             changed = true;
@@ -272,6 +304,24 @@ impl Structure {
         parent_checks: &mut Vec<DeferredParentCheck>,
     ) -> bool {
         let impositions = self.pending_type_impositions.clone();
+        let mut changed = false;
+        for (el, ct) in impositions {
+            if self.impose_concrete_type(el, ct, conflicts, parent_checks) {
+                changed = true;
+            }
+        }
+        changed
+    }
+
+    /// Applies morphism-propagated type facts before local typing derives
+    /// new facts. The queue persists across close calls so later equalities
+    /// can still expose conflicts against these facts.
+    fn apply_pending_known_type_impositions(
+        &mut self,
+        conflicts: &mut Vec<TypeConflict>,
+        parent_checks: &mut Vec<DeferredParentCheck>,
+    ) -> bool {
+        let impositions = self.pending_known_type_impositions.clone();
         let mut changed = false;
         for (el, ct) in impositions {
             if self.impose_concrete_type(el, ct, conflicts, parent_checks) {
@@ -644,6 +694,13 @@ impl Structure {
                 *p = self.unification.root_const(*p);
             }
         }
+
+        for (el, ct) in self.pending_known_type_impositions.iter_mut() {
+            *el = self.unification.root_const(*el);
+            for p in ct.parents.iter_mut() {
+                *p = self.unification.root_const(*p);
+            }
+        }
     }
 
     fn root(&self, id: ElId) -> ElId {
@@ -726,13 +783,14 @@ impl StructureCat {
     /// Each cycle consists of:
     ///
     ///   - Forward: walk structures in arena order. Close each structure,
-    ///     then push its `pred_apps`, `func_apps`, `var_els` and
-    ///     `ambient_model_els` along every outgoing morphism, canonicalising
-    ///     the [`ElMap`]'s keys under the now-settled domain unification and
-    ///     enqueueing equalities on the codomain when two keys collapse to
-    ///     the same root or when a pushed entry clashes with an existing
-    ///     one in the codomain. The codomain is not re-closed eagerly; it
-    ///     will be closed when its own iteration arrives.
+    ///     then push its concrete element types, `pred_apps`, `func_apps`,
+    ///     `var_els` and `ambient_model_els` along every outgoing morphism.
+    ///     While doing so, canonicalise the [`ElMap`]'s keys under the
+    ///     now-settled domain unification and enqueue equalities on the
+    ///     codomain when two keys collapse to the same root or when a
+    ///     pushed entry clashes with an existing one in the codomain. The
+    ///     codomain is not re-closed eagerly; it will be closed when its
+    ///     own iteration arrives.
     ///
     ///   - Backward: walk structures in reverse. For each outgoing morphism,
     ///     pull type information from the codomain back into the domain for
@@ -819,8 +877,9 @@ impl StructureCat {
     /// Carries data from `src` into `tgt` along the `(src, tgt)` morphism.
     /// Rewrites the [`ElMap`]'s keys to their roots in `src` and its
     /// values to their roots in `tgt`, enqueues equalities on `tgt` when
-    /// two keys collapse, and inserts the images of `src`'s `pred_apps`,
-    /// `func_apps`, `var_els` and `ambient_model_els` into `tgt`.
+    /// two keys collapse, and inserts the images of `src`'s concrete
+    /// element types, `pred_apps`, `func_apps`, `var_els` and
+    /// `ambient_model_els` into `tgt`.
     ///
     /// Returns true iff a previously-absent entry was inserted into `tgt`,
     /// or an equate was enqueued on `tgt` whose pair lives in distinct
@@ -868,6 +927,17 @@ impl StructureCat {
             *map.get(&src_st.unification.root_const(e))
                 .expect("morphism not defined on element")
         };
+
+        for (&el, ct) in &src_st.els {
+            let Some(ct) = ct else {
+                continue;
+            };
+            let mapped_ct = ConcreteType {
+                typ: ct.typ,
+                parents: ct.parents.iter().copied().map(image).collect(),
+            };
+            changed |= tgt_st.impose_known_type(image(el), mapped_ct);
+        }
 
         for pa in &src_st.pred_apps {
             changed |= tgt_st.pred_apps.insert(PredApp {

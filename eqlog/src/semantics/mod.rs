@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::collections::BTreeSet;
 use std::iter;
 
 use itertools::Itertools;
@@ -88,29 +87,6 @@ pub fn iter_conflicting_type_errors<'a>(
                     types: types.clone(),
                     location,
                 })
-            })
-        })
-}
-
-pub fn iter_undetermined_type_errors<'a>(
-    eqlog: &'a Eqlog,
-    locations: &'a BTreeMap<Loc, Location>,
-) -> impl 'a + Iterator<Item = CompileError> {
-    let all_els: BTreeSet<El> = eqlog.iter_el().collect();
-    let els_with_type: BTreeSet<El> = eqlog.iter_el_type().map(|(el, _)| el).collect();
-
-    all_els
-        .into_iter()
-        .filter(move |el| !els_with_type.contains(el))
-        .flat_map(move |el| {
-            eqlog.iter_semantic_el().filter_map(move |(tm, _, e)| {
-                if !eqlog.are_equal_el(e, el) {
-                    return None;
-                }
-
-                let loc = eqlog.term_node_loc(tm)?;
-                let location = *locations.get(&loc).unwrap();
-                return Some(CompileError::UndeterminedTermType { location });
             })
         })
 }
@@ -266,7 +242,6 @@ pub fn check_eqlog(
     let first_error: Option<CompileError> = iter::empty()
         .chain(iter_symbol_lookup_errors(eqlog, identifiers, locations))
         .chain(iter_conflicting_type_errors(eqlog, identifiers, locations))
-        .chain(iter_undetermined_type_errors(eqlog, locations))
         .chain(iter_enum_ctors_not_surjective_errors(
             eqlog,
             identifiers,

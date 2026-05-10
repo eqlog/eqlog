@@ -1,0 +1,5 @@
+Move undetermined term type diagnostic to algebra
+
+Report undetermined surface term types from Rust-side rule structures
+after populate/close reaches a fixed point, and stop relying on the
+legacy Eqlog-side iterator for that diagnostic.
