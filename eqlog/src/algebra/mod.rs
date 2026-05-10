@@ -21,7 +21,7 @@ use crate::algebra::signature::{Signature, TypeId};
 use crate::algebra::structure::{ConcreteType, ElId, Structure, StructureId, TypeConflict};
 use crate::ast::*;
 use crate::error::CompileError;
-use crate::scopes::Scopes;
+use crate::scopes::{Scopes, Symbol};
 
 /// One rule declaration together with the chain of model types it is
 /// nested inside, outermost first.
@@ -81,6 +81,9 @@ pub fn build_structures(
         // settled, conflict-free state. Type conflicts can leave the
         // morphisms in shapes that would produce noisy false positives.
         if errors.is_empty() {
+            errors.extend(enum_ctor_surjectivity_errors(
+                rid, ast, scopes, signature, &rule,
+            ));
             errors.extend(surjectivity_errors(ast, &rule));
         }
         check_rule_matches(rid, ast, scopes, signature, &mut errors);
@@ -92,6 +95,111 @@ pub fn build_structures(
         assert!(prev.is_none(), "rule {rid:?} visited twice in decl tree");
     }
     Ok(rules)
+}
+
+/// Reports defined-then enum terms that are not direct constructor
+/// applications for their enum type.
+///
+/// The check runs only after higher-priority structure errors are absent. If
+/// the defined term's type is still unknown, this pass stays silent so the
+/// undetermined-type diagnostic can be reported instead.
+fn enum_ctor_surjectivity_errors(
+    rid: RuleDeclId,
+    ast: &Ast,
+    scopes: &Scopes,
+    signature: &Signature,
+    rule: &RuleStructures,
+) -> Vec<CompileError> {
+    let mut errors = Vec::new();
+    let mut defined_then_terms = Vec::new();
+    collect_defined_then_terms(ast, &ast.rule_decl(rid).body, &mut defined_then_terms);
+
+    for (stmt, term) in defined_then_terms {
+        let Some(&target) = rule.stmt_after.get(&stmt) else {
+            continue;
+        };
+        let Some(term_type) = concrete_type_of_term(rule, target, term) else {
+            continue;
+        };
+        let Some(enum_decl) = signature.enum_decl_for_type(term_type.typ) else {
+            continue;
+        };
+        if is_ambient_ctor_app_for_enum(term, term_type.typ, ast, scopes, signature) {
+            continue;
+        }
+
+        errors.push(CompileError::EnumCtorsNotSurjective {
+            term_location: ast.loc(term),
+            enum_name: ast.enum_decl(enum_decl).name.clone(),
+            enum_location: ast.loc(enum_decl),
+        });
+    }
+
+    errors
+}
+
+fn collect_defined_then_terms(ast: &Ast, stmts: &[StmtId], out: &mut Vec<(StmtId, TermId)>) {
+    for &stmt in stmts {
+        match *ast.stmt(stmt) {
+            Stmt::Then(then_id) => {
+                let atom = ast.then_stmt(then_id).atom;
+                if let ThenAtom::Defined(def_id) = *ast.then_atom(atom) {
+                    out.push((stmt, ast.defined_then_atom(def_id).term));
+                }
+            }
+            Stmt::Branch(branch_id) => {
+                for block in &ast.branch_stmt(branch_id).blocks {
+                    collect_defined_then_terms(ast, block, out);
+                }
+            }
+            Stmt::Match(match_id) => {
+                for case in &ast.match_stmt(match_id).cases {
+                    collect_defined_then_terms(ast, &ast.match_case(*case).body, out);
+                }
+            }
+            Stmt::If(_) => {}
+        }
+    }
+}
+
+fn concrete_type_of_term(
+    rule: &RuleStructures,
+    sid: StructureId,
+    term: TermId,
+) -> Option<ConcreteType> {
+    let structure = &rule.cat.structures[sid.0];
+    let el = *rule.semantic_els[sid.0].get(&term)?;
+    let root = structure.unification.root_const(el);
+    let mut ct = structure.els.get(&root)?.clone()?;
+    for parent in &mut ct.parents {
+        *parent = structure.unification.root_const(*parent);
+    }
+    Some(ct)
+}
+
+fn is_ambient_ctor_app_for_enum(
+    term: TermId,
+    enum_type: TypeId,
+    ast: &Ast,
+    scopes: &Scopes,
+    signature: &Signature,
+) -> bool {
+    let Term::App(app_id) = *ast.term(term) else {
+        return false;
+    };
+    let func = ast.app_term(app_id).func;
+    let FuncExpr::Ambient(ambient_id) = *ast.func_expr(func) else {
+        return false;
+    };
+    let scope = scopes.entry(ambient_id);
+    let name = &ast.ambient_func_expr(ambient_id).name;
+    let Some(Symbol::Ctor(ctor_id)) = scopes.lookup(scope, name) else {
+        return false;
+    };
+    let Some(func_id) = signature.func_for_ctor_decl(ctor_id) else {
+        return false;
+    };
+    signature.func(func_id).codomain == enum_type
 }
 
 /// Reports surjectivity violations for `then`-atom morphisms. A
