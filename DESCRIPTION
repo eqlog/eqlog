@@ -1,0 +1,5 @@
+Move morphism application diagnostics to algebra
+
+Record morphism application sites while populating algebra structures.
+Emit the non-morphism and non-member diagnostics from the settled
+algebra state. Remove the replaced Eqlog-side diagnostic iterators.

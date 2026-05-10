@@ -23,6 +23,13 @@ use crate::ast::*;
 use crate::error::CompileError;
 use crate::scopes::{Scope, ScopeId, Scopes, Symbol};
 
+/// A surface `f@(x)` term evaluated in a particular rule structure.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct MorAppSite {
+    pub mor: TermId,
+    pub arg: TermId,
+}
+
 /// Origin tag for the morphism associated with a statement. Mirrors
 /// `if_morphism`, `surj_then_morphism`, `non_surj_then_morphism` and
 /// `noop_morphism` in `eqlog.eql`. A property of how the morphism arose
@@ -78,6 +85,10 @@ pub struct RuleStructures {
     /// as `branch_block_starts`: an empty case body has no first
     /// statement to anchor the start structure to.
     pub match_case_starts: BTreeMap<MatchCaseId, StructureId>,
+    /// Every `f@(x)` term seen by [`walk_term`], keyed by the structure
+    /// where the application was evaluated and the application term
+    /// itself.
+    pub mor_app_sites: BTreeMap<(StructureId, TermId), MorAppSite>,
 }
 
 impl RuleStructures {
@@ -674,10 +685,14 @@ fn walk_term(
         }
         Term::MorApp(mid) => {
             let MorAppTerm { mor, arg } = *ast.mor_app_term(mid);
+            if let Entry::Vacant(entry) = rule.mor_app_sites.entry((current, term)) {
+                entry.insert(MorAppSite { mor, arg });
+                changed = true;
+            }
             let (mor_el, c1) = walk_term(mor, current, rule, ast, scopes, signature, errors);
             let (arg_el, c2) = walk_term(arg, current, rule, ast, scopes, signature, errors);
             changed |= c1 || c2;
-            match resolve_mor_app(arg_el, prior_el, current, rule, signature) {
+            match resolve_mor_app(mor_el, arg_el, prior_el, current, rule, signature) {
                 Some((func_id, parents)) => {
                     let (e, c) = emit_known_app(
                         func_id,
@@ -747,13 +762,27 @@ fn resolve_mor_projection(
 /// be known from the argument element or, after another close pass, from the
 /// result element.
 fn resolve_mor_app(
+    mor_el: ElId,
     arg_el: ElId,
     result_el: Option<ElId>,
     current: StructureId,
     rule: &RuleStructures,
     signature: &Signature,
 ) -> Option<(FuncId, Vec<ElId>)> {
+    let mor_model = match concrete_type_of_el(rule, current, mor_el) {
+        Some(ct) => match signature.type_(ct.typ).kind {
+            TypeKind::Mor(model_tid) => Some(model_tid),
+            _ => return None,
+        },
+        None => None,
+    };
+
     if let Some(ct) = concrete_type_of_el(rule, current, arg_el) {
+        if let Some(model_tid) = mor_model {
+            if member_model_type(signature, &ct) != Some(model_tid) {
+                return None;
+            }
+        }
         if let Some(fid) = signature.mor_app_func_for_type(ct.typ) {
             let (_model_parent, outer_parents) = ct.parents.split_last()?;
             return Some((fid, outer_parents.to_vec()));
@@ -765,6 +794,10 @@ fn resolve_mor_app(
     let fid = signature.mor_app_func_for_type(ct.typ)?;
     let (_model_parent, outer_parents) = ct.parents.split_last()?;
     Some((fid, outer_parents.to_vec()))
+}
+
+fn member_model_type(signature: &Signature, ct: &ConcreteType) -> Option<TypeId> {
+    signature.type_(ct.typ).parents.last().copied()
 }
 
 fn concrete_type_of_el(

@@ -17,7 +17,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::algebra::match_check::check_rule_matches;
 use crate::algebra::populate::{walk_rule, MorphismKind, RuleStructures};
-use crate::algebra::signature::{Signature, TypeId};
+use crate::algebra::signature::{Signature, TypeId, TypeKind};
 use crate::algebra::structure::{ConcreteType, ElId, Structure, StructureId, TypeConflict};
 use crate::ast::*;
 use crate::error::CompileError;
@@ -73,10 +73,17 @@ pub fn build_structures(
         }
 
         let mut errors: Vec<CompileError> = last_conflicts
-            .into_iter()
+            .iter()
+            .cloned()
             .map(|(sid, conflict)| conflict_to_error(ast, signature, &rule, sid, conflict))
             .collect();
         errors.extend(last_arg_num_errors);
+        errors.extend(morphism_application_errors(
+            ast,
+            signature,
+            &rule,
+            &last_conflicts,
+        ));
         // Only run the surjectivity check when the structures are at a
         // settled, conflict-free state. Type conflicts can leave the
         // morphisms in shapes that would produce noisy false positives.
@@ -92,6 +99,135 @@ pub fn build_structures(
         assert!(prev.is_none(), "rule {rid:?} visited twice in decl tree");
     }
     Ok(rules)
+}
+
+fn morphism_application_errors(
+    ast: &Ast,
+    signature: &Signature,
+    rule: &RuleStructures,
+    conflicts: &[(StructureId, TypeConflict)],
+) -> Vec<CompileError> {
+    let mut errors = Vec::new();
+    let mut reported_non_mors = BTreeSet::new();
+    let mut reported_non_members = BTreeSet::new();
+
+    for (&(sid, _app_term), site) in &rule.mor_app_sites {
+        let Some(mor_types) = concrete_types_of_term(rule, sid, site.mor, conflicts) else {
+            continue;
+        };
+
+        let mor_models: BTreeSet<TypeId> = mor_types
+            .iter()
+            .filter_map(|ct| match signature.type_(ct.typ).kind {
+                TypeKind::Mor(model_tid) => Some(model_tid),
+                _ => None,
+            })
+            .collect();
+
+        if mor_models.is_empty() {
+            if reported_non_mors.insert(site.mor) {
+                errors.push(CompileError::NonMorphismAppliedAsMorphism {
+                    location: ast.loc(site.mor),
+                });
+            }
+            continue;
+        }
+
+        let Some(arg_types) = concrete_types_of_term(rule, sid, site.arg, conflicts) else {
+            continue;
+        };
+        for model_tid in mor_models {
+            let arg_is_member = arg_types
+                .iter()
+                .any(|ct| member_model_type(signature, ct) == Some(model_tid));
+            if !arg_is_member {
+                if reported_non_members.insert(site.arg) {
+                    errors.push(CompileError::MorphismAppliedToNonMember {
+                        location: ast.loc(site.arg),
+                    });
+                }
+                break;
+            }
+        }
+    }
+
+    errors
+}
+
+fn concrete_types_of_term(
+    rule: &RuleStructures,
+    sid: StructureId,
+    term: TermId,
+    conflicts: &[(StructureId, TypeConflict)],
+) -> Option<Vec<ConcreteType>> {
+    // Type information is not always materialised in cloned successor
+    // structures immediately, so recover types from incoming preimages too.
+    let start_structure = &rule.cat.structures[sid.0];
+    let start_el = *rule.semantic_els[sid.0].get(&term)?;
+    let start_root = start_structure.unification.root_const(start_el);
+    let mut types = Vec::new();
+
+    let mut visited = BTreeSet::new();
+    let mut worklist = vec![(sid, start_root)];
+    while let Some((current_sid, root)) = worklist.pop() {
+        if !visited.insert((current_sid, root)) {
+            continue;
+        }
+
+        let structure = &rule.cat.structures[current_sid.0];
+        if let Some(Some(ct)) = structure.els.get(&root) {
+            push_unique_concrete_type(&mut types, canonical_concrete_type(structure, ct));
+        }
+        for (conflict_sid, conflict) in conflicts {
+            if *conflict_sid != current_sid {
+                continue;
+            }
+            if structure.unification.root_const(conflict.el) != root {
+                continue;
+            }
+            push_unique_concrete_type(&mut types, canonical_concrete_type(structure, &conflict.a));
+            push_unique_concrete_type(&mut types, canonical_concrete_type(structure, &conflict.b));
+        }
+
+        for (&(src, tgt), elmap) in &rule.cat.morphisms {
+            if tgt != current_sid {
+                continue;
+            }
+            let src_structure = &rule.cat.structures[src.0];
+            for (&src_el, &tgt_el) in elmap {
+                if structure.unification.root_const(tgt_el) != root {
+                    continue;
+                }
+                let src_root = src_structure.unification.root_const(src_el);
+                if !visited.contains(&(src, src_root)) {
+                    worklist.push((src, src_root));
+                }
+            }
+        }
+    }
+
+    (!types.is_empty()).then_some(types)
+}
+
+fn push_unique_concrete_type(types: &mut Vec<ConcreteType>, ct: ConcreteType) {
+    if !types.contains(&ct) {
+        types.push(ct);
+    }
+}
+
+fn canonical_concrete_type(structure: &Structure, ct: &ConcreteType) -> ConcreteType {
+    ConcreteType {
+        typ: ct.typ,
+        parents: ct
+            .parents
+            .iter()
+            .map(|&parent| structure.unification.root_const(parent))
+            .collect(),
+    }
+}
+
+fn member_model_type(signature: &Signature, ct: &ConcreteType) -> Option<TypeId> {
+    signature.type_(ct.typ).parents.last().copied()
 }
 
 /// Reports surjectivity violations for `then`-atom morphisms. A
