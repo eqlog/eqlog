@@ -1,0 +1,5 @@
+Implement algebra symbol lookup diagnostics
+
+Move rule-body symbol lookup diagnostics from the generated Eqlog
+semantics path into a Rust-side algebra pass over the AST, scopes, and
+settled rule structures.

@@ -5,13 +5,14 @@
 //! the AST. [`structure`] holds the per-rule and per-statement structure
 //! data, including the close pass that saturates it under functionality and
 //! signature-imposed typing. [`populate`] walks the AST rule bodies to fill
-//! in each [`RuleStructures`]. Future passes (morphism construction) will
-//! live alongside them.
+//! in each [`RuleStructures`]. [`symbols`] reports rule-body lookup
+//! diagnostics from the AST, scopes and settled rule structures.
 
 pub mod match_check;
 pub mod populate;
 pub mod signature;
 pub mod structure;
+pub mod symbols;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -31,18 +32,24 @@ struct RuleNode {
 }
 
 /// Builds and closes a [`RuleStructures`] for every rule reachable from
-/// `module`. Bails on the first rule whose close pass reports conflicts.
+/// `module`.
+///
+/// The returned errors match the previous early-exit behavior: if any rule has
+/// structure diagnostics, the Vec contains the diagnostics from the first such
+/// rule in source order. The structures are still returned so later diagnostic
+/// passes can inspect resolved term types.
 pub fn build_structures(
     ast: &Ast,
     scopes: &Scopes,
     signature: &Signature,
     module: ModuleId,
-) -> Result<BTreeMap<RuleDeclId, RuleStructures>, Vec<CompileError>> {
+) -> (BTreeMap<RuleDeclId, RuleStructures>, Vec<CompileError>) {
     let mut rule_nodes = Vec::new();
     let decls = ast.module(module).decls.clone();
     collect_rules(ast, signature, &decls, &[], &mut rule_nodes);
 
     let mut rules = BTreeMap::new();
+    let mut first_errors = None;
     for RuleNode {
         rid,
         enclosing_models,
@@ -84,14 +91,14 @@ pub fn build_structures(
             errors.extend(surjectivity_errors(ast, &rule));
         }
         check_rule_matches(rid, ast, scopes, signature, &mut errors);
-        if !errors.is_empty() {
-            return Err(errors);
+        if first_errors.is_none() && !errors.is_empty() {
+            first_errors = Some(errors);
         }
 
         let prev = rules.insert(rid, rule);
         assert!(prev.is_none(), "rule {rid:?} visited twice in decl tree");
     }
-    Ok(rules)
+    (rules, first_errors.unwrap_or_default())
 }
 
 /// Reports surjectivity violations for `then`-atom morphisms. A
