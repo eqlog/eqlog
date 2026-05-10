@@ -18,9 +18,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::algebra::match_check::check_rule_matches;
 use crate::algebra::populate::{walk_rule, MorphismKind, RuleStructures};
 use crate::algebra::signature::{Signature, TypeId};
-use crate::algebra::structure::{ConcreteType, ElId, Structure, StructureId, TypeConflict};
+use crate::algebra::structure::{
+    ConcreteType, ElId, Structure, StructureId, TypeConflict, TypeConflictOrigin,
+};
 use crate::ast::*;
 use crate::error::CompileError;
+use crate::grammar_util::Location;
 use crate::scopes::Scopes;
 
 /// One rule declaration together with the chain of model types it is
@@ -199,10 +202,11 @@ fn collect_rules(
 }
 
 /// Lowers a [`TypeConflict`] to a [`CompileError::ConflictingTermType`],
-/// anchored on a term whose element shares a class with `conflict.el`
-/// (located via [`find_term`]). Each [`ConcreteType`] renders as
-/// `TypeName` for global types or `parent_name.TypeName` for member
-/// types.
+/// anchored on a term whose element shares a class with `conflict.el`.
+/// Equality-like conflicts can search incoming morphisms for an earlier
+/// source term; ordinary imposition conflicts stay in the structure that
+/// observed the incompatible type. Each [`ConcreteType`] renders as
+/// `TypeName` for global types or `parent_name.TypeName` for member types.
 ///
 /// Panics if no term backs `el` in any reachable structure.
 fn conflict_to_error(
@@ -212,9 +216,15 @@ fn conflict_to_error(
     sid: StructureId,
     conflict: TypeConflict,
 ) -> CompileError {
-    let TypeConflict { el, a, b } = conflict;
+    let TypeConflict { el, a, b, origin } = conflict;
     let structure = &rule.cat.structures[sid.0];
-    let term_id = find_term(rule, sid, el);
+    let use_earliest_term = origin == TypeConflictOrigin::Equality
+        || (a.typ != b.typ && has_multiple_var_names_in_class(structure, el));
+    let term_id = if use_earliest_term {
+        find_earliest_term(ast, rule, sid, el)
+    } else {
+        find_term(rule, sid, el)
+    };
     CompileError::ConflictingTermType {
         types: vec![
             concrete_type_to_string(ast, signature, structure, &a),
@@ -249,6 +259,17 @@ fn concrete_type_to_string(
         })
         .unwrap_or("?");
     format!("{parent_name}.{type_name}")
+}
+
+fn has_multiple_var_names_in_class(structure: &Structure, target: ElId) -> bool {
+    let target_root = structure.unification.root_const(target);
+    structure
+        .var_els
+        .values()
+        .filter(|&&el| structure.unification.root_const(el) == target_root)
+        .take(2)
+        .count()
+        > 1
 }
 
 /// Locates a term whose element shares a class with `target` in the
@@ -291,6 +312,63 @@ fn find_term(rule: &RuleStructures, sid: StructureId, target: ElId) -> TermId {
                 }
             }
         }
+    }
+
+    let is_ambient_at_sid = rule.cat.structures[sid.0]
+        .ambient_model_els
+        .values()
+        .any(|&e| rule.cat.structures[sid.0].unification.root_const(e) == start_root);
+    panic!(
+        "conflict on class {target:?} at {sid:?} has no term in any reachable structure \
+         (ambient model el at sid: {is_ambient_at_sid})"
+    );
+}
+
+/// Locates the earliest source term reachable from `target` by walking
+/// incoming morphisms. Equality-origin conflicts can arise in a later
+/// structure even though the best diagnostic anchor is an earlier term
+/// whose class was merged into the conflict.
+fn find_earliest_term(ast: &Ast, rule: &RuleStructures, sid: StructureId, target: ElId) -> TermId {
+    let start_root = rule.cat.structures[sid.0].unification.root_const(target);
+    let mut visited: BTreeSet<(StructureId, ElId)> = BTreeSet::new();
+    let mut worklist: Vec<(StructureId, ElId)> = vec![(sid, start_root)];
+    let mut best: Option<(Location, TermId)> = None;
+
+    while let Some((s, el_root)) = worklist.pop() {
+        if !visited.insert((s, el_root)) {
+            continue;
+        }
+
+        let s_st = &rule.cat.structures[s.0];
+        for (&term, &e) in &rule.semantic_els[s.0] {
+            if s_st.unification.root_const(e) != el_root {
+                continue;
+            }
+            let loc = ast.loc(term);
+            if best.is_none_or(|(best_loc, _)| (loc.1, loc.0) < (best_loc.1, best_loc.0)) {
+                best = Some((loc, term));
+            }
+        }
+
+        for (&(src, tgt), elmap) in &rule.cat.morphisms {
+            if tgt != s {
+                continue;
+            }
+            let src_st = &rule.cat.structures[src.0];
+            for (&src_el, &tgt_el) in elmap {
+                if s_st.unification.root_const(tgt_el) != el_root {
+                    continue;
+                }
+                let src_root = src_st.unification.root_const(src_el);
+                if !visited.contains(&(src, src_root)) {
+                    worklist.push((src, src_root));
+                }
+            }
+        }
+    }
+
+    if let Some((_, term)) = best {
+        return term;
     }
 
     let is_ambient_at_sid = rule.cat.structures[sid.0]

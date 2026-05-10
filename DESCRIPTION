@@ -1,0 +1,4 @@
+Move type conflict diagnostics to algebra
+
+Rust-side algebra now reports dependent member type conflicts that were
+previously only caught by the Eqlog semantic fallback.

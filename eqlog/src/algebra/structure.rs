@@ -13,9 +13,9 @@
 //!
 //! A [`StructureCat`] bundles an indexed family of structures together
 //! with a forward-only set of morphisms between them. The entailed close
-//! pass settles each structure in turn, pushing shared data forward along
-//! outgoing morphisms, and then walks backward to pull type information
-//! from codomains into domains.
+//! pass settles each structure in turn, pushing shared data and concrete
+//! types forward along outgoing morphisms, and then walks backward to
+//! pull missing type information from codomains into domains.
 //!
 //! Grouping structures by rule, mapping AST nodes to structures and
 //! tracking `semantic_el` provenance all live in [`crate::algebra`] and
@@ -110,6 +110,10 @@ pub struct Structure {
     /// Pending [`Structure::impose_type`] assertions. Persists across
     /// `close` calls; canonicalised alongside `els`.
     pub(super) pending_type_impositions: Vec<(ElId, ConcreteType)>,
+    /// Parent disagreements observed in an earlier close cycle. They are
+    /// rechecked on later cycles because a later equality can still make
+    /// the parent lists agree.
+    deferred_parent_checks: Vec<DeferredParentCheck>,
 }
 
 /// A parent-disagreement observation queued by
@@ -124,6 +128,7 @@ struct DeferredParentCheck {
     el: ElId,
     a: ConcreteType,
     b: ConcreteType,
+    origin: TypeConflictOrigin,
 }
 
 impl Default for Structure {
@@ -137,8 +142,18 @@ impl Default for Structure {
             unification: Unification::new(),
             pending_equalities: Vec::new(),
             pending_type_impositions: Vec::new(),
+            deferred_parent_checks: Vec::new(),
         }
     }
+}
+
+/// How a type conflict was first observed. Callers use this to tune
+/// source attribution without losing the existing/new type ordering of
+/// ordinary impositions.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum TypeConflictOrigin {
+    Equality,
+    Imposition,
 }
 
 /// A type disagreement discovered during [`Structure::close`]: two
@@ -161,6 +176,7 @@ pub struct TypeConflict {
     pub el: ElId,
     pub a: ConcreteType,
     pub b: ConcreteType,
+    pub origin: TypeConflictOrigin,
 }
 
 impl Structure {
@@ -236,7 +252,8 @@ impl Structure {
     /// report no change.
     pub fn close(&mut self, signature: &Signature) -> (bool, Vec<TypeConflict>) {
         let mut conflicts = Vec::new();
-        let mut parent_checks: Vec<DeferredParentCheck> = Vec::new();
+        let mut parent_checks: Vec<DeferredParentCheck> =
+            mem::take(&mut self.deferred_parent_checks);
         let mut changed = false;
         loop {
             let drained = self.drain_equalities(&mut conflicts, &mut parent_checks);
@@ -286,19 +303,26 @@ impl Structure {
     /// [`TypeConflict`]. Entries whose parents have since been put into
     /// the same class are silently discarded.
     fn resolve_parent_checks(
-        &self,
+        &mut self,
         parent_checks: Vec<DeferredParentCheck>,
         conflicts: &mut Vec<TypeConflict>,
     ) {
+        let mut unresolved = Vec::new();
         for check in parent_checks {
-            if !parents_match(&self.unification, &check.a.parents, &check.b.parents) {
+            let check = self.canonical_parent_check(check);
+            if !parents_match(&self.unification, &check.a.parents, &check.b.parents)
+                && !unresolved.contains(&check)
+            {
                 conflicts.push(TypeConflict {
-                    el: self.root(check.el),
-                    a: check.a,
-                    b: check.b,
+                    el: check.el,
+                    a: check.a.clone(),
+                    b: check.b.clone(),
+                    origin: check.origin,
                 });
+                unresolved.push(check);
             }
         }
+        self.deferred_parent_checks = unresolved;
     }
 
     /// Drains `pending_equalities` down to empty, performing the union
@@ -315,37 +339,45 @@ impl Structure {
     ) -> bool {
         let mut changed = false;
         while let Some((a, b)) = self.pending_equalities.pop() {
-            let a = self.root(a);
-            let b = self.root(b);
-            if a == b {
+            let lhs = self.root(a);
+            let rhs = self.root(b);
+            if lhs == rhs {
                 continue;
             }
             changed = true;
 
             // Deterministic winner: smaller id stays root.
-            let (keep, drop) = if a.0 <= b.0 { (a, b) } else { (b, a) };
+            let (keep, drop) = if lhs.0 <= rhs.0 {
+                (lhs, rhs)
+            } else {
+                (rhs, lhs)
+            };
+            let lhs_ct = self.els.get(&lhs).cloned().flatten();
+            let rhs_ct = self.els.get(&rhs).cloned().flatten();
             self.unification.union_roots_into(drop, keep);
 
-            let drop_ct = self.els.remove(&drop).flatten();
-            let keep_ct = self.els.remove(&keep).flatten();
-            let merged = match (keep_ct, drop_ct) {
+            self.els.remove(&drop);
+            self.els.remove(&keep);
+            let merged = match (lhs_ct, rhs_ct) {
                 (None, None) => None,
                 (Some(x), None) | (None, Some(x)) => Some(x),
-                (Some(k), Some(d)) => {
-                    if k.typ != d.typ {
+                (Some(lhs_ct), Some(rhs_ct)) => {
+                    if lhs_ct.typ != rhs_ct.typ {
                         conflicts.push(TypeConflict {
                             el: keep,
-                            a: k.clone(),
-                            b: d,
+                            a: lhs_ct.clone(),
+                            b: rhs_ct,
+                            origin: TypeConflictOrigin::Equality,
                         });
-                    } else if !parents_match(&self.unification, &k.parents, &d.parents) {
+                    } else if !parents_match(&self.unification, &lhs_ct.parents, &rhs_ct.parents) {
                         parent_checks.push(DeferredParentCheck {
                             el: keep,
-                            a: k.clone(),
-                            b: d,
+                            a: lhs_ct.clone(),
+                            b: rhs_ct,
+                            origin: TypeConflictOrigin::Equality,
                         });
                     }
-                    Some(k)
+                    Some(lhs_ct)
                 }
             };
             self.els.insert(keep, merged);
@@ -595,12 +627,14 @@ impl Structure {
                         el: root,
                         a: existing,
                         b: ct,
+                        origin: TypeConflictOrigin::Imposition,
                     });
                 } else if !parents_match(&self.unification, &existing.parents, &ct.parents) {
                     parent_checks.push(DeferredParentCheck {
                         el: root,
                         a: existing,
                         b: ct,
+                        origin: TypeConflictOrigin::Imposition,
                     });
                 }
                 false
@@ -644,6 +678,23 @@ impl Structure {
                 *p = self.unification.root_const(*p);
             }
         }
+
+        let checks = mem::take(&mut self.deferred_parent_checks);
+        self.deferred_parent_checks = checks
+            .into_iter()
+            .map(|check| self.canonical_parent_check(check))
+            .collect();
+    }
+
+    fn canonical_parent_check(&self, mut check: DeferredParentCheck) -> DeferredParentCheck {
+        check.el = self.root(check.el);
+        for p in check.a.parents.iter_mut() {
+            *p = self.root(*p);
+        }
+        for p in check.b.parents.iter_mut() {
+            *p = self.root(*p);
+        }
+        check
     }
 
     fn root(&self, id: ElId) -> ElId {
@@ -657,8 +708,8 @@ impl Structure {
 /// codomain's).
 ///
 /// Each morphism is stored as an [`ElMap`] on elements; the [`Structure`]
-/// invariants (preserving `pred_apps`, `func_apps`, `var_els` and
-/// `ambient_model_els` under the map) are maintained by
+/// invariants (preserving concrete types, `pred_apps`, `func_apps`,
+/// `var_els` and `ambient_model_els` under the map) are maintained by
 /// [`StructureCat::close`] rather than baked into the data structure.
 ///
 /// `under_prods` is a separate registry of "wide pullback" relationships
@@ -726,8 +777,9 @@ impl StructureCat {
     /// Each cycle consists of:
     ///
     ///   - Forward: walk structures in arena order. Close each structure,
-    ///     then push its `pred_apps`, `func_apps`, `var_els` and
-    ///     `ambient_model_els` along every outgoing morphism, canonicalising
+    ///     then push its concrete types, `pred_apps`, `func_apps`,
+    ///     `var_els` and `ambient_model_els` along every outgoing morphism,
+    ///     canonicalising
     ///     the [`ElMap`]'s keys under the now-settled domain unification and
     ///     enqueueing equalities on the codomain when two keys collapse to
     ///     the same root or when a pushed entry clashes with an existing
@@ -772,12 +824,12 @@ impl StructureCat {
                 for c in cs {
                     conflicts.push((id, c));
                 }
-                cycle |= self.push_forward(id);
+                cycle |= self.push_forward(id, &mut conflicts);
             }
 
             for i in (0..n).rev() {
                 let id = StructureId(i);
-                cycle |= self.pull_types_backward(id, &mut conflicts);
+                cycle |= self.pull_types_backward(id);
                 let (c_changed, cs) = self.structures[i].close(signature);
                 cycle |= c_changed;
                 for c in cs {
@@ -808,10 +860,14 @@ impl StructureCat {
     /// Pushes shared data from `src` along every outgoing morphism. Returns
     /// true iff at least one morphism observed any logical insertion or
     /// non-trivial equate.
-    fn push_forward(&mut self, src: StructureId) -> bool {
+    fn push_forward(
+        &mut self,
+        src: StructureId,
+        conflicts: &mut Vec<(StructureId, TypeConflict)>,
+    ) -> bool {
         let mut changed = false;
         for tgt in self.outgoing(src) {
-            changed |= self.push_morphism(src, tgt);
+            changed |= self.push_morphism(src, tgt, conflicts);
         }
         changed
     }
@@ -819,14 +875,20 @@ impl StructureCat {
     /// Carries data from `src` into `tgt` along the `(src, tgt)` morphism.
     /// Rewrites the [`ElMap`]'s keys to their roots in `src` and its
     /// values to their roots in `tgt`, enqueues equalities on `tgt` when
-    /// two keys collapse, and inserts the images of `src`'s `pred_apps`,
-    /// `func_apps`, `var_els` and `ambient_model_els` into `tgt`.
+    /// two keys collapse, and inserts the images of `src`'s concrete
+    /// types, `pred_apps`, `func_apps`, `var_els` and `ambient_model_els`
+    /// into `tgt`.
     ///
     /// Returns true iff a previously-absent entry was inserted into `tgt`,
     /// or an equate was enqueued on `tgt` whose pair lives in distinct
     /// equivalence classes. Idempotent re-runs that only re-canonicalise
     /// the morphism's keys and values report false.
-    fn push_morphism(&mut self, src: StructureId, tgt: StructureId) -> bool {
+    fn push_morphism(
+        &mut self,
+        src: StructureId,
+        tgt: StructureId,
+        conflicts: &mut Vec<(StructureId, TypeConflict)>,
+    ) -> bool {
         let StructureCat {
             structures,
             morphisms,
@@ -945,33 +1007,49 @@ impl StructureCat {
             }
         }
 
+        let src_typed_els: Vec<(ElId, ConcreteType)> = src_st
+            .els
+            .iter()
+            .filter_map(|(&e, ct)| ct.clone().map(|ct| (e, ct)))
+            .collect();
+        for (el, ct) in src_typed_els {
+            let mapped_el = image(el);
+            let mapped_ct = ConcreteType {
+                typ: ct.typ,
+                parents: ct.parents.iter().copied().map(image).collect(),
+            };
+            let mut local_conflicts = Vec::new();
+            let mut local_parent_checks = Vec::new();
+            changed |= tgt_st.impose_concrete_type(
+                mapped_el,
+                mapped_ct,
+                &mut local_conflicts,
+                &mut local_parent_checks,
+            );
+            tgt_st.deferred_parent_checks.extend(local_parent_checks);
+            for c in local_conflicts {
+                conflicts.push((tgt, c));
+            }
+        }
+
         changed
     }
 
-    /// For each outgoing morphism `(src, tgt)`, imposes on `src` the type
-    /// of every mapped codomain element whose parents are all ambient
-    /// model elements in `tgt`. The preimages of those parents in `src`
-    /// are read off `src.ambient_model_els` by type. Returns true iff at
-    /// least one such imposition recorded a fresh type or enqueued a
-    /// parent equality on `src`.
-    fn pull_types_backward(
-        &mut self,
-        src: StructureId,
-        conflicts: &mut Vec<(StructureId, TypeConflict)>,
-    ) -> bool {
+    /// For each outgoing morphism `(src, tgt)`, reflects missing type
+    /// information from mapped codomain elements whose parents are all
+    /// ambient model elements in `tgt`. The preimages of those parents in
+    /// `src` are read off `src.ambient_model_els` by type. Existing source
+    /// types are left alone when they disagree; the downstream structure
+    /// that witnessed the disagreement reports the conflict.
+    fn pull_types_backward(&mut self, src: StructureId) -> bool {
         let mut changed = false;
         for tgt in self.outgoing(src) {
-            changed |= self.pull_morphism_types(src, tgt, conflicts);
+            changed |= self.pull_morphism_types(src, tgt);
         }
         changed
     }
 
-    fn pull_morphism_types(
-        &mut self,
-        src: StructureId,
-        tgt: StructureId,
-        conflicts: &mut Vec<(StructureId, TypeConflict)>,
-    ) -> bool {
+    fn pull_morphism_types(&mut self, src: StructureId, tgt: StructureId) -> bool {
         let StructureCat {
             structures,
             morphisms,
@@ -1022,21 +1100,29 @@ impl StructureCat {
                 typ: ct.typ,
                 parents: new_parents,
             };
-            let mut local_conflicts = Vec::new();
-            let mut local_parent_checks = Vec::new();
-            changed |= src_st.impose_concrete_type(
-                src_el,
-                new_ct,
-                &mut local_conflicts,
-                &mut local_parent_checks,
-            );
-            // No equates pending on `src_st` at this point (callers run
-            // pull_types_backward only after a full close), so no later
-            // unification can rescue a queued parent disagreement —
-            // resolve immediately.
-            src_st.resolve_parent_checks(local_parent_checks, &mut local_conflicts);
-            for c in local_conflicts {
-                conflicts.push((src, c));
+            match src_st.concrete_type_of(src_el) {
+                None => {
+                    let mut local_conflicts = Vec::new();
+                    let mut local_parent_checks = Vec::new();
+                    changed |= src_st.impose_concrete_type(
+                        src_el,
+                        new_ct,
+                        &mut local_conflicts,
+                        &mut local_parent_checks,
+                    );
+                    debug_assert!(local_conflicts.is_empty());
+                    debug_assert!(local_parent_checks.is_empty());
+                }
+                Some(existing)
+                    if existing.typ == new_ct.typ
+                        && parents_match(
+                            &src_st.unification,
+                            &existing.parents,
+                            &new_ct.parents,
+                        ) => {}
+                Some(_) => {
+                    continue;
+                }
             }
         }
         changed
