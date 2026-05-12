@@ -1,6 +1,4 @@
-Always use earliest type-conflict term
+Drop expected-error whitespace churn
 
-Remove the conditional conflict-attribution path and always anchor type
-conflicts at the earliest reachable source term. Trim trailing spaces
-from rendered source-display lines so updated diagnostics remain
-`git diff --check` clean.
+Restore source-display formatting and expected-error trailing whitespace
+from upstream, keeping only the semantic diagnostic location changes.

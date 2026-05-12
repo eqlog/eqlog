@@ -1,6 +1,6 @@
 Error: the left-hand side of 'var : Type' must be a variable or wildcard
  --> error-test-source/if-var-lhs-not-var/theory.eql:4
-  |
+  | 
 4 |     if f(x) : T;
-  |        ^^^^
-  |
+  |        ^^^^     
+  | 

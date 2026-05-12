@@ -80,7 +80,7 @@ impl<'a> Display for SourceDisplay<'a> {
             write!(f, "{source_path}:{first_num}\n")?;
         }
         write_padding(f, max_line_num_digits)?;
-        write!(f, " |\n")?;
+        write!(f, " | \n")?;
 
         for (num, line_loc) in nums_locs {
             let line_num_str = num.to_string();
@@ -90,21 +90,21 @@ impl<'a> Display for SourceDisplay<'a> {
             write!(f, "{}\n", &source[line_begin..line_end])?;
 
             if underlined {
-                let mut underline = String::new();
+                write_padding(f, max_line_num_digits)?;
+                write!(f, " | ")?;
                 for i in line_begin..line_end {
                     if Location(i, i + 1).intersect(location).is_some() {
-                        underline.push('^');
+                        write!(f, "^")?;
                     } else {
-                        underline.push(' ');
+                        write!(f, " ")?;
                     }
                 }
-                write_padding(f, max_line_num_digits)?;
-                write!(f, " | {}\n", underline.trim_end())?;
+                write!(f, "\n")?;
             }
         }
 
         write_padding(f, max_line_num_digits)?;
-        write!(f, " |\n")?;
+        write!(f, " | \n")?;
 
         Ok(())
     }

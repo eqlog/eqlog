@@ -1,8 +1,8 @@
 Error: term has conflicting types:
   --> error-test-source/conflicting-term-type-member-annotation/theory.eql:10
-   |
+   | 
 10 |     if m.f(x)!;
-   |            ^
-   |
+   |            ^   
+   | 
 - Could be m.S
 - Could be m.T

@@ -624,7 +624,7 @@ impl Display for CompileErrorWithContext {
             } => {
                 write!(
                     f,
-                    "term of enum type \"{enum_name}\" is not introduced with constructor\n"
+                    "term of enum type \"{enum_name}\" is not introduced with constructor \n"
                 )?;
                 write_loc(f, *term_location)?;
                 write!(f, "Enum \"{enum_name}\" declared here:\n")?;
