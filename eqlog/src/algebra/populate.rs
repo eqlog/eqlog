@@ -677,7 +677,8 @@ fn walk_term(
             let (mor_el, c1) = walk_term(mor, current, rule, ast, scopes, signature, errors);
             let (arg_el, c2) = walk_term(arg, current, rule, ast, scopes, signature, errors);
             changed |= c1 || c2;
-            let candidates = resolve_mor_app_apps(arg_el, prior_el, current, rule, signature);
+            let candidates =
+                resolve_mor_app_apps(mor_el, arg_el, prior_el, current, rule, signature);
             match emit_known_apps(candidates, vec![mor_el, arg_el], prior_el, current, rule) {
                 Some((e, c)) => {
                     changed |= c;
@@ -746,37 +747,64 @@ fn resolve_mor_projection_apps(
 }
 
 /// Resolves every generated morphism-application function currently implied
-/// by the argument or result element's member types.
+/// by the argument or result element's member types, provided the morphism
+/// element is untyped or has a compatible `Mor<M>` type.
 fn resolve_mor_app_apps(
+    mor_el: ElId,
     arg_el: ElId,
     result_el: Option<ElId>,
     current: StructureId,
     rule: &RuleStructures,
     signature: &Signature,
 ) -> Vec<(FuncId, Vec<ElId>)> {
+    let mor_types = concrete_types_of_el(rule, current, mor_el);
+    let mor_models: BTreeSet<TypeId> = mor_types
+        .iter()
+        .filter_map(|ct| match signature.type_(ct.typ).kind {
+            TypeKind::Mor(model_tid) => Some(model_tid),
+            _ => None,
+        })
+        .collect();
+    if !mor_types.is_empty() && mor_models.is_empty() {
+        return Vec::new();
+    }
+
     let mut apps = BTreeSet::new();
     for ct in concrete_types_of_el(rule, current, arg_el) {
-        if let Some(fid) = signature.mor_app_func_for_type(ct.typ) {
-            let Some((_model_parent, outer_parents)) = ct.parents.split_last() else {
-                continue;
-            };
-            apps.insert((fid, outer_parents.to_vec()));
-        }
+        insert_mor_app_candidate(signature, &mor_models, &mut apps, ct);
     }
 
     if let Some(result_el) = result_el {
         for ct in concrete_types_of_el(rule, current, result_el) {
-            let Some(fid) = signature.mor_app_func_for_type(ct.typ) else {
-                continue;
-            };
-            let Some((_model_parent, outer_parents)) = ct.parents.split_last() else {
-                continue;
-            };
-            apps.insert((fid, outer_parents.to_vec()));
+            insert_mor_app_candidate(signature, &mor_models, &mut apps, ct);
         }
     }
 
     apps.into_iter().collect()
+}
+
+fn member_model_type(signature: &Signature, ct: &ConcreteType) -> Option<TypeId> {
+    signature.type_(ct.typ).parents.last().copied()
+}
+
+fn insert_mor_app_candidate(
+    signature: &Signature,
+    mor_models: &BTreeSet<TypeId>,
+    apps: &mut BTreeSet<(FuncId, Vec<ElId>)>,
+    ct: ConcreteType,
+) {
+    let Some(fid) = signature.mor_app_func_for_type(ct.typ) else {
+        return;
+    };
+    if !mor_models.is_empty()
+        && !member_model_type(signature, &ct).is_some_and(|m| mor_models.contains(&m))
+    {
+        return;
+    }
+    let Some((_model_parent, outer_parents)) = ct.parents.split_last() else {
+        return;
+    };
+    apps.insert((fid, outer_parents.to_vec()));
 }
 
 fn concrete_types_of_el(
