@@ -13,7 +13,6 @@ use crate::ram::*;
 use crate::rust_gen::*;
 use crate::scope_checks::{check_bindings, check_occurrences};
 use crate::scopes::resolve_scopes;
-use crate::semantics::*;
 use crate::syntactic::check_syntactic;
 use crate::to_ram::*;
 use anyhow::anyhow;
@@ -493,11 +492,9 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
         }
     }
 
-    let eqlog_err = check_eqlog(&eqlog, &identifiers, &locations).err();
-
-    // Merge Rust-side and eqlog-side errors by `CompileError`'s `Ord`, which
-    // applies the kind precedence (e.g. UndeclaredSymbol beats
-    // VariableOccursOnlyOnce) before falling back to source location.
+    // Merge compile errors by `CompileError`'s `Ord`, which applies the kind
+    // precedence (e.g. UndeclaredSymbol beats VariableOccursOnlyOnce) before
+    // falling back to source location.
     if let Some(error) = binding_errors
         .into_iter()
         .chain(signature_errors)
@@ -505,7 +502,6 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
         .chain(occurrence_err)
         .chain(symbol_lookup_errors)
         .chain(structure_errors)
-        .chain(eqlog_err)
         .min()
     {
         return Err(CompileErrorWithContext {
