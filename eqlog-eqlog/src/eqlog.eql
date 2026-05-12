@@ -2875,27 +2875,6 @@ rule then_atom_epic_ok_pred {
     then terms_should_be_epic_ok(args);
 }
 
-// ## Enum constructor surjectivity check
-pred should_be_obtained_by_ctor(TermNode, EnumDeclNode);
-rule defined_then_should_be_given_by_ctor {
-    if defined_then_atom_node(atom, _, tm);
-    if ss = scope_symbols(entry_scope(rule_descendant_then_atom(atom)));
-    if el = semantic_el(tm, _);
-    if el_type(el, GlobalType(semantic_type(ss, ty_name)));
-    if enum_decl(enum_decl_node, ty_name, _);
-    then should_be_obtained_by_ctor(tm, enum_decl_node);
-}
-
-pred is_given_by_ctor(TermNode, EnumDeclNode);
-
-rule ctor_app_is_given_by_ctor {
-    if app_term_node(tm, func_expr, _);
-    if ambient_func_expr(func_expr, func_ident);
-    if ctor_decl(ctor, func_ident, _);
-    if ctor_enum(ctor) = enum_decl_node;
-    then is_given_by_ctor(tm, enum_decl_node);
-}
-
 // ### Function definedness
 //
 // This predicate holds if an Eqlog function can be made defined via the Rust API.
