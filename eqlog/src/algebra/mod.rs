@@ -35,10 +35,9 @@ struct RuleNode {
 /// Builds and closes a [`RuleStructures`] for every rule reachable from
 /// `module`.
 ///
-/// The returned errors match the previous early-exit behavior: if any rule has
-/// structure diagnostics, the Vec contains the diagnostics from the first such
-/// rule in source order. The structures are still returned so later diagnostic
-/// passes can inspect resolved term types.
+/// Returns every rule's structures together with diagnostics from the first
+/// rule in source order that fails structure validation. Later rules are still
+/// built so diagnostic passes can inspect their resolved term types.
 pub fn build_structures(
     ast: &Ast,
     scopes: &Scopes,
