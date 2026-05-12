@@ -1,8 +1,8 @@
 Error: term has conflicting types:
-  --> error-test-source/bad-dep-pred-arg-type/theory.eql:11
+  --> error-test-source/bad-dep-pred-arg-type/theory.eql:10
    | 
-11 |     then m_1.mark(e);
-   |                   ^  
+10 |     if m_0.mark(e);
+   |                 ^  
    | 
 - Could be m_0.El
 - Could be m_1.El

@@ -21,6 +21,7 @@ use crate::algebra::signature::{Signature, TypeId, TypeKind};
 use crate::algebra::structure::{ConcreteType, ElId, Structure, StructureId, TypeConflict};
 use crate::ast::*;
 use crate::error::CompileError;
+use crate::grammar_util::Location;
 use crate::scopes::Scopes;
 
 /// One rule declaration together with the chain of model types it is
@@ -78,12 +79,7 @@ pub fn build_structures(
             .map(|(sid, conflict)| conflict_to_error(ast, signature, &rule, sid, conflict))
             .collect();
         errors.extend(last_arg_num_errors);
-        errors.extend(morphism_application_errors(
-            ast,
-            signature,
-            &rule,
-            &last_conflicts,
-        ));
+        errors.extend(morphism_application_errors(ast, signature, &rule));
         // Only run the surjectivity check when the structures are at a
         // settled, conflict-free state. Type conflicts can leave the
         // morphisms in shapes that would produce noisy false positives.
@@ -105,14 +101,13 @@ fn morphism_application_errors(
     ast: &Ast,
     signature: &Signature,
     rule: &RuleStructures,
-    conflicts: &[(StructureId, TypeConflict)],
 ) -> Vec<CompileError> {
     let mut errors = Vec::new();
     let mut reported_non_mors = BTreeSet::new();
     let mut reported_non_members = BTreeSet::new();
 
     for (&(sid, _app_term), site) in &rule.mor_app_sites {
-        let Some(mor_types) = concrete_types_of_term(rule, sid, site.mor, conflicts) else {
+        let Some(mor_types) = concrete_types_of_term(rule, sid, site.mor) else {
             continue;
         };
 
@@ -133,7 +128,7 @@ fn morphism_application_errors(
             continue;
         }
 
-        let Some(arg_types) = concrete_types_of_term(rule, sid, site.arg, conflicts) else {
+        let Some(arg_types) = concrete_types_of_term(rule, sid, site.arg) else {
             continue;
         };
         for model_tid in mor_models {
@@ -158,7 +153,6 @@ fn concrete_types_of_term(
     rule: &RuleStructures,
     sid: StructureId,
     term: TermId,
-    conflicts: &[(StructureId, TypeConflict)],
 ) -> Option<Vec<ConcreteType>> {
     // Type information is not always materialised in cloned successor
     // structures immediately, so recover types from incoming preimages too.
@@ -175,18 +169,8 @@ fn concrete_types_of_term(
         }
 
         let structure = &rule.cat.structures[current_sid.0];
-        if let Some(Some(ct)) = structure.els.get(&root) {
-            push_unique_concrete_type(&mut types, canonical_concrete_type(structure, ct));
-        }
-        for (conflict_sid, conflict) in conflicts {
-            if *conflict_sid != current_sid {
-                continue;
-            }
-            if structure.unification.root_const(conflict.el) != root {
-                continue;
-            }
-            push_unique_concrete_type(&mut types, canonical_concrete_type(structure, &conflict.a));
-            push_unique_concrete_type(&mut types, canonical_concrete_type(structure, &conflict.b));
+        for ct in structure.concrete_types_of(root) {
+            push_unique_concrete_type(&mut types, ct);
         }
 
         for (&(src, tgt), elmap) in &rule.cat.morphisms {
@@ -212,17 +196,6 @@ fn concrete_types_of_term(
 fn push_unique_concrete_type(types: &mut Vec<ConcreteType>, ct: ConcreteType) {
     if !types.contains(&ct) {
         types.push(ct);
-    }
-}
-
-fn canonical_concrete_type(structure: &Structure, ct: &ConcreteType) -> ConcreteType {
-    ConcreteType {
-        typ: ct.typ,
-        parents: ct
-            .parents
-            .iter()
-            .map(|&parent| structure.unification.root_const(parent))
-            .collect(),
     }
 }
 
@@ -335,10 +308,9 @@ fn collect_rules(
 }
 
 /// Lowers a [`TypeConflict`] to a [`CompileError::ConflictingTermType`],
-/// anchored on a term whose element shares a class with `conflict.el`
-/// (located via [`find_term`]). Each [`ConcreteType`] renders as
-/// `TypeName` for global types or `parent_name.TypeName` for member
-/// types.
+/// anchored on the earliest reachable term whose element shares a class
+/// with `conflict.el`. Each [`ConcreteType`] renders as `TypeName` for
+/// global types or `parent_name.TypeName` for member types.
 ///
 /// Panics if no term backs `el` in any reachable structure.
 fn conflict_to_error(
@@ -350,7 +322,7 @@ fn conflict_to_error(
 ) -> CompileError {
     let TypeConflict { el, a, b } = conflict;
     let structure = &rule.cat.structures[sid.0];
-    let term_id = find_term(rule, sid, el);
+    let term_id = find_earliest_term(ast, rule, sid, el);
     CompileError::ConflictingTermType {
         types: vec![
             concrete_type_to_string(ast, signature, structure, &a),
@@ -387,17 +359,13 @@ fn concrete_type_to_string(
     format!("{parent_name}.{type_name}")
 }
 
-/// Locates a term whose element shares a class with `target` in the
-/// structure at `sid`. Conflicts can surface in a structure that
-/// received `target` only as a morphism image, so on miss in
-/// `semantic_els[sid]` the search expands through incoming morphisms
-/// to preimages in source structures.
-///
-/// Panics if no reachable structure backs the class with a term.
-fn find_term(rule: &RuleStructures, sid: StructureId, target: ElId) -> TermId {
+/// Locates the earliest source term reachable from `target` by walking
+/// incoming morphisms.
+fn find_earliest_term(ast: &Ast, rule: &RuleStructures, sid: StructureId, target: ElId) -> TermId {
     let start_root = rule.cat.structures[sid.0].unification.root_const(target);
     let mut visited: BTreeSet<(StructureId, ElId)> = BTreeSet::new();
     let mut worklist: Vec<(StructureId, ElId)> = vec![(sid, start_root)];
+    let mut best: Option<(Location, TermId)> = None;
 
     while let Some((s, el_root)) = worklist.pop() {
         if !visited.insert((s, el_root)) {
@@ -405,11 +373,14 @@ fn find_term(rule: &RuleStructures, sid: StructureId, target: ElId) -> TermId {
         }
 
         let s_st = &rule.cat.structures[s.0];
-        if let Some((&term, _)) = rule.semantic_els[s.0]
-            .iter()
-            .find(|(_, &e)| s_st.unification.root_const(e) == el_root)
-        {
-            return term;
+        for (&term, &e) in &rule.semantic_els[s.0] {
+            if s_st.unification.root_const(e) != el_root {
+                continue;
+            }
+            let loc = ast.loc(term);
+            if best.is_none_or(|(best_loc, _)| (loc.1, loc.0) < (best_loc.1, best_loc.0)) {
+                best = Some((loc, term));
+            }
         }
 
         for (&(src, tgt), elmap) in &rule.cat.morphisms {
@@ -427,6 +398,10 @@ fn find_term(rule: &RuleStructures, sid: StructureId, target: ElId) -> TermId {
                 }
             }
         }
+    }
+
+    if let Some((_, term)) = best {
+        return term;
     }
 
     let is_ambient_at_sid = rule.cat.structures[sid.0]

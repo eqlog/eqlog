@@ -13,7 +13,7 @@
 //! happened during this call.
 
 use std::collections::btree_map::Entry;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::algebra::signature::{FuncId, PredId, Signature, TypeId, TypeKind};
 use crate::algebra::structure::{
@@ -376,7 +376,7 @@ fn walk_if_atom(
             // parent term, which must run on every pass so it gets re-tried
             // once the parent's type becomes known. Ambient/Mor cases
             // resolve immediately and don't mutate the structure.
-            let (ct_opt, mut changed) =
+            let (cts, mut changed) =
                 walk_var_type_expr(typ, current, rule, ast, scopes, signature, errors);
             let el_id = match rule.semantic_els[current.0].get(&term).copied() {
                 Some(el) => el,
@@ -402,15 +402,11 @@ fn walk_if_atom(
                     el_id
                 }
             };
-            // Queue the annotation for the close pass to apply. A member
+            // Queue the annotations for the close pass to apply. A member
             // annotation may stay unresolved until a later pass settles
             // its parent's type; until then the el simply has no concrete
-            // type, like any unannotated el. The close pass applies queued
-            // impositions after equality/functionality/typing have settled,
-            // so an annotation that disagrees with an inferred type is
-            // reported with the inferred type as the `a` slot of the
-            // resulting conflict.
-            if let Some(ct) = ct_opt {
+            // type, like any unannotated el.
+            for ct in cts {
                 changed |= rule.cat.structures[current.0].impose_type(el_id, ct);
             }
             changed
@@ -479,38 +475,40 @@ fn walk_pred_atom(
 
     let (resolved, c) = resolve_pred_expr(pred, current, rule, ast, scopes, signature, errors);
     changed |= c;
-    let Some((pred_id, parents)) = resolved else {
-        return changed;
-    };
-
-    let pred_data = signature.pred(pred_id);
-    if arg_els.len() != pred_data.arity.len() {
-        errors.push(CompileError::PredicateArgumentNumber {
-            expected: pred_data.arity.len(),
-            got: arg_els.len(),
-            location: ast.loc(id),
-        });
+    if resolved.is_empty() {
         return changed;
     }
-    let structure = &mut rule.cat.structures[current.0];
-    let parents: Vec<ElId> = parents
-        .into_iter()
-        .map(|e| structure.unification.root(e))
-        .collect();
-    let canonical_args: Vec<ElId> = arg_els
-        .iter()
-        .map(|e| structure.unification.root(*e))
-        .collect();
-    changed |= structure.pred_apps.insert(PredApp {
-        pred: pred_id,
-        parents,
-        args: canonical_args,
-    });
+
+    for (pred_id, parents) in resolved {
+        let pred_data = signature.pred(pred_id);
+        if arg_els.len() != pred_data.arity.len() {
+            errors.push(CompileError::PredicateArgumentNumber {
+                expected: pred_data.arity.len(),
+                got: arg_els.len(),
+                location: ast.loc(id),
+            });
+            continue;
+        }
+        let structure = &mut rule.cat.structures[current.0];
+        let parents: Vec<ElId> = parents
+            .into_iter()
+            .map(|e| structure.unification.root(e))
+            .collect();
+        let canonical_args: Vec<ElId> = arg_els
+            .iter()
+            .map(|e| structure.unification.root(*e))
+            .collect();
+        changed |= structure.pred_apps.insert(PredApp {
+            pred: pred_id,
+            parents,
+            args: canonical_args,
+        });
+    }
     changed
 }
 
-/// Resolves a [`PredExpr`] to its [`PredId`] and the parent el chain to
-/// emit alongside it on a [`PredApp`].
+/// Resolves a [`PredExpr`] to the [`PredId`] and parent el chain candidates
+/// to emit alongside it on [`PredApp`]s.
 ///
 /// For ambient preds the chain comes from the rule's
 /// [`Structure::ambient_model_els`], looked up by each parent type. The
@@ -520,7 +518,7 @@ fn walk_pred_atom(
 /// declared on an outer model used in an inner-model rule, both have
 /// fewer parents than the rule itself sits inside.
 ///
-/// For member preds the chain is the parent el's [`ConcreteType`]
+/// For member preds each chain is the parent el's [`ConcreteType`]
 /// parents with the parent el itself appended, which matches the
 /// signature's parent chain for any pred declared inside that model.
 /// The bool component is true iff walking the parent term produced a
@@ -534,7 +532,7 @@ fn resolve_pred_expr(
     scopes: &Scopes,
     signature: &Signature,
     errors: &mut Vec<CompileError>,
-) -> (Option<(PredId, Vec<ElId>)>, bool) {
+) -> (Vec<(PredId, Vec<ElId>)>, bool) {
     match *ast.pred_expr(pred) {
         PredExpr::Ambient(aid) => {
             let scope = scopes.entry(aid);
@@ -543,11 +541,13 @@ fn resolve_pred_expr(
                 Some(Symbol::Pred(pd)) => signature.pred_for_pred_decl(pd),
                 _ => None,
             };
-            let resolved = pred_id.map(|pid| {
-                let parents =
-                    rule.cat.structures[current.0].ambient_parents(&signature.pred(pid).parents);
-                (pid, parents)
-            });
+            let resolved = pred_id
+                .map(|pid| {
+                    let parents = rule.cat.structures[current.0]
+                        .ambient_parents(&signature.pred(pid).parents);
+                    vec![(pid, parents)]
+                })
+                .unwrap_or_default();
             (resolved, false)
         }
         PredExpr::Member(mid) => {
@@ -557,15 +557,17 @@ fn resolve_pred_expr(
             } = ast.member_pred_expr(mid).clone();
             let (parent_el, changed) =
                 walk_term(parent_term, current, rule, ast, scopes, signature, errors);
-            let resolved = member_scope_and_parents(rule, current, parent_el, scopes, signature)
-                .and_then(|(body, parents)| {
+            let resolved = member_scopes_and_parents(rule, current, parent_el, scopes, signature)
+                .into_iter()
+                .filter_map(|(body, parents)| {
                     let pd = match body.symbols.get(&name).copied()? {
                         Symbol::Pred(pd) => pd,
                         _ => return None,
                     };
                     let pid = signature.pred_for_pred_decl(pd)?;
                     Some((pid, parents))
-                });
+                })
+                .collect();
             (resolved, changed)
         }
     }
@@ -637,17 +639,16 @@ fn walk_term(
             let DomTerm { arg } = *ast.dom_term(did);
             let (arg_el, c) = walk_term(arg, current, rule, ast, scopes, signature, errors);
             changed |= c;
-            match resolve_mor_projection(
+            let candidates = resolve_mor_projection_apps(
                 MorProjection::Dom,
                 arg_el,
                 prior_el,
                 current,
                 rule,
                 signature,
-            ) {
-                Some((func_id, parents)) => {
-                    let (e, c) =
-                        emit_known_app(func_id, parents, vec![arg_el], prior_el, current, rule);
+            );
+            match emit_known_apps(candidates, vec![arg_el], prior_el, current, rule) {
+                Some((e, c)) => {
                     changed |= c;
                     e
                 }
@@ -662,17 +663,16 @@ fn walk_term(
             let CodTerm { arg } = *ast.cod_term(cid);
             let (arg_el, c) = walk_term(arg, current, rule, ast, scopes, signature, errors);
             changed |= c;
-            match resolve_mor_projection(
+            let candidates = resolve_mor_projection_apps(
                 MorProjection::Cod,
                 arg_el,
                 prior_el,
                 current,
                 rule,
                 signature,
-            ) {
-                Some((func_id, parents)) => {
-                    let (e, c) =
-                        emit_known_app(func_id, parents, vec![arg_el], prior_el, current, rule);
+            );
+            match emit_known_apps(candidates, vec![arg_el], prior_el, current, rule) {
+                Some((e, c)) => {
                     changed |= c;
                     e
                 }
@@ -692,16 +692,10 @@ fn walk_term(
             let (mor_el, c1) = walk_term(mor, current, rule, ast, scopes, signature, errors);
             let (arg_el, c2) = walk_term(arg, current, rule, ast, scopes, signature, errors);
             changed |= c1 || c2;
-            match resolve_mor_app(mor_el, arg_el, prior_el, current, rule, signature) {
-                Some((func_id, parents)) => {
-                    let (e, c) = emit_known_app(
-                        func_id,
-                        parents,
-                        vec![mor_el, arg_el],
-                        prior_el,
-                        current,
-                        rule,
-                    );
+            let candidates =
+                resolve_mor_app_apps(mor_el, arg_el, prior_el, current, rule, signature);
+            match emit_known_apps(candidates, vec![mor_el, arg_el], prior_el, current, rule) {
+                Some((e, c)) => {
                     changed |= c;
                     e
                 }
@@ -726,92 +720,114 @@ enum MorProjection {
     Cod,
 }
 
-/// Resolves the generated `dom`/`cod` function for a term. The projection can
-/// be determined either from the argument's known `Mor<M>` type or from the
-/// result element's known model type.
-fn resolve_mor_projection(
+/// Resolves every generated `dom`/`cod` function currently implied for a
+/// term. The projection can be determined either from the argument's known
+/// `Mor<M>` types or from the result element's known model types.
+fn resolve_mor_projection_apps(
     projection: MorProjection,
     arg_el: ElId,
     result_el: Option<ElId>,
     current: StructureId,
     rule: &RuleStructures,
     signature: &Signature,
-) -> Option<(FuncId, Vec<ElId>)> {
-    if let Some(ct) = concrete_type_of_el(rule, current, arg_el) {
+) -> Vec<(FuncId, Vec<ElId>)> {
+    let mut apps = BTreeSet::new();
+    for ct in concrete_types_of_el(rule, current, arg_el) {
         if let TypeKind::Mor(model_tid) = signature.type_(ct.typ).kind {
-            let ids = signature.ids_for_model_type(model_tid)?;
+            let Some(ids) = signature.ids_for_model_type(model_tid) else {
+                continue;
+            };
             let func = match projection {
                 MorProjection::Dom => ids.dom,
                 MorProjection::Cod => ids.cod,
             };
-            return Some((func, ct.parents));
+            apps.insert((func, ct.parents));
         }
     }
 
-    let result_el = result_el?;
-    let ct = concrete_type_of_el(rule, current, result_el)?;
-    let ids = signature.ids_for_model_type(ct.typ)?;
-    let func = match projection {
-        MorProjection::Dom => ids.dom,
-        MorProjection::Cod => ids.cod,
-    };
-    Some((func, ct.parents))
+    if let Some(result_el) = result_el {
+        for ct in concrete_types_of_el(rule, current, result_el) {
+            let Some(ids) = signature.ids_for_model_type(ct.typ) else {
+                continue;
+            };
+            let func = match projection {
+                MorProjection::Dom => ids.dom,
+                MorProjection::Cod => ids.cod,
+            };
+            apps.insert((func, ct.parents));
+        }
+    }
+
+    apps.into_iter().collect()
 }
 
-/// Resolves the generated morphism-application function. The member type can
-/// be known from the argument element or, after another close pass, from the
-/// result element.
-fn resolve_mor_app(
+/// Resolves every generated morphism-application function currently implied
+/// by the argument or result element's member types, provided the morphism
+/// element is untyped or has a compatible `Mor<M>` type.
+fn resolve_mor_app_apps(
     mor_el: ElId,
     arg_el: ElId,
     result_el: Option<ElId>,
     current: StructureId,
     rule: &RuleStructures,
     signature: &Signature,
-) -> Option<(FuncId, Vec<ElId>)> {
-    let mor_model = match concrete_type_of_el(rule, current, mor_el) {
-        Some(ct) => match signature.type_(ct.typ).kind {
+) -> Vec<(FuncId, Vec<ElId>)> {
+    let mor_types = concrete_types_of_el(rule, current, mor_el);
+    let mor_models: BTreeSet<TypeId> = mor_types
+        .iter()
+        .filter_map(|ct| match signature.type_(ct.typ).kind {
             TypeKind::Mor(model_tid) => Some(model_tid),
-            _ => return None,
-        },
-        None => None,
-    };
+            _ => None,
+        })
+        .collect();
+    if !mor_types.is_empty() && mor_models.is_empty() {
+        return Vec::new();
+    }
 
-    if let Some(ct) = concrete_type_of_el(rule, current, arg_el) {
-        if let Some(model_tid) = mor_model {
-            if member_model_type(signature, &ct) != Some(model_tid) {
-                return None;
-            }
-        }
-        if let Some(fid) = signature.mor_app_func_for_type(ct.typ) {
-            let (_model_parent, outer_parents) = ct.parents.split_last()?;
-            return Some((fid, outer_parents.to_vec()));
+    let mut apps = BTreeSet::new();
+    for ct in concrete_types_of_el(rule, current, arg_el) {
+        insert_mor_app_candidate(signature, &mor_models, &mut apps, ct);
+    }
+
+    if let Some(result_el) = result_el {
+        for ct in concrete_types_of_el(rule, current, result_el) {
+            insert_mor_app_candidate(signature, &mor_models, &mut apps, ct);
         }
     }
 
-    let result_el = result_el?;
-    let ct = concrete_type_of_el(rule, current, result_el)?;
-    let fid = signature.mor_app_func_for_type(ct.typ)?;
-    let (_model_parent, outer_parents) = ct.parents.split_last()?;
-    Some((fid, outer_parents.to_vec()))
+    apps.into_iter().collect()
 }
 
 fn member_model_type(signature: &Signature, ct: &ConcreteType) -> Option<TypeId> {
     signature.type_(ct.typ).parents.last().copied()
 }
 
-fn concrete_type_of_el(
+fn insert_mor_app_candidate(
+    signature: &Signature,
+    mor_models: &BTreeSet<TypeId>,
+    apps: &mut BTreeSet<(FuncId, Vec<ElId>)>,
+    ct: ConcreteType,
+) {
+    let Some(fid) = signature.mor_app_func_for_type(ct.typ) else {
+        return;
+    };
+    if !mor_models.is_empty()
+        && !member_model_type(signature, &ct).is_some_and(|m| mor_models.contains(&m))
+    {
+        return;
+    }
+    let Some((_model_parent, outer_parents)) = ct.parents.split_last() else {
+        return;
+    };
+    apps.insert((fid, outer_parents.to_vec()));
+}
+
+fn concrete_types_of_el(
     rule: &RuleStructures,
     current: StructureId,
     el: ElId,
-) -> Option<ConcreteType> {
-    let structure = &rule.cat.structures[current.0];
-    let root = structure.unification.root_const(el);
-    let mut ct = structure.els.get(&root)?.clone()?;
-    for parent in &mut ct.parents {
-        *parent = structure.unification.root_const(*parent);
-    }
-    Some(ct)
+) -> Vec<ConcreteType> {
+    rule.cat.structures[current.0].concrete_types_of(el)
 }
 
 fn expected_or_fresh(
@@ -868,8 +884,32 @@ fn emit_known_app(
     }
 }
 
-/// Resolves `func` and, on success, ensures the corresponding [`FuncApp`]
-/// is recorded in the current structure. `expected` is the result el the
+fn emit_known_apps(
+    candidates: Vec<(FuncId, Vec<ElId>)>,
+    arg_els: Vec<ElId>,
+    expected: Option<ElId>,
+    current: StructureId,
+    rule: &mut RuleStructures,
+) -> Option<(ElId, bool)> {
+    if candidates.is_empty() {
+        return None;
+    }
+
+    let mut result = expected;
+    let mut changed = false;
+    for (func_id, parents) in candidates {
+        let (el, c) = emit_known_app(func_id, parents, arg_els.clone(), result, current, rule);
+        changed |= c;
+        if result.is_none() {
+            result = Some(el);
+        }
+    }
+
+    result.map(|el| (el, changed))
+}
+
+/// Resolves `func` and, on success, ensures the corresponding [`FuncApp`]s
+/// are recorded in the current structure. `expected` is the result el the
 /// caller has previously committed for this term, if any (from
 /// `semantic_els`). When provided it is reused, possibly with an `equate`
 /// against an existing entry; otherwise a fresh el is allocated. On
@@ -894,21 +934,7 @@ fn emit_app(
     let (resolved, mut changed) =
         resolve_func_expr(func, current, rule, ast, scopes, signature, errors);
 
-    let Some((func_id, parents)) = resolved else {
-        let structure = &mut rule.cat.structures[current.0];
-        return match expected {
-            Some(el) => (el, changed),
-            None => (structure.push_el(), true),
-        };
-    };
-
-    let func_data = signature.func(func_id);
-    if arg_els.len() != func_data.domain.len() {
-        errors.push(CompileError::FunctionArgumentNumber {
-            expected: func_data.domain.len(),
-            got: arg_els.len(),
-            location: ast.loc(app),
-        });
+    if resolved.is_empty() {
         let structure = &mut rule.cat.structures[current.0];
         return match expected {
             Some(el) => (el, changed),
@@ -916,50 +942,37 @@ fn emit_app(
         };
     }
 
-    let structure = &mut rule.cat.structures[current.0];
-
-    let parents: Vec<ElId> = parents
-        .into_iter()
-        .map(|e| structure.unification.root(e))
-        .collect();
-    let canonical_args: Vec<ElId> = arg_els
-        .iter()
-        .map(|e| structure.unification.root(*e))
-        .collect();
-    let app_key = FuncApp {
-        func: func_id,
-        parents,
-        args: canonical_args,
-    };
-
-    let result_id = match structure.func_apps.get(&app_key).copied() {
-        Some(existing) => match expected {
-            Some(exp) => {
-                if exp != existing {
-                    changed |= structure.equate(exp, existing);
-                }
-                exp
-            }
-            None => existing,
-        },
-        None => {
-            let id = match expected {
-                Some(el) => el,
-                None => structure.push_el(),
-            };
-            structure.func_apps.insert(app_key, id);
-            // Allocating an el or inserting a new func_app entry is
-            // always observable change.
-            changed = true;
-            id
+    let mut result = expected;
+    for (func_id, parents) in resolved {
+        let func_data = signature.func(func_id);
+        if arg_els.len() != func_data.domain.len() {
+            errors.push(CompileError::FunctionArgumentNumber {
+                expected: func_data.domain.len(),
+                got: arg_els.len(),
+                location: ast.loc(app),
+            });
+            continue;
         }
-    };
-    (result_id, changed)
+
+        let (el, c) = emit_known_app(func_id, parents, arg_els.clone(), result, current, rule);
+        changed |= c;
+        if result.is_none() {
+            result = Some(el);
+        }
+    }
+
+    match result {
+        Some(el) => (el, changed),
+        None => {
+            let structure = &mut rule.cat.structures[current.0];
+            (structure.push_el(), true)
+        }
+    }
 }
 
 /// Like [`resolve_pred_expr`] but for [`FuncExpr`]. Member ctors are
-/// accepted alongside member funcs; the resulting [`FuncId`] either way
-/// is what the [`FuncApp`] should reference.
+/// accepted alongside member funcs; each resulting [`FuncId`] is emitted as
+/// a [`FuncApp`] candidate.
 fn resolve_func_expr(
     func: FuncExprId,
     current: StructureId,
@@ -968,7 +981,7 @@ fn resolve_func_expr(
     scopes: &Scopes,
     signature: &Signature,
     errors: &mut Vec<CompileError>,
-) -> (Option<(FuncId, Vec<ElId>)>, bool) {
+) -> (Vec<(FuncId, Vec<ElId>)>, bool) {
     match *ast.func_expr(func) {
         FuncExpr::Ambient(aid) => {
             let scope = scopes.entry(aid);
@@ -978,11 +991,13 @@ fn resolve_func_expr(
                 Some(Symbol::Ctor(cd)) => signature.func_for_ctor_decl(cd),
                 _ => None,
             };
-            let resolved = func_id.map(|fid| {
-                let parents =
-                    rule.cat.structures[current.0].ambient_parents(&signature.func(fid).parents);
-                (fid, parents)
-            });
+            let resolved = func_id
+                .map(|fid| {
+                    let parents = rule.cat.structures[current.0]
+                        .ambient_parents(&signature.func(fid).parents);
+                    vec![(fid, parents)]
+                })
+                .unwrap_or_default();
             (resolved, false)
         }
         FuncExpr::Member(mid) => {
@@ -992,49 +1007,56 @@ fn resolve_func_expr(
             } = ast.member_func_expr(mid).clone();
             let (parent_el, changed) =
                 walk_term(parent_term, current, rule, ast, scopes, signature, errors);
-            let resolved = member_scope_and_parents(rule, current, parent_el, scopes, signature)
-                .and_then(|(body, parents)| {
+            let resolved = member_scopes_and_parents(rule, current, parent_el, scopes, signature)
+                .into_iter()
+                .filter_map(|(body, parents)| {
                     let fid = match body.symbols.get(&name).copied()? {
                         Symbol::Func(fd) => signature.func_for_func_decl(fd)?,
                         Symbol::Ctor(cd) => signature.func_for_ctor_decl(cd)?,
                         _ => return None,
                     };
                     Some((fid, parents))
-                });
+                })
+                .collect();
             (resolved, changed)
         }
     }
 }
 
-/// Looks up `parent_el`'s [`ConcreteType`], resolves it to a model body
-/// scope and builds the parent el chain to emit on a member [`PredApp`]
-/// or [`FuncApp`]. The chain is the parent el's [`ConcreteType`] parents
-/// with the parent el itself appended, matching the signature's
-/// enclosing-models chain for any pred/func declared inside that model.
+/// Looks up every model [`ConcreteType`] on `parent_el`, resolves each to a
+/// model body scope, and builds the parent el chain to emit on a member
+/// [`PredApp`] or [`FuncApp`]. Each chain is the parent el's
+/// [`ConcreteType`] parents with the parent el itself appended, matching
+/// the signature's enclosing-models chain for any pred/func declared inside
+/// that model.
 ///
-/// Returns `None` when `parent_el`'s type is not yet known, or is not a
+/// Returns no entries when `parent_el`'s type is not yet known, or is not a
 /// model type. Member resolution failures further down (the model has
 /// no symbol of that name, or the symbol is the wrong kind) are the
 /// caller's job to report by inspecting the returned [`Scope`].
-fn member_scope_and_parents<'a>(
+fn member_scopes_and_parents<'a>(
     rule: &RuleStructures,
     current: StructureId,
     parent_el: ElId,
     scopes: &'a Scopes,
     signature: &Signature,
-) -> Option<(&'a Scope, Vec<ElId>)> {
+) -> Vec<(&'a Scope, Vec<ElId>)> {
     let structure = &rule.cat.structures[current.0];
-    let root = structure.unification.root_const(parent_el);
-    let ct = structure.els.get(&root)?.clone()?;
-    let model_decl = signature.model_decl_for_type(ct.typ)?;
-    let body_scope = scopes.unordered(model_decl);
-    let mut parents = ct.parents;
-    parents.push(parent_el);
-    Some((scopes.scope(body_scope), parents))
+    structure
+        .concrete_types_of(parent_el)
+        .into_iter()
+        .filter_map(|ct| {
+            let model_decl = signature.model_decl_for_type(ct.typ)?;
+            let body_scope = scopes.unordered(model_decl);
+            let mut parents = ct.parents;
+            parents.push(parent_el);
+            Some((scopes.scope(body_scope), parents))
+        })
+        .collect()
 }
 
 /// Resolves a [`TypeExprId`] in a var-if-atom annotation position to the
-/// [`ConcreteType`] it imposes on the annotated el. Returns `None` when
+/// [`ConcreteType`]s it imposes on the annotated el. Returns no entries when
 /// resolution fails or, for a member type, when the parent's type is
 /// not yet known. The bool reports whether walking the parent term
 /// produced an allocation.
@@ -1046,7 +1068,7 @@ fn walk_var_type_expr(
     scopes: &Scopes,
     signature: &Signature,
     errors: &mut Vec<CompileError>,
-) -> (Option<ConcreteType>, bool) {
+) -> (Vec<ConcreteType>, bool) {
     let scope: ScopeId = scopes.entry(type_expr);
     match *ast.type_expr(type_expr) {
         TypeExpr::Ambient(id) => {
@@ -1058,7 +1080,12 @@ fn walk_var_type_expr(
                 _ => None,
             };
             let structure = &rule.cat.structures[current.0];
-            (concrete_type_for(signature, tid, structure), false)
+            (
+                concrete_type_for(signature, tid, structure)
+                    .into_iter()
+                    .collect(),
+                false,
+            )
         }
         TypeExpr::Mor(id) => {
             let name = &ast.mor_type_expr(id).name;
@@ -1067,7 +1094,12 @@ fn walk_var_type_expr(
                 _ => None,
             };
             let structure = &rule.cat.structures[current.0];
-            (concrete_type_for(signature, tid, structure), false)
+            (
+                concrete_type_for(signature, tid, structure)
+                    .into_iter()
+                    .collect(),
+                false,
+            )
         }
         TypeExpr::Member(mid) => {
             let MemberTypeExpr {
@@ -1076,8 +1108,9 @@ fn walk_var_type_expr(
             } = ast.member_type_expr(mid).clone();
             let (parent_el, changed) =
                 walk_term(parent_term, current, rule, ast, scopes, signature, errors);
-            let resolved = member_scope_and_parents(rule, current, parent_el, scopes, signature)
-                .and_then(|(body, parents)| {
+            let resolved = member_scopes_and_parents(rule, current, parent_el, scopes, signature)
+                .into_iter()
+                .filter_map(|(body, parents)| {
                     let tid = match body.symbols.get(&name).copied()? {
                         Symbol::Type(td) => signature.type_for_type_decl(td),
                         Symbol::Enum(ed) => signature.type_for_enum_decl(ed),
@@ -1085,7 +1118,8 @@ fn walk_var_type_expr(
                         _ => return None,
                     };
                     Some(ConcreteType { typ: tid, parents })
-                });
+                })
+                .collect();
             (resolved, changed)
         }
     }
@@ -1116,12 +1150,12 @@ fn ensure_ambient_els(init: &mut Structure, enclosing_models: &[TypeId]) -> bool
     let mut parents: Vec<ElId> = Vec::new();
     for &model_tid in enclosing_models {
         let el_id = init.push_el();
-        init.els.insert(
+        init.insert_concrete_type_fact(
             el_id,
-            Some(ConcreteType {
+            ConcreteType {
                 typ: model_tid,
                 parents: parents.clone(),
-            }),
+            },
         );
         init.ambient_model_els.insert(model_tid, el_id);
         parents.push(el_id);
