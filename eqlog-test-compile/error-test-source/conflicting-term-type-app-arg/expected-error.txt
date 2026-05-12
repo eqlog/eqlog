@@ -4,5 +4,5 @@ Error: term has conflicting types:
 8 |     if bar(foo()) = x;
   |            ^^^^^      
   | 
-- Could be B
 - Could be A
+- Could be B
