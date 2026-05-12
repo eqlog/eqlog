@@ -118,38 +118,6 @@ pub fn iter_enum_ctors_not_surjective_errors<'a>(
         })
 }
 
-pub fn iter_non_morphism_applied_as_morphism_errors<'a>(
-    eqlog: &'a Eqlog,
-    _identifiers: &'a BTreeMap<Ident, String>,
-    locations: &'a BTreeMap<Loc, Location>,
-) -> impl 'a + Iterator<Item = CompileError> {
-    eqlog.iter_should_be_mor_el().filter_map(|(el, loc)| {
-        if !eqlog.is_mor_el(el) {
-            let location = *locations.get(&loc).unwrap();
-            Some(CompileError::NonMorphismAppliedAsMorphism { location })
-        } else {
-            None
-        }
-    })
-}
-
-pub fn iter_morphism_applied_to_non_member_errors<'a>(
-    eqlog: &'a Eqlog,
-    _identifiers: &'a BTreeMap<Ident, String>,
-    locations: &'a BTreeMap<Loc, Location>,
-) -> impl 'a + Iterator<Item = CompileError> {
-    eqlog
-        .iter_should_be_member_element()
-        .filter_map(|(el, model_type, loc)| {
-            if !eqlog.is_member_element(el, model_type) {
-                let location = *locations.get(&loc).unwrap();
-                Some(CompileError::MorphismAppliedToNonMember { location })
-            } else {
-                None
-            }
-        })
-}
-
 pub fn check_eqlog(
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
@@ -158,16 +126,6 @@ pub fn check_eqlog(
     let first_error: Option<CompileError> = iter::empty()
         .chain(iter_symbol_lookup_errors(eqlog, identifiers, locations))
         .chain(iter_enum_ctors_not_surjective_errors(
-            eqlog,
-            identifiers,
-            locations,
-        ))
-        .chain(iter_non_morphism_applied_as_morphism_errors(
-            eqlog,
-            identifiers,
-            locations,
-        ))
-        .chain(iter_morphism_applied_to_non_member_errors(
             eqlog,
             identifiers,
             locations,
