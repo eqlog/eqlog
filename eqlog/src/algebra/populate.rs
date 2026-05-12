@@ -772,13 +772,7 @@ fn concrete_type_of_el(
     current: StructureId,
     el: ElId,
 ) -> Option<ConcreteType> {
-    let structure = &rule.cat.structures[current.0];
-    let root = structure.unification.root_const(el);
-    let mut ct = structure.els.get(&root)?.clone()?;
-    for parent in &mut ct.parents {
-        *parent = structure.unification.root_const(*parent);
-    }
-    Some(ct)
+    rule.cat.structures[current.0].concrete_type_of(el)
 }
 
 fn expected_or_fresh(
@@ -991,8 +985,7 @@ fn member_scope_and_parents<'a>(
     signature: &Signature,
 ) -> Option<(&'a Scope, Vec<ElId>)> {
     let structure = &rule.cat.structures[current.0];
-    let root = structure.unification.root_const(parent_el);
-    let ct = structure.els.get(&root)?.clone()?;
+    let ct = structure.concrete_type_of(parent_el)?;
     let model_decl = signature.model_decl_for_type(ct.typ)?;
     let body_scope = scopes.unordered(model_decl);
     let mut parents = ct.parents;
@@ -1083,12 +1076,12 @@ fn ensure_ambient_els(init: &mut Structure, enclosing_models: &[TypeId]) -> bool
     let mut parents: Vec<ElId> = Vec::new();
     for &model_tid in enclosing_models {
         let el_id = init.push_el();
-        init.els.insert(
+        init.insert_concrete_type_fact(
             el_id,
-            Some(ConcreteType {
+            ConcreteType {
                 typ: model_tid,
                 parents: parents.clone(),
-            }),
+            },
         );
         init.ambient_model_els.insert(model_tid, el_id);
         parents.push(el_id);

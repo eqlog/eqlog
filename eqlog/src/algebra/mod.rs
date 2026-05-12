@@ -18,9 +18,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::algebra::match_check::check_rule_matches;
 use crate::algebra::populate::{walk_rule, MorphismKind, RuleStructures};
 use crate::algebra::signature::{Signature, TypeId};
-use crate::algebra::structure::{
-    ConcreteType, ElId, Structure, StructureId, TypeConflict, TypeConflictOrigin,
-};
+use crate::algebra::structure::{ConcreteType, ElId, Structure, StructureId, TypeConflict};
 use crate::ast::*;
 use crate::error::CompileError;
 use crate::grammar_util::Location;
@@ -216,10 +214,9 @@ fn conflict_to_error(
     sid: StructureId,
     conflict: TypeConflict,
 ) -> CompileError {
-    let TypeConflict { el, a, b, origin } = conflict;
+    let TypeConflict { el, a, b } = conflict;
     let structure = &rule.cat.structures[sid.0];
-    let use_earliest_term = origin == TypeConflictOrigin::Equality
-        || (a.typ != b.typ && has_multiple_var_names_in_class(structure, el));
+    let use_earliest_term = a.typ != b.typ && has_multiple_var_names_in_class(structure, el);
     let term_id = if use_earliest_term {
         find_earliest_term(ast, rule, sid, el)
     } else {

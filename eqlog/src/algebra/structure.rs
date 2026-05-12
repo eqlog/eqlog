@@ -4,9 +4,9 @@
 //! A [`Structure`] over a [`crate::algebra::signature::Signature`] records
 //! the elements ([`ElId`]), function applications ([`FuncApp`]) and
 //! predicate applications ([`PredApp`]) that exist at a given point in a
-//! rule. Elements either have a known [`ConcreteType`] (a non-optional
-//! [`TypeId`] together with the element's parent model els) or none at
-//! all, and equality between elements is tracked by an embedded
+//! rule. Elements carry all known [`ConcreteType`] facts (a non-optional
+//! [`TypeId`] together with the element's parent model els), and equality
+//! between elements is tracked by an embedded
 //! [`eqlog_runtime::Unification`]. Function and predicate applications
 //! are plain data, keyed by their own contents, so two calls with
 //! identical parents and arguments collapse naturally.
@@ -60,7 +60,7 @@ impl From<ElId> for u32 {
 /// the parent-model elements the type depends on. Parents are outermost first
 /// and have the same length as `signature.type_(typ).parents` in a well-formed
 /// program.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ConcreteType {
     pub typ: TypeId,
     pub parents: Vec<ElId>,
@@ -82,10 +82,14 @@ pub struct FuncApp {
 
 #[derive(Clone, Debug)]
 pub struct Structure {
-    /// Live elements, keyed by [`ElId`]. `None` means the element's type
-    /// has not been determined yet. After [`Structure::close`] only
+    /// Live elements, keyed by [`ElId`]. An empty set means the element's
+    /// type has not been determined yet. After [`Structure::close`] only
     /// equivalence class roots remain as keys.
-    pub els: BTreeMap<ElId, Option<ConcreteType>>,
+    pub els: BTreeMap<ElId, BTreeSet<ConcreteType>>,
+    /// Insertion order for concrete type facts. `els` is the semantic
+    /// source of truth; this only preserves stable diagnostic ordering,
+    /// mirroring relation iteration in the Eqlog implementation.
+    type_order: Vec<(ElId, ConcreteType)>,
     pub pred_apps: BTreeSet<PredApp>,
     pub func_apps: BTreeMap<FuncApp, ElId>,
     /// Variable bindings that have entered scope in this structure, keyed
@@ -110,31 +114,13 @@ pub struct Structure {
     /// Pending [`Structure::impose_type`] assertions. Persists across
     /// `close` calls; canonicalised alongside `els`.
     pub(super) pending_type_impositions: Vec<(ElId, ConcreteType)>,
-    /// Parent disagreements observed in an earlier close cycle. They are
-    /// rechecked on later cycles because a later equality can still make
-    /// the parent lists agree.
-    deferred_parent_checks: Vec<DeferredParentCheck>,
-}
-
-/// A parent-disagreement observation queued by
-/// [`Structure::drain_equalities`] or [`Structure::impose_concrete_type`]
-/// for re-evaluation once no further equates can fire. The two
-/// [`ConcreteType`]s share a [`TypeId`] — only the parent lists are in
-/// question. `el` is the equivalence-class root they were assigned to
-/// at observation time; later resolution canonicalises through the
-/// unification's current root.
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct DeferredParentCheck {
-    el: ElId,
-    a: ConcreteType,
-    b: ConcreteType,
-    origin: TypeConflictOrigin,
 }
 
 impl Default for Structure {
     fn default() -> Self {
         Self {
             els: BTreeMap::new(),
+            type_order: Vec::new(),
             pred_apps: BTreeSet::new(),
             func_apps: BTreeMap::new(),
             var_els: BTreeMap::new(),
@@ -142,18 +128,8 @@ impl Default for Structure {
             unification: Unification::new(),
             pending_equalities: Vec::new(),
             pending_type_impositions: Vec::new(),
-            deferred_parent_checks: Vec::new(),
         }
     }
-}
-
-/// How a type conflict was first observed. Callers use this to tune
-/// source attribution without losing the existing/new type ordering of
-/// ordinary impositions.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum TypeConflictOrigin {
-    Equality,
-    Imposition,
 }
 
 /// A type disagreement discovered during [`Structure::close`]: two
@@ -176,17 +152,16 @@ pub struct TypeConflict {
     pub el: ElId,
     pub a: ConcreteType,
     pub b: ConcreteType,
-    pub origin: TypeConflictOrigin,
 }
 
 impl Structure {
     /// Allocates a fresh [`ElId`], registers it with the unification and
-    /// records it in `els` with no concrete type yet. Callers that know a
-    /// type up front write it into `els` after the call.
+    /// records it in `els` with no concrete type facts yet. Callers that
+    /// know a type up front record it after the call.
     pub fn push_el(&mut self) -> ElId {
         let id = ElId(self.unification.len());
         self.unification.increase_size_to(id.0 + 1);
-        self.els.insert(id, None);
+        self.els.insert(id, BTreeSet::new());
         id
     }
 
@@ -251,135 +226,65 @@ impl Structure {
     /// driving an outer populate/close fixed point can stop when both
     /// report no change.
     pub fn close(&mut self, signature: &Signature) -> (bool, Vec<TypeConflict>) {
-        let mut conflicts = Vec::new();
-        let mut parent_checks: Vec<DeferredParentCheck> =
-            mem::take(&mut self.deferred_parent_checks);
         let mut changed = false;
         loop {
-            let drained = self.drain_equalities(&mut conflicts, &mut parent_checks);
+            let drained = self.drain_equalities();
             let func_changed = self.functionality();
-            let type_changed = self.typing(signature, &mut conflicts, &mut parent_checks);
-            let mor_app_changed =
-                self.morphism_app_constraints(signature, &mut conflicts, &mut parent_checks);
+            let type_changed = self.typing(signature);
+            let mor_app_changed = self.morphism_app_constraints(signature);
             if !drained && !func_changed && !type_changed && !mor_app_changed {
                 break;
             }
             changed = true;
         }
         // Apply pending type impositions after the equality/functionality/
-        // typing fixed point has settled. This puts any inferred type into
-        // the `existing` slot of `impose_concrete_type`, so a conflict with
-        // an annotation surfaces as `a = inferred, b = annotated`.
-        changed |= self.apply_pending_type_impositions(&mut conflicts, &mut parent_checks);
-        self.resolve_parent_checks(parent_checks, &mut conflicts);
+        // typing fixed point has settled. This preserves the diagnostic
+        // order where inferred facts precede annotation facts for the same
+        // element.
+        changed |= self.apply_pending_type_impositions();
         self.canonicalise_refs();
+        let conflicts = self.type_conflicts();
         (changed, conflicts)
     }
 
     /// Imposes every `(el, ct)` queued via [`Structure::impose_type`] on the
-    /// corresponding equivalence class, accumulating any
-    /// [`TypeConflict`]s and parent-disagreement deferrals. The queue is
+    /// corresponding equivalence class. The queue is
     /// not drained: the same impositions are reapplied on every `close`
     /// so a conflict that materialises only after a later equate still
     /// surfaces. Returns true iff any imposition recorded a fresh
     /// concrete type.
-    fn apply_pending_type_impositions(
-        &mut self,
-        conflicts: &mut Vec<TypeConflict>,
-        parent_checks: &mut Vec<DeferredParentCheck>,
-    ) -> bool {
+    fn apply_pending_type_impositions(&mut self) -> bool {
         let impositions = self.pending_type_impositions.clone();
         let mut changed = false;
         for (el, ct) in impositions {
-            if self.impose_concrete_type(el, ct, conflicts, parent_checks) {
+            if self.impose_concrete_type(el, ct) {
                 changed = true;
             }
         }
         changed
     }
 
-    /// Walks `parent_checks`. For each entry that still has a parent
-    /// disagreement under the unification's current state, pushes a
-    /// [`TypeConflict`]. Entries whose parents have since been put into
-    /// the same class are silently discarded.
-    fn resolve_parent_checks(
-        &mut self,
-        parent_checks: Vec<DeferredParentCheck>,
-        conflicts: &mut Vec<TypeConflict>,
-    ) {
-        let mut unresolved = Vec::new();
-        for check in parent_checks {
-            let check = self.canonical_parent_check(check);
-            if !parents_match(&self.unification, &check.a.parents, &check.b.parents)
-                && !unresolved.contains(&check)
-            {
-                conflicts.push(TypeConflict {
-                    el: check.el,
-                    a: check.a.clone(),
-                    b: check.b.clone(),
-                    origin: check.origin,
-                });
-                unresolved.push(check);
-            }
-        }
-        self.deferred_parent_checks = unresolved;
-    }
-
     /// Drains `pending_equalities` down to empty, performing the union
-    /// and merging `els` entries for each pair. Records a
-    /// [`TypeConflict`] when the merged entries disagree on [`TypeId`].
-    /// Parent disagreements are queued on `parent_checks` for
-    /// re-evaluation after the close fixed point converges, since a
-    /// still-pending equate may yet put the disagreeing parents into the
-    /// same class. Returns true iff at least one class merge happened.
-    fn drain_equalities(
-        &mut self,
-        conflicts: &mut Vec<TypeConflict>,
-        parent_checks: &mut Vec<DeferredParentCheck>,
-    ) -> bool {
+    /// and merging `els` type fact sets for each pair. Returns true iff at
+    /// least one class merge happened.
+    fn drain_equalities(&mut self) -> bool {
         let mut changed = false;
         while let Some((a, b)) = self.pending_equalities.pop() {
-            let lhs = self.root(a);
-            let rhs = self.root(b);
-            if lhs == rhs {
+            let a = self.root(a);
+            let b = self.root(b);
+            if a == b {
                 continue;
             }
             changed = true;
 
             // Deterministic winner: smaller id stays root.
-            let (keep, drop) = if lhs.0 <= rhs.0 {
-                (lhs, rhs)
-            } else {
-                (rhs, lhs)
-            };
-            let lhs_ct = self.els.get(&lhs).cloned().flatten();
-            let rhs_ct = self.els.get(&rhs).cloned().flatten();
+            let (keep, drop) = if a.0 <= b.0 { (a, b) } else { (b, a) };
             self.unification.union_roots_into(drop, keep);
 
-            self.els.remove(&drop);
-            self.els.remove(&keep);
-            let merged = match (lhs_ct, rhs_ct) {
-                (None, None) => None,
-                (Some(x), None) | (None, Some(x)) => Some(x),
-                (Some(lhs_ct), Some(rhs_ct)) => {
-                    if lhs_ct.typ != rhs_ct.typ {
-                        conflicts.push(TypeConflict {
-                            el: keep,
-                            a: lhs_ct.clone(),
-                            b: rhs_ct,
-                            origin: TypeConflictOrigin::Equality,
-                        });
-                    } else if !parents_match(&self.unification, &lhs_ct.parents, &rhs_ct.parents) {
-                        parent_checks.push(DeferredParentCheck {
-                            el: keep,
-                            a: lhs_ct.clone(),
-                            b: rhs_ct,
-                            origin: TypeConflictOrigin::Equality,
-                        });
-                    }
-                    Some(lhs_ct)
-                }
-            };
+            let mut merged = self.els.remove(&keep).unwrap_or_default();
+            if let Some(drop_cts) = self.els.remove(&drop) {
+                merged.extend(drop_cts);
+            }
             self.els.insert(keep, merged);
         }
         changed
@@ -418,15 +323,10 @@ impl Structure {
 
     /// Walks each func/pred application and propagates the type the
     /// signature demands for every argument (and for the result of a func).
-    /// Domain types are imposed before codomain types so a conflicting
-    /// el attributes the codomain as the new arrival. Returns true iff a
-    /// fresh concrete type got recorded.
-    fn typing(
-        &mut self,
-        signature: &Signature,
-        conflicts: &mut Vec<TypeConflict>,
-        parent_checks: &mut Vec<DeferredParentCheck>,
-    ) -> bool {
+    /// Domain types are recorded before codomain types so diagnostics keep
+    /// the same order as the Eqlog relation facts. Returns true iff a fresh
+    /// concrete type fact got recorded.
+    fn typing(&mut self, signature: &Signature) -> bool {
         let mut changed = false;
 
         let apps: Vec<(FuncApp, ElId)> = self
@@ -437,7 +337,7 @@ impl Structure {
         for (app, _result) in &apps {
             for (i, &arg) in app.args.iter().enumerate() {
                 if let Some(ct) = func_domain_type_at(signature, app, i) {
-                    if self.impose_concrete_type(arg, ct, conflicts, parent_checks) {
+                    if self.impose_concrete_type(arg, ct) {
                         changed = true;
                     }
                 }
@@ -452,7 +352,7 @@ impl Structure {
                     break;
                 };
                 if let Some(ct) = concrete_type_at(signature, arity_tid, &app.parents) {
-                    if self.impose_concrete_type(arg, ct, conflicts, parent_checks) {
+                    if self.impose_concrete_type(arg, ct) {
                         changed = true;
                     }
                 }
@@ -461,7 +361,7 @@ impl Structure {
 
         for (app, result) in apps {
             if let Some(ct) = func_codomain_type_at(signature, &app) {
-                if self.impose_concrete_type(result, ct, conflicts, parent_checks) {
+                if self.impose_concrete_type(result, ct) {
                     changed = true;
                 }
             }
@@ -478,12 +378,7 @@ impl Structure {
     /// - if `x : d.T`, record `dom(f) = d`;
     /// - if `mor_app<T>(f, x) : c.T`, record `cod(f) = c`;
     /// - if either projection is known, impose the corresponding member type.
-    fn morphism_app_constraints(
-        &mut self,
-        signature: &Signature,
-        conflicts: &mut Vec<TypeConflict>,
-        parent_checks: &mut Vec<DeferredParentCheck>,
-    ) -> bool {
+    fn morphism_app_constraints(&mut self, signature: &Signature) -> bool {
         let apps: Vec<(FuncApp, ElId)> = self
             .func_apps
             .iter()
@@ -537,8 +432,6 @@ impl Structure {
                         typ: member_tid,
                         parents,
                     },
-                    conflicts,
-                    parent_checks,
                 ) {
                     changed = true;
                 }
@@ -553,8 +446,6 @@ impl Structure {
                         typ: member_tid,
                         parents,
                     },
-                    conflicts,
-                    parent_checks,
                 ) {
                     changed = true;
                 }
@@ -567,21 +458,40 @@ impl Structure {
     /// Returns the innermost parent of `el` when it already has type
     /// `member_tid`.
     fn member_parent_from_type(&self, el: ElId, member_tid: TypeId) -> Option<ElId> {
-        let ct = self.concrete_type_of(el)?;
-        if ct.typ != member_tid {
-            return None;
-        }
-        let member_parent = *ct.parents.last()?;
-        Some(self.root(member_parent))
+        self.concrete_types_of(el)
+            .into_iter()
+            .find(|ct| ct.typ == member_tid)
+            .and_then(|ct| ct.parents.last().copied())
+            .map(|parent| self.root(parent))
     }
 
-    fn concrete_type_of(&self, el: ElId) -> Option<ConcreteType> {
+    pub(super) fn concrete_type_of(&self, el: ElId) -> Option<ConcreteType> {
+        self.concrete_types_of(el).into_iter().next()
+    }
+
+    fn concrete_types_of(&self, el: ElId) -> Vec<ConcreteType> {
         let root = self.root(el);
-        let mut ct = self.els.get(&root)?.clone()?;
-        for parent in &mut ct.parents {
-            *parent = self.root(*parent);
+        let mut seen = BTreeSet::new();
+        let mut ordered: Vec<ConcreteType> = self
+            .type_order
+            .iter()
+            .filter_map(|(typed_el, ct)| {
+                if self.root(*typed_el) != root {
+                    return None;
+                }
+                let ct = self.canonical_type(ct.clone());
+                (self.els.get(&root)?.contains(&ct) && seen.insert(ct.clone())).then_some(ct)
+            })
+            .collect();
+        if let Some(cts) = self.els.get(&root) {
+            for ct in cts {
+                let ct = self.canonical_type(ct.clone());
+                if seen.insert(ct.clone()) {
+                    ordered.push(ct);
+                }
+            }
         }
-        Some(ct)
+        ordered
     }
 
     fn insert_func_app_or_equate(&mut self, app: FuncApp, result: ElId) -> bool {
@@ -600,46 +510,20 @@ impl Structure {
         }
     }
 
-    /// Asserts that `el`'s type is `ct`. Records a [`TypeConflict`] when
-    /// the existing entry's [`TypeId`] differs. When the [`TypeId`]s
-    /// match but some parent element falls in a different class than the
-    /// corresponding entry in `ct.parents`, queues a
-    /// [`DeferredParentCheck`] on `parent_checks` for re-evaluation
-    /// after the surrounding fixed point converges, since a still-queued
-    /// equate may yet put the disagreeing parents into the same class.
-    /// Returns true iff a fresh concrete type was recorded.
-    fn impose_concrete_type(
-        &mut self,
-        el: ElId,
-        ct: ConcreteType,
-        conflicts: &mut Vec<TypeConflict>,
-        parent_checks: &mut Vec<DeferredParentCheck>,
-    ) -> bool {
+    /// Asserts that `el` has type `ct`. Returns true iff a fresh concrete
+    /// type fact was recorded.
+    fn impose_concrete_type(&mut self, el: ElId, ct: ConcreteType) -> bool {
         let root = self.root(el);
-        match self.els.get(&root).cloned().flatten() {
-            None => {
-                self.els.insert(root, Some(ct));
-                true
-            }
-            Some(existing) => {
-                if existing.typ != ct.typ {
-                    conflicts.push(TypeConflict {
-                        el: root,
-                        a: existing,
-                        b: ct,
-                        origin: TypeConflictOrigin::Imposition,
-                    });
-                } else if !parents_match(&self.unification, &existing.parents, &ct.parents) {
-                    parent_checks.push(DeferredParentCheck {
-                        el: root,
-                        a: existing,
-                        b: ct,
-                        origin: TypeConflictOrigin::Imposition,
-                    });
-                }
-                false
-            }
+        let ct = self.canonical_type(ct);
+        let inserted = self.els.entry(root).or_default().insert(ct.clone());
+        if inserted {
+            self.type_order.push((root, ct));
         }
+        inserted
+    }
+
+    pub(super) fn insert_concrete_type_fact(&mut self, el: ElId, ct: ConcreteType) -> bool {
+        self.impose_concrete_type(el, ct)
     }
 
     /// Final pass: rewrite every remaining reference (pred app parents and
@@ -660,16 +544,13 @@ impl Structure {
         }
 
         let old_els = mem::take(&mut self.els);
-        for (id, ct) in old_els {
+        for (id, cts) in old_els {
             let root = self.root(id);
             if root != id {
                 continue;
             }
-            let ct = ct.map(|ct| ConcreteType {
-                typ: ct.typ,
-                parents: ct.parents.into_iter().map(|e| self.root(e)).collect(),
-            });
-            self.els.insert(id, ct);
+            let cts = cts.into_iter().map(|ct| self.canonical_type(ct)).collect();
+            self.els.insert(id, cts);
         }
 
         for (el, ct) in self.pending_type_impositions.iter_mut() {
@@ -679,22 +560,50 @@ impl Structure {
             }
         }
 
-        let checks = mem::take(&mut self.deferred_parent_checks);
-        self.deferred_parent_checks = checks
-            .into_iter()
-            .map(|check| self.canonical_parent_check(check))
-            .collect();
+        let order = mem::take(&mut self.type_order);
+        let mut seen = BTreeSet::new();
+        for (el, ct) in order {
+            let el = self.root(el);
+            let ct = self.canonical_type(ct);
+            if self.els.get(&el).is_some_and(|cts| cts.contains(&ct))
+                && seen.insert((el, ct.clone()))
+            {
+                self.type_order.push((el, ct));
+            }
+        }
     }
 
-    fn canonical_parent_check(&self, mut check: DeferredParentCheck) -> DeferredParentCheck {
-        check.el = self.root(check.el);
-        for p in check.a.parents.iter_mut() {
+    fn canonical_type(&self, mut ct: ConcreteType) -> ConcreteType {
+        for p in ct.parents.iter_mut() {
             *p = self.root(*p);
         }
-        for p in check.b.parents.iter_mut() {
-            *p = self.root(*p);
+        ct
+    }
+
+    fn type_conflicts(&self) -> Vec<TypeConflict> {
+        let mut conflicts = Vec::new();
+        for (&el, cts) in &self.els {
+            if cts.len() < 2 {
+                continue;
+            }
+            let ordered = self.concrete_types_of(el);
+            let Some(first) = ordered.first() else {
+                continue;
+            };
+            for ct in ordered.iter().skip(1) {
+                if first.typ != ct.typ
+                    || !parents_match(&self.unification, &first.parents, &ct.parents)
+                {
+                    conflicts.push(TypeConflict {
+                        el,
+                        a: first.clone(),
+                        b: ct.clone(),
+                    });
+                    break;
+                }
+            }
         }
-        check
+        conflicts
     }
 
     fn root(&self, id: ElId) -> ElId {
@@ -824,7 +733,7 @@ impl StructureCat {
                 for c in cs {
                     conflicts.push((id, c));
                 }
-                cycle |= self.push_forward(id, &mut conflicts);
+                cycle |= self.push_forward(id);
             }
 
             for i in (0..n).rev() {
@@ -860,14 +769,10 @@ impl StructureCat {
     /// Pushes shared data from `src` along every outgoing morphism. Returns
     /// true iff at least one morphism observed any logical insertion or
     /// non-trivial equate.
-    fn push_forward(
-        &mut self,
-        src: StructureId,
-        conflicts: &mut Vec<(StructureId, TypeConflict)>,
-    ) -> bool {
+    fn push_forward(&mut self, src: StructureId) -> bool {
         let mut changed = false;
         for tgt in self.outgoing(src) {
-            changed |= self.push_morphism(src, tgt, conflicts);
+            changed |= self.push_morphism(src, tgt);
         }
         changed
     }
@@ -883,12 +788,7 @@ impl StructureCat {
     /// or an equate was enqueued on `tgt` whose pair lives in distinct
     /// equivalence classes. Idempotent re-runs that only re-canonicalise
     /// the morphism's keys and values report false.
-    fn push_morphism(
-        &mut self,
-        src: StructureId,
-        tgt: StructureId,
-        conflicts: &mut Vec<(StructureId, TypeConflict)>,
-    ) -> bool {
+    fn push_morphism(&mut self, src: StructureId, tgt: StructureId) -> bool {
         let StructureCat {
             structures,
             morphisms,
@@ -1010,7 +910,12 @@ impl StructureCat {
         let src_typed_els: Vec<(ElId, ConcreteType)> = src_st
             .els
             .iter()
-            .filter_map(|(&e, ct)| ct.clone().map(|ct| (e, ct)))
+            .flat_map(|(&el, _)| {
+                src_st
+                    .concrete_types_of(el)
+                    .into_iter()
+                    .map(move |ct| (el, ct))
+            })
             .collect();
         for (el, ct) in src_typed_els {
             let mapped_el = image(el);
@@ -1018,18 +923,7 @@ impl StructureCat {
                 typ: ct.typ,
                 parents: ct.parents.iter().copied().map(image).collect(),
             };
-            let mut local_conflicts = Vec::new();
-            let mut local_parent_checks = Vec::new();
-            changed |= tgt_st.impose_concrete_type(
-                mapped_el,
-                mapped_ct,
-                &mut local_conflicts,
-                &mut local_parent_checks,
-            );
-            tgt_st.deferred_parent_checks.extend(local_parent_checks);
-            for c in local_conflicts {
-                conflicts.push((tgt, c));
-            }
+            changed |= tgt_st.impose_concrete_type(mapped_el, mapped_ct);
         }
 
         changed
@@ -1071,57 +965,48 @@ impl StructureCat {
 
         for (&src_el, &tgt_el) in map.iter() {
             let tgt_root = tgt_st.unification.root_const(tgt_el);
-            let Some(Some(ct)) = tgt_st.els.get(&tgt_root) else {
+            let Some(tgt_cts) = tgt_st.els.get(&tgt_root) else {
                 continue;
             };
 
-            let parent_types: Option<Vec<TypeId>> = ct
-                .parents
-                .iter()
-                .map(|p| {
-                    tgt_ambient_by_root
-                        .get(&tgt_st.unification.root_const(*p))
-                        .copied()
-                })
-                .collect();
-            let Some(parent_types) = parent_types else {
-                continue;
-            };
-
-            let new_parents: Option<Vec<ElId>> = parent_types
-                .iter()
-                .map(|t| src_st.ambient_model_els.get(t).copied())
-                .collect();
-            let Some(new_parents) = new_parents else {
-                continue;
-            };
-
-            let new_ct = ConcreteType {
-                typ: ct.typ,
-                parents: new_parents,
-            };
-            match src_st.concrete_type_of(src_el) {
-                None => {
-                    let mut local_conflicts = Vec::new();
-                    let mut local_parent_checks = Vec::new();
-                    changed |= src_st.impose_concrete_type(
-                        src_el,
-                        new_ct,
-                        &mut local_conflicts,
-                        &mut local_parent_checks,
-                    );
-                    debug_assert!(local_conflicts.is_empty());
-                    debug_assert!(local_parent_checks.is_empty());
-                }
-                Some(existing)
-                    if existing.typ == new_ct.typ
-                        && parents_match(
-                            &src_st.unification,
-                            &existing.parents,
-                            &new_ct.parents,
-                        ) => {}
-                Some(_) => {
+            for ct in tgt_cts {
+                let parent_types: Option<Vec<TypeId>> = ct
+                    .parents
+                    .iter()
+                    .map(|p| {
+                        tgt_ambient_by_root
+                            .get(&tgt_st.unification.root_const(*p))
+                            .copied()
+                    })
+                    .collect();
+                let Some(parent_types) = parent_types else {
                     continue;
+                };
+
+                let new_parents: Option<Vec<ElId>> = parent_types
+                    .iter()
+                    .map(|t| src_st.ambient_model_els.get(t).copied())
+                    .collect();
+                let Some(new_parents) = new_parents else {
+                    continue;
+                };
+
+                let new_ct = ConcreteType {
+                    typ: ct.typ,
+                    parents: new_parents,
+                };
+                let existing = src_st.concrete_types_of(src_el);
+                if existing.is_empty()
+                    || existing.iter().any(|existing| {
+                        existing.typ == new_ct.typ
+                            && parents_match(
+                                &src_st.unification,
+                                &existing.parents,
+                                &new_ct.parents,
+                            )
+                    })
+                {
+                    changed |= src_st.impose_concrete_type(src_el, new_ct);
                 }
             }
         }
