@@ -1,4 +1,5 @@
-Store all algebra type facts
+Use structural order for algebra type facts
 
-Mirror the Eqlog semantic machinery by keeping every concrete type fact
-for an element instead of overwriting conflicts with one optional type.
+Remove the insertion-order side table for concrete type facts. Callers
+now handle every concrete type known for an element instead of selecting
+one.

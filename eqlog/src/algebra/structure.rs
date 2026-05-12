@@ -86,10 +86,6 @@ pub struct Structure {
     /// type has not been determined yet. After [`Structure::close`] only
     /// equivalence class roots remain as keys.
     pub els: BTreeMap<ElId, BTreeSet<ConcreteType>>,
-    /// Insertion order for concrete type facts. `els` is the semantic
-    /// source of truth; this only preserves stable diagnostic ordering,
-    /// mirroring relation iteration in the Eqlog implementation.
-    type_order: Vec<(ElId, ConcreteType)>,
     pub pred_apps: BTreeSet<PredApp>,
     pub func_apps: BTreeMap<FuncApp, ElId>,
     /// Variable bindings that have entered scope in this structure, keyed
@@ -120,7 +116,6 @@ impl Default for Structure {
     fn default() -> Self {
         Self {
             els: BTreeMap::new(),
-            type_order: Vec::new(),
             pred_apps: BTreeSet::new(),
             func_apps: BTreeMap::new(),
             var_els: BTreeMap::new(),
@@ -138,9 +133,8 @@ impl Default for Structure {
 /// some parent of `a` falls in a different equivalence class than the
 /// corresponding parent of `b`.
 ///
-/// Parents inside `a` and `b` are not canonicalised; the caller compares
-/// them through the [`Structure`]'s unification when it needs class
-/// identity.
+/// Parents inside `a` and `b` have been canonicalised to their current
+/// roots.
 ///
 /// The caller is responsible for turning this into a user-facing
 /// [`crate::error::CompileError`]; typically it looks up a term in
@@ -238,9 +232,7 @@ impl Structure {
             changed = true;
         }
         // Apply pending type impositions after the equality/functionality/
-        // typing fixed point has settled. This preserves the diagnostic
-        // order where inferred facts precede annotation facts for the same
-        // element.
+        // typing fixed point has settled.
         changed |= self.apply_pending_type_impositions();
         self.canonicalise_refs();
         let conflicts = self.type_conflicts();
@@ -323,9 +315,7 @@ impl Structure {
 
     /// Walks each func/pred application and propagates the type the
     /// signature demands for every argument (and for the result of a func).
-    /// Domain types are recorded before codomain types so diagnostics keep
-    /// the same order as the Eqlog relation facts. Returns true iff a fresh
-    /// concrete type fact got recorded.
+    /// Returns true iff a fresh concrete type fact got recorded.
     fn typing(&mut self, signature: &Signature) -> bool {
         let mut changed = false;
 
@@ -416,10 +406,10 @@ impl Structure {
                 args: vec![mor_el],
             };
 
-            if let Some(domain_el) = self.member_parent_from_type(arg_el, member_tid) {
+            for domain_el in self.member_parents_from_type(arg_el, member_tid) {
                 changed |= self.insert_func_app_or_equate(dom_app.clone(), domain_el);
             }
-            if let Some(codomain_el) = self.member_parent_from_type(result, member_tid) {
+            for codomain_el in self.member_parents_from_type(result, member_tid) {
                 changed |= self.insert_func_app_or_equate(cod_app.clone(), codomain_el);
             }
 
@@ -455,43 +445,29 @@ impl Structure {
         changed
     }
 
-    /// Returns the innermost parent of `el` when it already has type
-    /// `member_tid`.
-    fn member_parent_from_type(&self, el: ElId, member_tid: TypeId) -> Option<ElId> {
+    /// Returns the innermost parents of all concrete types on `el` whose
+    /// underlying type is `member_tid`.
+    fn member_parents_from_type(&self, el: ElId, member_tid: TypeId) -> Vec<ElId> {
         self.concrete_types_of(el)
             .into_iter()
-            .find(|ct| ct.typ == member_tid)
-            .and_then(|ct| ct.parents.last().copied())
+            .filter(|ct| ct.typ == member_tid)
+            .filter_map(|ct| ct.parents.last().copied())
             .map(|parent| self.root(parent))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
     }
 
-    pub(super) fn concrete_type_of(&self, el: ElId) -> Option<ConcreteType> {
-        self.concrete_types_of(el).into_iter().next()
-    }
-
-    fn concrete_types_of(&self, el: ElId) -> Vec<ConcreteType> {
+    pub(super) fn concrete_types_of(&self, el: ElId) -> Vec<ConcreteType> {
         let root = self.root(el);
-        let mut seen = BTreeSet::new();
-        let mut ordered: Vec<ConcreteType> = self
-            .type_order
-            .iter()
-            .filter_map(|(typed_el, ct)| {
-                if self.root(*typed_el) != root {
-                    return None;
-                }
-                let ct = self.canonical_type(ct.clone());
-                (self.els.get(&root)?.contains(&ct) && seen.insert(ct.clone())).then_some(ct)
-            })
-            .collect();
-        if let Some(cts) = self.els.get(&root) {
-            for ct in cts {
-                let ct = self.canonical_type(ct.clone());
-                if seen.insert(ct.clone()) {
-                    ordered.push(ct);
-                }
-            }
-        }
-        ordered
+        self.els
+            .get(&root)
+            .into_iter()
+            .flat_map(|cts| cts.iter().cloned())
+            .map(|ct| self.canonical_type(ct))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
     }
 
     fn insert_func_app_or_equate(&mut self, app: FuncApp, result: ElId) -> bool {
@@ -515,11 +491,7 @@ impl Structure {
     fn impose_concrete_type(&mut self, el: ElId, ct: ConcreteType) -> bool {
         let root = self.root(el);
         let ct = self.canonical_type(ct);
-        let inserted = self.els.entry(root).or_default().insert(ct.clone());
-        if inserted {
-            self.type_order.push((root, ct));
-        }
-        inserted
+        self.els.entry(root).or_default().insert(ct)
     }
 
     pub(super) fn insert_concrete_type_fact(&mut self, el: ElId, ct: ConcreteType) -> bool {
@@ -557,18 +529,6 @@ impl Structure {
             *el = self.unification.root_const(*el);
             for p in ct.parents.iter_mut() {
                 *p = self.unification.root_const(*p);
-            }
-        }
-
-        let order = mem::take(&mut self.type_order);
-        let mut seen = BTreeSet::new();
-        for (el, ct) in order {
-            let el = self.root(el);
-            let ct = self.canonical_type(ct);
-            if self.els.get(&el).is_some_and(|cts| cts.contains(&ct))
-                && seen.insert((el, ct.clone()))
-            {
-                self.type_order.push((el, ct));
             }
         }
     }
