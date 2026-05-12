@@ -137,10 +137,9 @@ impl Default for Structure {
 /// roots.
 ///
 /// The caller is responsible for turning this into a user-facing
-/// [`crate::error::CompileError`]; typically it looks up a term in
-/// [`Structure::semantic_el`] whose element falls in `el`'s class (for
-/// type mismatches) or in a differing parent's class (for parent
-/// mismatches).
+/// [`crate::error::CompileError`]; typically it looks up a source term whose
+/// semantic element falls in `el`'s class (for type mismatches) or in a
+/// differing parent's class (for parent mismatches).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TypeConflict {
     pub el: ElId,

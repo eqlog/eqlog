@@ -1,4 +1,9 @@
-Drop expected-error whitespace churn
+Move type-conflict diagnostics into algebra
 
-Restore source-display formatting and expected-error trailing whitespace
-from upstream, keeping only the semantic diagnostic location changes.
+Store every concrete type fact per algebra element and report conflicts
+only after the structure category reaches its fixed point. Remove the
+Eqlog-side conflicting-type diagnostic.
+
+Resolve member and morphism typing against all known concrete types, use
+structural type-fact order, and anchor conflicts at the earliest
+reachable source term.
