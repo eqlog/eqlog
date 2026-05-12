@@ -1,5 +1,5 @@
-Use structural order for algebra type facts
+Report algebra type conflicts after closure
 
-Remove the insertion-order side table for concrete type facts. Callers
-now handle every concrete type known for an element instead of selecting
-one.
+Collect concrete type conflicts only after the structure category
+reaches its fixed point, so temporary parent disagreements can be
+resolved by later equalities before diagnostics are produced.

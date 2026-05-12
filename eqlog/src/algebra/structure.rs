@@ -160,10 +160,9 @@ impl Structure {
     }
 
     /// Declares that `el` should have concrete type `ct`. Applied at the
-    /// end of [`Structure::close`], after inferred typing has settled, so
-    /// a disagreement surfaces as a [`TypeConflict`] with the inferred
-    /// type in `a` and `ct` in `b`. Returns true iff a fresh entry was
-    /// queued; idempotent on `(el, ct)` already enqueued.
+    /// end of [`Structure::close`], after inferred typing has settled.
+    /// Returns true iff a fresh entry was queued; idempotent on `(el, ct)`
+    /// already enqueued.
     pub fn impose_type(&mut self, el: ElId, mut ct: ConcreteType) -> bool {
         // Canonicalise to the current roots before comparing. Existing
         // entries were canonicalised at the end of the previous `close`,
@@ -213,13 +212,12 @@ impl Structure {
     }
 
     /// Saturates the structure under functionality and signature-imposed
-    /// typing, canonicalises every reference to its class root, and
-    /// returns any [`TypeConflict`]s observed along the way.
+    /// typing, and canonicalises every reference to its class root.
     ///
     /// `changed` is true iff at least one inner pass did work, so callers
     /// driving an outer populate/close fixed point can stop when both
     /// report no change.
-    pub fn close(&mut self, signature: &Signature) -> (bool, Vec<TypeConflict>) {
+    pub fn close(&mut self, signature: &Signature) -> bool {
         let mut changed = false;
         loop {
             let drained = self.drain_equalities();
@@ -235,8 +233,7 @@ impl Structure {
         // typing fixed point has settled.
         changed |= self.apply_pending_type_impositions();
         self.canonicalise_refs();
-        let conflicts = self.type_conflicts();
-        (changed, conflicts)
+        changed
     }
 
     /// Imposes every `(el, ct)` queued via [`Structure::impose_type`] on the
@@ -540,7 +537,7 @@ impl Structure {
         ct
     }
 
-    fn type_conflicts(&self) -> Vec<TypeConflict> {
+    pub(super) fn type_conflicts(&self) -> Vec<TypeConflict> {
         let mut conflicts = Vec::new();
         for (&el, cts) in &self.els {
             if cts.len() < 2 {
@@ -672,14 +669,14 @@ impl StructureCat {
     /// A final canonicalisation rewrites every [`ElMap`]'s keys and values
     /// to their respective roots.
     ///
-    /// Returns `(changed, conflicts)`. `conflicts` is every
-    /// [`TypeConflict`] discovered, tagged with the [`StructureId`] of the
-    /// structure in which it occurred, so callers can attribute diagnostics.
+    /// Returns `(changed, conflicts)`. `conflicts` is collected after the
+    /// category has reached a fixed point, tagged with the [`StructureId`]
+    /// of the structure in which it occurred, so callers can attribute
+    /// diagnostics.
     /// `changed` is true iff at least one cycle observed work, so an
     /// enclosing populate/close fixed point can stop when both report no
     /// change.
     pub fn close(&mut self, signature: &Signature) -> (bool, Vec<(StructureId, TypeConflict)>) {
-        let mut conflicts: Vec<(StructureId, TypeConflict)> = Vec::new();
         let mut changed = false;
         let n = self.structures.len();
 
@@ -688,22 +685,14 @@ impl StructureCat {
 
             for i in 0..n {
                 let id = StructureId(i);
-                let (c_changed, cs) = self.structures[i].close(signature);
-                cycle |= c_changed;
-                for c in cs {
-                    conflicts.push((id, c));
-                }
+                cycle |= self.structures[i].close(signature);
                 cycle |= self.push_forward(id);
             }
 
             for i in (0..n).rev() {
                 let id = StructureId(i);
                 cycle |= self.pull_types_backward(id);
-                let (c_changed, cs) = self.structures[i].close(signature);
-                cycle |= c_changed;
-                for c in cs {
-                    conflicts.push((id, c));
-                }
+                cycle |= self.structures[i].close(signature);
             }
 
             cycle |= self.saturate_under_prods();
@@ -715,7 +704,21 @@ impl StructureCat {
         }
 
         self.canonicalise_morphisms();
+        let conflicts = self.type_conflicts();
         (changed, conflicts)
+    }
+
+    fn type_conflicts(&self) -> Vec<(StructureId, TypeConflict)> {
+        self.structures
+            .iter()
+            .enumerate()
+            .flat_map(|(i, structure)| {
+                structure
+                    .type_conflicts()
+                    .into_iter()
+                    .map(move |conflict| (StructureId(i), conflict))
+            })
+            .collect()
     }
 
     /// Lists every outgoing morphism codomain for `src` in ascending order.
