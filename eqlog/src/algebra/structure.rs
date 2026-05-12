@@ -644,12 +644,12 @@ impl StructureCat {
     ///   - Forward: walk structures in arena order. Close each structure,
     ///     then push its concrete types, `pred_apps`, `func_apps`,
     ///     `var_els` and `ambient_model_els` along every outgoing morphism,
-    ///     canonicalising
-    ///     the [`ElMap`]'s keys under the now-settled domain unification and
-    ///     enqueueing equalities on the codomain when two keys collapse to
-    ///     the same root or when a pushed entry clashes with an existing
-    ///     one in the codomain. The codomain is not re-closed eagerly; it
-    ///     will be closed when its own iteration arrives.
+    ///     canonicalising the [`ElMap`]'s keys under the now-settled domain
+    ///     unification and enqueueing equalities on the codomain when two
+    ///     keys collapse to the same root or when a pushed entry clashes
+    ///     with an existing one in the codomain. The codomain is not
+    ///     re-closed eagerly; it will be closed when its own iteration
+    ///     arrives.
     ///
     ///   - Backward: walk structures in reverse. For each outgoing morphism,
     ///     pull type information from the codomain back into the domain for
