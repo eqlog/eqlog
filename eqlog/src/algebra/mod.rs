@@ -21,6 +21,7 @@ use crate::algebra::signature::{Signature, TypeId};
 use crate::algebra::structure::{ConcreteType, ElId, Structure, StructureId, TypeConflict};
 use crate::ast::*;
 use crate::error::CompileError;
+use crate::grammar_util::Location;
 use crate::scopes::{Scopes, Symbol};
 
 /// One rule declaration together with the chain of model types it is
@@ -169,12 +170,11 @@ fn concrete_type_of_term(
 ) -> Option<ConcreteType> {
     let structure = &rule.cat.structures[sid.0];
     let el = *rule.semantic_els[sid.0].get(&term)?;
-    let root = structure.unification.root_const(el);
-    let mut ct = structure.els.get(&root)?.clone()?;
-    for parent in &mut ct.parents {
-        *parent = structure.unification.root_const(*parent);
-    }
-    Some(ct)
+    let cts = structure.concrete_types_of(el);
+    let [ct] = cts.as_slice() else {
+        return None;
+    };
+    Some(ct.clone())
 }
 
 fn is_ambient_ctor_app_for_enum(
@@ -307,10 +307,9 @@ fn collect_rules(
 }
 
 /// Lowers a [`TypeConflict`] to a [`CompileError::ConflictingTermType`],
-/// anchored on a term whose element shares a class with `conflict.el`
-/// (located via [`find_term`]). Each [`ConcreteType`] renders as
-/// `TypeName` for global types or `parent_name.TypeName` for member
-/// types.
+/// anchored on the earliest reachable term whose element shares a class
+/// with `conflict.el`. Each [`ConcreteType`] renders as `TypeName` for
+/// global types or `parent_name.TypeName` for member types.
 ///
 /// Panics if no term backs `el` in any reachable structure.
 fn conflict_to_error(
@@ -322,7 +321,7 @@ fn conflict_to_error(
 ) -> CompileError {
     let TypeConflict { el, a, b } = conflict;
     let structure = &rule.cat.structures[sid.0];
-    let term_id = find_term(rule, sid, el);
+    let term_id = find_earliest_term(ast, rule, sid, el);
     CompileError::ConflictingTermType {
         types: vec![
             concrete_type_to_string(ast, signature, structure, &a),
@@ -359,17 +358,13 @@ fn concrete_type_to_string(
     format!("{parent_name}.{type_name}")
 }
 
-/// Locates a term whose element shares a class with `target` in the
-/// structure at `sid`. Conflicts can surface in a structure that
-/// received `target` only as a morphism image, so on miss in
-/// `semantic_els[sid]` the search expands through incoming morphisms
-/// to preimages in source structures.
-///
-/// Panics if no reachable structure backs the class with a term.
-fn find_term(rule: &RuleStructures, sid: StructureId, target: ElId) -> TermId {
+/// Locates the earliest source term reachable from `target` by walking
+/// incoming morphisms.
+fn find_earliest_term(ast: &Ast, rule: &RuleStructures, sid: StructureId, target: ElId) -> TermId {
     let start_root = rule.cat.structures[sid.0].unification.root_const(target);
     let mut visited: BTreeSet<(StructureId, ElId)> = BTreeSet::new();
     let mut worklist: Vec<(StructureId, ElId)> = vec![(sid, start_root)];
+    let mut best: Option<(Location, TermId)> = None;
 
     while let Some((s, el_root)) = worklist.pop() {
         if !visited.insert((s, el_root)) {
@@ -377,11 +372,14 @@ fn find_term(rule: &RuleStructures, sid: StructureId, target: ElId) -> TermId {
         }
 
         let s_st = &rule.cat.structures[s.0];
-        if let Some((&term, _)) = rule.semantic_els[s.0]
-            .iter()
-            .find(|(_, &e)| s_st.unification.root_const(e) == el_root)
-        {
-            return term;
+        for (&term, &e) in &rule.semantic_els[s.0] {
+            if s_st.unification.root_const(e) != el_root {
+                continue;
+            }
+            let loc = ast.loc(term);
+            if best.is_none_or(|(best_loc, _)| (loc.1, loc.0) < (best_loc.1, best_loc.0)) {
+                best = Some((loc, term));
+            }
         }
 
         for (&(src, tgt), elmap) in &rule.cat.morphisms {
@@ -399,6 +397,10 @@ fn find_term(rule: &RuleStructures, sid: StructureId, target: ElId) -> TermId {
                 }
             }
         }
+    }
+
+    if let Some((_, term)) = best {
+        return term;
     }
 
     let is_ambient_at_sid = rule.cat.structures[sid.0]
