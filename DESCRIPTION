@@ -2,5 +2,4 @@ Check enum constructors in algebra
 
 Move enum-constructor surjectivity checking for defined then-atoms
 into the Rust-side algebra structure pass, and stop running the old
-Eqlog-side diagnostic iterator. Add a successful compile regression
-for directly constructing enum values in then-defined atoms.
+Eqlog-side diagnostic iterator.
