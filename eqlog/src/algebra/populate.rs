@@ -23,13 +23,6 @@ use crate::ast::*;
 use crate::error::CompileError;
 use crate::scopes::{Scope, ScopeId, Scopes, Symbol};
 
-/// A surface `f@(x)` term evaluated in a particular rule structure.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct MorAppSite {
-    pub mor: TermId,
-    pub arg: TermId,
-}
-
 /// Origin tag for the morphism associated with a statement. Mirrors
 /// `if_morphism`, `surj_then_morphism`, `non_surj_then_morphism` and
 /// `noop_morphism` in `eqlog.eql`. A property of how the morphism arose
@@ -85,10 +78,6 @@ pub struct RuleStructures {
     /// as `branch_block_starts`: an empty case body has no first
     /// statement to anchor the start structure to.
     pub match_case_starts: BTreeMap<MatchCaseId, StructureId>,
-    /// Every `f@(x)` term seen by [`walk_term`], keyed by the structure
-    /// where the application was evaluated and the application term
-    /// itself.
-    pub mor_app_sites: BTreeMap<(StructureId, TermId), MorAppSite>,
 }
 
 impl RuleStructures {
@@ -685,10 +674,6 @@ fn walk_term(
         }
         Term::MorApp(mid) => {
             let MorAppTerm { mor, arg } = *ast.mor_app_term(mid);
-            if let Entry::Vacant(entry) = rule.mor_app_sites.entry((current, term)) {
-                entry.insert(MorAppSite { mor, arg });
-                changed = true;
-            }
             let (mor_el, c1) = walk_term(mor, current, rule, ast, scopes, signature, errors);
             let (arg_el, c2) = walk_term(arg, current, rule, ast, scopes, signature, errors);
             changed |= c1 || c2;

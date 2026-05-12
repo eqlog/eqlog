@@ -80,6 +80,7 @@ pub fn build_structures(
             .collect();
         errors.extend(last_arg_num_errors);
         errors.extend(morphism_application_errors(ast, signature, &rule));
+        errors.extend(undetermined_type_errors(ast, &rule));
         // Only run the surjectivity check when the structures are at a
         // settled, conflict-free state. Type conflicts can leave the
         // morphisms in shapes that would produce noisy false positives.
@@ -106,42 +107,96 @@ fn morphism_application_errors(
     let mut reported_non_mors = BTreeSet::new();
     let mut reported_non_members = BTreeSet::new();
 
-    for (&(sid, _app_term), site) in &rule.mor_app_sites {
-        let Some(mor_types) = concrete_types_of_term(rule, sid, site.mor) else {
-            continue;
-        };
+    for (sid, semantic_els) in rule.semantic_els.iter().enumerate() {
+        let sid = StructureId(sid);
+        for &term in semantic_els.keys() {
+            let Term::MorApp(mor_app) = *ast.term(term) else {
+                continue;
+            };
+            let MorAppTerm { mor, arg } = *ast.mor_app_term(mor_app);
 
-        let mor_models: BTreeSet<TypeId> = mor_types
+            check_morphism_application(
+                ast,
+                signature,
+                rule,
+                sid,
+                mor,
+                arg,
+                &mut reported_non_mors,
+                &mut reported_non_members,
+                &mut errors,
+            );
+        }
+    }
+
+    errors
+}
+
+fn check_morphism_application(
+    ast: &Ast,
+    signature: &Signature,
+    rule: &RuleStructures,
+    sid: StructureId,
+    mor: TermId,
+    arg: TermId,
+    reported_non_mors: &mut BTreeSet<TermId>,
+    reported_non_members: &mut BTreeSet<TermId>,
+    errors: &mut Vec<CompileError>,
+) {
+    let Some(mor_types) = concrete_types_of_term(rule, sid, mor) else {
+        return;
+    };
+
+    let mor_models: BTreeSet<TypeId> = mor_types
+        .iter()
+        .filter_map(|ct| match signature.type_(ct.typ).kind {
+            TypeKind::Mor(model_tid) => Some(model_tid),
+            _ => None,
+        })
+        .collect();
+
+    if mor_models.is_empty() {
+        if reported_non_mors.insert(mor) {
+            errors.push(CompileError::NonMorphismAppliedAsMorphism {
+                location: ast.loc(mor),
+            });
+        }
+        return;
+    }
+
+    let Some(arg_types) = concrete_types_of_term(rule, sid, arg) else {
+        return;
+    };
+    for model_tid in mor_models {
+        let arg_is_member = arg_types
             .iter()
-            .filter_map(|ct| match signature.type_(ct.typ).kind {
-                TypeKind::Mor(model_tid) => Some(model_tid),
-                _ => None,
-            })
-            .collect();
-
-        if mor_models.is_empty() {
-            if reported_non_mors.insert(site.mor) {
-                errors.push(CompileError::NonMorphismAppliedAsMorphism {
-                    location: ast.loc(site.mor),
+            .any(|ct| member_model_type(signature, ct) == Some(model_tid));
+        if !arg_is_member {
+            if reported_non_members.insert(arg) {
+                errors.push(CompileError::MorphismAppliedToNonMember {
+                    location: ast.loc(arg),
                 });
             }
-            continue;
+            break;
         }
+    }
+}
 
-        let Some(arg_types) = concrete_types_of_term(rule, sid, site.arg) else {
-            continue;
-        };
-        for model_tid in mor_models {
-            let arg_is_member = arg_types
-                .iter()
-                .any(|ct| member_model_type(signature, ct) == Some(model_tid));
-            if !arg_is_member {
-                if reported_non_members.insert(site.arg) {
-                    errors.push(CompileError::MorphismAppliedToNonMember {
-                        location: ast.loc(site.arg),
-                    });
-                }
-                break;
+/// Reports every surface term whose semantic element still has no concrete
+/// type after the rule's populate/close fixed point has settled.
+fn undetermined_type_errors(ast: &Ast, rule: &RuleStructures) -> Vec<CompileError> {
+    let mut reported_terms = BTreeSet::new();
+    let mut errors = Vec::new();
+
+    for (sid, semantic_els) in rule.semantic_els.iter().enumerate() {
+        let structure = &rule.cat.structures[sid];
+        for (&term, &el) in semantic_els {
+            let root = structure.unification.root_const(el);
+            let has_type = structure.els.get(&root).is_some_and(|cts| !cts.is_empty());
+            if !has_type && reported_terms.insert(term) {
+                errors.push(CompileError::UndeterminedTermType {
+                    location: ast.loc(term),
+                });
             }
         }
     }
@@ -153,13 +208,13 @@ fn concrete_types_of_term(
     rule: &RuleStructures,
     sid: StructureId,
     term: TermId,
-) -> Option<Vec<ConcreteType>> {
+) -> Option<BTreeSet<ConcreteType>> {
     // Type information is not always materialised in cloned successor
     // structures immediately, so recover types from incoming preimages too.
     let start_structure = &rule.cat.structures[sid.0];
     let start_el = *rule.semantic_els[sid.0].get(&term)?;
     let start_root = start_structure.unification.root_const(start_el);
-    let mut types = Vec::new();
+    let mut types = BTreeSet::new();
 
     let mut visited = BTreeSet::new();
     let mut worklist = vec![(sid, start_root)];
@@ -169,9 +224,7 @@ fn concrete_types_of_term(
         }
 
         let structure = &rule.cat.structures[current_sid.0];
-        for ct in structure.concrete_types_of(root) {
-            push_unique_concrete_type(&mut types, ct);
-        }
+        types.extend(structure.concrete_types_of(root));
 
         for (&(src, tgt), elmap) in &rule.cat.morphisms {
             if tgt != current_sid {
@@ -191,12 +244,6 @@ fn concrete_types_of_term(
     }
 
     (!types.is_empty()).then_some(types)
-}
-
-fn push_unique_concrete_type(types: &mut Vec<ConcreteType>, ct: ConcreteType) {
-    if !types.contains(&ct) {
-        types.push(ct);
-    }
 }
 
 fn member_model_type(signature: &Signature, ct: &ConcreteType) -> Option<TypeId> {
