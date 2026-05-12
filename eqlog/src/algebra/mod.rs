@@ -5,13 +5,14 @@
 //! the AST. [`structure`] holds the per-rule and per-statement structure
 //! data, including the close pass that saturates it under functionality and
 //! signature-imposed typing. [`populate`] walks the AST rule bodies to fill
-//! in each [`RuleStructures`]. Future passes (morphism construction) will
-//! live alongside them.
+//! in each [`RuleStructures`]. [`symbols`] reports rule-body lookup
+//! diagnostics from the AST, scopes and settled rule structures.
 
 pub mod match_check;
 pub mod populate;
 pub mod signature;
 pub mod structure;
+pub mod symbols;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -32,18 +33,23 @@ struct RuleNode {
 }
 
 /// Builds and closes a [`RuleStructures`] for every rule reachable from
-/// `module`. Bails on the first rule whose close pass reports conflicts.
+/// `module`.
+///
+/// Returns every rule's structures together with diagnostics from the first
+/// rule in source order that fails structure validation. Later rules are still
+/// built so diagnostic passes can inspect their resolved term types.
 pub fn build_structures(
     ast: &Ast,
     scopes: &Scopes,
     signature: &Signature,
     module: ModuleId,
-) -> Result<BTreeMap<RuleDeclId, RuleStructures>, Vec<CompileError>> {
+) -> (BTreeMap<RuleDeclId, RuleStructures>, Vec<CompileError>) {
     let mut rule_nodes = Vec::new();
     let decls = ast.module(module).decls.clone();
     collect_rules(ast, signature, &decls, &[], &mut rule_nodes);
 
     let mut rules = BTreeMap::new();
+    let mut first_errors = None;
     for RuleNode {
         rid,
         enclosing_models,
@@ -81,7 +87,7 @@ pub fn build_structures(
         errors.extend(last_arg_num_errors);
         errors.extend(morphism_application_errors(ast, signature, &rule));
         errors.extend(undetermined_type_errors(ast, &rule));
-        // Only run the then-atom surjectivity checks when the structures are
+        // Only run lower-priority surjectivity checks when the structures are
         // at a settled state without higher-priority structure errors.
         if errors.is_empty() {
             errors.extend(enum_ctor_surjectivity_errors(
@@ -90,14 +96,14 @@ pub fn build_structures(
             errors.extend(surjectivity_errors(ast, &rule));
         }
         check_rule_matches(rid, ast, scopes, signature, &mut errors);
-        if !errors.is_empty() {
-            return Err(errors);
+        if first_errors.is_none() && !errors.is_empty() {
+            first_errors = Some(errors);
         }
 
         let prev = rules.insert(rid, rule);
         assert!(prev.is_none(), "rule {rid:?} visited twice in decl tree");
     }
-    Ok(rules)
+    (rules, first_errors.unwrap_or_default())
 }
 
 fn morphism_application_errors(
@@ -240,7 +246,7 @@ fn enum_ctor_surjectivity_errors(
         let Some(enum_decl) = signature.enum_decl_for_type(term_type.typ) else {
             continue;
         };
-        if is_ambient_ctor_app_for_enum(term, term_type.typ, ast, scopes, signature) {
+        if is_ctor_app_for_enum(term, term_type.typ, target, ast, scopes, signature, rule) {
             continue;
         }
 
@@ -278,23 +284,48 @@ fn collect_defined_then_terms(ast: &Ast, stmts: &[StmtId], out: &mut Vec<(StmtId
     }
 }
 
-fn is_ambient_ctor_app_for_enum(
+fn is_ctor_app_for_enum(
     term: TermId,
     enum_type: TypeId,
+    sid: StructureId,
     ast: &Ast,
     scopes: &Scopes,
     signature: &Signature,
+    rule: &RuleStructures,
 ) -> bool {
     let Term::App(app_id) = *ast.term(term) else {
         return false;
     };
     let func = ast.app_term(app_id).func;
-    let FuncExpr::Ambient(ambient_id) = *ast.func_expr(func) else {
-        return false;
-    };
-    let scope = scopes.entry(ambient_id);
-    let name = &ast.ambient_func_expr(ambient_id).name;
-    let Some(Symbol::Ctor(ctor_id)) = scopes.lookup(scope, name) else {
+    match *ast.func_expr(func) {
+        FuncExpr::Ambient(ambient_id) => {
+            let scope = scopes.entry(ambient_id);
+            let name = &ast.ambient_func_expr(ambient_id).name;
+            ctor_symbol_has_codomain(scopes.lookup(scope, name), enum_type, signature)
+        }
+        FuncExpr::Member(member_id) => {
+            let MemberFuncExpr { term, name } = ast.member_func_expr(member_id).clone();
+            let Some(parent_types) = concrete_types_of_term(rule, sid, term) else {
+                return false;
+            };
+            parent_types.into_iter().any(|ct| {
+                let Some(model_decl) = signature.model_decl_for_type(ct.typ) else {
+                    return false;
+                };
+                let body_scope = scopes.unordered(model_decl);
+                let sym = scopes.scope(body_scope).symbols.get(&name).copied();
+                ctor_symbol_has_codomain(sym, enum_type, signature)
+            })
+        }
+    }
+}
+
+fn ctor_symbol_has_codomain(
+    symbol: Option<Symbol>,
+    enum_type: TypeId,
+    signature: &Signature,
+) -> bool {
+    let Some(Symbol::Ctor(ctor_id)) = symbol else {
         return false;
     };
     let Some(func_id) = signature.func_for_ctor_decl(ctor_id) else {

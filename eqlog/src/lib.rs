@@ -6,7 +6,6 @@ mod ast_to_eqlog;
 mod casing;
 mod eqlog_util;
 mod grammar_util;
-mod semantics;
 lalrpop_mod!(grammar);
 mod build;
 #[allow(dead_code)]

@@ -7,9 +7,8 @@
 //! * [`occurrences`] — per-rule singleton detection for variable names.
 //!
 //! The entry points return errors as a `Vec` or `Option`; [`crate::build`]
-//! merges them with [`crate::semantics::check_eqlog`] errors through
-//! `CompileError`'s `Ord` so that the global kind-precedence ordering
-//! applies.
+//! merges them through `CompileError`'s `Ord` so that the global
+//! kind-precedence ordering applies.
 
 pub mod bindings;
 pub mod occurrences;
