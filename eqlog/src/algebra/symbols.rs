@@ -288,7 +288,7 @@ impl<'a> Checker<'a> {
                 let MemberTypeExpr { term, name } = self.ast.member_type_expr(id).clone();
                 self.walk_term(term, ctx);
                 for scope in self.member_receiver_scopes(term, ctx) {
-                    self.check_lookup(
+                    self.check_member_lookup(
                         scope,
                         name.clone(),
                         &[LookupKind::Type, LookupKind::Enum, LookupKind::Model],
@@ -314,7 +314,12 @@ impl<'a> Checker<'a> {
                 let MemberPredExpr { term, name } = self.ast.member_pred_expr(id).clone();
                 self.walk_term(term, ctx);
                 for scope in self.member_receiver_scopes(term, ctx) {
-                    self.check_lookup(scope, name.clone(), &[LookupKind::Pred], self.ast.loc(pred));
+                    self.check_member_lookup(
+                        scope,
+                        name.clone(),
+                        &[LookupKind::Pred],
+                        self.ast.loc(pred),
+                    );
                 }
             }
         }
@@ -330,7 +335,12 @@ impl<'a> Checker<'a> {
                 let MemberFuncExpr { term, name } = self.ast.member_func_expr(id).clone();
                 self.walk_term(term, ctx);
                 for scope in self.member_receiver_scopes(term, ctx) {
-                    self.check_lookup(scope, name.clone(), &[LookupKind::Func], self.ast.loc(func));
+                    self.check_member_lookup(
+                        scope,
+                        name.clone(),
+                        &[LookupKind::Func, LookupKind::Ctor],
+                        self.ast.loc(func),
+                    );
                 }
             }
         }
@@ -371,6 +381,27 @@ impl<'a> Checker<'a> {
         used_at: Location,
     ) {
         let decls = lookup_decl_symbols(self.scopes, self.ast, scope, &name);
+        self.check_decl_symbols(name, expected, used_at, decls);
+    }
+
+    fn check_member_lookup(
+        &mut self,
+        scope: ScopeId,
+        name: String,
+        expected: &[LookupKind],
+        used_at: Location,
+    ) {
+        let decls = lookup_direct_decl_symbols(self.scopes, scope, &name);
+        self.check_decl_symbols(name, expected, used_at, decls);
+    }
+
+    fn check_decl_symbols(
+        &mut self,
+        name: String,
+        expected: &[LookupKind],
+        used_at: Location,
+        decls: Vec<Symbol>,
+    ) {
         if decls.is_empty() {
             self.errors
                 .push(CompileError::UndeclaredSymbol { name, used_at });
@@ -387,7 +418,7 @@ impl<'a> Checker<'a> {
         let found = decls[0];
         let found_kind = found
             .lookup_kind()
-            .expect("lookup_decl_symbols excludes variables and args");
+            .expect("symbol lookup excludes variables and args");
         self.errors.push(CompileError::BadSymbolKind {
             name,
             expected: expected[0].symbol_kind_case(),
@@ -396,6 +427,17 @@ impl<'a> Checker<'a> {
             declared_at: found.location(self.ast),
         });
     }
+}
+
+fn lookup_direct_decl_symbols(scopes: &Scopes, scope: ScopeId, name: &str) -> Vec<Symbol> {
+    scopes
+        .scope(scope)
+        .symbols
+        .get(name)
+        .copied()
+        .into_iter()
+        .filter(|sym| !matches!(sym, Symbol::Arg(_) | Symbol::Var(_)))
+        .collect()
 }
 
 fn lookup_decl_symbols(scopes: &Scopes, ast: &Ast, scope: ScopeId, name: &str) -> Vec<Symbol> {
