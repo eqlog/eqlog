@@ -3,93 +3,9 @@ use std::iter;
 
 use itertools::Itertools;
 
-use crate::eqlog_util::*;
 use crate::error::*;
 use crate::grammar_util::*;
 use eqlog_eqlog::*;
-
-fn element_type_to_string<'a>(
-    typ: DepType,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-    _locations: &'a BTreeMap<Loc, Location>,
-) -> String {
-    match eqlog.dep_type_case(typ) {
-        DepTypeCase::GlobalType(typ) => display_type(typ, eqlog, identifiers).to_string(),
-        DepTypeCase::MemberType(el, typ) => {
-            let typ = display_type(typ, eqlog, identifiers).to_string();
-
-            let name = match eqlog
-                .iter_var()
-                .find_map(|(_, name, el0)| eqlog.are_equal_el(el0, el).then_some(name))
-            {
-                Some(name) => name,
-                None => {
-                    // TODO: Do better here. This happens if the model element is not given by a
-                    // variable but by a composed term.
-                    return format!("?.{typ}");
-                }
-            };
-
-            let virt_ident = eqlog
-                .iter_semantic_name()
-                .find_map(|(virt_ident, _scope, name0)| {
-                    eqlog.are_equal_el_name(name0, name).then_some(virt_ident)
-                })
-                .expect(
-                    "Every semantic name should be given by a virtual identifier in some scope",
-                );
-
-            let ident = match eqlog.virt_real_ident(virt_ident) {
-                Some(ident) => ident,
-                None => {
-                    // The variable is a wildcard.
-                    return format!("_.{typ}");
-                }
-            };
-            let s = identifiers.get(&ident).unwrap();
-
-            return format!("{s}.{typ}");
-        }
-    }
-}
-
-pub fn iter_conflicting_type_errors<'a>(
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-    locations: &'a BTreeMap<Loc, Location>,
-) -> impl 'a + Iterator<Item = CompileError> {
-    let mut el_types: BTreeMap<El, Vec<DepType>> = BTreeMap::new();
-    for (el, ty) in eqlog.iter_el_type() {
-        let tys = el_types.entry(el).or_default();
-        if !tys.contains(&ty) {
-            tys.push(ty);
-        }
-    }
-
-    el_types
-        .into_iter()
-        .filter(|(_, tys)| tys.len() > 1)
-        .flat_map(move |(el, tys)| {
-            let types: Vec<String> = tys
-                .into_iter()
-                .map(|ty| element_type_to_string(ty, eqlog, identifiers, locations))
-                .collect();
-            eqlog.iter_semantic_el().filter_map(move |(tm, _, e)| {
-                if !eqlog.are_equal_el(e, el) {
-                    return None;
-                }
-
-                let loc = eqlog.term_node_loc(tm).unwrap();
-                let location = *locations.get(&loc).unwrap();
-
-                Some(CompileError::ConflictingTermType {
-                    types: types.clone(),
-                    location,
-                })
-            })
-        })
-}
 
 pub fn iter_symbol_lookup_errors<'a>(
     eqlog: &'a Eqlog,
@@ -241,7 +157,6 @@ pub fn check_eqlog(
 ) -> Result<(), CompileError> {
     let first_error: Option<CompileError> = iter::empty()
         .chain(iter_symbol_lookup_errors(eqlog, identifiers, locations))
-        .chain(iter_conflicting_type_errors(eqlog, identifiers, locations))
         .chain(iter_enum_ctors_not_surjective_errors(
             eqlog,
             identifiers,
