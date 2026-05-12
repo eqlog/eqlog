@@ -78,6 +78,7 @@ pub fn build_structures(
             .map(|(sid, conflict)| conflict_to_error(ast, signature, &rule, sid, conflict))
             .collect();
         errors.extend(last_arg_num_errors);
+        errors.extend(undetermined_type_errors(ast, &rule));
         // Only run the surjectivity check when the structures are at a
         // settled, conflict-free state. Type conflicts can leave the
         // morphisms in shapes that would produce noisy false positives.
@@ -93,6 +94,28 @@ pub fn build_structures(
         assert!(prev.is_none(), "rule {rid:?} visited twice in decl tree");
     }
     Ok(rules)
+}
+
+/// Reports every surface term whose semantic element still has no concrete
+/// type after the rule's populate/close fixed point has settled.
+fn undetermined_type_errors(ast: &Ast, rule: &RuleStructures) -> Vec<CompileError> {
+    let mut reported_terms = BTreeSet::new();
+    let mut errors = Vec::new();
+
+    for (sid, semantic_els) in rule.semantic_els.iter().enumerate() {
+        let structure = &rule.cat.structures[sid];
+        for (&term, &el) in semantic_els {
+            let root = structure.unification.root_const(el);
+            let has_type = structure.els.get(&root).is_some_and(|cts| !cts.is_empty());
+            if !has_type && reported_terms.insert(term) {
+                errors.push(CompileError::UndeterminedTermType {
+                    location: ast.loc(term),
+                });
+            }
+        }
+    }
+
+    errors
 }
 
 /// Reports surjectivity violations for `then`-atom morphisms. A

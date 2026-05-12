@@ -388,6 +388,18 @@ static COMPILE_ERROR_KIND_ORDER: LazyLock<HashSet<[CompileErrorKind; 2]>> = Lazy
     }
     transitive_closure(&mut relation);
 
+    // Bad arity can leave call arguments or results untyped; report the
+    // arity error as the more direct cause.
+    for k in CompileErrorKind::iter() {
+        if !relation.contains(&[k, FunctionArgumentNumber]) {
+            relation.insert([FunctionArgumentNumber, k]);
+        }
+        if !relation.contains(&[k, PredicateArgumentNumber]) {
+            relation.insert([PredicateArgumentNumber, k]);
+        }
+    }
+    transitive_closure(&mut relation);
+
     for k in CompileErrorKind::iter() {
         if !relation.contains(&[k, UndeterminedTermType]) {
             relation.insert([UndeterminedTermType, k]);
