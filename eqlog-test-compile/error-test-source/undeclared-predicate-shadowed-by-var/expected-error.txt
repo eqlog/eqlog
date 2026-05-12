@@ -1,0 +1,6 @@
+Error: undeclared symbol "p"
+ --> error-test-source/undeclared-predicate-shadowed-by-var/theory.eql:6
+  | 
+6 |     if p(p);
+  |        ^    
+  | 
