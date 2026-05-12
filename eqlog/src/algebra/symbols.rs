@@ -13,7 +13,7 @@ use eqlog_eqlog::SymbolKindCase;
 
 use crate::algebra::populate::RuleStructures;
 use crate::algebra::signature::Signature;
-use crate::algebra::structure::{ConcreteType, StructureId};
+use crate::algebra::structure::StructureId;
 use crate::ast::*;
 use crate::error::CompileError;
 use crate::grammar_util::Location;
@@ -287,10 +287,10 @@ impl<'a> Checker<'a> {
             TypeExpr::Member(id) => {
                 let MemberTypeExpr { term, name } = self.ast.member_type_expr(id).clone();
                 self.walk_term(term, ctx);
-                if let Some(scope) = self.member_receiver_scope(term, ctx) {
+                for scope in self.member_receiver_scopes(term, ctx) {
                     self.check_lookup(
                         scope,
-                        name,
+                        name.clone(),
                         &[LookupKind::Type, LookupKind::Enum, LookupKind::Model],
                         used_at,
                     );
@@ -313,8 +313,8 @@ impl<'a> Checker<'a> {
             PredExpr::Member(id) => {
                 let MemberPredExpr { term, name } = self.ast.member_pred_expr(id).clone();
                 self.walk_term(term, ctx);
-                if let Some(scope) = self.member_receiver_scope(term, ctx) {
-                    self.check_lookup(scope, name, &[LookupKind::Pred], self.ast.loc(pred));
+                for scope in self.member_receiver_scopes(term, ctx) {
+                    self.check_lookup(scope, name.clone(), &[LookupKind::Pred], self.ast.loc(pred));
                 }
             }
         }
@@ -329,30 +329,38 @@ impl<'a> Checker<'a> {
             FuncExpr::Member(id) => {
                 let MemberFuncExpr { term, name } = self.ast.member_func_expr(id).clone();
                 self.walk_term(term, ctx);
-                if let Some(scope) = self.member_receiver_scope(term, ctx) {
-                    self.check_lookup(scope, name, &[LookupKind::Func], self.ast.loc(func));
+                for scope in self.member_receiver_scopes(term, ctx) {
+                    self.check_lookup(scope, name.clone(), &[LookupKind::Func], self.ast.loc(func));
                 }
             }
         }
     }
 
-    fn member_receiver_scope(&self, term: TermId, ctx: RuleCtx<'a>) -> Option<ScopeId> {
-        let ct = self.concrete_type_of_term(term, ctx)?;
-        let model_decl = self.signature.model_decl_for_type(ct.typ)?;
-        Some(self.scopes.unordered(model_decl))
-    }
-
-    fn concrete_type_of_term(&self, term: TermId, ctx: RuleCtx<'a>) -> Option<ConcreteType> {
-        let rule = ctx.rule?;
-        let current = ctx.current?;
-        let el = *rule.semantic_els.get(current.0)?.get(&term)?;
-        let structure = rule.cat.structures.get(current.0)?;
-        let root = structure.unification.root_const(el);
-        let mut ct = structure.els.get(&root)?.clone()?;
-        for parent in &mut ct.parents {
-            *parent = structure.unification.root_const(*parent);
-        }
-        Some(ct)
+    fn member_receiver_scopes(&self, term: TermId, ctx: RuleCtx<'a>) -> Vec<ScopeId> {
+        let Some(rule) = ctx.rule else {
+            return Vec::new();
+        };
+        let Some(current) = ctx.current else {
+            return Vec::new();
+        };
+        let Some(el) = rule
+            .semantic_els
+            .get(current.0)
+            .and_then(|els| els.get(&term))
+        else {
+            return Vec::new();
+        };
+        let Some(structure) = rule.cat.structures.get(current.0) else {
+            return Vec::new();
+        };
+        structure
+            .concrete_types_of(*el)
+            .into_iter()
+            .filter_map(|ct| {
+                let model_decl = self.signature.model_decl_for_type(ct.typ)?;
+                Some(self.scopes.unordered(model_decl))
+            })
+            .collect()
     }
 
     fn check_lookup(
