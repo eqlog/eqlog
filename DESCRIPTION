@@ -1,5 +1,6 @@
-Report algebra type conflicts after closure
+Always use earliest type-conflict term
 
-Collect concrete type conflicts only after the structure category
-reaches its fixed point, so temporary parent disagreements can be
-resolved by later equalities before diagnostics are produced.
+Remove the conditional conflict-attribution path and always anchor type
+conflicts at the earliest reachable source term. Trim trailing spaces
+from rendered source-display lines so updated diagnostics remain
+`git diff --check` clean.

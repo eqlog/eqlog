@@ -200,11 +200,9 @@ fn collect_rules(
 }
 
 /// Lowers a [`TypeConflict`] to a [`CompileError::ConflictingTermType`],
-/// anchored on a term whose element shares a class with `conflict.el`.
-/// Equality-like conflicts can search incoming morphisms for an earlier
-/// source term; ordinary imposition conflicts stay in the structure that
-/// observed the incompatible type. Each [`ConcreteType`] renders as
-/// `TypeName` for global types or `parent_name.TypeName` for member types.
+/// anchored on the earliest reachable term whose element shares a class
+/// with `conflict.el`. Each [`ConcreteType`] renders as `TypeName` for
+/// global types or `parent_name.TypeName` for member types.
 ///
 /// Panics if no term backs `el` in any reachable structure.
 fn conflict_to_error(
@@ -216,12 +214,7 @@ fn conflict_to_error(
 ) -> CompileError {
     let TypeConflict { el, a, b } = conflict;
     let structure = &rule.cat.structures[sid.0];
-    let use_earliest_term = a.typ != b.typ && has_multiple_var_names_in_class(structure, el);
-    let term_id = if use_earliest_term {
-        find_earliest_term(ast, rule, sid, el)
-    } else {
-        find_term(rule, sid, el)
-    };
+    let term_id = find_earliest_term(ast, rule, sid, el);
     CompileError::ConflictingTermType {
         types: vec![
             concrete_type_to_string(ast, signature, structure, &a),
@@ -258,73 +251,8 @@ fn concrete_type_to_string(
     format!("{parent_name}.{type_name}")
 }
 
-fn has_multiple_var_names_in_class(structure: &Structure, target: ElId) -> bool {
-    let target_root = structure.unification.root_const(target);
-    structure
-        .var_els
-        .values()
-        .filter(|&&el| structure.unification.root_const(el) == target_root)
-        .take(2)
-        .count()
-        > 1
-}
-
-/// Locates a term whose element shares a class with `target` in the
-/// structure at `sid`. Conflicts can surface in a structure that
-/// received `target` only as a morphism image, so on miss in
-/// `semantic_els[sid]` the search expands through incoming morphisms
-/// to preimages in source structures.
-///
-/// Panics if no reachable structure backs the class with a term.
-fn find_term(rule: &RuleStructures, sid: StructureId, target: ElId) -> TermId {
-    let start_root = rule.cat.structures[sid.0].unification.root_const(target);
-    let mut visited: BTreeSet<(StructureId, ElId)> = BTreeSet::new();
-    let mut worklist: Vec<(StructureId, ElId)> = vec![(sid, start_root)];
-
-    while let Some((s, el_root)) = worklist.pop() {
-        if !visited.insert((s, el_root)) {
-            continue;
-        }
-
-        let s_st = &rule.cat.structures[s.0];
-        if let Some((&term, _)) = rule.semantic_els[s.0]
-            .iter()
-            .find(|(_, &e)| s_st.unification.root_const(e) == el_root)
-        {
-            return term;
-        }
-
-        for (&(src, tgt), elmap) in &rule.cat.morphisms {
-            if tgt != s {
-                continue;
-            }
-            let src_st = &rule.cat.structures[src.0];
-            for (&src_el, &tgt_el) in elmap {
-                if s_st.unification.root_const(tgt_el) != el_root {
-                    continue;
-                }
-                let src_root = src_st.unification.root_const(src_el);
-                if !visited.contains(&(src, src_root)) {
-                    worklist.push((src, src_root));
-                }
-            }
-        }
-    }
-
-    let is_ambient_at_sid = rule.cat.structures[sid.0]
-        .ambient_model_els
-        .values()
-        .any(|&e| rule.cat.structures[sid.0].unification.root_const(e) == start_root);
-    panic!(
-        "conflict on class {target:?} at {sid:?} has no term in any reachable structure \
-         (ambient model el at sid: {is_ambient_at_sid})"
-    );
-}
-
 /// Locates the earliest source term reachable from `target` by walking
-/// incoming morphisms. Equality-origin conflicts can arise in a later
-/// structure even though the best diagnostic anchor is an earlier term
-/// whose class was merged into the conflict.
+/// incoming morphisms.
 fn find_earliest_term(ast: &Ast, rule: &RuleStructures, sid: StructureId, target: ElId) -> TermId {
     let start_root = rule.cat.structures[sid.0].unification.root_const(target);
     let mut visited: BTreeSet<(StructureId, ElId)> = BTreeSet::new();
