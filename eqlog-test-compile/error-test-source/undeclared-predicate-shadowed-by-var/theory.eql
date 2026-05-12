@@ -1,0 +1,8 @@
+type A;
+pred p(A);
+
+rule {
+    if p: A;
+    if p(p);
+    then p = p;
+}

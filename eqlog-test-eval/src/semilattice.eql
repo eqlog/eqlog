@@ -25,13 +25,13 @@ rule {
     then meet(x, y)!;
 }
 rule {
-    if meet = meet(x, y);
-    then le(meet, x);
-    then le(meet, y);
+    if m = meet(x, y);
+    then le(m, x);
+    then le(m, y);
 }
 rule {
     if le(z, x);
     if le(z, y);
-    if meet = meet(x, y);
-    then le(z, meet);
+    if m = meet(x, y);
+    then le(z, m);
 }

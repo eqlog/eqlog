@@ -26,15 +26,15 @@ rule {
     then join(x, y)!;
 }
 rule {
-    if join = join(x, y);
-    then le(x, join);
-    then le(y, join);
+    if j = join(x, y);
+    then le(x, j);
+    then le(y, j);
 }
 rule {
     if le(x, z);
     if le(y, z);
-    if join = join(x, y);
-    then le(join, z);
+    if j = join(x, y);
+    then le(j, z);
 }
 
 // Axioms of meets, combined into a single rule.

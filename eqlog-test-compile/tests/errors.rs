@@ -86,6 +86,10 @@ fn undeclared_predicate() {
     test_case(Path::new("undeclared-predicate"));
 }
 #[test]
+fn undeclared_predicate_shadowed_by_var() {
+    test_case(Path::new("undeclared-predicate-shadowed-by-var"));
+}
+#[test]
 fn undeclared_function() {
     test_case(Path::new("undeclared-function"));
 }

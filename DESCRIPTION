@@ -1,0 +1,5 @@
+Fix shadowed symbol lookup diagnostics
+
+Make rule-body symbol lookup diagnostics respect the nearest visible
+binding so variables and args shadow outer declarations instead of
+letting diagnostics accept the outer symbol.

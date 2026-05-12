@@ -380,7 +380,7 @@ impl<'a> Checker<'a> {
         expected: &[LookupKind],
         used_at: Location,
     ) {
-        let decls = lookup_decl_symbols(self.scopes, self.ast, scope, &name);
+        let decls = lookup_decl_symbols(self.scopes, scope, &name);
         self.check_decl_symbols(name, expected, used_at, decls);
     }
 
@@ -440,19 +440,9 @@ fn lookup_direct_decl_symbols(scopes: &Scopes, scope: ScopeId, name: &str) -> Ve
         .collect()
 }
 
-fn lookup_decl_symbols(scopes: &Scopes, ast: &Ast, scope: ScopeId, name: &str) -> Vec<Symbol> {
-    let mut decls = Vec::new();
-    let mut cur = Some(scope);
-    while let Some(id) = cur {
-        let scope = scopes.scope(id);
-        if let Some(sym) = scope.symbols.get(name).copied() {
-            match sym {
-                Symbol::Arg(_) | Symbol::Var(_) => {}
-                _ => decls.push(sym),
-            }
-        }
-        cur = scope.parent;
+fn lookup_decl_symbols(scopes: &Scopes, scope: ScopeId, name: &str) -> Vec<Symbol> {
+    match scopes.lookup(scope, name) {
+        Some(Symbol::Arg(_) | Symbol::Var(_)) | None => Vec::new(),
+        Some(sym) => vec![sym],
     }
-    decls.sort_by_key(|sym| sym.location(ast).1);
-    decls
 }
