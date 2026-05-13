@@ -1,0 +1,5 @@
+Activate eqlog-test-eval tests
+
+Restore the deactivated eqlog-test-eval theories and wire their Rust
+test modules back into the crate. Adjust the subset_rules theory to
+avoid local variables shadowing the nullary functions they reference.

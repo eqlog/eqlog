@@ -9,14 +9,11 @@ eqlog_mod!(poset);
 eqlog_mod!(semilattice);
 eqlog_mod!(distr_lattice);
 eqlog_mod!(group);
-// Deactivated: populate::walk_term panics on dom/cod/@ pending operator support.
-//eqlog_mod!(product_category);
-// Deactivated: populate::walk_term panics on dom/cod/@ pending operator support.
-//eqlog_mod!(lex_category);
+eqlog_mod!(product_category);
+eqlog_mod!(lex_category);
 eqlog_mod!(partial_magma);
 eqlog_mod!(pca);
-// Deactivated: populate::walk_term panics on dom/cod/@ pending operator support.
-//eqlog_mod!(inference);
+eqlog_mod!(inference);
 eqlog_mod!(reduction_from_nullary);
 eqlog_mod!(branches);
 eqlog_mod!(nat);
@@ -26,12 +23,10 @@ eqlog_mod!(triple_join);
 eqlog_mod!(int);
 eqlog_mod!(indexed_set);
 eqlog_mod!(indexed_pointed);
-// Deactivated: populate::walk_term panics on dom/cod/@ pending operator support.
-//eqlog_mod!(indexed_abelian_group);
+eqlog_mod!(indexed_abelian_group);
 eqlog_mod!(empty);
 eqlog_mod!(subset);
-// Deactivated: populate::walk_term panics on dom/cod/@ pending operator support.
-//eqlog_mod!(subset_rules);
+eqlog_mod!(subset_rules);
 
 mod category_mod;
 #[cfg(test)]
@@ -40,9 +35,8 @@ mod distr_lattice_test;
 mod eval_func;
 #[cfg(test)]
 mod group_test;
-// Deactivated: populate::walk_term panics on dom/cod/@ pending operator support.
-//#[cfg(test)]
-//mod lex_category_test;
+#[cfg(test)]
+mod lex_category_test;
 #[cfg(test)]
 mod logic_test;
 mod monoid_test;
@@ -51,16 +45,14 @@ mod monoid_test;
 //mod pca_test;
 #[cfg(test)]
 mod branches_test;
-// Deactivated: populate::walk_term panics on dom/cod/@ pending operator support.
-//#[cfg(test)]
-//mod indexed_abelian_group_test;
+#[cfg(test)]
+mod indexed_abelian_group_test;
 #[cfg(test)]
 mod indexed_pointed_test;
 #[cfg(test)]
 mod indexed_set_test;
-// Deactivated: populate::walk_term panics on dom/cod/@ pending operator support.
-//#[cfg(test)]
-//mod inference_test;
+#[cfg(test)]
+mod inference_test;
 #[cfg(test)]
 mod int_test;
 #[cfg(test)]
@@ -72,14 +64,12 @@ mod nat_test;
 mod pointed_test;
 #[cfg(test)]
 mod poset_test;
-// Deactivated: populate::walk_term panics on dom/cod/@ pending operator support.
-//#[cfg(test)]
-//mod product_category_test;
+#[cfg(test)]
+mod product_category_test;
 #[cfg(test)]
 mod semilattice_test;
-// Deactivated: populate::walk_term panics on dom/cod/@ pending operator support.
-//#[cfg(test)]
-//mod subset_rules_test;
+#[cfg(test)]
+mod subset_rules_test;
 #[cfg(test)]
 mod subset_test;
 #[cfg(test)]
