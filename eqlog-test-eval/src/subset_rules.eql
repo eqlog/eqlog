@@ -10,15 +10,15 @@ func b() -> Subs;
 func a_b() -> Mor(Subs);
 
 rule ab_inclusion_dom {
-    if a = a();
-    if a_b = a_b();
-    then dom(a_b) = a;
+    if a_val = a();
+    if a_b_val = a_b();
+    then dom(a_b_val) = a_val;
 }
 
 rule ab_inclusion_cod {
-    if b = b();
-    if a_b = a_b();
-    then cod(a_b) = b;
+    if b_val = b();
+    if a_b_val = a_b();
+    then cod(a_b_val) = b_val;
 }
 
 pred ab_element(Carrier);
