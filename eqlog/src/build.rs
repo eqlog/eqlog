@@ -477,7 +477,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     let symbol_lookup_errors =
         check_symbol_lookups(&ast, &scopes, &signature, module, &rule_structures);
 
-    let (mut eqlog, identifiers, locations, _module) = populate_eqlog(&ast, module);
+    let (mut eqlog, identifiers, locations, eqlog_ast_maps, _module) = populate_eqlog(&ast, module);
     eqlog.close();
 
     if log_enabled!(log::Level::Debug) {
@@ -513,7 +513,15 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     }
     assert!(!eqlog.absurd());
 
-    let flat_rule_groups = flatten(&eqlog, &identifiers);
+    let flat_rule_groups = flatten(
+        &ast,
+        module,
+        &signature,
+        &rule_structures,
+        &eqlog,
+        &eqlog_ast_maps,
+        &identifiers,
+    );
     let flat_rules_iter = flat_rule_groups.iter().flat_map(|group| group.rules.iter());
     let index_selection = select_indices(flat_rules_iter, &eqlog);
 

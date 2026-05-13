@@ -127,6 +127,40 @@ impl Signature {
         &self.funcs[id.0]
     }
 
+    pub fn iter_funcs(&self) -> impl Iterator<Item = FuncId> + '_ {
+        (0..self.funcs.len()).map(FuncId)
+    }
+
+    pub fn iter_type_decls(&self) -> impl Iterator<Item = (TypeDeclId, TypeId)> + '_ {
+        self.type_decls.iter().map(|(&decl, &typ)| (decl, typ))
+    }
+
+    pub fn iter_enum_decls(&self) -> impl Iterator<Item = (EnumDeclId, TypeId)> + '_ {
+        self.enum_decls.iter().map(|(&decl, &typ)| (decl, typ))
+    }
+
+    pub fn iter_model_decls(&self) -> impl Iterator<Item = (ModelDeclId, ModelIds)> + '_ {
+        self.model_decls.iter().map(|(&decl, &ids)| (decl, ids))
+    }
+
+    pub fn iter_pred_decls(&self) -> impl Iterator<Item = (PredDeclId, PredId)> + '_ {
+        self.pred_decls.iter().map(|(&decl, &pred)| (decl, pred))
+    }
+
+    pub fn iter_func_decls(&self) -> impl Iterator<Item = (FuncDeclId, FuncId)> + '_ {
+        self.func_decls.iter().map(|(&decl, &func)| (decl, func))
+    }
+
+    pub fn iter_ctor_decls(&self) -> impl Iterator<Item = (CtorDeclId, FuncId)> + '_ {
+        self.ctor_decls.iter().map(|(&decl, &func)| (decl, func))
+    }
+
+    pub fn iter_mor_app_funcs(&self) -> impl Iterator<Item = (TypeId, FuncId)> + '_ {
+        self.mor_app_funcs
+            .iter()
+            .map(|(&member_type, &func)| (member_type, func))
+    }
+
     pub fn type_for_type_decl(&self, id: TypeDeclId) -> TypeId {
         *self
             .type_decls

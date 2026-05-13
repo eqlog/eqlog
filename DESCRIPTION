@@ -1,0 +1,8 @@
+Migrate flattening to algebra structures
+
+Drive rule flattening from the Rust-side algebra structures and
+signature while retaining a narrow bridge to the generated Eqlog ids
+used by rust_gen.
+
+Fix match-case population so case patterns are equated with the
+scrutinee.

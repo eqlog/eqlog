@@ -5,6 +5,17 @@ use eqlog_eqlog::*;
 use crate::ast::*;
 use crate::grammar_util::Location;
 
+#[derive(Clone, Debug, Default)]
+pub struct EqlogAstMaps {
+    pub type_decl_nodes: BTreeMap<TypeDeclId, TypeDeclNode>,
+    pub pred_decl_nodes: BTreeMap<PredDeclId, PredDeclNode>,
+    pub func_decl_nodes: BTreeMap<FuncDeclId, FuncDeclNode>,
+    pub rule_decl_nodes: BTreeMap<RuleDeclId, RuleDeclNode>,
+    pub enum_decl_nodes: BTreeMap<EnumDeclId, EnumDeclNode>,
+    pub model_decl_nodes: BTreeMap<ModelDeclId, ModelDeclNode>,
+    pub ctor_decl_nodes: BTreeMap<CtorDeclId, CtorDeclNode>,
+}
+
 pub fn populate_eqlog(
     ast: &Ast,
     module: ModuleId,
@@ -12,6 +23,7 @@ pub fn populate_eqlog(
     Eqlog,
     BTreeMap<Ident, String>,
     BTreeMap<Loc, Location>,
+    EqlogAstMaps,
     ModuleNode,
 ) {
     let mut eqlog = Eqlog::new();
@@ -20,6 +32,7 @@ pub fn populate_eqlog(
         eqlog: &mut eqlog,
         identifiers: BTreeMap::new(),
         locations: BTreeMap::new(),
+        maps: EqlogAstMaps::default(),
     };
 
     let module_node = ctx.build_module(module);
@@ -27,6 +40,7 @@ pub fn populate_eqlog(
     let Ctx {
         identifiers,
         locations,
+        maps,
         ..
     } = ctx;
 
@@ -36,7 +50,7 @@ pub fn populate_eqlog(
         .map(|(location, loc)| (loc, location))
         .collect();
 
-    (eqlog, identifiers, locations, module_node)
+    (eqlog, identifiers, locations, maps, module_node)
 }
 
 struct Ctx<'a> {
@@ -44,6 +58,7 @@ struct Ctx<'a> {
     eqlog: &'a mut Eqlog,
     identifiers: BTreeMap<String, Ident>,
     locations: BTreeMap<Location, Loc>,
+    maps: EqlogAstMaps,
 }
 
 impl<'a> Ctx<'a> {
@@ -417,6 +432,7 @@ impl<'a> Ctx<'a> {
 
     fn build_type_decl(&mut self, decl: TypeDeclId) -> TypeDeclNode {
         let node = self.eqlog.new_type_decl_node();
+        self.maps.type_decl_nodes.insert(decl, node);
         let TypeDecl { name } = self.ast.type_decl(decl);
         let ident = self.intern_ident(&name.clone());
         self.eqlog.insert_type_decl(node, ident);
@@ -429,6 +445,7 @@ impl<'a> Ctx<'a> {
 
     fn build_pred_decl(&mut self, decl: PredDeclId) -> PredDeclNode {
         let node = self.eqlog.new_pred_decl_node();
+        self.maps.pred_decl_nodes.insert(decl, node);
         let PredDecl { name, args } = self.ast.pred_decl(decl);
         let name = name.clone();
         let args = *args;
@@ -444,6 +461,7 @@ impl<'a> Ctx<'a> {
 
     fn build_func_decl(&mut self, decl: FuncDeclId) -> FuncDeclNode {
         let node = self.eqlog.new_func_decl_node();
+        self.maps.func_decl_nodes.insert(decl, node);
         let FuncDecl { name, args, result } = self.ast.func_decl(decl);
         let name = name.clone();
         let args = *args;
@@ -461,6 +479,7 @@ impl<'a> Ctx<'a> {
 
     fn build_ctor_decl(&mut self, decl: CtorDeclId) -> CtorDeclNode {
         let node = self.eqlog.new_ctor_decl_node();
+        self.maps.ctor_decl_nodes.insert(decl, node);
         let CtorDecl { name, args } = self.ast.ctor_decl(decl);
         let name = name.clone();
         let args = *args;
@@ -490,6 +509,7 @@ impl<'a> Ctx<'a> {
 
     fn build_enum_decl(&mut self, decl: EnumDeclId) -> EnumDeclNode {
         let node = self.eqlog.new_enum_decl_node();
+        self.maps.enum_decl_nodes.insert(decl, node);
         let EnumDecl { name, ctors } = self.ast.enum_decl(decl);
         let name = name.clone();
         let ctors = ctors.clone();
@@ -505,6 +525,7 @@ impl<'a> Ctx<'a> {
 
     fn build_rule_decl(&mut self, decl: RuleDeclId) -> RuleDeclNode {
         let node = self.eqlog.new_rule_decl_node();
+        self.maps.rule_decl_nodes.insert(decl, node);
         let RuleDecl { name, body } = self.ast.rule_decl(decl);
         let name = name.clone();
         let body = body.clone();
@@ -524,6 +545,7 @@ impl<'a> Ctx<'a> {
 
     fn build_model_decl(&mut self, decl: ModelDeclId) -> ModelDeclNode {
         let node = self.eqlog.new_model_decl_node();
+        self.maps.model_decl_nodes.insert(decl, node);
         let ModelDecl { name, body } = self.ast.model_decl(decl);
         let name = name.clone();
         let body = body.clone();

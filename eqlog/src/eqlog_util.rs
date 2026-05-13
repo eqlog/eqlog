@@ -116,29 +116,6 @@ pub fn type_list_vec(mut types: TypeList, eqlog: &Eqlog) -> Vec<Type> {
     conss.into_iter().chain(snocs.into_iter().rev()).collect()
 }
 
-pub fn iter_in_ker<'a>(
-    morphism: Morphism,
-    eqlog: &'a Eqlog,
-) -> impl 'a + Iterator<Item = (El, El)> {
-    eqlog.iter_in_ker().filter_map(move |(morph, el0, el1)| {
-        if !eqlog.are_equal_morphism(morphism, morph) {
-            return None;
-        }
-
-        Some((el0, el1))
-    })
-}
-
-pub fn el_type(el: El, eqlog: &Eqlog) -> Option<DepType> {
-    eqlog.iter_el_type().find_map(|(e, t)| {
-        if eqlog.are_equal_el(e, el) {
-            Some(t)
-        } else {
-            None
-        }
-    })
-}
-
 pub fn display_type<'a>(
     typ: Type,
     eqlog: &'a Eqlog,
