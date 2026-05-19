@@ -249,7 +249,8 @@ fn walk_stmt(
             let term = *term;
             let cases = cases.clone();
             let (after_scrutinee, mut changed) = ensure_match_after_scrutinee(rule, id, current);
-            let (_el, c1) = walk_term(term, after_scrutinee, rule, ast, scopes, signature, errors);
+            let (term_el, c1) =
+                walk_term(term, after_scrutinee, rule, ast, scopes, signature, errors);
             changed |= c1;
             // Same pre-allocation pattern as for `Branch`: the match's
             // after-structure must precede every case-end in arena order
@@ -262,9 +263,10 @@ fn walk_stmt(
                 let MatchCase { pattern, body } = ast.match_case(*case).clone();
                 let (case_start, c2) = ensure_match_case_start(rule, *case, after_scrutinee);
                 changed |= c2;
-                let (_el, c3) =
+                let (pattern_el, c3) =
                     walk_term(pattern, case_start, rule, ast, scopes, signature, errors);
                 changed |= c3;
+                changed |= rule.cat.structures[case_start.0].equate(term_el, pattern_el);
                 let (case_end, c4) =
                     walk_stmt_block(&body, case_start, rule, ast, scopes, signature, errors);
                 changed |= c4;
