@@ -5,6 +5,7 @@ use std::{
 
 use super::ast::*;
 use crate::eqlog_util::*;
+use crate::flatten::FlattenCtx;
 use eqlog_eqlog::*;
 use itertools::Itertools as _;
 use maplit::btreeset;
@@ -165,8 +166,9 @@ pub struct IndexSelection {
 
 pub fn select_indices<'a>(
     rules: impl IntoIterator<Item = &'a FlatRule>,
-    eqlog: &'a Eqlog,
+    ctx: &FlattenCtx<'_>,
 ) -> IndexSelection {
+    let eqlog = ctx.eqlog();
     let mut query_specs: BTreeSet<(FlatInRel, QuerySpec)> = BTreeSet::new();
 
     query_specs.extend(

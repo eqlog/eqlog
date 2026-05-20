@@ -14,6 +14,43 @@ use crate::flat_eqlog::*;
 
 type FlatElKey = (StructureId, ElId);
 
+pub(crate) struct FlattenCtx<'a> {
+    ast: &'a Ast,
+    module: ModuleId,
+    signature: &'a Signature,
+    rule_structures: &'a BTreeMap<RuleDeclId, RuleStructures>,
+    /// Eqlog-backed facts currently consumed by flat lowering and index selection.
+    eqlog: &'a Eqlog,
+    eqlog_ast_maps: &'a EqlogAstMaps,
+    identifiers: &'a BTreeMap<Ident, String>,
+}
+
+impl<'a> FlattenCtx<'a> {
+    pub(crate) fn new(
+        ast: &'a Ast,
+        module: ModuleId,
+        signature: &'a Signature,
+        rule_structures: &'a BTreeMap<RuleDeclId, RuleStructures>,
+        eqlog: &'a Eqlog,
+        eqlog_ast_maps: &'a EqlogAstMaps,
+        identifiers: &'a BTreeMap<Ident, String>,
+    ) -> Self {
+        Self {
+            ast,
+            module,
+            signature,
+            rule_structures,
+            eqlog,
+            eqlog_ast_maps,
+            identifiers,
+        }
+    }
+
+    pub(crate) fn eqlog(&self) -> &Eqlog {
+        self.eqlog
+    }
+}
+
 #[derive(Clone, Debug)]
 struct RuleMorphism {
     src: StructureId,
@@ -35,7 +72,10 @@ struct EqlogBridge<'a> {
 }
 
 impl<'a> EqlogBridge<'a> {
-    fn new(eqlog: &'a Eqlog, signature: &Signature, maps: &EqlogAstMaps) -> Self {
+    fn new(ctx: &'a FlattenCtx<'_>) -> Self {
+        let eqlog = ctx.eqlog;
+        let signature = ctx.signature;
+        let maps = ctx.eqlog_ast_maps;
         let mut types = BTreeMap::new();
         for (decl, typ) in signature.iter_type_decls() {
             types.insert(typ, eqlog_type_decl_type(eqlog, maps, decl));
@@ -311,7 +351,7 @@ fn incoming_source(rule: &RuleStructures, target: StructureId) -> StructureId {
 /// the target reuses that variable. Remaining target elements receive fresh
 /// variables.
 fn assign_el_vars(
-    ast: &Ast,
+    ctx: &FlattenCtx<'_>,
     rule: &RuleStructures,
     morphisms: &[RuleMorphism],
     bridge: &EqlogBridge<'_>,
@@ -320,7 +360,7 @@ fn assign_el_vars(
     let mut available_vars = 0..;
 
     assign_structure_el_vars(
-        ast,
+        ctx,
         rule,
         StructureId(0),
         bridge,
@@ -346,7 +386,7 @@ fn assign_el_vars(
         }
 
         assign_structure_el_vars(
-            ast,
+            ctx,
             rule,
             morphism.tgt,
             bridge,
@@ -359,7 +399,7 @@ fn assign_el_vars(
 }
 
 fn assign_structure_el_vars(
-    ast: &Ast,
+    ctx: &FlattenCtx<'_>,
     rule: &RuleStructures,
     structure: StructureId,
     bridge: &EqlogBridge<'_>,
@@ -371,14 +411,19 @@ fn assign_structure_el_vars(
         let el = st.unification.root_const(el);
         el_vars.entry((structure, el)).or_insert_with(|| {
             let typ = bridge.typ(concrete_type_of(rule, structure, el).typ);
-            let base_name = el_base_name(ast, rule, structure, el);
+            let base_name = el_base_name(ctx, rule, structure, el);
             let name: Arc<str> = format!("{base_name}{}", available_vars.next().unwrap()).into();
             FlatVar { name, typ }
         });
     }
 }
 
-fn el_base_name(ast: &Ast, rule: &RuleStructures, structure: StructureId, el: ElId) -> String {
+fn el_base_name(
+    ctx: &FlattenCtx<'_>,
+    rule: &RuleStructures,
+    structure: StructureId,
+    el: ElId,
+) -> String {
     let st = &rule.cat.structures[structure.0];
     let root = st.unification.root_const(el);
     if let Some(name) = st.var_els.iter().find_map(|(name, &var_el)| {
@@ -393,8 +438,8 @@ fn el_base_name(ast: &Ast, rule: &RuleStructures, structure: StructureId, el: El
             if st.unification.root_const(term_el) != root {
                 return None;
             }
-            match *ast.term(term) {
-                Term::Var(var) => Some(ast.var_term(var).name.clone()),
+            match *ctx.ast.term(term) {
+                Term::Var(var) => Some(ctx.ast.var_term(var).name.clone()),
                 Term::Wildcard | Term::App(_) | Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => {
                     None
                 }
@@ -779,20 +824,21 @@ fn initial_matching_stmts(
 
 /// Compiles an Eqlog rule declaration into a set of [FlatRule]s.
 fn flatten_rule(
-    ast: &Ast,
+    ctx: &FlattenCtx<'_>,
     rule_id: RuleDeclId,
     anonymous_index: usize,
     rule: &RuleStructures,
     bridge: &EqlogBridge<'_>,
 ) -> FlatRuleGroup {
-    let name = ast
+    let name = ctx
+        .ast
         .rule_decl(rule_id)
         .name
         .clone()
         .unwrap_or_else(|| format!("anonymous_rule_{anonymous_index}"));
 
     let morphisms = flatten_morphisms(rule);
-    let el_vars = assign_el_vars(ast, rule, &morphisms, bridge);
+    let el_vars = assign_el_vars(ctx, rule, &morphisms, bridge);
 
     let mut rules: Vec<FlatRule> = Vec::new();
     let mut matching_stmts: BTreeMap<StructureId, Vec<FlatIfStmt>> = BTreeMap::new();
@@ -851,25 +897,17 @@ fn flatten_rule(
     FlatRuleGroup { name, rules }
 }
 
-pub fn flatten(
-    ast: &Ast,
-    module: ModuleId,
-    signature: &Signature,
-    rule_structures: &BTreeMap<RuleDeclId, RuleStructures>,
-    eqlog: &Eqlog,
-    maps: &EqlogAstMaps,
-    identifiers: &BTreeMap<Ident, String>,
-) -> Vec<FlatRuleGroup> {
-    let bridge = EqlogBridge::new(eqlog, signature, maps);
+pub fn flatten(ctx: &FlattenCtx<'_>) -> Vec<FlatRuleGroup> {
+    let bridge = EqlogBridge::new(ctx);
     let mut groups: Vec<FlatRuleGroup> = Vec::new();
 
-    groups.extend(signature.iter_funcs().map(|func_id| {
+    groups.extend(ctx.signature.iter_funcs().map(|func_id| {
         let func = bridge.func(func_id);
         let rel = bridge.func_rel(func_id);
-        let rel_snake = display_rel(rel, eqlog, identifiers)
+        let rel_snake = display_rel(rel, ctx.eqlog, ctx.identifiers)
             .to_string()
             .to_case(Snake);
-        let rule = semi_naive_functionality(func, eqlog);
+        let rule = semi_naive_functionality(func, ctx.eqlog);
         FlatRuleGroup {
             name: format!("functionality_{rel_snake}"),
             rules: vec![rule],
@@ -877,16 +915,17 @@ pub fn flatten(
     }));
 
     let mut rule_ids = Vec::new();
-    collect_rule_ids(ast, &ast.module(module).decls, &mut rule_ids);
+    collect_rule_ids(ctx.ast, &ctx.ast.module(ctx.module).decls, &mut rule_ids);
     groups.extend(
         rule_ids
             .into_iter()
             .enumerate()
             .map(|(anonymous_index, rule_id)| {
-                let rule = rule_structures
+                let rule = ctx
+                    .rule_structures
                     .get(&rule_id)
                     .expect("rule structure should be built for every rule");
-                postprocess_rule_group(flatten_rule(ast, rule_id, anonymous_index, rule, &bridge))
+                postprocess_rule_group(flatten_rule(ctx, rule_id, anonymous_index, rule, &bridge))
             }),
     );
 

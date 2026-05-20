@@ -499,7 +499,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     }
     assert!(!eqlog.absurd());
 
-    let flat_rule_groups = flatten(
+    let flatten_ctx = FlattenCtx::new(
         &ast,
         module,
         &signature,
@@ -508,8 +508,9 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
         &eqlog_ast_maps,
         &identifiers,
     );
+    let flat_rule_groups = flatten(&flatten_ctx);
     let flat_rules_iter = flat_rule_groups.iter().flat_map(|group| group.rules.iter());
-    let index_selection = select_indices(flat_rules_iter, &eqlog);
+    let index_selection = select_indices(flat_rules_iter, &flatten_ctx);
 
     let ram_modules: Vec<RamModule> = flat_rule_groups
         .into_iter()
