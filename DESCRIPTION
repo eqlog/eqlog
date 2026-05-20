@@ -1,0 +1,6 @@
+Remove Eqlog rule semantics
+
+Drop the remaining Eqlog-side rule-body semantic model now that
+flattening is driven by the Rust-side algebra structures. Keep the
+declaration/signature metadata used by code generation, simplify AST
+lowering, and regenerate the prebuilt eqlog-eqlog Rust output.

@@ -10,7 +10,6 @@ pub struct EqlogAstMaps {
     pub type_decl_nodes: BTreeMap<TypeDeclId, TypeDeclNode>,
     pub pred_decl_nodes: BTreeMap<PredDeclId, PredDeclNode>,
     pub func_decl_nodes: BTreeMap<FuncDeclId, FuncDeclNode>,
-    pub rule_decl_nodes: BTreeMap<RuleDeclId, RuleDeclNode>,
     pub enum_decl_nodes: BTreeMap<EnumDeclId, EnumDeclNode>,
     pub model_decl_nodes: BTreeMap<ModelDeclId, ModelDeclNode>,
     pub ctor_decl_nodes: BTreeMap<CtorDeclId, CtorDeclNode>,
@@ -78,67 +77,6 @@ impl<'a> Ctx<'a> {
             .or_insert_with(|| eqlog.new_loc())
     }
 
-    fn build_term(&mut self, term: TermId) -> TermNode {
-        let node = self.eqlog.new_term_node();
-        match *self.ast.term(term) {
-            Term::Var(id) => {
-                let name = self.ast.var_term(id).name.clone();
-                let ident = self.intern_ident(&name);
-                let virt_ident = self.eqlog.define_real_virt_ident(ident);
-                self.eqlog.insert_var_term_node(node, virt_ident);
-            }
-            Term::Wildcard => {
-                self.eqlog.insert_wildcard_term_node(node);
-            }
-            Term::App(id) => {
-                let AppTerm { func, args } = *self.ast.app_term(id);
-                let func_expr = self.build_func_expr(func);
-                let arg_list = self.build_term_list(args);
-                self.eqlog.insert_app_term_node(node, func_expr, arg_list);
-            }
-            Term::Dom(id) => {
-                let DomTerm { arg } = *self.ast.dom_term(id);
-                let arg_node = self.build_term(arg);
-                self.eqlog.insert_dom_term_node(node, arg_node);
-            }
-            Term::Cod(id) => {
-                let CodTerm { arg } = *self.ast.cod_term(id);
-                let arg_node = self.build_term(arg);
-                self.eqlog.insert_cod_term_node(node, arg_node);
-            }
-            Term::MorApp(id) => {
-                let MorAppTerm { mor, arg } = *self.ast.mor_app_term(id);
-                let mor_node = self.build_term(mor);
-                let arg_node = self.build_term(arg);
-                self.eqlog
-                    .insert_mor_app_term_node(node, mor_node, arg_node);
-            }
-        }
-
-        let loc = self.intern_loc(self.ast.loc(term));
-        self.eqlog.insert_term_node_loc(node, loc);
-
-        node
-    }
-
-    fn build_term_list(&mut self, list: TermListId) -> TermListNode {
-        let terms: Vec<TermId> = self.ast.term_list(list).terms.clone();
-        let term_nodes: Vec<TermNode> = terms.into_iter().map(|t| self.build_term(t)).collect();
-
-        let mut node = self.eqlog.new_term_list_node();
-        self.eqlog.insert_nil_term_list_node(node);
-        for tm in term_nodes.iter().rev() {
-            let cons = self.eqlog.new_term_list_node();
-            self.eqlog.insert_cons_term_list_node(cons, *tm, node);
-            node = cons;
-        }
-
-        let loc = self.intern_loc(self.ast.loc(list));
-        self.eqlog.insert_term_list_node_loc(node, loc);
-
-        node
-    }
-
     fn build_type_expr(&mut self, type_expr: TypeExprId) -> TypeExprNode {
         let node = self.eqlog.new_type_expr_node();
         match *self.ast.type_expr(type_expr) {
@@ -147,249 +85,16 @@ impl<'a> Ctx<'a> {
                 let ident = self.intern_ident(&name);
                 self.eqlog.insert_ambient_type_expr(node, ident);
             }
-            TypeExpr::Member(id) => {
-                let MemberTypeExpr { term, name } = self.ast.member_type_expr(id);
-                let term = *term;
-                let name = name.clone();
-                let term_node = self.build_term(term);
-                let ident = self.intern_ident(&name);
-                self.eqlog.insert_member_type_expr(node, term_node, ident);
-            }
             TypeExpr::Mor(id) => {
                 let name = self.ast.mor_type_expr(id).name.clone();
                 let ident = self.intern_ident(&name);
                 self.eqlog.insert_mor_type_expr(node, ident);
             }
+            TypeExpr::Member(_) => {}
         }
 
         let loc = self.intern_loc(self.ast.loc(type_expr));
         self.eqlog.insert_type_expr_node_loc(node, loc);
-
-        node
-    }
-
-    fn build_pred_expr(&mut self, pred_expr: PredExprId) -> PredExprNode {
-        let node = self.eqlog.new_pred_expr_node();
-        match *self.ast.pred_expr(pred_expr) {
-            PredExpr::Ambient(id) => {
-                let name = self.ast.ambient_pred_expr(id).name.clone();
-                let ident = self.intern_ident(&name);
-                self.eqlog.insert_ambient_pred_expr(node, ident);
-            }
-            PredExpr::Member(id) => {
-                let MemberPredExpr { term, name } = self.ast.member_pred_expr(id);
-                let term = *term;
-                let name = name.clone();
-                let term_node = self.build_term(term);
-                let ident = self.intern_ident(&name);
-                self.eqlog.insert_member_pred_expr(node, term_node, ident);
-            }
-        }
-
-        let loc = self.intern_loc(self.ast.loc(pred_expr));
-        self.eqlog.insert_pred_expr_node_loc(node, loc);
-
-        node
-    }
-
-    fn build_func_expr(&mut self, func_expr: FuncExprId) -> FuncExprNode {
-        let node = self.eqlog.new_func_expr_node();
-        match *self.ast.func_expr(func_expr) {
-            FuncExpr::Ambient(id) => {
-                let name = self.ast.ambient_func_expr(id).name.clone();
-                let ident = self.intern_ident(&name);
-                self.eqlog.insert_ambient_func_expr(node, ident);
-            }
-            FuncExpr::Member(id) => {
-                let MemberFuncExpr { term, name } = self.ast.member_func_expr(id);
-                let term = *term;
-                let name = name.clone();
-                let term_node = self.build_term(term);
-                let ident = self.intern_ident(&name);
-                self.eqlog.insert_member_func_expr(node, term_node, ident);
-            }
-        }
-
-        let loc = self.intern_loc(self.ast.loc(func_expr));
-        self.eqlog.insert_func_expr_node_loc(node, loc);
-
-        node
-    }
-
-    fn build_if_atom(&mut self, atom: IfAtomId) -> IfAtomNode {
-        let node = self.eqlog.new_if_atom_node();
-        match *self.ast.if_atom(atom) {
-            IfAtom::Equal(id) => {
-                let EqualAtom { lhs, rhs } = *self.ast.equal_atom(id);
-                let lhs = self.build_term(lhs);
-                let rhs = self.build_term(rhs);
-                self.eqlog.insert_equal_if_atom_node(node, lhs, rhs);
-            }
-            IfAtom::Defined(id) => {
-                let DefinedIfAtom { term } = *self.ast.defined_if_atom(id);
-                let term_node = self.build_term(term);
-                self.eqlog.insert_defined_if_atom_node(node, term_node);
-            }
-            IfAtom::Pred(id) => {
-                let PredAtom { pred, args } = *self.ast.pred_atom(id);
-                let pred_node = self.build_pred_expr(pred);
-                let args_node = self.build_term_list(args);
-                self.eqlog
-                    .insert_pred_if_atom_node(node, pred_node, args_node);
-            }
-            IfAtom::Var(id) => {
-                let VarIfAtom { term, typ } = *self.ast.var_if_atom(id);
-                let term_node = self.build_term(term);
-                let typ_node = self.build_type_expr(typ);
-                self.eqlog
-                    .insert_var_if_atom_node(node, term_node, typ_node);
-            }
-        }
-
-        let loc = self.intern_loc(self.ast.loc(atom));
-        self.eqlog.insert_if_atom_node_loc(node, loc);
-
-        node
-    }
-
-    fn build_then_atom(&mut self, atom: ThenAtomId) -> ThenAtomNode {
-        let node = self.eqlog.new_then_atom_node();
-        match *self.ast.then_atom(atom) {
-            ThenAtom::Equal(id) => {
-                let EqualAtom { lhs, rhs } = *self.ast.equal_atom(id);
-                let lhs = self.build_term(lhs);
-                let rhs = self.build_term(rhs);
-                self.eqlog.insert_equal_then_atom_node(node, lhs, rhs);
-            }
-            ThenAtom::Defined(id) => {
-                let DefinedThenAtom { var, term } = *self.ast.defined_then_atom(id);
-                let term_node = self.build_term(term);
-                let var_node = self.build_opt_term(var);
-                self.eqlog
-                    .insert_defined_then_atom_node(node, var_node, term_node);
-            }
-            ThenAtom::Pred(id) => {
-                let PredAtom { pred, args } = *self.ast.pred_atom(id);
-                let pred_node = self.build_pred_expr(pred);
-                let args_node = self.build_term_list(args);
-                self.eqlog
-                    .insert_pred_then_atom_node(node, pred_node, args_node);
-            }
-        }
-
-        let loc = self.intern_loc(self.ast.loc(atom));
-        self.eqlog.insert_then_atom_node_loc(node, loc);
-
-        node
-    }
-
-    fn build_opt_term(&mut self, term: Option<TermId>) -> OptTermNode {
-        let node = self.eqlog.new_opt_term_node();
-        match term {
-            Some(term) => {
-                let term_node = self.build_term(term);
-                self.eqlog.insert_some_term_node(node, term_node);
-            }
-            None => {
-                self.eqlog.insert_none_term_node(node);
-            }
-        }
-        node
-    }
-
-    fn build_stmt_block(&mut self, stmts: &[StmtId]) -> StmtListNode {
-        let stmt_nodes: Vec<StmtNode> = stmts.iter().map(|s| self.build_stmt(*s)).collect();
-        let mut node = self.eqlog.new_stmt_list_node();
-        self.eqlog.insert_nil_stmt_list_node(node);
-        for stmt in stmt_nodes.iter().rev() {
-            let cons = self.eqlog.new_stmt_list_node();
-            self.eqlog.insert_cons_stmt_list_node(cons, *stmt, node);
-            node = cons;
-        }
-        node
-    }
-
-    fn build_stmt_block_list(&mut self, blocks: &[Vec<StmtId>]) -> StmtBlockListNode {
-        let block_nodes: Vec<StmtListNode> =
-            blocks.iter().map(|b| self.build_stmt_block(b)).collect();
-        let mut node = self.eqlog.new_stmt_block_list_node();
-        self.eqlog.insert_nil_stmt_block_list_node(node);
-        for block in block_nodes.iter().rev() {
-            let cons = self.eqlog.new_stmt_block_list_node();
-            self.eqlog
-                .insert_cons_stmt_block_list_node(cons, *block, node);
-            node = cons;
-        }
-        node
-    }
-
-    fn build_match_case(&mut self, case: MatchCaseId) -> MatchCaseNode {
-        let node = self.eqlog.new_match_case_node();
-        let MatchCase { pattern, body } = self.ast.match_case(case);
-        let pattern = *pattern;
-        let body = body.clone();
-        let pattern_node = self.build_term(pattern);
-        let body_node = self.build_stmt_block(&body);
-        self.eqlog.insert_match_case(node, pattern_node, body_node);
-
-        let loc = self.intern_loc(self.ast.loc(case));
-        self.eqlog.insert_match_case_node_loc(node, loc);
-
-        node
-    }
-
-    fn build_match_case_list(&mut self, cases: &[MatchCaseId]) -> MatchCaseListNode {
-        let case_nodes: Vec<MatchCaseNode> =
-            cases.iter().map(|c| self.build_match_case(*c)).collect();
-        let mut node = self.eqlog.new_match_case_list_node();
-        self.eqlog.insert_nil_match_case_list_node(node);
-        for case in case_nodes.iter().rev() {
-            let cons = self.eqlog.new_match_case_list_node();
-            self.eqlog
-                .insert_cons_match_case_list_node(cons, *case, node);
-            node = cons;
-        }
-        node
-    }
-
-    fn build_stmt(&mut self, stmt: StmtId) -> StmtNode {
-        let node = self.eqlog.new_stmt_node();
-        let insert_loc;
-        match *self.ast.stmt(stmt) {
-            Stmt::If(id) => {
-                let atom = self.ast.if_stmt(id).atom;
-                let atom_node = self.build_if_atom(atom);
-                self.eqlog.insert_if_stmt_node(node, atom_node);
-                insert_loc = true;
-            }
-            Stmt::Then(id) => {
-                let atom = self.ast.then_stmt(id).atom;
-                let atom_node = self.build_then_atom(atom);
-                self.eqlog.insert_then_stmt_node(node, atom_node);
-                insert_loc = true;
-            }
-            Stmt::Branch(id) => {
-                let blocks = self.ast.branch_stmt(id).blocks.clone();
-                let blocks_node = self.build_stmt_block_list(&blocks);
-                self.eqlog.insert_branch_stmt_node(node, blocks_node);
-                insert_loc = false;
-            }
-            Stmt::Match(id) => {
-                let MatchStmt { term, cases } = self.ast.match_stmt(id);
-                let term = *term;
-                let cases = cases.clone();
-                let term_node = self.build_term(term);
-                let cases_node = self.build_match_case_list(&cases);
-                self.eqlog
-                    .insert_match_stmt_node(node, term_node, cases_node);
-                insert_loc = true;
-            }
-        }
-
-        if insert_loc {
-            let loc = self.intern_loc(self.ast.loc(stmt));
-            self.eqlog.insert_stmt_node_loc(node, loc);
-        }
 
         node
     }
@@ -523,26 +228,6 @@ impl<'a> Ctx<'a> {
         node
     }
 
-    fn build_rule_decl(&mut self, decl: RuleDeclId) -> RuleDeclNode {
-        let node = self.eqlog.new_rule_decl_node();
-        self.maps.rule_decl_nodes.insert(decl, node);
-        let RuleDecl { name, body } = self.ast.rule_decl(decl);
-        let name = name.clone();
-        let body = body.clone();
-        let body_node = self.build_stmt_block(&body);
-        self.eqlog.insert_rule_decl(node, body_node);
-
-        if let Some(name) = name {
-            let ident = self.intern_ident(&name);
-            self.eqlog.insert_rule_name(node, ident);
-        }
-
-        let loc = self.intern_loc(self.ast.loc(decl));
-        self.eqlog.insert_rule_decl_node_loc(node, loc);
-
-        node
-    }
-
     fn build_model_decl(&mut self, decl: ModelDeclId) -> ModelDeclNode {
         let node = self.eqlog.new_model_decl_node();
         self.maps.model_decl_nodes.insert(decl, node);
@@ -559,7 +244,7 @@ impl<'a> Ctx<'a> {
         node
     }
 
-    fn build_decl(&mut self, decl: DeclId) -> DeclNode {
+    fn build_decl(&mut self, decl: DeclId) -> Option<DeclNode> {
         let node = self.eqlog.new_decl_node();
         match *self.ast.decl(decl) {
             Decl::Type(d) => {
@@ -574,10 +259,6 @@ impl<'a> Ctx<'a> {
                 let inner = self.build_func_decl(d);
                 self.eqlog.insert_decl_node_func(node, inner);
             }
-            Decl::Rule(d) => {
-                let inner = self.build_rule_decl(d);
-                self.eqlog.insert_decl_node_rule(node, inner);
-            }
             Decl::Enum(d) => {
                 let inner = self.build_enum_decl(d);
                 self.eqlog.insert_decl_node_enum(node, inner);
@@ -586,12 +267,13 @@ impl<'a> Ctx<'a> {
                 let inner = self.build_model_decl(d);
                 self.eqlog.insert_decl_node_model(node, inner);
             }
+            Decl::Rule(_) => return None,
         }
-        node
+        Some(node)
     }
 
     fn build_decl_list(&mut self, decls: &[DeclId]) -> DeclListNode {
-        let decl_nodes: Vec<DeclNode> = decls.iter().map(|d| self.build_decl(*d)).collect();
+        let decl_nodes: Vec<DeclNode> = decls.iter().filter_map(|d| self.build_decl(*d)).collect();
         let mut node = self.eqlog.new_decl_list_node();
         self.eqlog.insert_nil_decl_list_node(node);
         for decl in decl_nodes.iter().rev() {

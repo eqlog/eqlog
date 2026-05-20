@@ -1,85 +1,11 @@
 use convert_case::{Case, Casing};
 use eqlog_eqlog::*;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fmt::Display;
-use std::iter::successors;
 
 use Case::Snake;
 
 use crate::fmt_util::FmtFn;
-
-pub fn iter_els<'a>(structure: Structure, eqlog: &'a Eqlog) -> impl 'a + Iterator<Item = El> {
-    eqlog.iter_el_structure().filter_map(move |(el, strct)| {
-        if eqlog.are_equal_structure(strct, structure) {
-            Some(el)
-        } else {
-            None
-        }
-    })
-}
-
-pub fn iter_vars<'a>(
-    structure: Structure,
-    eqlog: &'a Eqlog,
-) -> impl 'a + Iterator<Item = (Ident, El)> {
-    eqlog.iter_var().filter_map(move |(strct, el_name, el)| {
-        if !eqlog.are_equal_structure(strct, structure) {
-            return None;
-        }
-
-        let virt_ident = eqlog
-            .iter_semantic_name()
-            .find_map(|(virt_ident, _, el_name0)| {
-                if eqlog.are_equal_el_name(el_name0, el_name) {
-                    Some(virt_ident)
-                } else {
-                    None
-                }
-            })?;
-
-        let ident = eqlog.iter_real_virt_ident().find_map(|(ident, vrt_id)| {
-            if eqlog.are_equal_virt_ident(vrt_id, virt_ident) {
-                Some(ident)
-            } else {
-                None
-            }
-        })?;
-
-        Some((ident, el))
-    })
-}
-
-pub fn el_list_vec(mut els: ElList, eqlog: &Eqlog) -> Vec<El> {
-    let mut conss = Vec::new();
-    let mut snocs = Vec::new();
-    loop {
-        let cons_entry = eqlog
-            .iter_cons_el_list()
-            .find(|(_, _, cons_els)| eqlog.are_equal_el_list(*cons_els, els));
-        if let Some((head_el, tail_els, _)) = cons_entry {
-            conss.push(head_el);
-            els = tail_els;
-            continue;
-        }
-
-        let snoc_entry = eqlog
-            .iter_snoc_el_list()
-            .find(|(_, _, snoc_els)| eqlog.are_equal_el_list(*snoc_els, els));
-        if let Some((init_els, last_el, _)) = snoc_entry {
-            snocs.push(last_el);
-            els = init_els;
-            continue;
-        }
-
-        assert!(eqlog
-            .iter_nil_el_list()
-            .find(|(_, nil)| eqlog.are_equal_el_list(els, *nil))
-            .is_some());
-        break;
-    }
-
-    conss.into_iter().chain(snocs.into_iter().rev()).collect()
-}
 
 pub fn type_list_vec(mut types: TypeList, eqlog: &Eqlog) -> Vec<Type> {
     let mut conss = Vec::new();
@@ -269,47 +195,4 @@ pub fn display_rel<'a>(
     }
 
     panic!("Rel should be either pred or func")
-}
-
-/// A breadth-first traversal of the morphisms of a rule.
-pub fn iter_rule_morphisms<'a>(
-    rule: RuleDeclNode,
-    eqlog: &'a Eqlog,
-) -> impl 'a + Iterator<Item = Vec<Morphism>> {
-    let first_dom = eqlog.before_rule_structure(rule).unwrap();
-
-    let first_morphisms: Vec<Morphism> = eqlog
-        .iter_source()
-        .filter_map(|(morph, dom)| {
-            if eqlog.are_equal_structure(dom, first_dom) {
-                Some(morph)
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    successors(
-        (!first_morphisms.is_empty()).then_some(first_morphisms),
-        |prev_morphisms| {
-            let prev_cods: BTreeSet<Structure> = prev_morphisms
-                .iter()
-                .copied()
-                .map(|morph| eqlog.target(morph).unwrap())
-                .collect();
-
-            let next_morphisms: Vec<Morphism> = eqlog
-                .iter_source()
-                .filter_map(|(morph, dom)| {
-                    if prev_cods.contains(&dom) {
-                        Some(morph)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-
-            (!next_morphisms.is_empty()).then_some(next_morphisms)
-        },
-    )
 }
