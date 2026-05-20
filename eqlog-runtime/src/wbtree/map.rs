@@ -1166,7 +1166,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use rand::rngs::StdRng;
-    use rand::{Rng, RngExt, SeedableRng};
+    use rand::{RngExt, SeedableRng};
 
     /// Print the tree structure in ASCII art format for debugging
     pub fn print_tree_debug<V>(node: &Option<Rc<Node<V>>>)

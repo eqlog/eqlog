@@ -1,0 +1,5 @@
+Remove unused rand import
+
+Drop the obsolete Rng import from the wbtree map tests. The tests
+call random_range through RngExt, so importing Rng only produces an
+unused import warning.
