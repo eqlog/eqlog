@@ -1,35 +1,20 @@
 pred absurd();
 
 // ## Identifiers
-//
-// The `Ident` type corresponds to actual strings that occur in the source
-// file. The `VirtIdent` type represent ids that do not occur verbatim in
-// source code, but semantically correspond to identifiers. For example, each
-// occurence of a wildcard token _ corresponds to a separate `VirtIdent` which
-// does not arise from an `Ident`.
+
 type Ident;
-type VirtIdent;
 
-func real_virt_ident(Ident) -> VirtIdent;
-func virt_real_ident(VirtIdent) -> Ident;
-
-rule real_virt_ident_total {
-    if ident: Ident;
-    then real_virt_ident(ident)!;
-}
-rule virt_real_ident_retraction {
-    if virt_ident = real_virt_ident(ident);
-    then virt_real_ident(virt_ident) = ident;
-}
-
-// ## Abstract syntax tree (AST) nodes
+// ## Abstract syntax tree (AST) declaration nodes
 
 type TypeDeclNode;
 pred type_decl(TypeDeclNode, name: Ident);
 
+type TypeExprNode;
+pred ambient_type_expr(node: TypeExprNode, ty_ident: Ident);
+pred mor_type_expr(node: TypeExprNode, ty_ident: Ident);
+
 type ArgDeclNode;
-// arg_decl_node_name is optional (but must be unique), arg_decl_node_type is
-// mandatory and must be unique.
+// arg_decl_node_name is optional, arg_decl_node_type is mandatory.
 pred arg_decl_node_name(ArgDeclNode, name: Ident);
 pred arg_decl_node_type(ArgDeclNode, typ: TypeExprNode);
 
@@ -53,73 +38,6 @@ pred cons_ctor_decl_list_node(CtorDeclListNode, head: CtorDeclNode, tail: CtorDe
 type EnumDeclNode;
 pred enum_decl(EnumDeclNode, name: Ident, ctors: CtorDeclListNode);
 
-type TermNode;
-
-type TermListNode;
-pred nil_term_list_node(nil: TermListNode);
-pred cons_term_list_node(node: TermListNode, head: TermNode, tail: TermListNode);
-
-type TypeExprNode;
-pred ambient_type_expr(node: TypeExprNode, ty_ident: Ident);
-pred member_type_expr(node: TypeExprNode, tm: TermNode, ty_ident: Ident);
-pred mor_type_expr(node: TypeExprNode, ty_ident: Ident);
-
-type PredExprNode;
-pred ambient_pred_expr(node: PredExprNode, pred_ident: Ident);
-pred member_pred_expr(node: PredExprNode, tm: TermNode, pred_ident: Ident);
-
-type FuncExprNode;
-pred ambient_func_expr(node: FuncExprNode, func_ident: Ident);
-pred member_func_expr(node: FuncExprNode, tm: TermNode, func_ident: Ident);
-
-type OptTermNode;
-pred none_term_node(OptTermNode);
-pred some_term_node(OptTermNode, value: TermNode);
-
-pred var_term_node(TermNode, VirtIdent);
-pred wildcard_term_node(TermNode);
-pred app_term_node(TermNode, func_expr: FuncExprNode, args: TermListNode);
-pred dom_term_node(TermNode, mor_arg: TermNode);
-pred cod_term_node(TermNode, mor_arg: TermNode);
-pred mor_app_term_node(TermNode, mor_term: TermNode, arg_term: TermNode);
-
-type MatchCaseNode;
-pred match_case(node: MatchCaseNode, pattern: TermNode, body: StmtListNode);
-
-type MatchCaseListNode;
-pred nil_match_case_list_node(nil: MatchCaseListNode);
-pred cons_match_case_list_node(node: MatchCaseListNode, head: MatchCaseNode, tail: MatchCaseListNode);
-
-type IfAtomNode;
-pred equal_if_atom_node(IfAtomNode, lhs: TermNode, rhs: TermNode);
-pred defined_if_atom_node(IfAtomNode, term: TermNode);
-pred pred_if_atom_node(IfAtomNode, predicate: PredExprNode, args: TermListNode);
-pred var_if_atom_node(IfAtomNode, var: TermNode, type_expr: TypeExprNode);
-
-type ThenAtomNode;
-pred equal_then_atom_node(ThenAtomNode, lhs: TermNode, rhs: TermNode);
-pred defined_then_atom_node(ThenAtomNode, var: OptTermNode, tm: TermNode);
-pred pred_then_atom_node(ThenAtomNode, predicate: PredExprNode, args: TermListNode);
-
-type StmtNode;
-pred if_stmt_node(StmtNode, IfAtomNode);
-pred then_stmt_node(StmtNode, ThenAtomNode);
-pred branch_stmt_node(StmtNode, blocks: StmtBlockListNode);
-pred match_stmt_node(StmtNode, term: TermNode, cases: MatchCaseListNode);
-
-type StmtListNode;
-pred nil_stmt_list_node(nil: StmtListNode);
-pred cons_stmt_list_node(node: StmtListNode, head: StmtNode, tail: StmtListNode);
-
-type StmtBlockListNode;
-pred nil_stmt_block_list_node(node: StmtBlockListNode);
-pred cons_stmt_block_list_node(node: StmtBlockListNode, head: StmtListNode, tail: StmtBlockListNode);
-
-type RuleDeclNode;
-pred rule_decl(node: RuleDeclNode, stmts: StmtListNode);
-// This is defined for non-anonymous RuleDeclNode elements only.
-func rule_name(RuleDeclNode) -> Ident;
-
 type ModelDeclNode;
 pred model_decl(node: ModelDeclNode, name: Ident, body: DeclListNode);
 
@@ -127,7 +45,6 @@ type DeclNode;
 pred decl_node_type(DeclNode, TypeDeclNode);
 pred decl_node_pred(DeclNode, PredDeclNode);
 pred decl_node_func(DeclNode, FuncDeclNode);
-pred decl_node_rule(DeclNode, RuleDeclNode);
 pred decl_node_enum(DeclNode, EnumDeclNode);
 pred decl_node_model(DeclNode, ModelDeclNode);
 
@@ -138,12 +55,12 @@ pred cons_decl_list_node(DeclListNode, head: DeclNode, tail: DeclListNode);
 type ModuleNode;
 pred decls_module_node(ModuleNode, DeclListNode);
 
-func module_name(module: ModuleNode) -> Ident;
-
 // ### Locations
+
 type Loc;
 
 func type_decl_node_loc(TypeDeclNode) -> Loc;
+func type_expr_node_loc(TypeExprNode) -> Loc;
 func arg_decl_node_loc(ArgDeclNode) -> Loc;
 func arg_decl_list_node_loc(ArgDeclListNode) -> Loc;
 func pred_decl_node_loc(PredDeclNode) -> Loc;
@@ -151,360 +68,10 @@ func func_decl_node_loc(FuncDeclNode) -> Loc;
 func ctor_decl_node_loc(CtorDeclNode) -> Loc;
 func enum_decl_node_loc(EnumDeclNode) -> Loc;
 func model_decl_node_loc(ModelDeclNode) -> Loc;
-func term_node_loc(TermNode) -> Loc;
-func term_list_node_loc(TermListNode) -> Loc;
-func match_case_node_loc(MatchCaseNode) -> Loc;
-func opt_term_node_loc(OptTermNode) -> Loc;
-func if_atom_node_loc(IfAtomNode) -> Loc;
-func then_atom_node_loc(ThenAtomNode) -> Loc;
-func stmt_node_loc(StmtNode) -> Loc;
-func stmt_list_node_loc(StmtListNode) -> Loc;
-func rule_decl_node_loc(RuleDeclNode) -> Loc;
-func decl_node_loc(DeclNode) -> Loc;
 func decl_list_node_loc(DeclListNode) -> Loc;
 func module_node_loc(ModuleNode) -> Loc;
-func type_expr_node_loc(TypeExprNode) -> Loc;
-func pred_expr_node_loc(PredExprNode) -> Loc;
-func func_expr_node_loc(FuncExprNode) -> Loc;
 
-// ### Descendant nodes of rules
-//
-// Every node that can appear as a descendant of a `RuleDeclNode` can be
-// coerced into a `RuleDescendantNode`.
-type RuleDescendantNode;
-
-func rule_descendant_rule(RuleDeclNode) -> RuleDescendantNode;
-func rule_descendant_term(TermNode) -> RuleDescendantNode;
-func rule_descendant_term_list(TermListNode) -> RuleDescendantNode;
-func rule_descendant_opt_term(OptTermNode) -> RuleDescendantNode;
-func rule_descendant_if_atom(IfAtomNode) -> RuleDescendantNode;
-func rule_descendant_then_atom(ThenAtomNode) -> RuleDescendantNode;
-func rule_descendant_match_case(MatchCaseNode) -> RuleDescendantNode;
-func rule_descendant_match_case_list(MatchCaseListNode) -> RuleDescendantNode;
-func rule_descendant_stmt(StmtNode) -> RuleDescendantNode;
-func rule_descendant_stmt_list(StmtListNode) -> RuleDescendantNode;
-func rule_descendant_stmt_block_list(StmtBlockListNode) -> RuleDescendantNode;
-func rule_descendant_type_expr(TypeExprNode) -> RuleDescendantNode;
-func rule_descendant_pred_expr(PredExprNode) -> RuleDescendantNode;
-func rule_descendant_func_expr(FuncExprNode) -> RuleDescendantNode;
-
-rule rule_descendant_rule_total {
-    if rul: RuleDeclNode;
-    then rule_descendant_rule(rul)!;
-}
-rule rule_descendant_term_total {
-    if tm: TermNode;
-    then rule_descendant_term(tm)!;
-}
-rule rule_descendant_term_list_total {
-    if tms: TermListNode;
-    then rule_descendant_term_list(tms)!;
-}
-rule rule_descendant_opt_term_total {
-    if opt_tm: OptTermNode;
-    then rule_descendant_opt_term(opt_tm)!;
-}
-rule rule_descendant_if_atom_total {
-    if atom: IfAtomNode;
-    then rule_descendant_if_atom(atom)!;
-}
-rule rule_descendant_then_atom_total {
-    if atom: ThenAtomNode;
-    then rule_descendant_then_atom(atom)!;
-}
-rule rule_descendant_match_case_total {
-    if case: MatchCaseNode;
-    then rule_descendant_match_case(case)!;
-}
-rule rule_descendant_match_case_list_total {
-    if cases: MatchCaseListNode;
-    then rule_descendant_match_case_list(cases)!;
-}
-rule rule_descendant_stmt_total {
-    if stmt: StmtNode;
-    then rule_descendant_stmt(stmt)!;
-}
-rule rule_descendant_stmt_list_total {
-    if stmts: StmtListNode;
-    then rule_descendant_stmt_list(stmts)!;
-}
-rule rule_descendant_stmt_block_list_total {
-    if blocks: StmtBlockListNode;
-    then rule_descendant_stmt_block_list(blocks)!;
-}
-rule rule_descendant_type_expr_total {
-    if type_expr: TypeExprNode;
-    then rule_descendant_type_expr(type_expr)!;
-}
-rule rule_descendant_pred_expr_total {
-    if pred_expr: PredExprNode;
-    then rule_descendant_pred_expr(pred_expr)!;
-}
-rule rule_descendant_func_expr_total {
-    if func_expr: FuncExprNode;
-    then rule_descendant_func_expr(func_expr)!;
-}
-
-/// ### Scopes
-
-type Scope;
-
-pred var_in_scope(VirtIdent, Scope);
-pred scope_extension(smaller: Scope, larger: Scope);
-
-rule scope_extension_vars {
-    if var_in_scope(ident, scope);
-    if scope_extension(scope, extension);
-    then var_in_scope(ident, extension);
-}
-
-func entry_scope(RuleDescendantNode) -> Scope;
-func exit_scope(RuleDescendantNode) -> Scope;
-
-rule entry_exit_scope_total {
-    if descendant: RuleDescendantNode;
-    then entry_scope(descendant)!;
-    then exit_scope(descendant)!;
-}
-rule exit_scope_extends_entry_scope {
-    if node: RuleDescendantNode;
-    if entry = entry_scope(node);
-    if exit = exit_scope(node);
-    then scope_extension(entry, exit);
-}
-
-pred scope_single_child(child: RuleDescendantNode, parent: RuleDescendantNode);
-pred scope_extension_siblings(first_child: RuleDescendantNode, second_child: RuleDescendantNode, parent: RuleDescendantNode);
-
-rule scope_single_child_scopes {
-    if scope_single_child(child, parent);
-    if parent_entry = entry_scope(parent);
-    if parent_exit = exit_scope(parent);
-    then entry_scope(child) = parent_entry;
-    then exit_scope(child) = parent_exit;
-}
-
-rule scope_extension_siblings_parent_first {
-    if scope_extension_siblings(first_child, _, parent);
-    if parent_entry = entry_scope(parent);
-    then entry_scope(first_child) = parent_entry;
-}
-
-rule scope_extension_siblings_first_second {
-    if scope_extension_siblings(first_child, second_child, _);
-    if first_exit = exit_scope(first_child);
-    then entry_scope(second_child) = first_exit;
-}
-
-rule scope_extension_siblings_second_parent {
-    if scope_extension_siblings(_, second_child, parent);
-    if second_exit = exit_scope(second_child);
-    then exit_scope(parent) = second_exit;
-}
-
-rule scopes_rule_stmts {
-    if rule_decl(rul, stmts);
-
-    if descendant_rule = rule_descendant_rule(rul);
-    if descendant_stmts = rule_descendant_stmt_list(stmts);
-
-    then scope_single_child(descendant_stmts, descendant_rule);
-}
-
-rule scopes_stmt_list_cons {
-    if cons_stmt_list_node(stmts, head, tail);
-
-    if descendant_stmts = rule_descendant_stmt_list(stmts);
-    if descendant_head = rule_descendant_stmt(head);
-    if descendant_tail = rule_descendant_stmt_list(tail);
-
-    then scope_extension_siblings(descendant_head, descendant_tail, descendant_stmts);
-}
-
-rule scopes_stmt_block_list_cons {
-    if cons_stmt_block_list_node(blocks, head, tail);
-    if descendant_blocks = rule_descendant_stmt_block_list(blocks);
-    if descendant_head = rule_descendant_stmt_list(head);
-    if descendant_tail = rule_descendant_stmt_block_list(tail);
-
-    if blocks_entry = entry_scope(descendant_blocks);
-
-    then blocks_entry = entry_scope(descendant_head);
-    then blocks_entry = entry_scope(descendant_tail);
-}
-
-rule scopes_stmt_if {
-    if if_stmt_node(stmt, atom);
-    if descendant_stmt = rule_descendant_stmt(stmt);
-    if descendant_atom = rule_descendant_if_atom(atom);
-
-    then scope_single_child(descendant_atom, descendant_stmt);
-}
-rule scopes_stmt_then {
-    if then_stmt_node(stmt, atom);
-    if descendant_stmt = rule_descendant_stmt(stmt);
-    if descendant_atom = rule_descendant_then_atom(atom);
-
-    then scope_single_child(descendant_atom, descendant_stmt);
-}
-rule scopes_stmt_branch {
-    if branch_stmt_node(stmt, blocks);
-    if descendant_stmt = rule_descendant_stmt(stmt);
-    if descendant_block_list = rule_descendant_stmt_block_list(blocks);
-
-    then scope_single_child(descendant_block_list, descendant_stmt);
-}
-rule scopes_stmt_match {
-    if match_stmt_node(stmt, term, cases);
-    if stmt_descendant = rule_descendant_stmt(stmt);
-    if descendant_term = rule_descendant_term(term);
-    if descendant_cases = rule_descendant_match_case_list(cases);
-
-    then scope_extension_siblings(descendant_term, descendant_cases, stmt_descendant);
-}
-
-rule scopes_if_atom_equal {
-    if equal_if_atom_node(atom, lhs, rhs);
-    if atom_descendant = rule_descendant_if_atom(atom);
-    if descendant_lhs = rule_descendant_term(lhs);
-    if descendant_rhs = rule_descendant_term(rhs);
-
-    then scope_extension_siblings(descendant_lhs, descendant_rhs, atom_descendant);
-}
-rule scopes_if_atom_defined {
-    if defined_if_atom_node(atom, tm);
-    if atom_descendant = rule_descendant_if_atom(atom);
-    if descendant_tm = rule_descendant_term(tm);
-
-    then scope_single_child(descendant_tm, atom_descendant);
-}
-rule scopes_if_atom_pred {
-    if pred_if_atom_node(atom, pred_expr, tms);
-    if atom_descendant = rule_descendant_if_atom(atom);
-    if pred_expr_descendant = rule_descendant_pred_expr(pred_expr);
-    if tms_descendant = rule_descendant_term_list(tms);
-
-    then scope_extension_siblings(pred_expr_descendant, tms_descendant, atom_descendant);
-}
-rule scopes_if_atom_var {
-    if var_if_atom_node(atom, tm, type_expr);
-    if atom_descendant = rule_descendant_if_atom(atom);
-    if tm_descendant = rule_descendant_term(tm);
-    if type_expr_descendant = rule_descendant_type_expr(type_expr);
-
-    // We don't want the newly introduced (variable) term to be in scope for
-    // the type it's supposed to have. Otherwise we'd have things like
-    // ```
-    //   if x : x.member_type;
-    // ```
-    // which is nonsensical. So that's why we can't make the entry scope of
-    // type_expr node agree with the exit scope of the term, even though
-    // syntactically the variable preceeds the type expression. The other way
-    // round makes a bit more sense, but we could also think about just not
-    // enforcing a relation between the type expr node and the variable node.
-    then scope_extension_siblings(type_expr_descendant, tm_descendant, atom_descendant);
-}
-
-rule scopes_then_atom_equal {
-    if equal_then_atom_node(atom, lhs, rhs);
-
-    if atom_descendant = rule_descendant_then_atom(atom);
-    if lhs_descendant = rule_descendant_term(lhs);
-    if rhs_descendant = rule_descendant_term(rhs);
-
-    then scope_extension_siblings(lhs_descendant, rhs_descendant, atom_descendant);
-}
-rule scopes_then_atom_defined {
-    if defined_then_atom_node(atom, var_tm, tm);
-    if atom_descendant = rule_descendant_then_atom(atom);
-    if var_tm_descendant = rule_descendant_opt_term(var_tm);
-    if tm_descendant = rule_descendant_term(tm);
-
-    then scope_extension_siblings(var_tm_descendant, tm_descendant, atom_descendant);
-}
-rule scopes_then_atom_pred {
-    if pred_then_atom_node(atom, pred_expr, tms);
-    if atom_descendant = rule_descendant_then_atom(atom);
-    if pred_expr_descendant = rule_descendant_pred_expr(pred_expr);
-    if tms_descendant = rule_descendant_term_list(tms);
-
-    then scope_extension_siblings(pred_expr_descendant, tms_descendant, atom_descendant);
-}
-
-// No rules for match case nodes -- they're taken care of by desugaring to BlockListNodes.
-
-rule scopes_term_list_cons {
-    if cons_term_list_node(tms, head, tail);
-    if tms_descendant = rule_descendant_term_list(tms);
-    if head_descendant = rule_descendant_term(head);
-    if tail_descendant = rule_descendant_term_list(tail);
-
-    then scope_extension_siblings(head_descendant, tail_descendant, tms_descendant);
-}
-rule scopes_opt_term_some {
-    if some_term_node(opt_tm, tm);
-    if opt_tm_descendant = rule_descendant_opt_term(opt_tm);
-    if tm_descendant = rule_descendant_term(tm);
-
-    then scope_single_child(tm_descendant, opt_tm_descendant);
-}
-rule scopes_term_app {
-    if app_term_node(tm, func_expr, args);
-    if tm_descendant = rule_descendant_term(tm);
-    if func_expr_descendant = rule_descendant_func_expr(func_expr);
-    if args_descendant = rule_descendant_term_list(args);
-
-    then scope_extension_siblings(func_expr_descendant, args_descendant, tm_descendant);
-}
-rule scopes_term_dom {
-    if dom_term_node(tm, arg_tm);
-    if tm_descendant = rule_descendant_term(tm);
-    if arg_descendant = rule_descendant_term(arg_tm);
-
-    then scope_single_child(arg_descendant, tm_descendant);
-}
-rule scopes_term_cod {
-    if cod_term_node(tm, arg_tm);
-    if tm_descendant = rule_descendant_term(tm);
-    if arg_descendant = rule_descendant_term(arg_tm);
-
-    then scope_single_child(arg_descendant, tm_descendant);
-}
-rule scopes_term_mor_app {
-    if mor_app_term_node(tm, mor_term, arg_term);
-    if tm_descendant = rule_descendant_term(tm);
-    if mor_descendant = rule_descendant_term(mor_term);
-    if arg_descendant = rule_descendant_term(arg_term);
-
-    then scope_extension_siblings(mor_descendant, arg_descendant, tm_descendant);
-}
-rule scopes_term_var {
-    if var_term_node(tm, virt_ident);
-    if tm_descendant = rule_descendant_term(tm);
-    if tm_exit = exit_scope(tm_descendant);
-
-    then var_in_scope(virt_ident, tm_exit);
-}
-rule scopes_member_type_expr {
-    if member_type_expr(type_expr, tm, _);
-    if type_expr_descendant = rule_descendant_type_expr(type_expr);
-    if tm_descendant = rule_descendant_term(tm);
-    then scope_single_child(tm_descendant, type_expr_descendant);
-}
-rule scopes_member_pred_expr {
-    if member_pred_expr(pred_expr, tm, _);
-    if pred_expr_descendant = rule_descendant_pred_expr(pred_expr);
-    if tm_descendant = rule_descendant_term(tm);
-    then scope_single_child(tm_descendant, pred_expr_descendant);
-}
-rule scopes_member_func_expr {
-    if member_func_expr(func_expr, tm, _);
-    if func_expr_descendant = rule_descendant_func_expr(func_expr);
-    if tm_descendant = rule_descendant_term(tm);
-    then scope_single_child(tm_descendant, func_expr_descendant);
-}
-
-// ### The enum constructor belong to
+// ### The enum a constructor belongs to
 
 func ctor_enum(CtorDeclNode) -> EnumDeclNode;
 func ctors_enum(CtorDeclListNode) -> EnumDeclNode;
@@ -520,1017 +87,7 @@ rule enum_ctors_cons {
     then ctors_enum(tail_ctors) = enum_node;
 }
 
-// ## Desugaring MatchCase nodes
-
-// ### The discriminee of a match case (list) node.
-//
-// I.e., the term that is being matched on in the match statement that a match
-// case node belongs to.
-func cases_discriminee(MatchCaseListNode) -> TermNode;
-func case_discriminee(MatchCaseNode) -> TermNode;
-
-rule match_stmt_cases_discriminee {
-    if match_stmt_node(_, discriminee, cases);
-    then cases_discriminee(cases) = discriminee;
-}
-rule cases_match_stmt_cons {
-    if cases_discriminee(cases) = discriminee;
-    if cons_match_case_list_node(cases, head_case, tail_cases);
-    then case_discriminee(head_case) = discriminee;
-    then cases_discriminee(tail_cases) = discriminee;
-}
-
-// ### Desugared AST nodes
-func desugared_case_equality_atom(MatchCaseNode) -> IfAtomNode;
-func desugared_case_equality_stmt(MatchCaseNode) -> StmtNode;
-func desugared_case_block(MatchCaseNode) -> StmtListNode;
-func desugared_case_block_list(MatchCaseListNode) -> StmtBlockListNode;
-
-rule desugared_case_equality_stmt_loc {
-    if match_case(case_node, pattern, _);
-    if pattern_loc = term_node_loc(pattern);
-    if stmt_node = desugared_case_equality_stmt(case_node);
-    then stmt_node_loc(stmt_node) = pattern_loc;
-}
-
-rule desugared_case_defined {
-    if match_case(case_node, _, _);
-
-    then desugared_case_equality_atom(case_node)!;
-    then desugared_case_equality_stmt(case_node)!;
-    then desugared_case_block(case_node)!;
-}
-rule desugared_case_block_list_defined {
-    if cases: MatchCaseListNode;
-    then desugared_case_block_list(cases)!;
-}
-
-rule desugared_case_equality_atom_stmt {
-    if discriminee = case_discriminee(case_node);
-    if match_case(case_node, pattern, _);
-    if atom = desugared_case_equality_atom(case_node);
-    if stmt = desugared_case_equality_stmt(case_node);
-
-    then equal_if_atom_node(atom, discriminee, pattern);
-    then if_stmt_node(stmt, atom);
-}
-rule desugared_case_block_structure {
-    if match_case(case_node, _, block);
-    if desugared_stmt = desugared_case_equality_stmt(case_node);
-    if desugared_block = desugared_case_block(case_node);
-
-    then cons_stmt_list_node(desugared_block, desugared_stmt, block);
-}
-rule desugared_case_blocks {
-    if cons_match_case_list_node(cases, head_case, tail_cases);
-
-    if desugared_blocks = desugared_case_block_list(cases);
-    if desugared_head_block = desugared_case_block(head_case);
-    if desugared_tail_blocks = desugared_case_block_list(tail_cases);
-
-    then cons_stmt_block_list_node(desugared_blocks, desugared_head_block, desugared_tail_blocks);
-}
-
-rule scopes_desugared_case {
-    if block = desugared_case_block(case);
-
-    if descendant_block = rule_descendant_stmt_list(block);
-    if descendant_case = rule_descendant_match_case(case);
-
-    if entry = entry_scope(descendant_case);
-    if exit = exit_scope(descendant_case);
-
-    then entry_scope(descendant_block) = entry;
-    then exit_scope(descendant_block) = exit;
-}
-
-rule scopes_desugared_case_list {
-    if blocks = desugared_case_block_list(cases);
-
-    if descendant_blocks = rule_descendant_stmt_block_list(blocks);
-    if descendant_cases = rule_descendant_match_case_list(cases);
-
-    if entry = entry_scope(descendant_cases);
-    if exit = exit_scope(descendant_cases);
-
-    then entry_scope(descendant_blocks) = entry;
-    then exit_scope(descendant_blocks) = exit;
-}
-
-// ## Semantic types, predicates and functions
-
-type Type;
-
-pred is_normal_type(ty: Type);
-pred is_enum_type(ty: Type);
-pred is_model_type(ty: Type);
-pred is_mor_type(ty: Type);
-
-enum TypeList {
-    NilTypeList(),
-    ConsTypeList(head: Type, tail: TypeList),
-    SnocTypeList(init: TypeList, last: Type)
-}
-
-rule type_list_nil_not_cons {
-    if NilTypeList() = ConsTypeList(_, _);
-    then absurd();
-}
-rule type_list_cons_injective {
-    if ConsTypeList(head_0, tail_0) = ConsTypeList(head_1, tail_1);
-    then head_0 = head_1;
-    then tail_0 = tail_1;
-}
-
-func semantic_type(ss: SymbolScope, Ident) -> Type;
-rule semantic_decl_type {
-    if decl_node_type(decl, type_decl_node);
-    if type_decl(type_decl_node, ident);
-    if ss = decl_symbol_scope(decl);
-    then typ := semantic_type(ss, ident)!;
-    then is_normal_type(typ);
-}
-rule semantic_decl_enum {
-    if decl_node_enum(decl, enum_node);
-    if enum_decl(enum_node, ident, _);
-    if ss = decl_symbol_scope(decl);
-    then typ := semantic_type(ss, ident)!;
-    then is_enum_type(typ);
-}
-rule semantic_decl_model {
-    if decl_node_model(decl, model_node);
-    if model_decl(model_node, ident, _);
-    if ss = decl_symbol_scope(decl);
-    then typ := semantic_type(ss, ident)!;
-    then is_model_type(typ);
-}
-
-func mor_type(model_type: Type) -> Type;
-func mor_model_type(mor_type: Type) -> Type;
-func mor_type_dom_func(mor_type: Type) -> Func;
-func mor_type_cod_func(mor_type: Type) -> Func;
-func mor_app_func(member_type: Type) -> Func;
-
-rule mor_type_defined_for_model {
-    if is_model_type(typ);
-    then mor_type := mor_type(typ)!;
-    then mor_type_dom_func(mor_type)!;
-    then mor_type_cod_func(mor_type)!;
-}
-rule mor_model_type_law_for_morphisms {
-    if mt = mor_type(model_type);
-    then mor_model_type(mt) = model_type;
-}
-
-rule mor_type_is_mor_type {
-    if ty = mor_type(_);
-    then is_mor_type(ty);
-}
-
-rule mor_type_symbol_scope {
-    if mor_type = mor_type(model_type);
-    if ss = type_definition_symbol_scope(model_type);
-    then type_definition_symbol_scope(mor_type) = ss;
-}
-
-rule mor_type_dom_func_symbol_scope {
-    if dom_func = mor_type_dom_func(mor_type);
-    if dom_func_rel = FuncRel(dom_func);
-    if ss = type_definition_symbol_scope(mor_type);
-    then rel_definition_symbol_scope(dom_func_rel) = ss;
-}
-
-rule mor_type_cod_func_symbol_scope {
-    if cod_func = mor_type_cod_func(mor_type);
-    if cod_func_rel = FuncRel(cod_func);
-    if ss = type_definition_symbol_scope(mor_type);
-    then rel_definition_symbol_scope(cod_func_rel) = ss;
-}
-
-rule mor_type_dom_cod_func_domains {
-    if mor_type = mor_type(_);
-
-    if dom_func = mor_type_dom_func(mor_type);
-    if cod_func = mor_type_cod_func(mor_type);
-
-    then nil := NilTypeList()!;
-    then mor_typ_singleton := ConsTypeList(mor_type, nil)!;
-
-    then domain(dom_func) = mor_typ_singleton;
-    then domain(cod_func) = mor_typ_singleton;
-}
-
-rule mor_type_dom_cod_func_codomains {
-    if mor_type = mor_type(model_type);
-
-    if dom_func = mor_type_dom_func(mor_type);
-    if cod_func = mor_type_cod_func(mor_type);
-
-    then codomain(dom_func) = model_type;
-    then codomain(cod_func) = model_type;
-}
-
-rule mor_app_func_defined_for_member_types {
-    if type_definition_symbol_scope(member_type) = model_member_symbol_scope(_);
-    then mor_app_func(member_type)!;
-}
-
-rule mor_app_func_symbol_scope {
-    if app_func = mor_app_func(member_type);
-    if app_func_rel = FuncRel(app_func);
-    if member_ss = type_definition_symbol_scope(member_type);
-    if model_type = symbol_scope_model(member_ss);
-    if model_def_ss = type_definition_symbol_scope(model_type);
-    then rel_definition_symbol_scope(app_func_rel) = model_def_ss;
-}
-
-rule mor_app_func_domain {
-    if app_func = mor_app_func(member_type);
-    if member_ss = type_definition_symbol_scope(member_type);
-    if model_type = symbol_scope_model(member_ss);
-    if mor_type = mor_type(model_type);
-    
-    then nil := NilTypeList()!;
-    then member_type_singleton := ConsTypeList(member_type, nil)!;
-    then mor_and_member := ConsTypeList(mor_type, member_type_singleton)!;
-    
-    then domain(app_func) = mor_and_member;
-}
-
-rule mor_app_func_codomain {
-    if app_func = mor_app_func(member_type);
-    then codomain(app_func) = member_type;
-}
-
-func type_name(Type) -> Ident;
-rule type_name_semantic_type {
-    if semantic_type(_, name) = ty;
-    then type_name(ty) = name;
-}
-
-func virtual_symbol_scope() -> SymbolScope;
-rule virtual_symbol_scope_total {
-    then virtual_symbol_scope()!;
-}
-
-pred global_symbol_scope(scope: SymbolScope);
-rule global_symbol_scope_virtual {
-    if scope = virtual_symbol_scope();
-    then global_symbol_scope(scope);
-}
-rule global_symbol_scope_module {
-    if scope = module_symbol_scope(_);
-    then global_symbol_scope(scope);
-}
-
-func model_member_pred(nested_type: Type) -> Pred;
-rule model_member_pred_defined {
-    if ss = type_definition_symbol_scope(typ);
-    if symbol_scope_model(ss)!; // This is true iff typ is a member type.
-    then model_member_pred(typ)!;
-}
-
-rule model_member_pred_def_scope {
-    if ss = virtual_symbol_scope();
-    if rel = PredRel(model_member_pred(_));
-    then rel_definition_symbol_scope(rel) = ss;
-}
-
-rule parent_model_rel_arity {
-    if rel = PredRel(model_member_pred(member_type));
-    if parent_type = symbol_scope_model(type_definition_symbol_scope(member_type));
-    then nil := NilTypeList()!;
-    then member_nil := ConsTypeList(member_type, nil)!;
-    then parent_member_nil := ConsTypeList(parent_type, member_nil)!;
-    then arity(rel) = parent_member_nil;
-}
-
-pred illegal_member_type_expr_in_signature(type_expr: TypeExprNode);
-
-// This should be forced to be defined in case typ_expr is expected to be a
-// valid type in a pred/func signature (i.e., not dependent).
-func semantic_signature_type_expr(ss: SymbolScope, type_expr: TypeExprNode) -> Type;
-rule semantic_signature_type_expr_ambient {
-    if ty = semantic_signature_type_expr(ss, type_expr);
-    if loc = type_expr_node_loc(type_expr);
-    branch {
-        if ambient_type_expr(type_expr, ty_ident);
-        if type_kind = TypeSymbol();
-        if enum_kind = EnumSymbol();
-        if model_kind = ModelSymbol();
-        then should_be_symbol_3(ty_ident, type_kind, enum_kind, model_kind, ss, loc);
-        then ty = semantic_type(ss, ty_ident);
-    } along {
-        if member_type_expr(type_expr, _, _); 
-        then illegal_member_type_expr_in_signature(type_expr);
-    } along {
-        if mor_type_expr(type_expr, model_ty_ident);
-        if model_kind = ModelSymbol();
-        then should_be_symbol(model_ty_ident, model_kind, ss, loc);
-        if model_ty = semantic_type(ss, model_ty_ident);
-        then ty = mor_type(model_ty);
-    }
-}
-
-func semantic_arg_type(arg: ArgDeclNode) -> Type;
-rule semantic_arg_type_def {
-    if arg_decl_node_type(arg, type_expr);
-    if ss = arg_symbol_scope(arg);
-    then ty := semantic_signature_type_expr(ss, type_expr)!;
-    then semantic_arg_type(arg) = ty;
-}
-
-func semantic_arg_types(ArgDeclListNode) -> TypeList;
-rule semantic_arg_types_nil {
-    if nil_arg_decl_list_node(n);
-    then NilTypeList()!;
-    then semantic_arg_types(n) = NilTypeList();
-}
-rule semantic_arg_types_cons {
-    if cons_arg_decl_list_node(arg_decls, head, tail);
-    if head_type = semantic_arg_type(head);
-    if tail_types = semantic_arg_types(tail);
-    then tys := ConsTypeList(head_type, tail_types)!;
-    then semantic_arg_types(arg_decls) = tys;
-}
-
-type Pred;
-func semantic_pred(scope: SymbolScope, Ident) -> Pred;
-func pred_arity(Pred) -> TypeList;
-rule semantic_decl_pred {
-    if decl_node_pred(decl, pred_decl);
-    if pred_decl(pred_decl, name, arg_decls);
-    if ss = decl_symbol_scope(decl);
-    then predicate := semantic_pred(ss, name)!;
-    if arg_types = semantic_arg_types(arg_decls);
-    then pred_arity(predicate) = arg_types;
-}
-
-
-
-type Func;
-func semantic_func(scope: SymbolScope, Ident) -> Func;
-func domain(Func) -> TypeList;
-func codomain(Func) -> Type;
-
-rule semantic_decl_func {
-    if decl_node_func(decl, func_decl);
-    if func_decl(func_decl, name, arg_decls, result_type_expr);
-    if ss = decl_symbol_scope(decl);
-    then function := semantic_func(ss, name)!;
-    branch {
-        if arg_types = semantic_arg_types(arg_decls);
-        then domain(function) = arg_types;
-    } along {
-        then result_type := semantic_signature_type_expr(ss, result_type_expr)!;
-        then codomain(function) = result_type;
-    }
-}
-rule semantic_decl_ctor {
-    if ctor_decl(ctor, ctor_name, arg_decls);
-    if enum_node = ctor_enum(ctor);
-    if ss = ctor_symbol_scope(ctor);
-    then function := semantic_func(ss, ctor_name)!;
-    branch {
-        if arg_types = semantic_arg_types(arg_decls);
-        then domain(function) = arg_types;
-    } along {
-        if enum_decl(enum_node, enum_name, _);
-        if result_type = semantic_type(ss, enum_name);
-        then codomain(function) = result_type;
-    }
-}
-
-enum Rel {
-    PredRel(Pred),
-    FuncRel(Func)
-}
-
-func rel_name(Rel) -> Ident;
-rule semantic_func_name {
-    if r = FuncRel(semantic_func(_, name));
-    then rel_name(r) = name;
-}
-rule semantic_pred_name {
-    if r = PredRel(semantic_pred(_, name));
-    then rel_name(r) = name;
-}
-
-rule rel_constructors_pred_total {
-    if predicate: Pred;
-    then PredRel(predicate)!;
-}
-rule rel_constructors_func_total {
-    if function: Func;
-    then FuncRel(function)!;
-}
-
-rule semantic_pred_scope_extension {
-    if symbol_scope_extension(smaller, larger);
-    if predicate = semantic_pred(smaller, ident);
-    then semantic_pred(larger, ident) = predicate;
-}
-rule semantic_func_scope_extension {
-    if symbol_scope_extension(smaller, larger);
-    if function = semantic_func(smaller, ident);
-    then semantic_func(larger, ident) = function;
-}
-rule semantic_type_scope_extension {
-    if symbol_scope_extension(smaller, larger);
-    if typ = semantic_type(smaller, ident);
-    then semantic_type(larger, ident) = typ;
-}
-
-func dep_arity(Rel) -> TypeList;
-rule dep_arity_laws {
-    if rel: Rel;
-    match rel {
-        PredRel(predicate) => {
-            if tys = pred_arity(predicate);
-            then dep_arity(rel) = tys;
-        }
-        FuncRel(function) => {
-            if func_dom = domain(function);
-            if func_cod = codomain(function);
-            then tys := SnocTypeList(func_dom, func_cod)!;
-            then dep_arity(rel) = tys;
-        }
-    }
-}
-
-func arity(Rel) -> TypeList;
-func flat_domain(Func) -> TypeList;
-
-rule top_level_arity_law {
-    if ss = rel_definition_symbol_scope(rel);
-    branch {
-        if ss = module_symbol_scope(_);
-    } along {
-        if ss = virtual_symbol_scope();
-    }
-    if ar = dep_arity(rel);
-    then arity(rel) = ar;
-}
-rule top_level_flat_domain_law {
-    if ss = rel_definition_symbol_scope(FuncRel(function));
-    branch {
-        if ss = module_symbol_scope(_);
-    } along {
-        if ss = virtual_symbol_scope();
-    }
-    if d = domain(function);
-    then flat_domain(function) = d;
-}
-rule member_arity_law {
-    if ss = rel_definition_symbol_scope(rel);
-    if model_ty = symbol_scope_model(ss);
-    if ar = dep_arity(rel);
-    then cons_ar := ConsTypeList(model_ty, ar)!;
-    then arity(rel) = cons_ar;
-}
-rule member_flat_domain_law {
-    if ss = rel_definition_symbol_scope(FuncRel(function));
-    if model_ty = symbol_scope_model(ss);
-    if d = domain(function);
-    then cons_d := ConsTypeList(model_ty, d)!;
-    then flat_domain(function) = cons_d;
-}
-
-// ## Structures
-type Structure;
-
-type El;
-
-enum ElList {
-    NilElList(Structure),
-    ConsElList(head: El, tail: ElList),
-    SnocElList(init: ElList, last: El)
-}
-
-rule el_list_cons_injective {
-    if ConsElList(head_0, tail_0) = ConsElList(head_1, tail_1);
-    then head_0 = head_1;
-    then tail_0 = tail_1;
-}
-rule el_list_snoc_injective {
-    if SnocElList(init_0, last_0) = SnocElList(init_1, last_1);
-    then init_0 = init_1;
-    then last_0 = last_1;
-}
-rule el_list_cons_nil {
-    if ConsElList(_, _) = NilElList(_);
-    then absurd();
-}
-rule el_list_snoc_nil {
-    if SnocElList(_, _) = NilElList(_);
-    then absurd();
-}
-
-rule cons_snoc_to_snoc_cons {
-    if els = ConsElList(first, SnocElList(middle, last));
-    then init := ConsElList(first, middle)!;
-    then els = SnocElList(init, last);
-}
-
-rule snoc_cons_to_cons_snoc {
-    if els = SnocElList(ConsElList(first, middle), last);
-    then tail := SnocElList(middle, last)!;
-    then els = ConsElList(first, tail);
-}
-
-pred dep_pred_app(predicate: DepPred, ElList);
-func dep_func_app(function: DepFunc, args: ElList) -> El;
-pred rel_app(Rel, ElList);
-
-type ElName;
-func var(Structure, ElName) -> El;
-
-// ### The structure that elements belong to
-func el_structure(El) -> Structure;
-func els_structure(ElList) -> Structure;
-rule nil_els_structure {
-    if els = NilElList(structure);
-    then els_structure(els) = structure;
-}
-rule cons_els_structure {
-    if els = ConsElList(head, tail);
-    if head_structure = el_structure(head);
-    then head_structure = els_structure(els);
-    then head_structure = els_structure(tail);
-}
-rule snoc_els_structure {
-    if els = SnocElList(init, last);
-    if last_structure = el_structure(last);
-    then last_structure = els_structure(els);
-    then last_structure = els_structure(init);
-}
-
-rule var_structure {
-    if el = var(structure, _);
-    then el_structure(el) = structure;
-}
-
-// ### Symbol access/instantiation
-
-// #### Dependent types
-
-enum DepType {
-    GlobalType(Type),
-    MemberType(El, Type)
-}
-
-rule global_type_total {
-    if ty: Type;
-    then GlobalType(ty)!;
-}
-
-func underlying_type(DepType) -> Type;
-rule underlying_type_law {
-    if dep_type: DepType;
-    match dep_type {
-        GlobalType(typ) => {
-            then underlying_type(dep_type) = typ;
-        }
-        MemberType(_, typ) => {
-            then underlying_type(dep_type) = typ;
-        }
-    }
-}
-
-enum DepTypeList {
-    NilDepTypeList(),
-    ConsDepTypeList(head: DepType, tail: DepTypeList)
-}
-
-func ambient_dep_type_list(TypeList) -> DepTypeList;
-rule ambient_dep_type_list_nil {
-    if tys = NilTypeList();
-    then dep_tys := NilDepTypeList()!;
-    then ambient_dep_type_list(tys) = dep_tys;
-}
-rule ambient_dep_type_list_cons {
-    if tys = ConsTypeList(head_type, tail_types);
-    if tail_dep_types = ambient_dep_type_list(tail_types);
-    if head_dep_type = GlobalType(head_type);
-    then dep_tys := ConsDepTypeList(head_dep_type, tail_dep_types)!;
-    then ambient_dep_type_list(tys) = dep_tys;
-}
-
-// #### Dependent functions
-
-enum DepFunc {
-    GlobalFunc(Func),
-    MemberFunc(El, Func)
-}
-
-rule global_func_total {
-    if function: Func;
-    then GlobalFunc(function)!;
-}
-
-func underlying_func(DepFunc) -> Func;
-rule underlying_func_law {
-    if dep_func: DepFunc;
-    match dep_func {
-        GlobalFunc(function) => {
-            then underlying_func(dep_func) = function;
-        }
-        MemberFunc(_, function) => {
-            then underlying_func(dep_func) = function;
-        }
-    }
-}
-
-// #### Dependent predicates
-
-enum DepPred {
-    GlobalPred(Pred),
-    MemberPred(El, Pred)
-}
-
-rule global_pred_total {
-    if predicate: Pred;
-    then GlobalPred(predicate)!;
-}
-
-func underlying_pred(DepPred) -> Pred;
-rule underlying_pred_law {
-    if dep_pred: DepPred;
-    match dep_pred {
-        GlobalPred(predicate) => {
-            then underlying_pred(dep_pred) = predicate;
-        }
-        MemberPred(_, predicate) => {
-            then underlying_pred(dep_pred) = predicate;
-        }
-    }
-}
-
-// ### Instantiated types
-pred should_instantiate_type(model_el: El, typ: Type);
-func instantiated_type(model_el: El, typ: Type) -> DepType;
-
-rule instantiated_type_global {
-    if should_instantiate_type(model_el, typ);
-    if def_scope = type_definition_symbol_scope(typ);
-    if global_symbol_scope(def_scope);
-    then GlobalType(typ)!;
-    then instantiated_type(model_el, typ) = GlobalType(typ);
-}
-rule instantiated_type_member {
-    if should_instantiate_type(model_el, typ);
-    if type_scope = type_definition_symbol_scope(typ);
-    if el_type(model_el, GlobalType(model_type));
-    if member_scope = model_member_symbol_scope(model_type);
-    if type_scope = member_scope;
-    then MemberType(model_el, typ)!;
-    then instantiated_type(model_el, typ) = MemberType(model_el, typ);
-}
-
-pred should_instantiate_types(model_el: El, types: TypeList);
-func instantiated_types(model_el: El, types: TypeList) -> DepTypeList;
-
-rule instantiated_types_nil {
-    if should_instantiate_types(model_el, tys);
-    if tys = NilTypeList();
-    then NilDepTypeList()!;
-    then instantiated_types(model_el, tys) = NilDepTypeList();
-}
-rule instantiated_types_cons {
-    if should_instantiate_types(model_el, tys);
-    if tys = ConsTypeList(head_ty, tail_tys);
-    then should_instantiate_type(model_el, head_ty);
-    then should_instantiate_types(model_el, tail_tys);
-    if head_dep_ty = instantiated_type(model_el, head_ty);
-    if tail_dep_tys = instantiated_types(model_el, tail_tys);
-    then dep_tys := ConsDepTypeList(head_dep_ty, tail_dep_tys)!;
-    then instantiated_types(model_el, tys) = dep_tys;
-}
-
-func dep_pred_arity(DepPred) -> DepTypeList;
-
-// ### The types of elements
-pred el_type(El, DepType);
-pred el_types(ElList, DepTypeList);
-
-rule nil_dep_types {
-    if els = NilElList(_);
-    then tys := NilDepTypeList()!;
-    then el_types(els, tys);
-}
-rule cons_dep_types {
-    if els = ConsElList(head, tail);
-    if el_type(head, head_type);
-    if el_types(tail, tail_types);
-    then tys := ConsDepTypeList(head_type, tail_types)!;
-    then el_types(els, tys);
-}
-rule cons_dep_types_reverse {
-    if els = ConsElList(head, tail);
-    if el_types(els, ConsDepTypeList(head_type, tail_types));
-    then el_type(head, head_type);
-    then el_types(tail, tail_types);
-}
-
-rule dep_pred_app_types_global {
-    if dep_pred_app(GlobalPred(predicate), els);
-    if ambient_dep_type_list(pred_arity(predicate)) = tys;
-    then el_types(els, tys);
-}
-
-rule dep_pred_app_types_member {
-    if dep_pred_app(MemberPred(model_el, predicate), els);
-    if tys = pred_arity(predicate);
-    then should_instantiate_types(model_el, tys);
-    if dep_tys = instantiated_types(model_el, tys);
-    then el_types(els, dep_tys);
-}
-
-rule dep_func_app_domain_types_global {
-    if dep_func_app(GlobalFunc(function), args)!;
-    if ambient_dep_type_list(domain(function)) = tys;
-    then el_types(args, tys);
-}
-
-rule dep_func_app_domain_types_member {
-    if dep_func_app(MemberFunc(model_el, function), args)!;
-    if tys = domain(function);
-    then should_instantiate_types(model_el, tys);
-    if dep_tys = instantiated_types(model_el, tys);
-    then el_types(args, dep_tys);
-}
-
-rule dep_func_app_codomain_type_global {
-    if dep_func_app(GlobalFunc(function), _) = result;
-    if ty = GlobalType(codomain(function));
-    then el_type(result, ty);
-}
-rule dep_func_app_codomain_type_member {
-    if dep_func_app(MemberFunc(model_el, function), _) = result;
-    if ty = codomain(function);
-    then dep_ty := MemberType(model_el, ty)!;
-    then el_type(result, dep_ty);
-}
-
-func func_app(function: Func, args: ElList) -> El;
-
-rule func_app_result_structure {
-    if func_app(_, els) = result;
-    if els_structure(els) = strct; 
-    then el_structure(result) = strct;
-}
-
-rule func_app_to_rel_app {
-    if func_app(function, args) = result;
-    if func_rel = FuncRel(function);
-    then rel_args := SnocElList(args, result)!;
-    then rel_app(func_rel, rel_args);
-}
-
-// ### Constrained elements
-//
-// An element is constrained if it appears in a function
-// application (including the result) or in the
-// application of a predicate.
-pred constrained_el(El);
-pred constrained_els(ElList);
-
-// We can't check the non-dependent app versions here, since those include
-// applications of model_member_pred predicate. This would imply that every
-// member element is constrained, which would mean that we never query for
-// model membership.
-rule dep_pred_app_constrains {
-    if dep_pred_app(_, args);
-    then constrained_els(args);
-}
-rule dep_func_app_constrains {
-    if dep_func_app(_, args) = result;
-    then constrained_els(args);
-    then constrained_el(result);
-}
-rule dom_func_app_constrains {
-    if func_app(mor_type_dom_func(_), args) = result;
-    then constrained_els(args);
-    then constrained_el(result);
-}
-rule cod_func_app_constrains {
-    if func_app(mor_type_cod_func(_), args) = result;
-    then constrained_els(args);
-    then constrained_el(result);
-}
-rule mor_app_constraints {
-    if func_app(mor_app_func(_), args) = result;
-    then constrained_els(args);
-    then constrained_el(result);
-}
-
-rule constrained_head_tail {
-    if constrained_els(ConsElList(head, tail));
-    then constrained_el(head);
-    then constrained_els(tail);
-}
-rule constrained_init_snoc {
-    if constrained_els(SnocElList(init, last));
-    then constrained_els(init);
-    then constrained_el(last);
-}
-
-// ## Morphisms
-
-type Morphism;
-func source(Morphism) -> Structure;
-func target(Morphism) -> Structure;
-
-rule source_total {
-    if morph: Morphism;
-    then source(morph)!;
-}
-rule target_total {
-    if morph: Morphism;
-    then target(morph)!;
-}
-
-func map_el(Morphism, El) -> El;
-func map_els(Morphism, ElList) -> ElList;
-
-// Mapped elements live in the codomain structure.
-rule map_el_structure {
-    if mapped = map_el(mor, _);
-    if morph_target = target(mor);
-    then el_structure(mapped) = morph_target;
-}
-
-// The operations map_el(mor, -) and map_els(mor, -) are total.
-rule map_el_defined {
-    if source(mor) = struct;
-    if el_structure(el) = struct;
-    then map_el(mor, el)!;
-}
-// Morphisms commute with nil, cons and snoc.
-rule map_els_defined {
-    if els_structure(els) = source(mor);
-    match els {
-        NilElList(_) => {
-            if c = target(mor);
-            then cod_nil := NilElList(c)!;
-            then map_els(mor, els) = cod_nil;
-        }
-        ConsElList(head, tail) => {
-            if cod_head = map_el(mor, head);
-            if cod_tail = map_els(mor, tail);
-            then cod_cons := ConsElList(cod_head, cod_tail)!;
-            then map_els(mor, els) = cod_cons;
-        }
-        SnocElList(init, last) => {
-            if cod_init = map_els(mor, init);
-            if cod_last = map_el(mor, last);
-            then cod_snoc := SnocElList(cod_init, cod_last)!;
-            then map_els(mor, els) = cod_snoc;
-        }
-    }
-}
-
-func map_dep_pred(Morphism, DepPred) -> DepPred;
-func map_dep_func(Morphism, DepFunc) -> DepFunc;
-
-rule map_dep_pred_global {
-    if dom_pred = GlobalPred(_);
-    if mor: Morphism;
-    then map_dep_pred(mor, dom_pred) = dom_pred;
-}
-rule map_dep_pred_member {
-    if dom_pred = MemberPred(dom_el, p);
-    if cod_el = map_el(mor, dom_el);
-    then MemberPred(cod_el, p)!;
-    then map_dep_pred(mor, dom_pred) = MemberPred(cod_el, p);
-}
-
-rule map_dep_func_global {
-    if dom_func = GlobalFunc(_);
-    if mor: Morphism;
-    then map_dep_func(mor, dom_func) = dom_func;
-}
-rule map_dep_func_member {
-    if dom_func = MemberFunc(dom_el, f);
-    if cod_el = map_el(mor, dom_el);
-    then MemberFunc(cod_el, f)!;
-    then map_dep_func(mor, dom_func) = MemberFunc(cod_el, f);
-}
-
-// Morphisms commute with relations and variables.
-rule map_var {
-    if el = var(_, name);
-    if mapped_el = map_el(morph, el);
-    if target(morph) = cod_structure;
-    then mapped_el = var(cod_structure, name);
-}
-rule map_rel_app {
-    if rel_app(rel, args);
-    if mapped_args = map_els(_, args);
-    then rel_app(rel, mapped_args);
-}
-rule map_func_app {
-    // This is necessary even though we have the map_rel_app rule already.
-    // That's because we only have a one-sided implication
-    //
-    //   func_app(f, <args) = <result> => rel_app(f, <args>, result)
-    //
-    // but not the other direction.
-    if func_app(function, args) = result;
-    if mapped_args = map_els(mor, args);
-    if mapped_result = map_el(mor, result);
-    then func_app(function, mapped_args) = mapped_result;
-}
-
-rule map_dep_pred_app {
-    if dep_pred_app(dep_pred, args);
-    if mapped_args = map_els(mor, args);
-    if mapped_dep_pred = map_dep_pred(mor, dep_pred);
-    then dep_pred_app(mapped_dep_pred, mapped_args);
-}
-rule map_dep_func_app {
-    if dep_func_app(dep_func, args) = result;
-    if mapped_args = map_els(mor, args);
-    if mapped_result = map_el(mor, result);
-    if mapped_dep_func = map_dep_func(mor, dep_func);
-    then dep_func_app(mapped_dep_func, mapped_args) = mapped_result;
-}
-
-// Morphisms preserve and reflect types.
-rule map_preserves_el_type {
-    if el_type(el, dep_typ);
-    if mapped_el = map_el(morph, el);
-    match dep_typ {
-        GlobalType(typ) => {
-            then el_type(mapped_el, GlobalType(typ));
-        }
-        MemberType(model_el, local_typ) => {
-            if mapped_model_el = map_el(morph, model_el);
-            then mapped_dep_typ := MemberType(mapped_model_el, local_typ)!;
-            then el_type(mapped_el, mapped_dep_typ);
-        }
-    }
-}
-rule map_reflects_dep_type {
-    if el_type(map_el(_, el), mapped_dep_typ);
-    match mapped_dep_typ {
-        GlobalType(typ) => {
-            then el_type(el, GlobalType(typ));
-        }
-        MemberType(_, _) => {
-            // Can we say something in this case? Note that if
-            //
-            // mapped_el_typ = MemberType(mapped_model_el, local_type)
-            //
-            // and map_el(morph, model_el) = mapped_model_el, then we don't want to necessarily
-            // say that el_type(Instantiatedtype(model_el, local_type). Consider the case where we
-            // have two distinct model_el that satisfy map_el(morph, model_el) = mapped_model_el,
-            // i.e. the morphisms collapses the two elements into one.
-            //
-            // What we actually want to do here, probably, is to assert that an element
-            // preimage_model_el exists in the domain that maps to model_el such that el has type
-            // MemberType(preimage_model_el, typ). This would be similar to Hindley-Milner,
-            // but I'm not sure the existing machinery can deal with elements that are introduced
-            // in this way.
-        }
-    }
-}
-
-// Mapping elements commutes with ambient model els.
-rule map_preserves_ambient_model_els {
-    if el = ambient_model_el(ss, _);
-    if mapped_el = map_el(morph, el);
-    if target(morph) = cod_structure;
-    then mapped_el = ambient_model_el(ss, cod_structure);
-}
-
-// ### Kernel pairs of morphisms.
-
-pred in_ker(Morphism, El, El);
-rule in_ker_rule {
-    if map_el(morph, el_0) = map_el(morph, el_1);
-    then in_ker(morph, el_0, el_1);
-}
-
-// ### Images of morphisms.
-
-pred el_in_img(Morphism, El);
-rule el_in_img_rule {
-    if map_el(morph, _) = el;
-    then el_in_img(morph, el);
-}
-
-pred rel_tuple_in_img(Morphism, Rel, ElList);
-rule rel_tuple_in_img_law {
-    if rel_app(rel, dom_els);
-    if cod_els = map_els(morphism, dom_els);
-    then rel_tuple_in_img(morphism, rel, cod_els);
-}
-
-// ## Symbol checks
-//
-// This is for facilitating checks for duplicated symbols, wrong symbol types,
-// and wrong argument numbers.
+// ## Symbol scopes
 
 enum SymbolKind {
     TypeSymbol(),
@@ -1541,7 +98,7 @@ enum SymbolKind {
     CtorSymbol(),
     ModelSymbol()
 }
-rule {
+rule symbol_kind_values {
     then TypeSymbol()!;
     then PredSymbol()!;
     then FuncSymbol()!;
@@ -1551,25 +108,9 @@ rule {
     then ModelSymbol()!;
 }
 
-// A SymbolScope represents a set of defined symbols (types, functions, preds, ... but not variables).
 type SymbolScope;
 
 pred symbol_scope_extension(smaller: SymbolScope, larger: SymbolScope);
-func symbol_scope_parent(larger: SymbolScope) -> SymbolScope;
-rule symbol_scope_extension_parent {
-    if symbol_scope_extension(base, ext);
-    then symbol_scope_parent(ext) = base;
-}
-pred symbol_scope_ancestor(ss: SymbolScope, ancestor: SymbolScope);
-rule symbol_scope_ancestor_reflexivity {
-    if ss: SymbolScope;
-    then symbol_scope_ancestor(ss, ss);
-}
-rule symbol_scope_ancestor_parent {
-    if symbol_scope_ancestor(ss, ancestor);
-    if parent = symbol_scope_parent(ancestor);
-    then symbol_scope_ancestor(ss, parent);
-}
 
 func module_symbol_scope(module: ModuleNode) -> SymbolScope;
 func decl_symbol_scope(node: DeclNode) -> SymbolScope;
@@ -1582,7 +123,7 @@ func ctors_symbol_scope(ctor: CtorDeclListNode) -> SymbolScope;
 rule module_symbol_scope_rule {
     if decls_module_node(module, decls);
     if ss = decls_symbol_scope(decls);
-    then ss = module_symbol_scope(module);
+    then module_symbol_scope(module) = ss;
 }
 rule decl_symbol_scope_total {
     if node: DeclNode;
@@ -1612,8 +153,8 @@ rule ctors_symbol_scope_total {
 rule decl_nodes_symbol_cons {
     if cons_decl_list_node(nodes, head, tail);
     if ss = decls_symbol_scope(nodes);
-    then ss = decl_symbol_scope(head);
-    then ss = decls_symbol_scope(tail);
+    then decl_symbol_scope(head) = ss;
+    then decls_symbol_scope(tail) = ss;
 }
 
 rule pred_args_symbol_scope {
@@ -1654,8 +195,6 @@ rule ctors_symbol_scope_cons {
     then ctors_symbol_scope(tail) = ss;
 }
 
-// Lookups of the member symbol scope given a model type and the model type
-// given its member symbol scope.
 func model_member_symbol_scope(Type) -> SymbolScope;
 func symbol_scope_model(SymbolScope) -> Type;
 
@@ -1670,1214 +209,340 @@ rule model_symbol_scope_law {
     then symbol_scope_model(member_scope) = typ;
 }
 
-
-// The symbol scope that can be accessd via an element of model type.
-pred element_member_symbol_scope(El, SymbolScope);
-rule element_member_symbol_scope_laws {
-    if el_type(el, dep_type);
-    if typ = underlying_type(dep_type);
-    if sym_scope = model_member_symbol_scope(typ);
-    then element_member_symbol_scope(el, sym_scope);
-}
-
-// This is the name of the Rust struct that holds the data for symbols defined in this scope.
-func symbol_scope_name(ss: SymbolScope) -> Ident;
-// - For modules, it's derived from the file name.
-rule module_symbol_scope_name {
-    if ss = module_symbol_scope(module);
-    if name = module_name(module);
-    then symbol_scope_name(ss) = name;
-}
-// - For model declarations, it's the model name
-rule model_symbol_scope_name {
-    if model_decl(_, name, body);
-    if ss = decls_symbol_scope(body);
-    then symbol_scope_name(ss) = name;
-}
-
-// The SymbolScope attached to a (variable) Scope.
-// TODO: In a better world, we wouldn't need to distinguish `Scope`, which
-// tracks which variables have been introduced within a rule, and
-// `SymbolScope`, which tracks which symbols are available. Unfortunatey, an
-// eqlog program contains lots of different Scope elements (I think each AST
-// node in a rule that can introduce a new variable has its own scope, e.g.
-// each statement). So if we would attach the accessible_symbol predicate to a
-// Scope instead of a SymbolScope, we'd have copies of the whole set symbols
-// (on the order of e.g. 1000) for each scope (on the order for 10000 or more).
-// I tried it anyway, and self-compilation time for eqlog-eqlog increased from
-// around 3 seconds to 12 seconds.
-//
-// Instead, the symbols available at a given AST node within a rule are
-// available more indirectly, by accessing a SymbolScope via the Scope. Since a
-// rule cannot introduce new symbols, all `Scope` elements in a rule can share
-// the same SymbolScope, and actually all rules in the same ambient context
-// (as of this writing just global_symbol_scope, eventually also `model` member
-// scope) can share the same SymbolScope. This way, all data attached to the
-// SymbolScope exists only once regardless of many Scope elements there are.
-
-func scope_symbols(scope: Scope) -> SymbolScope;
-// Propagate the same symbol scope through all scopes in a rule:
-rule scope_extension_symbols {
-    if scope_extension(s_0, s_1);
-    if ss = scope_symbols(s_0);
-    then scope_symbols(s_1) = ss;
-}
-rule rule_symbol_scope {
-    if decl_node_rule(decl, rul);
-    if ss = decl_symbol_scope(decl);
-    if scope = entry_scope(rule_descendant_rule(rul));
-    then scope_symbols(scope) = ss;
-}
-
-// A predicate tracking which symbols have are defined in a symbol scope.
-pred defined_symbol(scope: SymbolScope, Ident, SymbolKind, Loc);
 func type_definition_symbol_scope(typ: Type) -> SymbolScope;
 func rel_definition_symbol_scope(rel: Rel) -> SymbolScope;
 
-// A predicate tracking which symbols have are accessible in a symbols scope.
-// At the moment, symbols are accessible if they're declared in the same
-// symbols scope or a containing symbol scope.
-pred accessible_symbol(scope: SymbolScope, Ident, SymbolKind, Loc);
+// ## Semantic types, predicates and functions
 
-rule defined_symbol_is_accessible {
-    if defined_symbol(ss, name, kind, loc);
-    then accessible_symbol(ss, name, kind, loc);
-}
-rule accessible_symbol_scope_extension {
-    if symbol_scope_extension(smaller, larger);
-    if accessible_symbol(smaller, name, kind, loc);
-    then accessible_symbol(larger, name, kind, loc);
+type Type;
+
+pred is_normal_type(ty: Type);
+pred is_enum_type(ty: Type);
+pred is_model_type(ty: Type);
+pred is_mor_type(ty: Type);
+
+enum TypeList {
+    NilTypeList(),
+    ConsTypeList(head: Type, tail: TypeList),
+    SnocTypeList(init: TypeList, last: Type)
 }
 
-rule type_decl_defines_symbol {
-    if decl_node_type(decl, type_decl);
-    if type_decl(type_decl, name);
+rule type_list_nil_not_cons {
+    if NilTypeList() = ConsTypeList(_, _);
+    then absurd();
+}
+rule type_list_cons_injective {
+    if ConsTypeList(head_0, tail_0) = ConsTypeList(head_1, tail_1);
+    then head_0 = head_1;
+    then tail_0 = tail_1;
+}
+
+func semantic_type(ss: SymbolScope, Ident) -> Type;
+rule semantic_decl_type {
+    if decl_node_type(decl, type_decl_node);
+    if type_decl(type_decl_node, ident);
     if ss = decl_symbol_scope(decl);
-    if kind = TypeSymbol();
-    if loc = type_decl_node_loc(type_decl);
-    then defined_symbol(ss, name, kind, loc);
+    then typ := semantic_type(ss, ident)!;
+    then is_normal_type(typ);
+    then type_definition_symbol_scope(typ) = ss;
 }
-rule enum_decl_defines_symbol {
-    if decl_node_enum(decl, enum_decl);
-    if enum_decl(enum_decl, name, _);
+rule semantic_decl_enum {
+    if decl_node_enum(decl, enum_node);
+    if enum_decl(enum_node, ident, _);
     if ss = decl_symbol_scope(decl);
-    if kind = EnumSymbol();
-    if loc = enum_decl_node_loc(enum_decl);
-    then defined_symbol(ss, name, kind, loc);
+    then typ := semantic_type(ss, ident)!;
+    then is_enum_type(typ);
+    then type_definition_symbol_scope(typ) = ss;
 }
-rule model_decl_defines_symbol {
-    if decl_node_model(decl, model_decl);
-    if model_decl(model_decl, name, _);
+rule semantic_decl_model {
+    if decl_node_model(decl, model_node);
+    if model_decl(model_node, ident, _);
     if ss = decl_symbol_scope(decl);
-    if kind = ModelSymbol();
-    if loc = model_decl_node_loc(model_decl);
-    then defined_symbol(ss, name, kind, loc);
+    then typ := semantic_type(ss, ident)!;
+    then is_model_type(typ);
+    then type_definition_symbol_scope(typ) = ss;
 }
-rule type_definition_symbol_scope_rule {
-    if ty = semantic_type(ss, ident);
-    if defined_symbol(ss, ident, _, _);
-    then type_definition_symbol_scope(ty) = ss;
+
+func mor_type(model_type: Type) -> Type;
+func mor_model_type(mor_type: Type) -> Type;
+func mor_type_dom_func(mor_type: Type) -> Func;
+func mor_type_cod_func(mor_type: Type) -> Func;
+func mor_app_func(member_type: Type) -> Func;
+
+rule mor_type_defined_for_model {
+    if is_model_type(typ);
+    then mor_type := mor_type(typ)!;
+    then mor_type_dom_func(mor_type)!;
+    then mor_type_cod_func(mor_type)!;
 }
-rule pred_decl_defines_symbol {
+rule mor_model_type_law_for_morphisms {
+    if mt = mor_type(model_type);
+    then mor_model_type(mt) = model_type;
+}
+rule mor_type_is_mor_type {
+    if ty = mor_type(_);
+    then is_mor_type(ty);
+}
+rule mor_type_symbol_scope {
+    if mor_type = mor_type(model_type);
+    if ss = type_definition_symbol_scope(model_type);
+    then type_definition_symbol_scope(mor_type) = ss;
+}
+
+type Func;
+
+func domain(Func) -> TypeList;
+func codomain(Func) -> Type;
+
+enum Rel {
+    PredRel(Pred),
+    FuncRel(Func)
+}
+
+rule rel_constructors_pred_total {
+    if predicate: Pred;
+    then PredRel(predicate)!;
+}
+rule rel_constructors_func_total {
+    if function: Func;
+    then FuncRel(function)!;
+}
+
+rule mor_type_dom_func_symbol_scope {
+    if dom_func = mor_type_dom_func(mor_type);
+    if dom_func_rel = FuncRel(dom_func);
+    if ss = type_definition_symbol_scope(mor_type);
+    then rel_definition_symbol_scope(dom_func_rel) = ss;
+}
+rule mor_type_cod_func_symbol_scope {
+    if cod_func = mor_type_cod_func(mor_type);
+    if cod_func_rel = FuncRel(cod_func);
+    if ss = type_definition_symbol_scope(mor_type);
+    then rel_definition_symbol_scope(cod_func_rel) = ss;
+}
+
+rule mor_type_dom_cod_func_domains {
+    if mor_type = mor_type(_);
+    if dom_func = mor_type_dom_func(mor_type);
+    if cod_func = mor_type_cod_func(mor_type);
+    then nil := NilTypeList()!;
+    then mor_typ_singleton := ConsTypeList(mor_type, nil)!;
+    then domain(dom_func) = mor_typ_singleton;
+    then domain(cod_func) = mor_typ_singleton;
+}
+rule mor_type_dom_cod_func_codomains {
+    if mor_type = mor_type(model_type);
+    if dom_func = mor_type_dom_func(mor_type);
+    if cod_func = mor_type_cod_func(mor_type);
+    then codomain(dom_func) = model_type;
+    then codomain(cod_func) = model_type;
+}
+
+rule mor_app_func_defined_for_member_types {
+    if type_definition_symbol_scope(member_type) = model_member_symbol_scope(_);
+    then mor_app_func(member_type)!;
+}
+rule mor_app_func_symbol_scope {
+    if app_func = mor_app_func(member_type);
+    if app_func_rel = FuncRel(app_func);
+    if member_ss = type_definition_symbol_scope(member_type);
+    if model_type = symbol_scope_model(member_ss);
+    if model_def_ss = type_definition_symbol_scope(model_type);
+    then rel_definition_symbol_scope(app_func_rel) = model_def_ss;
+}
+rule mor_app_func_domain {
+    if app_func = mor_app_func(member_type);
+    if member_ss = type_definition_symbol_scope(member_type);
+    if model_type = symbol_scope_model(member_ss);
+    if mor_type = mor_type(model_type);
+    then nil := NilTypeList()!;
+    then member_type_singleton := ConsTypeList(member_type, nil)!;
+    then mor_and_member := ConsTypeList(mor_type, member_type_singleton)!;
+    then domain(app_func) = mor_and_member;
+}
+rule mor_app_func_codomain {
+    if app_func = mor_app_func(member_type);
+    then codomain(app_func) = member_type;
+}
+
+func virtual_symbol_scope() -> SymbolScope;
+rule virtual_symbol_scope_total {
+    then virtual_symbol_scope()!;
+}
+
+pred global_symbol_scope(scope: SymbolScope);
+rule global_symbol_scope_virtual {
+    if scope = virtual_symbol_scope();
+    then global_symbol_scope(scope);
+}
+rule global_symbol_scope_module {
+    if scope = module_symbol_scope(_);
+    then global_symbol_scope(scope);
+}
+
+type Pred;
+func semantic_pred(scope: SymbolScope, Ident) -> Pred;
+func pred_arity(Pred) -> TypeList;
+
+rule semantic_decl_pred {
     if decl_node_pred(decl, pred_decl);
-    if pred_decl(pred_decl, name, _);
+    if pred_decl(pred_decl, name, arg_decls);
     if ss = decl_symbol_scope(decl);
-    if kind = PredSymbol();
-    if loc = pred_decl_node_loc(pred_decl);
-    then defined_symbol(ss, name, kind, loc);
-}
-rule func_decl_defines_symbol {
-    if decl_node_func(decl, func_decl);
-    if func_decl(func_decl, name, _, _);
-    if ss = decl_symbol_scope(decl);
-    if kind = FuncSymbol();
-    if loc = func_decl_node_loc(func_decl);
-    then defined_symbol(ss, name, kind, loc);
-}
-rule ctor_decl_defines_symbol {
-    if ctor_decl(ctor, name, _);
-    if ss = ctor_symbol_scope(ctor);
-    if kind  = CtorSymbol();
-    if loc = ctor_decl_node_loc(ctor);
-    then defined_symbol(ss, name, kind, loc);
-}
-rule pred_definition_symbol_scope_rule {
-    if predicate = semantic_pred(ss, ident);
-    if defined_symbol(ss, ident, _, _);
+    then predicate := semantic_pred(ss, name)!;
+    if arg_types = semantic_arg_types(arg_decls);
+    then pred_arity(predicate) = arg_types;
     if rel = PredRel(predicate);
     then rel_definition_symbol_scope(rel) = ss;
 }
-rule func_definition_symbol_scope_rule {
-    if function = semantic_func(ss, ident);
-    if defined_symbol(ss, ident, _, _);
+
+func semantic_func(scope: SymbolScope, Ident) -> Func;
+
+rule semantic_decl_func {
+    if decl_node_func(decl, func_decl);
+    if func_decl(func_decl, name, arg_decls, result_type_expr);
+    if ss = decl_symbol_scope(decl);
+    then function := semantic_func(ss, name)!;
+    if arg_types = semantic_arg_types(arg_decls);
+    then result_type := semantic_signature_type_expr(ss, result_type_expr)!;
+    then domain(function) = arg_types;
+    then codomain(function) = result_type;
     if rel = FuncRel(function);
     then rel_definition_symbol_scope(rel) = ss;
 }
-rule rule_decl_defines_symbol {
-    if decl_node_rule(decl, rul);
-    if rule_decl(rul, _);
-    if ss = decl_symbol_scope(decl);
-    if name = rule_name(rul);
-    if kind = RuleSymbol();
-    if loc = rule_decl_node_loc(rul);
-    then defined_symbol(ss, name, kind, loc);
-}
-
-// ### Symbol lookup checks
-
-// Only one kind of symbol is allowed.
-pred should_be_symbol(name: Ident, kind: SymbolKind, scope_symbols: SymbolScope, loc: Loc);
-// Two kinds of symbols are allowed, with `kind_1` being the typical one.
-pred should_be_symbol_2(name: Ident, kind_1: SymbolKind, kind_2: SymbolKind, scope_symbols: SymbolScope, loc: Loc);
-// Three kinds of symbols are allowed, with `kind_1` being the typical one.
-pred should_be_symbol_3(name: Ident, kind_1: SymbolKind, kind_2: SymbolKind, kind_3: SymbolKind, scope_symbols: SymbolScope, loc: Loc);
-
-rule var_atom_should_be_type_ambient {
-    if var_if_atom_node(atom, _, type_expr);
-    if ambient_type_expr(type_expr, name);
-    if scope = scope_symbols(entry_scope(rule_descendant_if_atom(atom)));
-    if type_kind = TypeSymbol();
-    if enum_kind = EnumSymbol();
-    if model_kind = ModelSymbol();
-    if loc = if_atom_node_loc(atom);
-    then should_be_symbol_3(name, type_kind, enum_kind, model_kind, scope, loc);
-}
-rule var_atom_should_be_type_member {
-    if var_if_atom_node(atom, _, type_expr);
-    if member_type_expr(type_expr, tm, name);
-    if el_type(semantic_el(tm, _), tm_dep_type);
-    if tm_typ = underlying_type(tm_dep_type);
-    if member_scope = model_member_symbol_scope(tm_typ);
-    if type_kind = TypeSymbol();
-    if enum_kind = EnumSymbol();
-    if model_kind = ModelSymbol();
-    if loc = if_atom_node_loc(atom);
-    then should_be_symbol_3(name, type_kind, enum_kind, model_kind, member_scope, loc);
-}
-rule ambient_pred_expr_should_be_symbol {
-    if ambient_pred_expr(pred_node, pred_name);
-    if scope = scope_symbols(entry_scope(rule_descendant_pred_expr(pred_node)));
-    if kind = PredSymbol();
-    if loc = pred_expr_node_loc(pred_node);
-    then should_be_symbol(pred_name, kind, scope, loc);
-}
-rule member_pred_expr_should_be_symbol {
-    if member_pred_expr(pred_expr, tm, pred_name);
-    if el_type(semantic_el(tm, _), tm_dep_type);
-    if tm_typ = underlying_type(tm_dep_type);
-    if member_scope = model_member_symbol_scope(tm_typ);
-    if pred_kind = PredSymbol();
-    if loc = pred_expr_node_loc(pred_expr);
-    then should_be_symbol(pred_name, pred_kind, member_scope, loc);
-}
-rule ambient_func_expr_should_be_symbol {
-    if ambient_func_expr(func_expr, func_name);
-    if scope = scope_symbols(entry_scope(rule_descendant_func_expr(func_expr)));
-    if func_kind = FuncSymbol();
-    if ctor_kind = CtorSymbol();
-    if loc = func_expr_node_loc(func_expr);
-    then should_be_symbol_2(func_name, func_kind, ctor_kind, scope, loc);
-}
-rule member_func_expr_should_be_symbol {
-    if member_func_expr(func_expr, tm, func_name);
-    if el_type(semantic_el(tm, _), tm_dep_type);
-    if tm_typ = underlying_type(tm_dep_type);
-    if member_scope = model_member_symbol_scope(tm_typ);
-    if func_kind = FuncSymbol();
-    if loc = func_expr_node_loc(func_expr);
-    then should_be_symbol(func_name, func_kind, member_scope, loc);
-}
-
-// ### Natural numbers and argument numbers
-
-type Nat;
-func zero() -> Nat;
-func succ(Nat) -> Nat;
-
-func type_list_len(TypeList) -> Nat;
-rule type_list_len_total {
-    if tys: TypeList;
-    then type_list_len(tys)!;
-}
-rule type_list_len_nil {
-    if tys = NilTypeList();
-    if len = type_list_len(tys);
-    then len = zero();
-}
-rule type_list_len_cons {
-    if tys = ConsTypeList(_, tail);
-    if len = type_list_len(tys);
-    if tail_len = type_list_len(tail);
-    then len = succ(tail_len);
-}
-rule type_list_len_snoc {
-    if tys = SnocTypeList(init, _);
-    if len = type_list_len(tys);
-    if init_len = type_list_len(init);
-    then len = succ(init_len);
-}
-
-func semantic_pred_expr(PredExprNode, Structure) -> DepPred;
-
-rule semantic_ambient_global_pred_expr_rule {
-    if ambient_pred_expr(pred_expr, name);
-    if ss = scope_symbols(entry_scope(rule_descendant_pred_expr(pred_expr)));
-    if p = semantic_pred(ss, name);
-    if p_scope = rel_definition_symbol_scope(PredRel(p));
-    if global_symbol_scope(p_scope);
-    if pred_expr_structure(pred_expr, structure);
-    then dep_pred := GlobalPred(p)!;
-    then semantic_pred_expr(pred_expr, structure) = dep_pred;
-}
-
-rule semantic_ambient_member_pred_expr_rule {
-    if ambient_pred_expr(pred_expr, name);
-    if ss = scope_symbols(entry_scope(rule_descendant_pred_expr(pred_expr)));
-    if p = semantic_pred(ss, name);
-    if p_scope = rel_definition_symbol_scope(PredRel(p));
-    if pred_expr_structure(pred_expr, structure);
-    if parent_el = ambient_model_el(p_scope, structure);
-    then dep_pred := MemberPred(parent_el, p)!;
-    then semantic_pred_expr(pred_expr, structure) = dep_pred;
-}
-
-rule semantic_external_member_pred_expr_rule {
-    if member_pred_expr(pred_expr, model_tm, member_name);
-    if model_el = semantic_el(model_tm, structure);
-    if el_type(model_el, GlobalType(model_el_ty));
-    if member_ss = model_member_symbol_scope(model_el_ty);
-    if member_pred = semantic_pred(member_ss, member_name);
-
-    then dep_pred := MemberPred(model_el, member_pred)!;
-    then semantic_pred_expr(pred_expr, structure) = dep_pred;
-}
-
-func semantic_func_expr(FuncExprNode, Structure) -> DepFunc;
-rule semantic_ambient_global_func_expr_rule {
-    if ambient_func_expr(func_expr, name);
-    if ss = scope_symbols(entry_scope(rule_descendant_func_expr(func_expr)));
-    if f = semantic_func(ss, name);
-    if f_scope = rel_definition_symbol_scope(FuncRel(f));
-    if global_symbol_scope(f_scope);
-    if func_expr_structure(func_expr, structure);
-    then dep_func := GlobalFunc(f)!;
-    then semantic_func_expr(func_expr, structure) = dep_func;
-}
-
-rule semantic_ambient_member_func_expr_rule {
-    if ambient_func_expr(func_expr, name);
-    if ss = scope_symbols(entry_scope(rule_descendant_func_expr(func_expr)));
-    if f = semantic_func(ss, name);
-    if f_scope = rel_definition_symbol_scope(FuncRel(f));
-    if func_expr_structure(func_expr, structure);
-    if parent_el = ambient_model_el(f_scope, structure);
-    then dep_func := MemberFunc(parent_el, f)!;
-    then semantic_func_expr(func_expr, structure) = dep_func;
-}
-
-rule semantic_external_member_func_expr_rule {
-    if member_func_expr(func_expr, model_tm, member_name);
-    if model_el = semantic_el(model_tm, structure);
-    if el_type(model_el, GlobalType(model_el_ty));
-    if member_ss = model_member_symbol_scope(model_el_ty);
-    if member_func = semantic_func(member_ss, member_name);
-
-    then dep_func := MemberFunc(model_el, member_func)!;
-    then semantic_func_expr(func_expr, structure) = dep_func;
-}
-
-func semantic_type_expr(TypeExprNode, Structure) -> DepType;
-
-rule semantic_ambient_global_type_expr_rule {
-    if ambient_type_expr(type_expr, name);
-    if ss = scope_symbols(entry_scope(rule_descendant_type_expr(type_expr)));
-    if t = semantic_type(ss, name);
-    if t_scope = type_definition_symbol_scope(t);
-    if global_symbol_scope(t_scope);
-    if type_expr_structure(type_expr, structure);
-    then dep_type := GlobalType(t)!;
-    then semantic_type_expr(type_expr, structure) = dep_type;
-}
-
-rule semantic_ambient_member_type_expr_rule {
-    if ambient_type_expr(type_expr, name);
-    if ss = scope_symbols(entry_scope(rule_descendant_type_expr(type_expr)));
-    if t = semantic_type(ss, name);
-    if t_scope = type_definition_symbol_scope(t);
-    if type_expr_structure(type_expr, structure);
-    if parent_el = ambient_model_el(t_scope, structure);
-    then dep_type := MemberType(parent_el, t)!;
-    then semantic_type_expr(type_expr, structure) = dep_type;
-}
-
-rule semantic_external_member_type_expr_rule {
-    if member_type_expr(type_expr, model_tm, member_name);
-    if type_expr_structure(type_expr, structure);
-    if model_el = semantic_el(model_tm, structure);
-    if el_type(model_el, GlobalType(model_el_ty));
-    if member_ss = model_member_symbol_scope(model_el_ty);
-    if member_type = semantic_type(member_ss, member_name);
-    then dep_type := MemberType(model_el, member_type)!;
-    then semantic_type_expr(type_expr, structure) = dep_type;
-}
-
-rule semantic_morphism_type_expr_rule {
-    if mor_type_expr(type_expr, model_type_name);
-    if ss = scope_symbols(entry_scope(rule_descendant_type_expr(type_expr)));
-    if model_type = semantic_type(ss, model_type_name);
-    if mor_typ = mor_type(model_type);
-    if type_expr_structure(type_expr, structure);
-    then dep_type := GlobalType(mor_typ)!;
-    then semantic_type_expr(type_expr, structure) = dep_type;
-}
-
-// ## Control flow graph
-pred cfg_edge(from: StmtNode, to: StmtNode);
-
-// ### Control flow from and into StmtListNodes
-// 
-// If control flows into a list of statements, then it flows into the first statement in that list.
-// If control flows out of a statement list, then it flows out of every suffix of the statement list, and from the last statement in the list.
-// In case of an empty statement list, there's an ordinary cfg edge between every before-statement to every after-statement.
-pred cfg_edge_stmts_stmt(from: StmtListNode, to: StmtNode);
-pred cfg_edge_stmt_stmts(from: StmtNode, to: StmtListNode);
-
-rule cfg_edge_stmts_stmt_cons {
-    if cfg_edge_stmts_stmt(stmts, stmt);
-    if cons_stmt_list_node(stmts, _, tail);
-    then cfg_edge_stmts_stmt(tail, stmt);
-}
-rule cfg_edge_stmts_stmt_singleton {
-    if cfg_edge_stmts_stmt(stmts, stmt);
-    if cons_stmt_list_node(stmts, head, tail);
-    if nil_stmt_list_node(tail);
-    then cfg_edge(head, stmt);
-}
-
-rule cfg_edge_stmt_stmts_cons {
-    if cfg_edge_stmt_stmts(stmt, stmts);
-    if cons_stmt_list_node(stmts, head, _);
-    then cfg_edge(stmt, head);
-}
-rule cfg_edge_stmt_stmts_nil {
-    if cfg_edge_stmt_stmts(stmt, stmts);
-    if nil_stmt_list_node(stmts);
-    if cfg_edge_stmts_stmt(stmts, next_stmt);
-    then cfg_edge(stmt, next_stmt);
-}
-
-// ### Control flow from and into branches
-//
-// This is for branch and match statements.
-
-pred cfg_edge_fork(from: StmtNode, to: StmtBlockListNode);
-pred cfg_edge_join(from: StmtBlockListNode, to: StmtNode);
-
-rule cfg_edge_fork_cons {
-    if cfg_edge_fork(stmt, blocks);
-    if cons_stmt_block_list_node(blocks, head_block, tail_blocks);
-    then cfg_edge_fork(stmt, tail_blocks);
-    then cfg_edge_stmt_stmts(stmt, head_block);
-}
-rule cfg_edge_join_cons {
-    if cfg_edge_join(blocks, stmt);
-    if cons_stmt_block_list_node(blocks, head_block, tail_blocks);
-    then cfg_edge_join(tail_blocks, stmt);
-    then cfg_edge_stmts_stmt(head_block, stmt);
-}
-
-// ## Populating the cfg edge based on the AST
-
-rule cfg_edge_if {
-    if cons_stmt_list_node(_, first , tail);
-    if if_stmt_node(first, _);
-    if cons_stmt_list_node(tail, second , _);
-    then cfg_edge(first, second);
-}
-
-rule cfg_edge_then {
-    if cons_stmt_list_node(_, first , tail);
-    if then_stmt_node(first, _);
-    if cons_stmt_list_node(tail, second , _);
-    then cfg_edge(first, second);
-}
-
-rule cfg_edge_branch_fork_blocks {
-    if branch_stmt_node(branch_stmt, branch_blocks);
-    then cfg_edge_fork(branch_stmt, branch_blocks);
-}
-rule cfg_edge_match_fork_blocks {
-    if match_stmt_node(match_stmt, _, cases);
-    if branch_blocks = desugared_case_block_list(cases);
-    then cfg_edge_fork(match_stmt, branch_blocks);
-}
-
-rule cfg_edge_branch_join_blocks {
-    if branch_stmt_node(branch_stmt, branch_blocks);
-    if cons_stmt_list_node(_, branch_stmt , tail);
-    if cons_stmt_list_node(tail, after_branch_stmt , _);
-    then cfg_edge_join(branch_blocks, after_branch_stmt);
-}
-rule cfg_edge_match_join_blocks {
-    if match_stmt_node(match_stmt, _, cases);
-    if cons_stmt_list_node(_, match_stmt , tail);
-    if cons_stmt_list_node(tail, after_match_stmt , _);
-    if branch_blocks = desugared_case_block_list(cases);
-    then cfg_edge_join(branch_blocks, after_match_stmt);
-}
-
-// ## The morphisms associated to statements.
-//
-// Each statement in a rule corresponds to a morphism of structures. The domain
-// of this morphism corresponds to the data that has been queries or asserted
-// earlier in the rule, and the codomain to the result of adjoining the data in
-// that statement. Codomain and domain of subsequent statements match, so their
-// morphisms are composable.
-
-pred before_stmt_structure(StmtNode, Structure);
-pred stmt_morphism(StmtNode, Morphism);
-
-func before_rule_structure(RuleDeclNode) -> Structure;
-rule before_rule_structure_total {
-    if rn: RuleDeclNode;
-    then before_rule_structure(rn)!;
-}
-
-func ambient_model_el_structure(RuleDeclNode) -> Structure;
-rule ambient_model_el_structure_module_scope {
-    if decl_node_rule(decl, rul);
-    if decl_symbol_scope(decl) = module_symbol_scope(_);
-    if before_rule_struct = before_rule_structure(rul);
-    then ambient_model_el_structure(rul) = before_rule_struct;
-}
-
-func ambient_model_el_morphism(RuleDeclNode) -> Morphism;
-rule ambient_model_el_structure_model_scope {
-    if decl_node_rule(decl, rul);
-    if ss = decl_symbol_scope(decl);
-    if ss = model_member_symbol_scope(_);
-    then ambient_model_el_morphism(rul)!;
-}
-
-rule ambient_model_el_morphism_signature {
-    if morph = ambient_model_el_morphism(rul);
-    if brs = before_rule_structure(rul);
-    then source(morph) = brs;
-    then ams := ambient_model_el_structure(rul)!;
-    then target(morph) = ams;
-}
-
-rule ambient_model_el_structure_els {
-    if ams = ambient_model_el_structure(rul);
-    if decl_node_rule(decl, rul);
-    if ss = decl_symbol_scope(decl);
-    if symbol_scope_ancestor(ss, ancestor_scope);
-    if _ = symbol_scope_model(ancestor_scope);
-    then ambient_model_el(ancestor_scope, ams)!;
-}
-
-rule before_first_rule_stmt {
-    if rule_decl(rul, stmts);
-    if cons_stmt_list_node(stmts, first, _);
-    if structure = ambient_model_el_structure(rul);
-    then before_stmt_structure(first, structure);
-}
-
-rule cfg_edge_stmt_structure {
-    if cfg_edge(from_stmt, to_stmt);
-    if stmt_morphism(from_stmt, from_morphism);
-    if from_cod = target(from_morphism);
-    then before_stmt_structure(to_stmt, from_cod);
-}
-
-func if_atom_morphism(IfAtomNode, before_structure: Structure) -> Morphism;
-func then_atom_morphism(ThenAtomNode, before_structure: Structure) -> Morphism;
-// This should only be defined for branch statements.
-func branch_stmt_morphism(StmtNode, before_structure: Structure) -> Morphism;
-// This should only be defined for match statements.
-func match_stmt_morphism(StmtNode, before_structure: Structure) -> Morphism;
-
-rule if_atom_morphism_source {
-    if morph_source = source(if_atom_morphism(_, before_structure));
-    then morph_source = before_structure;
-}
-rule then_atom_morphism_source {
-    if morph_source = source(then_atom_morphism(_, before_structure));
-    then morph_source = before_structure;
-}
-rule branch_stmt_morphism_source {
-    if morph_source = source(branch_stmt_morphism(_, before_structure));
-    then morph_source = before_structure;
-}
-rule match_stmt_morphism_source {
-    if morph_source = source(match_stmt_morphism(_, before_structure));
-    then morph_source = before_structure;
-}
-
-rule if_stmt_morphism_defined {
-    if if_stmt_node(stmt, atom);
-    if before_stmt_structure(stmt, before_structure);
-    then morph := if_atom_morphism(atom, before_structure)!;
-    then stmt_morphism(stmt, morph);
-}
-rule then_stmt_morphism_defined {
-    if then_stmt_node(stmt, atom);
-    if before_stmt_structure(stmt, before_structure);
-    then morph := then_atom_morphism(atom, before_structure)!;
-    then stmt_morphism(stmt, morph);
-}
-rule branch_stmt_morphism_defined {
-    if branch_stmt_node(stmt, _);
-    if before_stmt_structure(stmt, before_structure);
-    then morph := branch_stmt_morphism(stmt, before_structure)!;
-    then stmt_morphism(stmt, morph);
-}
-rule match_stmt_morphism_defined {
-    if match_stmt_node(stmt, _, _);
-    if before_stmt_structure(stmt, before_structure);
-    then morph := match_stmt_morphism(stmt, before_structure)!;
-    then stmt_morphism(stmt, morph);
-}
-
-pred if_morphism(Morphism);
-pred surj_then_morphism(Morphism);
-pred non_surj_then_morphism(Morphism);
-pred noop_morphism(Morphism);
-
-rule ambient_model_el_morphism_is_if {
-    if morph = ambient_model_el_morphism(_);
-    then if_morphism(morph);
-}
-rule if_stmt_morphism_is_if {
-    if if_stmt_node(stmt, _);
-    if stmt_morphism(stmt, morph);
-    then if_morphism(morph);
-}
-rule then_equal_stmt_morphism_is_surj {
-    if then_stmt_node(stmt, atom);
-    if equal_then_atom_node(atom, _, _);
-    if stmt_morphism(stmt, morph);
-    then surj_then_morphism(morph);
-}
-rule then_pred_stmt_morphism_is_surj {
-    if then_stmt_node(stmt, atom);
-    if pred_then_atom_node(atom, _, _);
-    if stmt_morphism(stmt, morph);
-    then surj_then_morphism(morph);
-}
-rule then_defined_stmt_morphism_is_non_surj {
-    if then_stmt_node(stmt, atom);
-    if defined_then_atom_node(atom, _, _);
-    if stmt_morphism(stmt, morph);
-    then non_surj_then_morphism(morph);
-}
-rule branch_stmt_morphism_is_noop {
-    if branch_stmt_node(stmt, _);
-    if stmt_morphism(stmt, morph);
-    then noop_morphism(morph);
-}
-rule match_stmt_morphism_is_if {
-    if match_stmt_node(stmt, _, _);
-    if stmt_morphism(stmt, morph);
-    then if_morphism(morph);
-}
-
-// ### Propagation of associated structures through the AST
-//
-// Even though a statement corresponds to a morphism, inside the statement we
-// only need access to the codomain of that morphism. That's the
-// stmt_structure, and similarly for subnodes of statements.
-//
-// #### Propagate stmt structure through if and then stmts.
-pred stmt_structure(StmtNode, Structure);
-pred if_atom_structure(IfAtomNode, Structure);
-pred then_atom_structure(ThenAtomNode, Structure);
-pred term_structure(TermNode, Structure);
-pred terms_structure(TermListNode, Structure);
-pred opt_term_structure(OptTermNode, Structure);
-pred type_expr_structure(TypeExprNode, Structure);
-pred pred_expr_structure(PredExprNode, Structure);
-pred func_expr_structure(FuncExprNode, Structure);
-
-rule stmt_structure_morphism {
-    if stmt_morphism(stmt, morph);
-    if s = target(morph);
-    then stmt_structure(stmt, s);
-}
-
-rule if_stmt_structure {
-    if if_stmt_node(stmt, atom);
-    if stmt_structure(stmt, structure);
-    then if_atom_structure(atom, structure);
-}
-rule then_stmt_structure {
-    if then_stmt_node(stmt, atom);
-    if stmt_structure(stmt, structure);
-    then then_atom_structure(atom, structure);
-}
-rule match_stmt_structure {
-    if match_stmt_node(stmt, term, _);
-    if stmt_structure(stmt, structure);
-    then term_structure(term, structure);
-}
-
-// #### Propagate associated structures through if atoms.
-rule equal_if_atom_structure {
-    if equal_if_atom_node(atom, lhs, rhs);
-    if if_atom_structure(atom, structure);
-    then term_structure(lhs, structure);
-    then term_structure(rhs, structure);
-}
-rule defined_if_atom_structure {
-    if defined_if_atom_node(atom, term);
-    if if_atom_structure(atom, structure);
-    then term_structure(term, structure);
-}
-rule pred_if_atom_structure {
-    if pred_if_atom_node(atom, pred_expr, arg_terms);
-    if if_atom_structure(atom, structure);
-    then terms_structure(arg_terms, structure);
-    then pred_expr_structure(pred_expr, structure);
-}
-rule var_if_atom_structure {
-    if var_if_atom_node(atom, var_term, type_expr);
-    if if_atom_structure(atom, structure);
-    then term_structure(var_term, structure);
-    then type_expr_structure(type_expr, structure);
-}
-
-// #### Propagate associated structures through then atoms.
-rule equal_then_atom_structure {
-    if equal_then_atom_node(atom, lhs, rhs);
-    if then_atom_structure(atom, structure);
-    then term_structure(lhs, structure);
-    then term_structure(rhs, structure);
-}
-rule defined_then_atom_structure {
-    if defined_then_atom_node(atom, var_term, term);
-    if then_atom_structure(atom, structure);
-    then opt_term_structure(var_term, structure);
-    then term_structure(term, structure);
-}
-rule pred_then_atom_structure {
-    if pred_then_atom_node(atom, pred_expr, arg_terms);
-    if then_atom_structure(atom, structure);
-    then terms_structure(arg_terms, structure);
-    then pred_expr_structure(pred_expr, structure);
-}
-
-// ### Propagate associated structure through type exprs.
-rule member_type_expr_structure {
-    if member_type_expr(type_expr, model_tm, _);
-    if type_expr_structure(type_expr, strct);
-    then term_structure(model_tm, strct);
-}
-
-// ### Propagate associated structure through pred exprs.
-rule member_pred_expr_structure {
-    if member_pred_expr(pred_expr, model_tm, _);
-    if pred_expr_structure(pred_expr, strct);
-    then term_structure(model_tm, strct);
-}
-
-// ### Propagate associated structure through func exprs.
-rule member_func_expr_structure {
-    if member_func_expr(func_expr, model_tm, _);
-    if func_expr_structure(func_expr, strct);
-    then term_structure(model_tm, strct);
-}
-
-// #### Propagate associated structures through terms.
-rule cons_term_list_structure {
-    if cons_term_list_node(terms, head, tail);
-    if terms_structure(terms, structure);
-    then term_structure(head, structure);
-    then terms_structure(tail, structure);
-}
-
-rule some_opt_term_structure {
-    if some_term_node(opt_term, term);
-    if opt_term_structure(opt_term, structure);
-    then term_structure(term, structure);
-}
-
-rule app_term_structure {
-    if app_term_node(term, func_expr, args);
-    if term_structure(term, structure);
-    then terms_structure(args, structure);
-    then func_expr_structure(func_expr, structure);
-}
-
-rule dom_term_structure {
-    if dom_term_node(term, arg_term);
-    if term_structure(term, structure);
-    then term_structure(arg_term, structure);
-}
-
-rule cod_term_structure {
-    if cod_term_node(term, arg_term);
-    if term_structure(term, structure);
-    then term_structure(arg_term, structure);
-}
-
-rule mor_app_term_structure {
-    if mor_app_term_node(term, mor_term, arg_term);
-    if term_structure(term, structure);
-    then term_structure(mor_term, structure);
-    then term_structure(arg_term, structure);
-}
-// ### Populate associated structures
-
-// #### Variables, scopes and named elements
-
-func semantic_name(VirtIdent, Scope) -> ElName;
-
-rule semantic_name_defined {
-    if var_in_scope(ident, scope);
-    then semantic_name(ident, scope)!;
-}
-rule semantic_name_extension_scope {
-    if scope_extension(smaller_scope, larger_scope);
-    if name_smaller = semantic_name(ident, smaller_scope);
-    if name_larger = semantic_name(ident, larger_scope);
-    then name_smaller = name_larger;
-}
-
-func semantic_el(TermNode, Structure) -> El;
-func semantic_els(TermListNode, Structure) -> ElList;
-rule semantic_el_defined {
-    if el: TermNode;
-    if term_structure(el, structure);
-    then semantic_el(el, structure)!;
-}
-
-rule semantic_els_nil {
-    if nil_term_list_node(terms);
-    if terms_structure(terms, structure);
-    then nil_els := NilElList(structure)!;
-    then semantic_els(terms, structure) = nil_els;
-}
-rule semantic_els_cons {
-    if cons_term_list_node(terms, head, tail);
-    if head_el = semantic_el(head, structure);
-    if tail_els = semantic_els(tail, structure);
-    then cons_els := ConsElList(head_el, tail_els)!;
-    then semantic_els(terms, structure) = cons_els;
-}
-
-// #### Variables representing ambient models.
-func ambient_model_el(model_member_scope: SymbolScope, Structure) -> El;
-
-// #### The structures of semantic elements
-rule semantic_el_struct {
-    if el = semantic_el(_, structure);
-    then el_structure(el) = structure;
-}
-rule semantic_els_struct {
-    if els = semantic_els(_, structure);
-    then els_structure(els) = structure;
-}
-
-rule ambient_model_el_struct {
-    if el = ambient_model_el(_, structure);
-    then el_structure(el) = structure;
-}
-
-// #### Types of ambient model els
-rule ambient_model_dep_type {
-    if el = ambient_model_el(member_scope, _);
-    if model_type = symbol_scope_model(member_scope);
-    if model_dep_type = GlobalType(model_type);
-    then el_type(el, model_dep_type);
-}
-
-pred dom_must_be_applied_to_mor_type(Type, Loc);
-pred dom_must_result_in_model_type(Type, Loc);
-pred cod_must_be_applied_to_mor_type(Type, Loc);
-pred cod_must_result_in_model_type(Type, Loc);
-
-// #### Types of dom and cod terms.
-rule dom_dep_type_down {
-    // The conclusion from the type of a term `dom(f)` to the type of `f`.
-    if dom_term_node(dom_term, mor_term);
-    if loc = term_node_loc(dom_term);
-    if dom_el = semantic_el(dom_term, structure);
-    if el_type(dom_el, domain_type);
-    match domain_type {
-        GlobalType(typ) => {
-            then dom_must_result_in_model_type(typ, loc);
-            if mor_typ = GlobalType(mor_type(typ));
-            if mor_el = semantic_el(mor_term, structure);
-            then el_type(mor_el, mor_typ);
+rule semantic_decl_ctor {
+    if ctor_decl(ctor, ctor_name, arg_decls);
+    if enum_node = ctor_enum(ctor);
+    if ss = ctor_symbol_scope(ctor);
+    then function := semantic_func(ss, ctor_name)!;
+    if arg_types = semantic_arg_types(arg_decls);
+    if enum_decl(enum_node, enum_name, _);
+    if result_type = semantic_type(ss, enum_name);
+    then domain(function) = arg_types;
+    then codomain(function) = result_type;
+    if rel = FuncRel(function);
+    then rel_definition_symbol_scope(rel) = ss;
+}
+
+rule semantic_pred_scope_extension {
+    if symbol_scope_extension(smaller, larger);
+    if predicate = semantic_pred(smaller, ident);
+    then semantic_pred(larger, ident) = predicate;
+}
+rule semantic_func_scope_extension {
+    if symbol_scope_extension(smaller, larger);
+    if function = semantic_func(smaller, ident);
+    then semantic_func(larger, ident) = function;
+}
+rule semantic_type_scope_extension {
+    if symbol_scope_extension(smaller, larger);
+    if typ = semantic_type(smaller, ident);
+    then semantic_type(larger, ident) = typ;
+}
+
+func model_member_pred(nested_type: Type) -> Pred;
+rule model_member_pred_defined {
+    if ss = type_definition_symbol_scope(typ);
+    if symbol_scope_model(ss)!;
+    then model_member_pred(typ)!;
+}
+rule model_member_pred_def_scope {
+    if ss = virtual_symbol_scope();
+    if rel = PredRel(model_member_pred(_));
+    then rel_definition_symbol_scope(rel) = ss;
+}
+rule parent_model_rel_arity {
+    if rel = PredRel(model_member_pred(member_type));
+    if parent_type = symbol_scope_model(type_definition_symbol_scope(member_type));
+    then nil := NilTypeList()!;
+    then member_nil := ConsTypeList(member_type, nil)!;
+    then parent_member_nil := ConsTypeList(parent_type, member_nil)!;
+    then arity(rel) = parent_member_nil;
+}
+
+func semantic_signature_type_expr(ss: SymbolScope, type_expr: TypeExprNode) -> Type;
+rule semantic_signature_type_expr_ambient {
+    if ty = semantic_signature_type_expr(ss, type_expr);
+    if ambient_type_expr(type_expr, ty_ident);
+    then ty = semantic_type(ss, ty_ident);
+}
+rule semantic_signature_type_expr_mor {
+    if ty = semantic_signature_type_expr(ss, type_expr);
+    if mor_type_expr(type_expr, model_ty_ident);
+    if model_ty = semantic_type(ss, model_ty_ident);
+    then ty = mor_type(model_ty);
+}
+
+func semantic_arg_type(arg: ArgDeclNode) -> Type;
+rule semantic_arg_type_def {
+    if arg_decl_node_type(arg, type_expr);
+    if ss = arg_symbol_scope(arg);
+    then ty := semantic_signature_type_expr(ss, type_expr)!;
+    then semantic_arg_type(arg) = ty;
+}
+
+func semantic_arg_types(ArgDeclListNode) -> TypeList;
+rule semantic_arg_types_nil {
+    if nil_arg_decl_list_node(n);
+    then nil := NilTypeList()!;
+    then semantic_arg_types(n) = nil;
+}
+rule semantic_arg_types_cons {
+    if cons_arg_decl_list_node(arg_decls, head, tail);
+    if head_type = semantic_arg_type(head);
+    if tail_types = semantic_arg_types(tail);
+    then tys := ConsTypeList(head_type, tail_types)!;
+    then semantic_arg_types(arg_decls) = tys;
+}
+
+func dep_arity(Rel) -> TypeList;
+rule dep_arity_laws {
+    if rel: Rel;
+    match rel {
+        PredRel(predicate) => {
+            if tys = pred_arity(predicate);
+            then dep_arity(rel) = tys;
         }
-        MemberType(_, member_type) => {
-            // At the moment, this is necessarily an error, since model types
-            // cannot be nested, so that member_type cannot be a model type.
-            then dom_must_result_in_model_type(member_type, loc);
-        }
-    }
-}
-rule cod_dep_type_down {
-    // The conclusion from the type of a term `cod(f)` to the type of `f`.
-    if cod_term_node(cod_term, mor_term);
-    if loc = term_node_loc(cod_term);
-    if cod_el = semantic_el(cod_term, structure);
-    if el_type(cod_el, codomain_type);
-    match codomain_type {
-        GlobalType(typ) => {
-            then cod_must_result_in_model_type(typ, loc);
-            if mor_typ = GlobalType(mor_type(typ));
-            if mor_el = semantic_el(mor_term, structure);
-            then el_type(mor_el, mor_typ);
-        }
-        MemberType(_, member_type) => {
-            // At the moment, this is necessarily an error, since model types
-            // cannot be nested, so that member_type cannot be a model type.
-            then cod_must_result_in_model_type(member_type, loc);
-        }
-    }
-}
-rule dom_dep_type_up {
-    // The conclusion from the type of a term `f` to the type of `dom(f)`.
-    if dom_term_node(dom_term, mor_term);
-    if loc = term_node_loc(dom_term);
-    if mor_el = semantic_el(mor_term, structure);
-    if el_type(mor_el, mor_type);
-    match mor_type {
-        GlobalType(typ) => {
-            then dom_must_be_applied_to_mor_type(typ, loc);
-            if typ = mor_type(model_type);
-            if model_dep_type = GlobalType(model_type);
-            if dom_el = semantic_el(dom_term, structure);
-            then el_type(dom_el, model_dep_type);
-        }
-        MemberType(_, member_type) => {
-            // At the moment, this is necessarily an error, since model types
-            // cannot be nested, so that member_type cannot be a model type.
-            then dom_must_be_applied_to_mor_type(member_type, loc);
-        }
-    }
-}
-rule cod_dep_type_up {
-    // The conclusion from the type of a term `f` to the type of `cod(f)`.
-    if cod_term_node(cod_term, mor_term);
-    if loc = term_node_loc(cod_term);
-    if mor_el = semantic_el(mor_term, structure);
-    if el_type(mor_el, mor_type);
-    match mor_type {
-        GlobalType(typ) => {
-            then cod_must_be_applied_to_mor_type(typ, loc);
-            if typ = mor_type(model_type);
-            if model_dep_type = GlobalType(model_type);
-            if cod_el = semantic_el(cod_term, structure);
-            then el_type(cod_el, model_dep_type);
-        }
-        MemberType(_, member_type) => {
-            // At the moment, this is necessarily an error, since model types
-            // cannot be nested, so that member_type cannot be a model type.
-            then cod_must_be_applied_to_mor_type(member_type, loc);
+        FuncRel(function) => {
+            if func_dom = domain(function);
+            if func_cod = codomain(function);
+            then tys := SnocTypeList(func_dom, func_cod)!;
+            then dep_arity(rel) = tys;
         }
     }
 }
 
-// #### Typing rules for mor_app_term
+func arity(Rel) -> TypeList;
+func flat_domain(Func) -> TypeList;
 
-pred is_mor_el(el: El);
-pred should_be_mor_el(el: El, loc: Loc);
-pred should_be_mor_for_model_el(el: El, model_type: Type, loc: Loc);
-
-rule mor_is_mor_el {
-    if el_type(el, GlobalType(mor_type(_)));
-    then is_mor_el(el);
+rule top_level_arity_law {
+    if ss = rel_definition_symbol_scope(rel);
+    if global_symbol_scope(ss);
+    if ar = dep_arity(rel);
+    then arity(rel) = ar;
 }
-rule mor_app_term_node_should_be_mor {
-    if mor_app_term_node(_, mor_term, _);
-    if mor_loc = term_node_loc(mor_term);
-    if mor_el = semantic_el(mor_term, _);
-    then should_be_mor_el(mor_el, mor_loc);
+rule top_level_flat_domain_law {
+    if ss = rel_definition_symbol_scope(FuncRel(function));
+    if global_symbol_scope(ss);
+    if d = domain(function);
+    then flat_domain(function) = d;
 }
-rule mor_app_term_node_should_be_mor_for_model {
-    if mor_app_term_node(_, mor_term, arg_term);
-    if arg_el = semantic_el(arg_term, structure);
-    if mor_el = semantic_el(mor_term, structure);
-    if mor_loc = term_node_loc(mor_term);
-    if el_type(arg_el, MemberType(model_el, _));
-    if el_type(model_el, GlobalType(model_ty));
-    then should_be_mor_for_model_el(mor_el, model_ty, mor_loc);
+rule member_arity_law {
+    if ss = rel_definition_symbol_scope(rel);
+    if model_ty = symbol_scope_model(ss);
+    if ar = dep_arity(rel);
+    then cons_ar := ConsTypeList(model_ty, ar)!;
+    then arity(rel) = cons_ar;
 }
-
-// Member elements are elements of type MemberType(model_el, _) for some model_el.
-pred is_member_element(el: El, model_type: Type);
-pred should_be_member_element(el: El, model_type: Type, loc: Loc);
-
-rule member_element_definition {
-    if el_type(arg_el, MemberType(model_el, _));
-    if el_type(model_el, GlobalType(model_type));
-    then is_member_element(arg_el, model_type);
-}
-rule argument_of_morphism_should_be_member {
-    if mor_app_term_node(_, mor_term, arg_term);
-    if arg_el = semantic_el(arg_term, structure);
-    if arg_loc = term_node_loc(arg_term);
-    if mor_el = semantic_el(mor_term, structure);
-    if el_type(mor_el, GlobalType(mor_type(model_ty)));
-    then should_be_member_element(arg_el, model_ty, arg_loc);
+rule member_flat_domain_law {
+    if ss = rel_definition_symbol_scope(FuncRel(function));
+    if model_ty = symbol_scope_model(ss);
+    if d = domain(function);
+    then cons_d := ConsTypeList(model_ty, d)!;
+    then flat_domain(function) = cons_d;
 }
 
-rule model_member_pred_app_defined {
-    if el_type(member_el, MemberType(model_el, member_type));
-    if member_rel = PredRel(model_member_pred(member_type));
-    if strct = el_structure(member_el);
-    then nil := NilElList(strct)!;
-    then member_nil := ConsElList(member_el, nil)!;
-    then model_member_nil := ConsElList(model_el, member_nil)!;
-    then rel_app(member_rel, model_member_nil);
-}
+// ## Code generation metadata
 
-// If arg_el has type MemberType(d, member_type), then dom(mor)
-// should be defined and equal to d.
-rule mor_app_domain_type_from_arg {
-    if mor_app_term_node(_, mor_term, arg_term);
-    if arg_el = semantic_el(arg_term, structure);
-    if el_type(arg_el, MemberType(domain_el, _));
-
-    if mor_el = semantic_el(mor_term, structure);
-    if el_type(mor_el, GlobalType(mor_type));
-
-    if dom_func = mor_type_dom_func(mor_type);
-
-    then nil := NilElList(structure)!;
-    then mor_el_singleton := ConsElList(mor_el, nil)!;
-    then func_app(dom_func, mor_el_singleton) = domain_el;
-}
-
-// The analogue of mor_app_domain_type_from_arg for the result of applying a
-// morphism to a member element.
-rule mor_app_codomain_type_from_arg {
-    if mor_app_term_node(result_term, mor_term, _);
-    if result_el = semantic_el(result_term, structure);
-    if el_type(result_el, MemberType(codomain_el, _));
-
-    if mor_el = semantic_el(mor_term, structure);
-    if el_type(mor_el, GlobalType(mor_type));
-
-    if cod_func = mor_type_cod_func(mor_type);
-
-    then nil := NilElList(structure)!;
-    then mor_el_singleton := ConsElList(mor_el, nil)!;
-    then func_app(cod_func, mor_el_singleton) = codomain_el;
-}
-
-rule mor_app_result_type {
-    if mor_app_term_node(result_term, mor_term, arg_term);
-    
-    if result_el = semantic_el(result_term, structure);
-    if mor_el = semantic_el(mor_term, structure);
-    if arg_el = semantic_el(arg_term, structure);
-
-    if el_type(arg_el, MemberType(_, member_type));
-    if el_type(mor_el, GlobalType(mor_type));
-
-    if cod_func = mor_type_cod_func(mor_type);
-    if mor_singleton = ConsElList(mor_el, NilElList(structure));
-    if cod_el = func_app(cod_func, mor_singleton);
-
-    then result_ty := MemberType(cod_el, member_type)!;
-    then el_type(result_el, result_ty);
-}
-
-// #### Semantics of terms
-
-rule dom_term_semantics {
-    if dom_term_node(dom_term, mor_term);
-    if dom_el = semantic_el(dom_term, structure);
-    if mor_el = semantic_el(mor_term, structure);
-
-    if el_type(mor_el, GlobalType(mor_type));
-    if dom_func = mor_type_dom_func(mor_type);
-
-    then nil := NilElList(structure)!;
-    then mor_el_single := ConsElList(mor_el, nil)!;
-
-    then func_app(dom_func, mor_el_single) = dom_el;
-}
-
-rule cod_term_semantics {
-    if cod_term_node(cod_term, mor_term);
-    if cod_el = semantic_el(cod_term, structure);
-    if mor_el = semantic_el(mor_term, structure);
-
-    if el_type(mor_el, GlobalType(mor_type));
-    if cod_func = mor_type_cod_func(mor_type);
-
-    then nil := NilElList(structure)!;
-    then mor_el_single := ConsElList(mor_el, nil)!;
-
-    then func_app(cod_func, mor_el_single) = cod_el;
-}
-rule mor_app_term_semantics {
-    if mor_app_term_node(result_term, mor_term, arg_term);
-    if result_el = semantic_el(result_term, structure);
-    if mor_el = semantic_el(mor_term, structure);
-    if arg_el = semantic_el(arg_term, structure);
-    
-    if el_type(arg_el, arg_dep_type);
-    if arg_type = underlying_type(arg_dep_type);
-    
-    if app_func = mor_app_func(arg_type);
-    
-    then nil := NilElList(structure)!;
-    then arg_single := ConsElList(arg_el, nil)!;
-    then mor_arg := ConsElList(mor_el, arg_single)!;
-    
-    then func_app(app_func, mor_arg) = result_el;
-}
-
-rule app_term_semantics {
-    if app_term_node(result_term, func_expr, arg_terms);
-    if result_el = semantic_el(result_term, structure);
-    if func_arg_els = semantic_els(arg_terms, structure);
-    if f = semantic_func_expr(func_expr, structure);
-    then dep_func_app(f, func_arg_els) = result_el;
-}
-
-rule var_term_semantics {
-    if var_term_node(term, ident);
-    if scope = exit_scope(rule_descendant_term(term));
-    if name = semantic_name(ident, scope);
-    if el = semantic_el(term, structure);
-    then el = var(structure, name);
-}
-
-func wildcard_name(TermNode) -> ElName;
-rule wildcard_name_defined {
-    if wildcard_term_node(term);
-    then wildcard_name(term)!;
-}
-rule wildcard_term_semantics {
-    if wildcard_term_node(term);
-    if name = wildcard_name(term);
-    if el = semantic_el(term, structure);
-    then el = var(structure, name);
-}
-
-// #### Semantics of if atoms
-rule equal_if_atom_semantics {
-    if equal_if_atom_node(_, lhs_term, rhs_term);
-    if lhs_el = semantic_el(lhs_term, structure);
-    if rhs_el = semantic_el(rhs_term, structure);
-    then lhs_el = rhs_el;
-}
-// No rule for `defined_if_atom` -- this is already taken care of because `semantic_el` is total.
-rule pred_if_atom_semantics {
-    if pred_if_atom_node(_, pred_expr, arg_terms);
-    if p = semantic_pred_expr(pred_expr, structure);
-    if arg_els = semantic_els(arg_terms, structure);
-    then dep_pred_app(p, arg_els);
-}
-rule var_if_atom_semantics {
-    if var_if_atom_node(_, var_term, type_expr);
-    if var_el = semantic_el(var_term, structure);
-    if dep_typ = semantic_type_expr(type_expr, structure);
-    then el_type(var_el, dep_typ);
-}
-
-// #### Semantics of then atoms
-rule equal_then_atom_semantics {
-    if equal_then_atom_node(_, lhs_term, rhs_term);
-    if lhs_el = semantic_el(lhs_term, structure);
-    if rhs_el = semantic_el(rhs_term, structure);
-    then lhs_el = rhs_el;
-}
-rule defined_then_atom_semantics {
-    if defined_then_atom_node(_, opt_var_term, term);
-    if some_term_node(opt_var_term, var_term);
-    if var_el = semantic_el(var_term, structure);
-    if el = semantic_el(term, structure);
-    then var_el = el;
-}
-rule pred_then_atom_semantics {
-    if pred_then_atom_node(_, pred_expr, arg_terms);
-    if p = semantic_pred_expr(pred_expr, structure);
-    if arg_els = semantic_els(arg_terms, structure);
-    then dep_pred_app(p, arg_els);
-}
-
-// ### Lowering dependent applications to non-dependent ones
-//
-// For member relations, rel_app includes the parent model element as the first argument
-// For global relations, rel_app and dep_pred_app/dep_func_app are the same
-
-// If the relation is global, then dep_pred_app and dep_func_app are equivalent to the non-dependent version.
-rule dep_pred_app_to_rel_app_global {
-    if dep_pred_app(dep_pred, args);
-    if dep_pred = GlobalPred(predicate);
-    if pred_rel = PredRel(predicate);
-    if module_symbol_scope(_) = rel_definition_symbol_scope(pred_rel);
-    then rel_app(pred_rel, args);
-}
-
-rule dep_pred_app_to_rel_app_member {
-    if dep_pred_app(dep_pred, args);
-    if dep_pred = MemberPred(model_el, predicate);
-    if pred_rel = PredRel(predicate);
-    then full_args := ConsElList(model_el, args)!;
-    then rel_app(pred_rel, full_args);
-}
-
-rule dep_func_app_to_rel_app_global {
-    if dep_func_app(GlobalFunc(function), args) = result;
-    then func_app(function, args) = result;
-}
-
-rule dep_func_app_to_rel_app_member {
-    if dep_func_app(MemberFunc(model_el, function), dep_args) = result;
-    then full_args := ConsElList(model_el, dep_args)!;
-    then func_app(function, full_args) = result;
-}
-
-// TODO: Need to deal with PredExprs.
-
-// ## Epic check
-
-// ### Terms that should need epic checking
-//
-// These are terms that appear in then statements.
-
-pred term_should_be_epic_ok(TermNode);
-pred terms_should_be_epic_ok(TermListNode);
-
-// #### Propagate should_be_epic_ok downwards.
-rule terms_should_be_epic_ok_cons {
-    if terms_should_be_epic_ok(terms);
-    if cons_term_list_node(terms, head, tail);
-    then term_should_be_epic_ok(head);
-    then terms_should_be_epic_ok(tail);
-}
-
-rule terms_should_be_epic_ok_app {
-    if term_should_be_epic_ok(tm);
-    if app_term_node(tm, _, args);
-    then terms_should_be_epic_ok(args);
-}
-
-rule then_atom_epic_ok_equal {
-    if equal_then_atom_node(_, lhs, rhs);
-    then term_should_be_epic_ok(lhs);
-    then term_should_be_epic_ok(rhs);
-}
-rule then_atom_epic_ok_defined {
-    if defined_then_atom_node(_, _, tm);
-    then term_should_be_epic_ok(tm);
-}
-rule then_atom_epic_ok_pred {
-    if pred_then_atom_node(_, _, args);
-    then terms_should_be_epic_ok(args);
-}
-
-// ### Function definedness
-//
-// This predicate holds if an Eqlog function can be made defined via the Rust API.
 pred function_can_be_made_defined(Func);
 
 rule function_can_be_made_defined_if_codomain_normal_type {
@@ -2900,19 +565,4 @@ rule function_can_be_defined_if_constructor {
     if ss = ctor_symbol_scope(ctor);
     if function = semantic_func(ss, ident);
     then function_can_be_made_defined(function);
-}
-
-// ## Match statement: pattern function must be a constructor.
-//
-// Conflicting-enum and non-exhaustive-cases diagnostics are produced by
-// algebra/match_check.rs from the AST and signature.
-
-rule case_pattern_app_should_be_constructor {
-    if match_case(match_node, pattern, _);
-    if scope = scope_symbols(entry_scope(rule_descendant_match_case(match_node)));
-    if app_term_node(pattern, func_expr, _);
-    if ambient_func_expr(func_expr, func_name);
-    if pattern_loc = term_node_loc(pattern);
-    if ctor_sym = CtorSymbol();
-    then should_be_symbol(func_name, ctor_sym, scope, pattern_loc);
 }

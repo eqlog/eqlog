@@ -4,7 +4,6 @@ use crate::algebra::symbols::check_symbol_lookups;
 use crate::ast::{Ast, ModuleId};
 use crate::ast_to_eqlog::populate_eqlog;
 use crate::casing::check_casing;
-use crate::debug::display_morphisms;
 use crate::error::*;
 use crate::flat_eqlog::*;
 use crate::flatten::*;
@@ -21,8 +20,6 @@ use anyhow::Context as _;
 pub use anyhow::{Error, Result};
 use convert_case::{Case, Casing};
 use indoc::{formatdoc, indoc};
-use log::debug;
-use log::log_enabled;
 use rayon::iter::ParallelBridge as _;
 use rayon::iter::ParallelIterator as _;
 use sha2::{Digest as _, Sha256};
@@ -477,20 +474,9 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     let symbol_lookup_errors =
         check_symbol_lookups(&ast, &scopes, &signature, module, &rule_structures);
 
-    let (mut eqlog, identifiers, locations, eqlog_ast_maps, _module) = populate_eqlog(&ast, module);
+    let (mut eqlog, identifiers, _locations, eqlog_ast_maps, _module) =
+        populate_eqlog(&ast, module);
     eqlog.close();
-
-    if log_enabled!(log::Level::Debug) {
-        for rule in eqlog.iter_rule_decl_node() {
-            let name: Option<&str> = match eqlog.rule_name(rule) {
-                Some(name) => Some(identifiers.get(&name).unwrap().as_str()),
-                None => None,
-            };
-            let name: &str = name.unwrap_or("<anonymous>");
-            let morphisms = display_morphisms(rule, &eqlog, &locations, &identifiers, &source);
-            debug!("Rule {name}:\n{morphisms}");
-        }
-    }
 
     // Merge compile errors by `CompileError`'s `Ord`, which applies the kind
     // precedence (e.g. UndeclaredSymbol beats VariableOccursOnlyOnce) before

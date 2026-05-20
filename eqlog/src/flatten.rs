@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use convert_case::{Case::Snake, Casing as _};
-use eqlog_eqlog::{Eqlog, Func, Ident, Pred, Rel, RuleDeclNode, SymbolScope, Type};
+use eqlog_eqlog::{Eqlog, Func, Ident, Pred, Rel, SymbolScope, Type};
 
 use crate::algebra::populate::{MorphismKind, RuleStructures};
 use crate::algebra::signature::{FuncId, PredId, Signature, TypeId};
@@ -781,14 +781,15 @@ fn initial_matching_stmts(
 fn flatten_rule(
     ast: &Ast,
     rule_id: RuleDeclId,
+    anonymous_index: usize,
     rule: &RuleStructures,
     bridge: &EqlogBridge<'_>,
-    maps: &EqlogAstMaps,
 ) -> FlatRuleGroup {
-    let name = ast.rule_decl(rule_id).name.clone().unwrap_or_else(|| {
-        let node: RuleDeclNode = maps.rule_decl_nodes[&rule_id];
-        format!("anonymous_rule_{}", node.0)
-    });
+    let name = ast
+        .rule_decl(rule_id)
+        .name
+        .clone()
+        .unwrap_or_else(|| format!("anonymous_rule_{anonymous_index}"));
 
     let morphisms = flatten_morphisms(rule);
     let el_vars = assign_el_vars(ast, rule, &morphisms, bridge);
@@ -877,12 +878,17 @@ pub fn flatten(
 
     let mut rule_ids = Vec::new();
     collect_rule_ids(ast, &ast.module(module).decls, &mut rule_ids);
-    groups.extend(rule_ids.into_iter().map(|rule_id| {
-        let rule = rule_structures
-            .get(&rule_id)
-            .expect("rule structure should be built for every rule");
-        postprocess_rule_group(flatten_rule(ast, rule_id, rule, &bridge, maps))
-    }));
+    groups.extend(
+        rule_ids
+            .into_iter()
+            .enumerate()
+            .map(|(anonymous_index, rule_id)| {
+                let rule = rule_structures
+                    .get(&rule_id)
+                    .expect("rule structure should be built for every rule");
+                postprocess_rule_group(flatten_rule(ast, rule_id, anonymous_index, rule, &bridge))
+            }),
+    );
 
     groups
 }
