@@ -1,0 +1,5 @@
+Introduce flatten context
+
+Thread a shared FlattenCtx through flattening and index selection.
+
+This leaves Eqlog-backed facts behind one boundary for later cleanup.
