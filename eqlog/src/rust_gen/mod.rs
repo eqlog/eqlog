@@ -1,18 +1,18 @@
-mod eqlog_ids;
+mod context;
 mod flat_eqlog;
 mod rule;
 mod types;
 
-pub(crate) use eqlog_ids::EqlogIds;
+pub(crate) use context::RustGenCtx;
 pub use rule::*;
 pub use types::*;
 
-use crate::eqlog_util::*;
+use crate::algebra::signature::{FuncId, TypeId, TypeKind};
+use crate::ast::EnumDeclId;
 use crate::flat_eqlog::*;
 use crate::fmt_util::*;
 use crate::ram::*;
 use convert_case::{Case, Casing};
-use eqlog_eqlog::*;
 use indoc::{formatdoc, writedoc};
 use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
@@ -29,68 +29,16 @@ impl From<usize> for ElVar {
     }
 }
 
-fn display_func<'a>(
-    func: Func,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
-    if let Some(semantic_ident) = eqlog
-        .iter_semantic_func()
-        .find_map(|(_sym_scope, ident, func0)| eqlog.are_equal_func(func, func0).then_some(ident))
-    {
-        return format!("{}", identifiers.get(&semantic_ident).unwrap()).to_case(Snake);
-    }
+fn display_func(func: FuncId, ctx: &RustGenCtx<'_>) -> String {
+    ctx.func_name(func).to_case(Snake)
+}
 
-    if let Some(mor_type) = eqlog
-        .iter_mor_type_dom_func()
-        .find_map(|(mor_type, dom_func)| {
-            if eqlog.are_equal_func(dom_func, func) {
-                Some(mor_type)
-            } else {
-                None
-            }
-        })
-    {
-        let mor_type = display_type(mor_type, eqlog, identifiers)
-            .to_string()
-            .to_case(Snake);
-        return format!("{mor_type}_dom");
-    }
+pub(crate) fn display_type<'a>(typ: TypeId, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
+    FmtFn(move |f| write!(f, "{}", ctx.type_name(typ)))
+}
 
-    if let Some(mor_type) = eqlog
-        .iter_mor_type_cod_func()
-        .find_map(|(mor_type, cod_func)| {
-            if eqlog.are_equal_func(cod_func, func) {
-                Some(mor_type)
-            } else {
-                None
-            }
-        })
-    {
-        let mor_type = display_type(mor_type, eqlog, identifiers)
-            .to_string()
-            .to_case(Snake);
-        return format!("{mor_type}_cod");
-    }
-
-    // Handle func = mor_app_func(member_type).
-    if let Some(member_type) = eqlog
-        .iter_mor_app_func()
-        .find_map(|(member_type, mor_app_func)| {
-            if eqlog.are_equal_func(mor_app_func, func) {
-                Some(member_type)
-            } else {
-                None
-            }
-        })
-    {
-        let member_type = display_type(member_type, eqlog, identifiers)
-            .to_string()
-            .to_case(Snake);
-        return format!("{member_type}_mor_app");
-    }
-
-    panic!("Unexpected func, neither a semantic_func or a mor_type_{{cod, dom}}_func")
+pub(crate) fn display_rel(rel: FlatRel, ctx: &RustGenCtx<'_>) -> String {
+    ctx.rel_name(rel)
 }
 
 fn display_imports() -> impl Display {
@@ -116,15 +64,9 @@ fn display_imports() -> impl Display {
 
 // #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 // pub struct TypeName(pub u32);
-fn display_type_struct<'a>(
-    typ: Type,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
+fn display_type_struct<'a>(typ: TypeId, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
     FmtFn(move |f| {
-        let type_name = display_type(typ, eqlog, identifiers)
-            .to_string()
-            .to_case(UpperCamel);
+        let type_name = display_type(typ, ctx).to_string().to_case(UpperCamel);
         writedoc! {f, "
             #[allow(dead_code)]
             #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
@@ -133,15 +75,9 @@ fn display_type_struct<'a>(
     })
 }
 
-fn display_type_impl<'a>(
-    typ: Type,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
+fn display_type_impl<'a>(typ: TypeId, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
     FmtFn(move |f| {
-        let type_name = display_type(typ, eqlog, identifiers)
-            .to_string()
-            .to_case(UpperCamel);
+        let type_name = display_type(typ, ctx).to_string().to_case(UpperCamel);
         writedoc! {f, "
             impl Into<u32> for {type_name} {{ fn into(self) -> u32 {{ self.0 }} }}
             impl From<u32> for {type_name} {{ fn from(x: u32) -> Self {{ {type_name}(x) }} }}
@@ -154,70 +90,36 @@ fn display_type_impl<'a>(
     })
 }
 
-fn display_ctor<'a>(
-    ctor: CtorDeclNode,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
+fn display_ctor<'a>(ctor: crate::ast::CtorDeclId, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
-        let ctor_ident = eqlog
-            .iter_ctor_decl()
-            .find_map(|(ctor0, ctor_ident, _)| {
-                if eqlog.are_equal_ctor_decl_node(ctor0, ctor) {
-                    Some(ctor_ident)
-                } else {
-                    None
-                }
-            })
-            .unwrap();
-
-        let ctor_name: String = identifiers.get(&ctor_ident).unwrap().to_case(UpperCamel);
-        let ss: SymbolScope = eqlog.ctor_symbol_scope(ctor).unwrap();
-
-        let ctor_func = eqlog.semantic_func(ss, ctor_ident).unwrap();
-        let domain: Vec<Type> = type_list_vec(
-            eqlog.flat_domain(ctor_func).expect("should be total"),
-            eqlog,
-        );
+        let ctor_name: String = ctx.ast().ctor_decl(ctor).name.to_case(UpperCamel);
+        let ctor_func = ctx
+            .signature()
+            .func_for_ctor_decl(ctor)
+            .expect("constructor declaration should have a function id");
+        let domain = flat_domain(ctor_func, ctx.signature());
 
         let domain = domain
             .into_iter()
-            .map(|typ| display_type(typ, eqlog, identifiers))
+            .map(|typ| display_type(typ, ctx))
             .format(", ");
 
         write!(f, "{}({})", ctor_name, domain)
     })
 }
 
-fn display_enum<'a>(
-    enum_decl: EnumDeclNode,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
+fn display_enum<'a>(enum_decl: EnumDeclId, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
-        let ctors = eqlog
-            .iter_ctor_enum()
-            .filter_map(|(ctor, enum_decl0)| {
-                if eqlog.are_equal_enum_decl_node(enum_decl, enum_decl0) {
-                    Some(ctor)
-                } else {
-                    None
-                }
-            })
-            .map(|ctor| format!("{},\n", display_ctor(ctor, eqlog, identifiers)))
+        let ctors = ctx
+            .ast()
+            .enum_decl(enum_decl)
+            .ctors
+            .iter()
+            .copied()
+            .map(|ctor| format!("{},\n", display_ctor(ctor, ctx)))
             .format("");
 
-        let enum_ident = eqlog
-            .iter_enum_decl()
-            .find_map(|(enum_decl0, enum_ident, _)| {
-                if eqlog.are_equal_enum_decl_node(enum_decl, enum_decl0) {
-                    Some(enum_ident)
-                } else {
-                    None
-                }
-            })
-            .unwrap();
-        let enum_name = identifiers.get(&enum_ident).unwrap().to_case(UpperCamel);
+        let enum_name = ctx.ast().enum_decl(enum_decl).name.to_case(UpperCamel);
 
         writedoc! {f, "
             #[allow(unused)]
@@ -229,25 +131,17 @@ fn display_enum<'a>(
     })
 }
 
-fn display_func_args_struct<'a>(
-    func: Func,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
+fn display_func_args_struct<'a>(func: FuncId, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
     FmtFn(move |f| {
-        let rel = eqlog.func_rel(func).unwrap();
-        let func_camel = display_rel(rel, eqlog, identifiers)
-            .to_string()
-            .to_case(UpperCamel);
-        let dom = type_list_vec(eqlog.flat_domain(func).unwrap(), eqlog);
+        let rel = FlatRel::Func(func);
+        let func_camel = display_rel(rel, ctx).to_string().to_case(UpperCamel);
+        let dom = flat_domain(func, ctx.signature());
         let args = dom
             .iter()
             .copied()
             .map(|typ| {
                 FmtFn(move |f| {
-                    let type_camel = display_type(typ, eqlog, identifiers)
-                        .to_string()
-                        .to_case(UpperCamel);
+                    let type_camel = display_type(typ, ctx).to_string().to_case(UpperCamel);
                     write!(f, "pub {type_camel}")
                 })
             })
@@ -262,13 +156,9 @@ fn display_func_args_struct<'a>(
     })
 }
 
-fn display_type_fields<'a>(
-    typ: Type,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
+fn display_type_fields<'a>(typ: TypeId, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
     FmtFn(move |f| {
-        let typ = display_type(typ, eqlog, identifiers).to_string();
+        let typ = display_type(typ, ctx).to_string();
         let type_snake = typ.to_case(Snake);
         writedoc! {f, "
             {type_snake}_equalities: Unification<{typ}>,
@@ -279,15 +169,13 @@ fn display_type_fields<'a>(
 }
 
 fn display_is_dirty_fn<'a>(
-    eqlog: &'a Eqlog,
-    eqlog_ids: &'a EqlogIds<'a>,
-    identifiers: &'a BTreeMap<Ident, String>,
+    ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let sets_dirty = iter_flat_rels(eqlog_ids.signature())
+        let sets_dirty = iter_flat_rels(ctx.signature())
             .map(FlatInRel::Rel)
-            .chain(eqlog_ids.signature().iter_types().map(FlatInRel::TypeSet))
+            .chain(ctx.signature().iter_types().map(FlatInRel::TypeSet))
             .map(|rel: FlatInRel| {
                 FmtFn(move |f| {
                     let query_spec = QuerySpec::all_new();
@@ -303,20 +191,18 @@ fn display_is_dirty_fn<'a>(
                         "Expected exactly one index for dirty tuples"
                     );
 
-                    let field_name =
-                        display_own_index_field_name(&rel, &index[0], eqlog_ids, identifiers);
+                    let field_name = display_own_index_field_name(&rel, &index[0], ctx);
                     write!(f, "|| !self.{field_name}.is_empty()")
                 })
             })
             .format("\n");
 
-        let uprooted_dirty = eqlog
-            .iter_type()
+        let uprooted_dirty = ctx
+            .signature()
+            .iter_types()
             .map(|typ| {
                 FmtFn(move |f| {
-                    let type_snake = display_type(typ, eqlog, identifiers)
-                        .to_string()
-                        .to_case(Snake);
+                    let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
                     write!(f, "|| !self.{type_snake}_uprooted.is_empty()")
                 })
             })
@@ -333,24 +219,16 @@ fn display_is_dirty_fn<'a>(
 }
 
 fn display_pub_predicate_holds_fn<'a>(
-    rel: Rel,
-    eqlog: &'a Eqlog,
-    eqlog_ids: &'a EqlogIds<'a>,
-    identifiers: &'a BTreeMap<Ident, String>,
+    rel: FlatRel,
+    ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let relation_snake = display_rel(rel, eqlog, identifiers)
-            .to_string()
-            .to_case(Snake);
-        let arity_types: Vec<Type> = type_list_vec(eqlog.arity(rel).unwrap(), eqlog);
+        let relation_snake = display_rel(rel, ctx).to_string().to_case(Snake);
+        let arity_types = rel.arity(ctx.signature());
         let arity_camel: Vec<String> = arity_types
             .iter()
-            .map(|&typ| {
-                display_type(typ, eqlog, identifiers)
-                    .to_string()
-                    .to_case(UpperCamel)
-            })
+            .map(|&typ| display_type(typ, ctx).to_string().to_case(UpperCamel))
             .collect();
 
         let rel_fn_args = arity_camel
@@ -369,10 +247,8 @@ fn display_pub_predicate_holds_fn<'a>(
         let rel_args_doc =
             (0..arity_types.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
 
-        let rel = eqlog_ids
-            .flat_in_rel(rel)
-            .expect("public relation should have a local flat relation");
-        let query = QuerySpec::one(rel.clone(), eqlog_ids.signature());
+        let rel = FlatInRel::Rel(rel);
+        let query = QuerySpec::one(rel.clone(), ctx.signature());
         let indices = index_selection
             .queries
             .get(&(rel.clone(), query))
@@ -383,7 +259,7 @@ fn display_pub_predicate_holds_fn<'a>(
         let checks = indices
             .into_iter()
             .map(|index_spec| {
-                let index_expr = display_index_expr(rel, &index_spec, eqlog_ids, identifiers);
+                let index_expr = display_index_expr(rel, &index_spec, ctx);
                 let IndexSpec { order, age: _ } = index_spec;
                 let row_args = order
                     .iter()
@@ -407,27 +283,21 @@ fn display_pub_predicate_holds_fn<'a>(
 }
 
 fn display_pub_function_eval_fn<'a>(
-    func: Func,
-    eqlog: &'a Eqlog,
-    eqlog_ids: &'a EqlogIds<'a>,
-    identifiers: &'a BTreeMap<Ident, String>,
+    func: FuncId,
+    ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
-        let rel = eqlog.func_rel(func).unwrap();
+        let rel = FlatRel::Func(func);
 
-        let relation_snake = display_rel(rel, eqlog, identifiers)
-            .to_string()
-            .to_case(Snake);
+        let relation_snake = display_rel(rel, ctx).to_string().to_case(Snake);
         let relation_snake = relation_snake.as_str();
 
-        let flat_dom = type_list_vec(eqlog.flat_domain(func).unwrap(), eqlog);
+        let flat_dom = flat_domain(func, ctx.signature());
         let flat_dom_len = flat_dom.len();
 
-        let cod = eqlog.codomain(func).unwrap();
-        let cod_camel = display_type(cod, eqlog, identifiers)
-            .to_string()
-            .to_case(UpperCamel);
+        let cod = ctx.signature().func(func).codomain;
+        let cod_camel = display_type(cod, ctx).to_string().to_case(UpperCamel);
         let cod_camel = &cod_camel;
 
         let params = flat_dom
@@ -436,9 +306,7 @@ fn display_pub_function_eval_fn<'a>(
             .enumerate()
             .map(|(i, typ)| {
                 FmtFn(move |f| {
-                    let type_camel = display_type(typ, eqlog, identifiers)
-                        .to_string()
-                        .to_case(UpperCamel);
+                    let type_camel = display_type(typ, ctx).to_string().to_case(UpperCamel);
                     write!(f, "mut arg{i}: {type_camel}, ")
                 })
             })
@@ -450,9 +318,7 @@ fn display_pub_function_eval_fn<'a>(
             .enumerate()
             .map(|(i, typ)| {
                 FmtFn(move |f| {
-                    let type_snake = display_type(typ, eqlog, identifiers)
-                        .to_string()
-                        .to_case(Snake);
+                    let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
                     write!(f, "arg{i} = self.root_{type_snake}(arg{i});")
                 })
             })
@@ -463,11 +329,8 @@ fn display_pub_function_eval_fn<'a>(
             .format(", ")
             .to_string();
 
-        let func_id = eqlog_ids
-            .func_id(func)
-            .expect("public function should have a local function id");
-        let query_spec = QuerySpec::eval_func(func_id, eqlog_ids.signature());
-        let flat_in_rel = FlatInRel::Rel(FlatRel::Func(func_id));
+        let query_spec = QuerySpec::eval_func(func, ctx.signature());
+        let flat_in_rel = FlatInRel::Rel(FlatRel::Func(func));
 
         let indices = index_selection
             .queries
@@ -480,8 +343,7 @@ fn display_pub_function_eval_fn<'a>(
             .into_iter()
             .map(move |index| {
                 FmtFn(move |f| {
-                    let index_expr =
-                        display_index_expr(&flat_in_rel, &index, eqlog_ids, identifiers);
+                    let index_expr = display_index_expr(&flat_in_rel, &index, ctx);
                     assert_eq!(*index.order.last().unwrap(), flat_dom_len);
 
                     let gets = index.order[0..index.order.len() - 1]
@@ -521,31 +383,20 @@ fn display_pub_function_eval_fn<'a>(
 }
 
 fn display_pub_iter_fn<'a>(
-    rel: Rel,
-    eqlog: &'a Eqlog,
-    eqlog_ids: &'a EqlogIds<'a>,
-    identifiers: &'a BTreeMap<Ident, String>,
+    rel: FlatRel,
+    ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let is_function = match eqlog.rel_case(rel) {
-            RelCase::FuncRel(_) => true,
-            RelCase::PredRel(_) => false,
-        };
-        let relation = display_rel(rel, eqlog, identifiers);
-        let rel_snake = display_rel(rel, eqlog, identifiers)
-            .to_string()
-            .to_case(Snake);
+        let is_function = matches!(rel, FlatRel::Func(_));
+        let relation = display_rel(rel, ctx);
+        let rel_snake = display_rel(rel, ctx).to_string().to_case(Snake);
         let rel_snake = rel_snake.as_str();
-        let arity_tys: Vec<Type> = type_list_vec(eqlog.arity(rel).unwrap(), eqlog);
+        let arity_tys = rel.arity(ctx.signature());
         let arity_tys = &arity_tys;
         let arity: Vec<String> = arity_tys
             .iter()
-            .map(move |ty| {
-                display_type(*ty, eqlog, identifiers)
-                    .to_string()
-                    .to_case(UpperCamel)
-            })
+            .map(move |ty| display_type(*ty, ctx).to_string().to_case(UpperCamel))
             .collect();
         let arity = arity.as_slice();
         let rel_type = if arity.len() == 1 {
@@ -583,9 +434,7 @@ fn display_pub_iter_fn<'a>(
             }
         };
 
-        let flat_in_rel = eqlog_ids
-            .flat_in_rel(rel)
-            .expect("public relation should have a local flat relation");
+        let flat_in_rel = FlatInRel::Rel(rel);
         let query_spec = QuerySpec::all();
         let indices = index_selection
             .queries
@@ -600,8 +449,7 @@ fn display_pub_iter_fn<'a>(
                 let flat_in_rel = flat_in_rel.clone();
                 FmtFn(move |f| {
                     let flat_in_rel = flat_in_rel.clone();
-                    let index_expr =
-                        display_index_expr(&flat_in_rel, &index, eqlog_ids, identifiers);
+                    let index_expr = display_index_expr(&flat_in_rel, &index, ctx);
                     let row_unpack_args = index
                         .order
                         .iter()
@@ -612,9 +460,8 @@ fn display_pub_iter_fn<'a>(
                         .enumerate()
                         .map(|(i, typ)| {
                             FmtFn(move |f| {
-                                let type_camel = display_type(*typ, eqlog, identifiers)
-                                    .to_string()
-                                    .to_case(UpperCamel);
+                                let type_camel =
+                                    display_type(*typ, ctx).to_string().to_case(UpperCamel);
                                 write!(f, "{type_camel}::from(arg{i})")
                             })
                         })
@@ -659,14 +506,10 @@ fn display_pub_iter_fn<'a>(
 fn display_insert_row_block<'a>(
     args: &'a [ElVar],
     age: IndexAge,
-    rel: Rel,
-    eqlog_ids: &'a EqlogIds<'a>,
-    identifiers: &'a BTreeMap<Ident, String>,
+    rel: FlatRel,
+    ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
-    let rel = eqlog_ids
-        .rel_id(rel)
-        .expect("inserted relation should have a local flat relation");
     index_selection
         .indices
         .iter()
@@ -691,8 +534,7 @@ fn display_insert_row_block<'a>(
         })
         .map(move |(flat_in_rel, index)| {
             FmtFn(move |f| {
-                let index_name =
-                    display_index_field_name(&flat_in_rel, &index, eqlog_ids, identifiers);
+                let index_name = display_index_field_name(&flat_in_rel, &index, ctx);
                 if let FlatInRel::RelWithDiagonals { rel: _, equalities } = &flat_in_rel {
                     let checks = equalities
                         .iter()
@@ -720,10 +562,7 @@ fn display_insert_row_block<'a>(
                         .format(", ")
                         .to_string();
 
-                    if flat_in_rel
-                        .parent_model_type(eqlog_ids.signature())
-                        .is_some()
-                    {
+                    if flat_in_rel.parent_model_type(ctx.signature()).is_some() {
                         writedoc! {f, "
                             if {checks} {{
                             self.{index_name}_own.insert([{args}]);
@@ -745,10 +584,7 @@ fn display_insert_row_block<'a>(
                         .map(|i| args[*i].clone())
                         .format(", ")
                         .to_string();
-                    if flat_in_rel
-                        .parent_model_type(eqlog_ids.signature())
-                        .is_some()
-                    {
+                    if flat_in_rel.parent_model_type(ctx.signature()).is_some() {
                         writedoc! {f, "
                             self.{index_name}_own.insert([{args}]);
                             self.{index_name}_all.insert([{args}]);
@@ -765,27 +601,19 @@ fn display_insert_row_block<'a>(
 }
 
 fn display_pub_insert_relation<'a>(
-    rel: Rel,
-    eqlog: &'a Eqlog,
-    eqlog_ids: &'a EqlogIds<'a>,
-    identifiers: &'a BTreeMap<Ident, String>,
+    rel: FlatRel,
+    ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
     is_function: bool,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let rel_snake = display_rel(rel, eqlog, identifiers)
-            .to_string()
-            .to_case(Snake);
+        let rel_snake = display_rel(rel, ctx).to_string().to_case(Snake);
         let rel_snake = rel_snake.as_str();
 
-        let arity_types = type_list_vec(eqlog.arity(rel).unwrap(), eqlog);
+        let arity_types = rel.arity(ctx.signature());
         let arity_camel: Vec<String> = arity_types
             .iter()
-            .map(|&typ| {
-                display_type(typ, eqlog, identifiers)
-                    .to_string()
-                    .to_case(UpperCamel)
-            })
+            .map(|&typ| display_type(typ, ctx).to_string().to_case(UpperCamel))
             .collect();
 
         let rel_args: Vec<ElVar> = (0..arity_types.len()).map(ElVar::from).collect();
@@ -806,15 +634,13 @@ fn display_pub_insert_relation<'a>(
             .zip(arity_types.iter())
             .map(|(arg, typ)| {
                 FmtFn(move |f: &mut Formatter| -> Result {
-                    let type_snake = display_type(*typ, eqlog, identifiers)
-                        .to_string()
-                        .to_case(Snake);
+                    let type_snake = display_type(*typ, ctx).to_string().to_case(Snake);
                     write!(f, "let {arg}: u32 = self.root_{type_snake}({arg}).0;")
                 })
             })
             .format("\n");
 
-        let weight_static_name = display_weight_static_name(rel, eqlog, identifiers).to_string();
+        let weight_static_name = display_weight_static_name(rel, ctx).to_string();
         let update_weights = rel_args
             .iter()
             .cloned()
@@ -823,7 +649,7 @@ fn display_pub_insert_relation<'a>(
             .map(move |(i, (arg, typ))| {
                 let weight_static_name = weight_static_name.clone();
                 FmtFn(move |f: &mut Formatter| -> Result {
-                    let type_snake = display_type(*typ, eqlog, identifiers)
+                    let type_snake = display_type(*typ, ctx)
                         .to_string()
                         .to_case(Snake);
                     writedoc! {f, "
@@ -855,19 +681,11 @@ fn display_pub_insert_relation<'a>(
             "}
         };
 
-        let index_inserts = display_insert_row_block(
-            rel_args,
-            IndexAge::New,
-            rel,
-            eqlog_ids,
-            identifiers,
-            index_selection,
-        );
+        let index_inserts =
+            display_insert_row_block(rel_args, IndexAge::New, rel, ctx, index_selection);
 
-        let flat_rel = eqlog_ids
-            .flat_in_rel(rel)
-            .expect("inserted relation should have a local flat relation");
-        let contains_query = QuerySpec::one(flat_rel.clone(), eqlog_ids.signature());
+        let flat_rel = FlatInRel::Rel(rel);
+        let contains_query = QuerySpec::one(flat_rel.clone(), ctx.signature());
         let contains_indices = index_selection
             .queries
             .get(&(flat_rel.clone(), contains_query))
@@ -878,7 +696,7 @@ fn display_pub_insert_relation<'a>(
         let contains_checks = contains_indices
             .into_iter()
             .map(|index_spec| {
-                let index_expr = display_index_expr(flat_rel, &index_spec, eqlog_ids, identifiers);
+                let index_expr = display_index_expr(flat_rel, &index_spec, ctx);
                 let IndexSpec { order, age: _ } = index_spec;
                 let row_args = order.iter().map(|i| rel_args[*i].clone()).format(", ");
                 FmtFn(move |f| {
@@ -891,7 +709,7 @@ fn display_pub_insert_relation<'a>(
             })
             .format("\n");
 
-        let mut type_positions: BTreeMap<Type, Vec<usize>> = BTreeMap::new();
+        let mut type_positions: BTreeMap<TypeId, Vec<usize>> = BTreeMap::new();
         for (i, typ) in arity_types.iter().copied().enumerate() {
             type_positions.entry(typ).or_default().push(i);
         }
@@ -916,8 +734,7 @@ fn display_pub_insert_relation<'a>(
                             let pos_arg = rel_args[pos].clone();
                             let rel_args = rel_args.iter().format(", ");
                             let el_index_field =
-                                display_element_index_field_name(rel, *typ, eqlog, identifiers)
-                                    .to_string();
+                                display_element_index_field_name(rel, *typ, ctx).to_string();
                             writedoc! {f, "
                             if true {checks} {{
                             self.{el_index_field}.entry({pos_arg}).or_default().push([{rel_args}]);
@@ -948,52 +765,33 @@ fn display_pub_insert_relation<'a>(
 }
 
 fn display_new_element_fn_internal<'a>(
-    typ: Type,
-    eqlog: &'a Eqlog,
-    eqlog_ids: &'a EqlogIds<'a>,
-    identifiers: &'a BTreeMap<Ident, String>,
+    typ: TypeId,
+    ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
-        let type_camel = display_type(typ, eqlog, identifiers)
-            .to_string()
-            .to_case(UpperCamel);
+        let type_camel = display_type(typ, ctx).to_string().to_case(UpperCamel);
         let type_snake = type_camel.to_case(Snake);
         let type_snake = type_snake.as_str();
 
-        let parent_pred = eqlog.model_member_pred(typ);
+        let parent_type = ctx.signature().type_(typ).parents.last().copied();
         let parent_param = FmtFn(move |f| {
-            if parent_pred.is_none() {
+            let Some(parent_type) = parent_type else {
                 return Ok(());
-            }
-
-            // If parent_pred is Some, then in particular typ must be a member type, so we can
-            // unwrap here.
-            let member_scope = eqlog.type_definition_symbol_scope(typ).unwrap();
-            let parent_type = eqlog.symbol_scope_model(member_scope).unwrap();
-            write!(
-                f,
-                "parent: {}",
-                display_type(parent_type, eqlog, identifiers)
-            )
+            };
+            write!(f, "parent: {}", display_type(parent_type, ctx))
         });
 
         let insert_parent = FmtFn(move |f| {
-            let parent_pred = match parent_pred {
-                Some(parent_pred) => parent_pred,
-                None => {
-                    return Ok(());
-                }
-            };
-            let parent_rel = eqlog.pred_rel(parent_pred).unwrap();
-            let parent_pred = display_rel(parent_rel, eqlog, identifiers);
+            if parent_type.is_none() {
+                return Ok(());
+            }
+            let parent_pred = display_rel(FlatRel::ModelMember(typ), ctx);
 
             write!(f, "self.insert_{parent_pred}(parent, el.into());")
         });
 
-        let type_set_rel = eqlog_ids
-            .type_set(typ)
-            .expect("new element type should have a local type id");
+        let type_set_rel = FlatInRel::TypeSet(typ);
         let new_index = index_selection
             .indices
             .get(&type_set_rel)
@@ -1003,8 +801,7 @@ fn display_new_element_fn_internal<'a>(
             .exactly_one()
             .expect("should have exactly one new index for type set");
 
-        let new_index_field =
-            display_index_field_name(&type_set_rel, new_index, eqlog_ids, identifiers);
+        let new_index_field = display_index_field_name(&type_set_rel, new_index, ctx);
 
         writedoc! {f, "
             /// Adjoins a new element of type [{type_camel}].
@@ -1027,36 +824,21 @@ fn display_new_element_fn_internal<'a>(
     })
 }
 
-fn display_new_element_fn<'a>(
-    typ: Type,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
+fn display_new_element_fn<'a>(typ: TypeId, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
     FmtFn(move |f| {
-        let type_camel = display_type(typ, eqlog, identifiers)
-            .to_string()
-            .to_case(UpperCamel);
+        let type_camel = display_type(typ, ctx).to_string().to_case(UpperCamel);
         let type_snake = type_camel.to_case(Snake);
 
-        let parent_pred = eqlog.model_member_pred(typ);
+        let parent_type = ctx.signature().type_(typ).parents.last().copied();
         let parent_param = FmtFn(move |f| {
-            if parent_pred.is_none() {
+            let Some(parent_type) = parent_type else {
                 return Ok(());
-            }
-
-            // If parent_pred is Some, then in particular typ must be a member type, so we can
-            // unwrap here.
-            let member_scope = eqlog.type_definition_symbol_scope(typ).unwrap();
-            let parent_type = eqlog.symbol_scope_model(member_scope).unwrap();
-            write!(
-                f,
-                "parent: {}",
-                display_type(parent_type, eqlog, identifiers)
-            )
+            };
+            write!(f, "parent: {}", display_type(parent_type, ctx))
         });
 
         let parent_arg = FmtFn(move |f| {
-            if parent_pred.is_none() {
+            if parent_type.is_none() {
                 return Ok(());
             }
             write!(f, "parent")
@@ -1073,55 +855,29 @@ fn display_new_element_fn<'a>(
 }
 
 fn display_new_enum_element<'a>(
-    enum_decl: EnumDeclNode,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
+    enum_decl: EnumDeclId,
+    ctx: &'a RustGenCtx<'a>,
 ) -> impl Display + 'a {
     FmtFn(move |f: &mut Formatter| -> Result {
-        let enum_ident = eqlog
-            .iter_enum_decl()
-            .find_map(|(enum_decl0, enum_ident, _)| {
-                if enum_decl0 == enum_decl {
-                    Some(enum_ident)
-                } else {
-                    None
-                }
-            })
-            .unwrap();
-        let enum_name = identifiers.get(&enum_ident).unwrap();
+        let enum_name = &ctx.ast().enum_decl(enum_decl).name;
         let enum_name_camel = enum_name.to_case(UpperCamel);
         let enum_name_camel = enum_name_camel.as_str();
         let enum_name_snake = enum_name.to_case(Snake);
 
-        let ctors = eqlog.iter_ctor_enum().filter_map(|(ctor, enum_decl0)| {
-            if eqlog.are_equal_enum_decl_node(enum_decl0, enum_decl) {
-                Some(ctor)
-            } else {
-                None
-            }
-        });
+        let ctors = ctx.ast().enum_decl(enum_decl).ctors.iter().copied();
 
         let match_branches = ctors
             .map(|ctor| {
                 FmtFn(move |f: &mut Formatter| -> Result {
-                    let ctor_sym_scope = eqlog.ctor_symbol_scope(ctor).unwrap();
-                    let ctor_ident = eqlog
-                        .iter_ctor_decl()
-                        .find_map(|(ctor0, ident, _)| {
-                            if eqlog.are_equal_ctor_decl_node(ctor, ctor0) {
-                                Some(ident)
-                            } else {
-                                None
-                            }
-                        })
-                        .unwrap();
-                    let ctor_name = identifiers.get(&ctor_ident).unwrap();
+                    let ctor_name = &ctx.ast().ctor_decl(ctor).name;
                     let ctor_name_snake = ctor_name.to_case(Snake);
                     let ctor_name_camel = ctor_name.to_case(UpperCamel);
 
-                    let ctor_func: Func = eqlog.semantic_func(ctor_sym_scope, ctor_ident).unwrap();
-                    let ctor_arg_types: Vec<Type> =
-                        type_list_vec(eqlog.flat_domain(ctor_func).unwrap(), eqlog);
+                    let ctor_func = ctx
+                        .signature()
+                        .func_for_ctor_decl(ctor)
+                        .expect("constructor declaration should have a function id");
+                    let ctor_arg_types = flat_domain(ctor_func, ctx.signature());
                     let ctor_vars = (0..ctor_arg_types.len()).map(ElVar::from).format(", ");
                     let func_vars = ctor_vars.clone();
 
@@ -1146,55 +902,27 @@ fn display_new_enum_element<'a>(
     })
 }
 
-fn display_enum_cases_fn<'a>(
-    enum_decl: EnumDeclNode,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl Display + 'a {
+fn display_enum_cases_fn<'a>(enum_decl: EnumDeclId, ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
     FmtFn(move |f: &mut Formatter| -> Result {
-        let enum_ident = eqlog
-            .iter_enum_decl()
-            .find_map(|(enum_decl0, enum_ident, _)| {
-                if enum_decl0 == enum_decl {
-                    Some(enum_ident)
-                } else {
-                    None
-                }
-            })
-            .unwrap();
-        let enum_name = identifiers.get(&enum_ident).unwrap();
+        let enum_name = &ctx.ast().enum_decl(enum_decl).name;
         let enum_name_camel = enum_name.to_case(UpperCamel);
         let enum_name_camel = enum_name_camel.as_str();
         let enum_name_snake = enum_name.to_case(Snake);
 
-        let ctors = eqlog.iter_ctor_enum().filter_map(|(ctor, enum_decl0)| {
-            if eqlog.are_equal_enum_decl_node(enum_decl0, enum_decl) {
-                Some(ctor)
-            } else {
-                None
-            }
-        });
+        let ctors = ctx.ast().enum_decl(enum_decl).ctors.iter().copied();
 
         let ctor_value_iters = ctors
             .map(|ctor| {
                 FmtFn(move |f: &mut Formatter| -> Result {
-                    let ctor_sym_scope = eqlog.ctor_symbol_scope(ctor).unwrap();
-                    let ctor_ident = eqlog
-                        .iter_ctor_decl()
-                        .find_map(|(ctor0, ident, _)| {
-                            if eqlog.are_equal_ctor_decl_node(ctor, ctor0) {
-                                Some(ident)
-                            } else {
-                                None
-                            }
-                        })
-                        .unwrap();
-                    let ctor_name = identifiers.get(&ctor_ident).unwrap();
+                    let ctor_name = &ctx.ast().ctor_decl(ctor).name;
                     let ctor_name_snake = ctor_name.to_case(Snake);
                     let ctor_name_camel = ctor_name.to_case(UpperCamel);
 
-                    let ctor_func: Func = eqlog.semantic_func(ctor_sym_scope, ctor_ident).unwrap();
-                    let arg_num = type_list_vec(eqlog.flat_domain(ctor_func).unwrap(), eqlog).len();
+                    let ctor_func = ctx
+                        .signature()
+                        .func_for_ctor_decl(ctor)
+                        .expect("constructor declaration should have a function id");
+                    let arg_num = flat_domain(ctor_func, ctx.signature()).len();
 
                     let ctor_arg_vars = (0..arg_num).map(ElVar::from);
                     let result_var = ElVar::from(arg_num);
@@ -1242,19 +970,15 @@ fn display_enum_cases_fn<'a>(
 }
 
 fn display_equate_elements<'a>(
-    typ: Type,
-    eqlog: &'a Eqlog,
-    eqlog_ids: &'a EqlogIds<'a>,
-    identifiers: &'a BTreeMap<Ident, String>,
+    typ: TypeId,
+    ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let type_camel = format!("{}", display_type(typ, eqlog, identifiers)).to_case(UpperCamel);
+        let type_camel = format!("{}", display_type(typ, ctx)).to_case(UpperCamel);
         let type_snake = type_camel.to_case(Snake);
 
-        let type_set_rel = eqlog_ids
-            .type_set(typ)
-            .expect("equated type should have a local type id");
+        let type_set_rel = FlatInRel::TypeSet(typ);
         let indices = index_selection
             .indices
             .get(&type_set_rel)
@@ -1271,8 +995,8 @@ fn display_equate_elements<'a>(
             .exactly_one()
             .expect("should have exactly one old index for type set");
 
-        let index_new = display_index_field_name(&type_set_rel, index_new, eqlog_ids, identifiers);
-        let index_old = display_index_field_name(&type_set_rel, index_old, eqlog_ids, identifiers);
+        let index_new = display_index_field_name(&type_set_rel, index_new, ctx);
+        let index_old = display_index_field_name(&type_set_rel, index_old, ctx);
 
         writedoc! {f, "
             /// Enforces the equality `lhs = rhs`.
@@ -1303,15 +1027,9 @@ fn display_equate_elements<'a>(
     })
 }
 
-fn display_root_fn<'a>(
-    typ: Type,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
+fn display_root_fn<'a>(typ: TypeId, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
     FmtFn(move |f| {
-        let type_name = display_type(typ, eqlog, identifiers)
-            .to_string()
-            .to_case(UpperCamel);
+        let type_name = display_type(typ, ctx).to_string().to_case(UpperCamel);
         let type_snake = type_name.to_case(Snake);
         writedoc! {f, "
             /// Returns the canonical representative of the equivalence class of `el`.
@@ -1327,15 +1045,9 @@ fn display_root_fn<'a>(
     })
 }
 
-fn display_are_equal_fn<'a>(
-    typ: Type,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
+fn display_are_equal_fn<'a>(typ: TypeId, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
     FmtFn(move |f| {
-        let type_name = display_type(typ, eqlog, identifiers)
-            .to_string()
-            .to_case(UpperCamel);
+        let type_name = display_type(typ, ctx).to_string().to_case(UpperCamel);
         let type_snake = type_name.to_case(Snake);
         writedoc! {f, "
             /// Returns `true` if `lhs` and `rhs` are in the same equivalence class.
@@ -1348,20 +1060,14 @@ fn display_are_equal_fn<'a>(
 }
 
 fn display_iter_type_fn<'a>(
-    typ: Type,
-    eqlog: &'a Eqlog,
-    eqlog_ids: &'a EqlogIds<'a>,
-    identifiers: &'a BTreeMap<Ident, String>,
+    typ: TypeId,
+    ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
-        let type_snake = display_type(typ, eqlog, identifiers)
-            .to_string()
-            .to_case(Snake);
+        let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
         let type_camel = type_snake.to_case(UpperCamel);
-        let rel = eqlog_ids
-            .type_set(typ)
-            .expect("iterated type should have a local type id");
+        let rel = FlatInRel::TypeSet(typ);
         let query = QuerySpec::all();
         let indices = index_selection.queries.get(&(rel.clone(), query)).unwrap();
 
@@ -1372,7 +1078,7 @@ fn display_iter_type_fn<'a>(
 
                 let rel = rel.clone();
                 FmtFn(move |f| {
-                    let index_field = display_index_field_name(&rel, index, eqlog_ids, identifiers);
+                    let index_field = display_index_field_name(&rel, index, ctx);
                     writedoc! {f, "
                         .chain(self.{index_field}.iter())
                     "}
@@ -1397,8 +1103,7 @@ fn display_remove_from_index_expr<'a>(
     rel: FlatInRel,
     index: IndexSpec,
     row_args: &'a [ElVar],
-    eqlog_ids: &'a EqlogIds<'a>,
-    identifiers: &'a BTreeMap<Ident, String>,
+    ctx: &'a RustGenCtx<'a>,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let equalities = match &rel {
@@ -1429,25 +1134,21 @@ fn display_remove_from_index_expr<'a>(
             .map(|i| row_args[*i].clone())
             .format(", ");
 
-        let field_name = display_own_index_field_name(&rel, &index, eqlog_ids, identifiers);
+        let field_name = display_own_index_field_name(&rel, &index, ctx);
 
         write!(f, "self.{field_name}.remove([{permuted_row_args}])")
     })
 }
 
 fn display_canonicalize_rel_block<'a>(
-    rel: Rel,
-    eqlog: &'a Eqlog,
-    eqlog_ids: &'a EqlogIds<'a>,
-    identifiers: &'a BTreeMap<Ident, String>,
+    rel: FlatRel,
+    ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
-        let rel_snake = display_rel(rel, eqlog, identifiers)
-            .to_string()
-            .to_case(Snake);
+        let rel_snake = display_rel(rel, ctx).to_string().to_case(Snake);
 
-        let arity = type_list_vec(eqlog.arity(rel).unwrap(), eqlog);
+        let arity = rel.arity(ctx.signature());
         let arity_len = arity.len();
         let types: BTreeSet<_> = arity.iter().copied().collect();
         let row_args: Vec<ElVar> = (0..arity.len()).map(ElVar::from).collect();
@@ -1457,11 +1158,8 @@ fn display_canonicalize_rel_block<'a>(
             .into_iter()
             .map(|typ| {
                 FmtFn(move |f| {
-                    let type_snake = display_type(typ, eqlog, identifiers)
-                        .to_string()
-                        .to_case(Snake);
-                    let element_index_field =
-                        display_element_index_field_name(rel, typ, eqlog, identifiers);
+                    let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
+                    let element_index_field = display_element_index_field_name(rel, typ, ctx);
 
                     writedoc! {f, "
                         for el in self.{type_snake}_uprooted.iter().copied() {{
@@ -1481,11 +1179,10 @@ fn display_canonicalize_rel_block<'a>(
                 .enumerate()
                 .map(move |(i, type_i)| {
                     FmtFn(move |f| {
-                        let type_i_snake = display_type(type_i, eqlog, identifiers)
+                        let type_i_snake = display_type(type_i, ctx)
                             .to_string()
                             .to_case(Snake);
-                        let weight_static_name =
-                            display_weight_static_name(rel, eqlog, identifiers);
+                        let weight_static_name = display_weight_static_name(rel, ctx);
                         let el = row_args[i].clone();
                         writedoc! {f, "
                             let weight{i}: &mut usize = &mut self.{type_i_snake}_weights[usize::try_from({el}).unwrap()];
@@ -1495,9 +1192,7 @@ fn display_canonicalize_rel_block<'a>(
                 })
                 .format("\n");
 
-        let flat_rel = eqlog_ids
-            .flat_in_rel(rel)
-            .expect("canonicalized relation should have a local flat relation");
+        let flat_rel = FlatInRel::Rel(rel);
         let primary_new_indices = index_selection
             .queries
             .get(&(flat_rel.clone(), QuerySpec::all_new()))
@@ -1525,7 +1220,7 @@ fn display_canonicalize_rel_block<'a>(
                     rel: rel0,
                     equalities: _,
                 } => {
-                    if Some(*rel0) != eqlog_ids.rel_id(rel) {
+                    if *rel0 != rel {
                         continue;
                     }
                 }
@@ -1554,13 +1249,8 @@ fn display_canonicalize_rel_block<'a>(
             .into_iter()
             .map(move |(r, index)| {
                 FmtFn(move |f| {
-                    let remove_from_index_expr = display_remove_from_index_expr(
-                        r.clone(),
-                        index.clone(),
-                        row_args,
-                        eqlog_ids,
-                        identifiers,
-                    );
+                    let remove_from_index_expr =
+                        display_remove_from_index_expr(r.clone(), index.clone(), row_args, ctx);
                     write!(f, "{remove_from_index_expr};")
                 })
             })
@@ -1569,41 +1259,24 @@ fn display_canonicalize_rel_block<'a>(
             .into_iter()
             .map(move |(r, index)| {
                 FmtFn(move |f| {
-                    let remove_from_index_expr = display_remove_from_index_expr(
-                        r.clone(),
-                        index.clone(),
-                        row_args,
-                        eqlog_ids,
-                        identifiers,
-                    );
+                    let remove_from_index_expr =
+                        display_remove_from_index_expr(r.clone(), index.clone(), row_args, ctx);
                     write!(f, "{remove_from_index_expr};")
                 })
             })
             .format("\n");
 
-        let remove_from_primary_new_index = display_remove_from_index_expr(
-            flat_rel.clone(),
-            primary_new_index,
-            row_args,
-            eqlog_ids,
-            identifiers,
-        );
-        let remove_from_primary_old_index = display_remove_from_index_expr(
-            flat_rel,
-            primary_old_index,
-            row_args,
-            eqlog_ids,
-            identifiers,
-        );
+        let remove_from_primary_new_index =
+            display_remove_from_index_expr(flat_rel.clone(), primary_new_index, row_args, ctx);
+        let remove_from_primary_old_index =
+            display_remove_from_index_expr(flat_rel, primary_old_index, row_args, ctx);
 
         let insert_row_args = row_args
             .iter()
             .zip(arity.iter())
             .map(|(arg, typ)| {
                 FmtFn(move |f| {
-                    let type_snake = display_type(*typ, eqlog, identifiers)
-                        .to_string()
-                        .to_case(UpperCamel);
+                    let type_snake = display_type(*typ, ctx).to_string().to_case(UpperCamel);
                     write!(f, "{type_snake}({arg})")
                 })
             })
@@ -1640,24 +1313,15 @@ fn display_canonicalize_rel_block<'a>(
 }
 
 fn display_canonicalize_fn<'a>(
-    eqlog: &'a Eqlog,
-    eqlog_ids: &'a EqlogIds<'a>,
-    identifiers: &'a BTreeMap<Ident, String>,
+    ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
-        let rel_blocks = eqlog
-            .iter_rel()
+        let rel_blocks = iter_flat_rels(ctx.signature())
             .map(|rel| {
                 FmtFn(move |f| {
-                    let block = display_canonicalize_rel_block(
-                        rel,
-                        eqlog,
-                        eqlog_ids,
-                        identifiers,
-                        index_selection,
-                    );
-                    let rel = display_rel(rel, eqlog, identifiers);
+                    let block = display_canonicalize_rel_block(rel, ctx, index_selection);
+                    let rel = display_rel(rel, ctx);
                     writedoc! {f, "
                         // Canonicalize {rel}.
                         {block}
@@ -1666,12 +1330,12 @@ fn display_canonicalize_fn<'a>(
             })
             .format("\n");
 
-        let clear_uprooted_vecs = eqlog
-            .iter_type()
+        let clear_uprooted_vecs = ctx
+            .signature()
+            .iter_types()
             .map(|typ| {
                 FmtFn(move |f: &mut Formatter| -> Result {
-                    let type_snake =
-                        format!("{}", display_type(typ, eqlog, identifiers)).to_case(Snake);
+                    let type_snake = format!("{}", display_type(typ, ctx)).to_case(Snake);
                     write!(f, "self.{type_snake}_uprooted.clear();")
                 })
             })
@@ -1687,44 +1351,36 @@ fn display_canonicalize_fn<'a>(
     })
 }
 
-fn display_rel_row_type<'a>(rel: Rel, eqlog: &'a Eqlog) -> impl 'a + Display {
+fn display_rel_row_type<'a>(rel: FlatRel, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
     FmtFn(move |f| {
-        let arity_len = type_list_vec(eqlog.arity(rel).unwrap(), eqlog).len();
+        let arity_len = rel.arity(ctx.signature()).len();
         write!(f, "[u32; {arity_len}]")
     })
 }
 
 /// Displays the tuple type of the arguments of a function.
-fn display_func_args_type<'a>(func: Func, eqlog: &'a Eqlog) -> impl 'a + Display {
+fn display_func_args_type<'a>(func: FuncId, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
     FmtFn(move |f| {
-        let dom_list = eqlog.flat_domain(func).unwrap();
-        let arity_len = type_list_vec(dom_list, eqlog).len();
+        let arity_len = flat_domain(func, ctx.signature()).len();
         write!(f, "[u32; {arity_len}]")
     })
 }
 
 fn display_out_set_field_name<'a>(
     rel: &'a FlatOutRel,
-    eqlog_ids: &'a EqlogIds<'a>,
-    identifiers: &'a BTreeMap<Ident, String>,
+    ctx: &'a RustGenCtx<'a>,
 ) -> impl 'a + Display {
-    let eqlog = eqlog_ids.eqlog();
     FmtFn(move |f| match rel {
         FlatOutRel::Rel(rel) => {
-            let rel_snake = display_rel(eqlog_ids.flat_rel(*rel), eqlog, identifiers)
-                .to_string()
-                .to_case(Snake);
+            let rel_snake = display_rel(*rel, ctx).to_string().to_case(Snake);
             write!(f, "new_{rel_snake}")
         }
         FlatOutRel::Equality(typ) => {
-            let type_snake = display_type(eqlog_ids.typ(*typ), eqlog, identifiers)
-                .to_string()
-                .to_case(Snake);
+            let type_snake = display_type(*typ, ctx).to_string().to_case(Snake);
             write!(f, "new_{type_snake}_equalities")
         }
         FlatOutRel::FuncDomain(func) => {
-            let rel = eqlog_ids.func_rel(*func);
-            let rel_snake = display_rel(rel, eqlog, identifiers)
+            let rel_snake = display_rel(FlatRel::Func(*func), ctx)
                 .to_string()
                 .to_case(Snake);
             write!(f, "new_{rel_snake}_def")
@@ -1732,53 +1388,46 @@ fn display_out_set_field_name<'a>(
     })
 }
 
-fn display_out_set_type<'a>(rel: &'a FlatOutRel, eqlog_ids: &'a EqlogIds<'a>) -> impl 'a + Display {
+fn display_out_set_type<'a>(rel: &'a FlatOutRel, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
     FmtFn(move |f| {
-        let arity_len = rel.arity(eqlog_ids.signature()).len();
+        let arity_len = rel.arity(ctx.signature()).len();
         write!(f, "Vec<[u32; {arity_len}]>")
     })
 }
 
-fn display_model_delta_struct<'a>(
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl Display + 'a {
+fn display_model_delta_struct<'a>(ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
     FmtFn(move |f| {
-        let new_tuples = eqlog
-            .iter_rel()
+        let new_tuples = iter_flat_rels(ctx.signature())
             .map(|rel| {
                 FmtFn(move |f| {
-                    let rel_snake = display_rel(rel, eqlog, identifiers)
-                        .to_string()
-                        .to_case(Snake);
-                    let row_type = display_rel_row_type(rel, eqlog);
+                    let rel_snake = display_rel(rel, ctx).to_string().to_case(Snake);
+                    let row_type = display_rel_row_type(rel, ctx);
                     write!(f, "new_{rel_snake}: Vec<{row_type}>,")
                 })
             })
             .format("\n");
 
-        let new_equalities = eqlog
-            .iter_type()
+        let new_equalities = ctx
+            .signature()
+            .iter_types()
             .map(|typ| {
                 FmtFn(move |f| {
-                    let type_snake = display_type(typ, eqlog, identifiers)
-                        .to_string()
-                        .to_case(Snake);
+                    let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
                     write!(f, "new_{type_snake}_equalities: Vec<[u32; 2]>,")
                 })
             })
             .format("\n");
 
-        let new_defines = eqlog
-            .iter_func()
-            .filter(|func| eqlog.function_can_be_made_defined(*func))
+        let new_defines = ctx
+            .signature()
+            .iter_funcs()
+            .filter(|func| ctx.function_can_be_made_defined(*func))
             .map(|func| {
                 FmtFn(move |f| {
-                    let rel = eqlog.func_rel(func).unwrap();
-                    let rel_snake = display_rel(rel, eqlog, identifiers)
+                    let rel_snake = display_rel(FlatRel::Func(func), ctx)
                         .to_string()
                         .to_case(Snake);
-                    let args_type = display_func_args_type(func, eqlog);
+                    let args_type = display_func_args_type(func, ctx);
                     write!(f, "new_{rel_snake}_def: Vec<{args_type}>,")
                 })
             })
@@ -1795,26 +1444,23 @@ fn display_model_delta_struct<'a>(
     })
 }
 
-fn display_model_delta_impl<'a>(
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl Display + 'a {
+fn display_model_delta_impl<'a>(ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
     FmtFn(move |f| {
         writedoc! {f, "
             impl ModelDelta {{
         "}
         .unwrap();
 
-        let new_fn = display_model_delta_new_fn(eqlog, identifiers);
+        let new_fn = display_model_delta_new_fn(ctx);
         write!(f, "{}", new_fn).unwrap();
 
-        let apply_equalities_fn = display_model_delta_apply_equalities_fn(eqlog, identifiers);
+        let apply_equalities_fn = display_model_delta_apply_equalities_fn(ctx);
         write!(f, "{}", apply_equalities_fn).unwrap();
 
-        let apply_tuples_fn = display_model_delta_apply_tuples_fn(eqlog, identifiers);
+        let apply_tuples_fn = display_model_delta_apply_tuples_fn(ctx);
         write!(f, "{}", apply_tuples_fn).unwrap();
 
-        let apply_def_fn = display_model_delta_apply_def_fn(eqlog, identifiers);
+        let apply_def_fn = display_model_delta_apply_def_fn(ctx);
         write!(f, "{}", apply_def_fn).unwrap();
 
         writedoc! {f, "
@@ -1823,41 +1469,34 @@ fn display_model_delta_impl<'a>(
     })
 }
 
-fn display_model_delta_new_fn<'a>(
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl Display + 'a {
+fn display_model_delta_new_fn<'a>(ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
     FmtFn(move |f| {
-        let new_tuples = eqlog
-            .iter_rel()
+        let new_tuples = iter_flat_rels(ctx.signature())
             .map(|rel| {
                 FmtFn(move |f| {
-                    let relation_snake = display_rel(rel, eqlog, identifiers)
-                        .to_string()
-                        .to_case(Snake);
+                    let relation_snake = display_rel(rel, ctx).to_string().to_case(Snake);
                     write!(f, "new_{relation_snake}: Vec::new(),")
                 })
             })
             .format("\n");
 
-        let new_equalities = eqlog
-            .iter_type()
+        let new_equalities = ctx
+            .signature()
+            .iter_types()
             .map(|typ| {
                 FmtFn(move |f| {
-                    let type_snake = display_type(typ, eqlog, identifiers)
-                        .to_string()
-                        .to_case(Snake);
+                    let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
                     write!(f, "new_{type_snake}_equalities: Vec::new(),")
                 })
             })
             .format("\n");
-        let new_defines = eqlog
-            .iter_func()
-            .filter(|&func| eqlog.function_can_be_made_defined(func))
+        let new_defines = ctx
+            .signature()
+            .iter_funcs()
+            .filter(|&func| ctx.function_can_be_made_defined(func))
             .map(|func| {
                 FmtFn(move |f| {
-                    let rel = eqlog.func_rel(func).unwrap();
-                    let func_snake = display_rel(rel, eqlog, identifiers)
+                    let func_snake = display_rel(FlatRel::Func(func), ctx)
                         .to_string()
                         .to_case(Snake);
                     write!(f, "new_{func_snake}_def: Vec::new(),")
@@ -1877,17 +1516,14 @@ fn display_model_delta_new_fn<'a>(
     })
 }
 
-fn display_model_delta_apply_equalities_fn<'a>(
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl Display + 'a {
+fn display_model_delta_apply_equalities_fn<'a>(ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
     FmtFn(move |f| {
-        let type_equalities = eqlog
-            .iter_type()
+        let type_equalities = ctx
+            .signature()
+            .iter_types()
             .map(|typ| {
                 FmtFn(move |f: &mut Formatter| -> Result {
-                    let type_snake =
-                        format!("{}", display_type(typ, eqlog, identifiers)).to_case(Snake);
+                    let type_snake = format!("{}", display_type(typ, ctx)).to_case(Snake);
 
                     writedoc! {f, "
                         for [lhs, rhs] in self.new_{type_snake}_equalities.drain(..) {{
@@ -1907,19 +1543,13 @@ fn display_model_delta_apply_equalities_fn<'a>(
     })
 }
 
-fn display_model_delta_apply_tuples_fn<'a>(
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
+fn display_model_delta_apply_tuples_fn<'a>(ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
     FmtFn(move |f| {
-        let relations = eqlog
-            .iter_rel()
+        let relations = iter_flat_rels(ctx.signature())
             .map(|rel| {
                 FmtFn(move |f| {
-                    let arity = type_list_vec(eqlog.arity(rel).unwrap(), eqlog);
-                    let rel_snake = display_rel(rel, eqlog, identifiers)
-                        .to_string()
-                        .to_case(Snake);
+                    let arity = rel.arity(ctx.signature());
+                    let rel_snake = display_rel(rel, ctx).to_string().to_case(Snake);
                     let args_destructure = (0..arity.len())
                         .map(ElVar::from)
                         .map(display_var)
@@ -1952,22 +1582,20 @@ fn display_model_delta_apply_tuples_fn<'a>(
     })
 }
 
-fn display_model_delta_apply_def_fn<'a>(
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl Display + 'a {
+fn display_model_delta_apply_def_fn<'a>(ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
     FmtFn(move |f| {
-        let func_defs = eqlog
-            .iter_func()
+        let func_defs = ctx
+            .signature()
+            .iter_funcs()
             .filter_map(|func| {
-                if !eqlog.function_can_be_made_defined(func) {
+                if !ctx.function_can_be_made_defined(func) {
                     return None;
                 }
 
-                let func_name = display_func(func, eqlog, identifiers).to_string();
+                let func_name = display_func(func, ctx).to_string();
                 let func_snake = func_name.to_case(Snake);
 
-                let domain = type_list_vec(eqlog.flat_domain(func).unwrap(), eqlog);
+                let domain = flat_domain(func, ctx.signature());
 
                 let args_destructure = (0..domain.len())
                     .map(ElVar::from)
@@ -2015,19 +1643,14 @@ fn display_var(var: ElVar) -> impl Display {
 }
 
 fn display_move_new_to_old_fn<'a>(
-    eqlog: &'a Eqlog,
-    eqlog_ids: &'a EqlogIds<'a>,
-    identifiers: &'a BTreeMap<Ident, String>,
+    ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let relations = eqlog
-            .iter_rel()
+        let relations = iter_flat_rels(ctx.signature())
             .map(|rel| {
                 FmtFn(move |f| {
-                    let flat_rel = eqlog_ids
-                        .flat_in_rel(rel)
-                        .expect("relation should have a local flat relation");
+                    let flat_rel = FlatInRel::Rel(rel);
                     let query_new = QuerySpec::all_new();
                     let indices_new = index_selection
                         .queries
@@ -2039,7 +1662,7 @@ fn display_move_new_to_old_fn<'a>(
                     );
                     let primary_index_new = &indices_new[0];
 
-                    let args: Vec<ElVar> = (0..flat_rel.arity(eqlog_ids.signature()).len())
+                    let args: Vec<ElVar> = (0..flat_rel.arity(ctx.signature()).len())
                         .map(ElVar::from)
                         .collect();
                     let primary_new_args = primary_index_new
@@ -2048,19 +1671,14 @@ fn display_move_new_to_old_fn<'a>(
                         .map(|i| args[*i].clone())
                         .format(", ");
 
-                    let primary_new_index = display_own_index_field_name(
-                        &flat_rel,
-                        &primary_index_new,
-                        eqlog_ids,
-                        identifiers,
-                    );
+                    let primary_new_index =
+                        display_own_index_field_name(&flat_rel, &primary_index_new, ctx);
 
                     let old_inserts = display_insert_row_block(
                         args.as_slice(),
                         IndexAge::Old,
                         rel,
-                        eqlog_ids,
-                        identifiers,
+                        ctx,
                         index_selection,
                     );
 
@@ -2101,12 +1719,8 @@ fn display_move_new_to_old_fn<'a>(
                         })
                         .map(move |(flat_in_rel, index)| {
                             FmtFn(move |f| {
-                                let field_name = display_own_index_field_name(
-                                    &flat_in_rel,
-                                    &index,
-                                    eqlog_ids,
-                                    identifiers,
-                                );
+                                let field_name =
+                                    display_own_index_field_name(&flat_in_rel, &index, ctx);
                                 write!(f, "self.{field_name}.clear();")
                             })
                         })
@@ -2122,13 +1736,12 @@ fn display_move_new_to_old_fn<'a>(
             })
             .format("\n");
 
-        let types = eqlog
-            .iter_type()
+        let types = ctx
+            .signature()
+            .iter_types()
             .map(|typ| {
                 FmtFn(move |f| {
-                    let flat_rel = eqlog_ids
-                        .type_set(typ)
-                        .expect("type should have a local type id");
+                    let flat_rel = FlatInRel::TypeSet(typ);
 
                     let indices = index_selection
                         .indices
@@ -2146,10 +1759,8 @@ fn display_move_new_to_old_fn<'a>(
                         .exactly_one()
                         .expect("should have exactly one old index for type set");
 
-                    let new_index =
-                        display_index_field_name(&flat_rel, index_new, eqlog_ids, identifiers);
-                    let old_index =
-                        display_index_field_name(&flat_rel, index_old, eqlog_ids, identifiers);
+                    let new_index = display_index_field_name(&flat_rel, index_new, ctx);
+                    let old_index = display_index_field_name(&flat_rel, index_old, ctx);
 
                     writedoc! {f, "
                         for r in self.{new_index}.iter() {{
@@ -2174,34 +1785,25 @@ fn display_move_new_to_old_fn<'a>(
 }
 
 fn display_recompute_model_indices_fn<'a>(
-    eqlog: &'a Eqlog,
-    eqlog_ids: &'a EqlogIds<'a>,
-    identifiers: &'a BTreeMap<Ident, String>,
+    ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let compute_ordered_mor_vars = eqlog
-            .iter_type()
-            .filter(|typ| eqlog.is_model_type(*typ))
+        let compute_ordered_mor_vars = ctx
+            .signature()
+            .iter_types()
+            .filter(|typ| matches!(ctx.signature().type_(*typ).kind, TypeKind::Model))
             .map(|typ| {
                 FmtFn(move |f: &mut Formatter| -> Result {
-                    let mor_type = eqlog.mor_type(typ).expect("typ is model type");
-                    let type_snake = display_type(typ, eqlog, identifiers)
-                        .to_string()
-                        .to_case(Snake);
+                    let ids = ctx
+                        .signature()
+                        .ids_for_model_type(typ)
+                        .expect("typ is model type");
+                    let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
 
-                    let dom_rel = eqlog.func_rel(eqlog.mor_type_dom_func(mor_type).expect("typ is model type")).unwrap();
-                    let cod_rel = eqlog.func_rel(eqlog.mor_type_cod_func(mor_type).expect("typ is model type")).unwrap();
-
-                    let dom_rel = eqlog_ids
-                        .flat_in_rel(dom_rel)
-                        .expect("dom relation should have a local relation");
-                    let cod_rel = eqlog_ids
-                        .flat_in_rel(cod_rel)
-                        .expect("cod relation should have a local relation");
-                    let set_rel = eqlog_ids
-                        .type_set(typ)
-                        .expect("model type should have a local type id");
+                    let dom_rel = FlatInRel::Rel(FlatRel::Func(ids.dom));
+                    let cod_rel = FlatInRel::Rel(FlatRel::Func(ids.cod));
+                    let set_rel = FlatInRel::TypeSet(typ);
 
                     let dom_indices = index_selection
                         .indices
@@ -2219,9 +1821,9 @@ fn display_recompute_model_indices_fn<'a>(
                         .expect("should have exactly one old index with order [1, 0] for dom rel");
 
                     let dom_new_order_1_0 =
-                        display_index_field_name(&dom_rel, new_order_1_0, eqlog_ids, identifiers);
+                        display_index_field_name(&dom_rel, new_order_1_0, ctx);
                     let dom_old_order_1_0 =
-                        display_index_field_name(&dom_rel, old_order_1_0, eqlog_ids, identifiers);
+                        display_index_field_name(&dom_rel, old_order_1_0, ctx);
 
                     let cod_indices = index_selection
                         .indices
@@ -2239,9 +1841,9 @@ fn display_recompute_model_indices_fn<'a>(
                         .expect("should have exactly one old index with order [0, 1] for cod rel");
 
                     let cod_new_order_0_1 =
-                        display_index_field_name(&cod_rel, new_order_0_1, eqlog_ids, identifiers);
+                        display_index_field_name(&cod_rel, new_order_0_1, ctx);
                     let cod_old_order_0_1 =
-                        display_index_field_name(&cod_rel, old_order_0_1, eqlog_ids, identifiers);
+                        display_index_field_name(&cod_rel, old_order_0_1, ctx);
 
                     let set_indices = index_selection
                         .indices
@@ -2258,8 +1860,8 @@ fn display_recompute_model_indices_fn<'a>(
                         .exactly_one()
                         .expect("should have exactly one old index for set rel");
 
-                    let obj_new_order_0 = display_index_field_name(&set_rel, new_order_0, eqlog_ids, identifiers);
-                    let obj_old_order_0 = display_index_field_name(&set_rel, old_order_0, eqlog_ids, identifiers);
+                    let obj_new_order_0 = display_index_field_name(&set_rel, new_order_0, ctx);
+                    let obj_old_order_0 = display_index_field_name(&set_rel, old_order_0, ctx);
 
                     writedoc! {f, r#"
                         let ordered_{type_snake}_mor: Vec<eqlog_runtime::MorphismWithSignature> =
@@ -2286,18 +1888,19 @@ fn display_recompute_model_indices_fn<'a>(
                     .map(move |index| (rel.clone(), index.clone()))
             })
             .filter_map(|(flat_in_rel, index_spec)| {
-                let parent_model_type = flat_in_rel.parent_model_type(eqlog_ids.signature())?;
+                let parent_model_type = flat_in_rel.parent_model_type(ctx.signature())?;
                 Some((flat_in_rel, index_spec, parent_model_type))
             })
             .map(|(flat_in_rel, index_spec, parent_model_type)| {
                 FmtFn(move |f| {
                     let flat_in_rel = &flat_in_rel;
-                    let arity = flat_in_rel.arity(eqlog_ids.signature());
+                    let arity = flat_in_rel.arity(ctx.signature());
                     let arity: Vec<_> =
                         index_spec.order.iter().copied().map(|i| arity[i]).collect();
                     let arity = arity.as_slice();
 
-                    let index_field_name = display_index_field_name(&flat_in_rel, &index_spec, eqlog_ids, identifiers).to_string();
+                    let index_field_name =
+                        display_index_field_name(&flat_in_rel, &index_spec, ctx).to_string();
                     let index_field_name = index_field_name.as_str();
 
                     // The model el is, semantically, always the 0th argument, but due to the
@@ -2341,7 +1944,7 @@ fn display_recompute_model_indices_fn<'a>(
                         }).format("\n");
 
                     let parent_model_type_snake =
-                        display_type(eqlog_ids.typ(parent_model_type), eqlog, identifiers).to_string().to_case(Snake);
+                        display_type(parent_model_type, ctx).to_string().to_case(Snake);
 
                     let remove_from_own =
                         FmtFn(|f| {
@@ -2362,24 +1965,22 @@ fn display_recompute_model_indices_fn<'a>(
                         ((parent_el_pos + 1)..arity.len()).map(|i| {
                             FmtFn(move |f| {
                                 let typ = arity[i];
-                                let typ_eqlog = eqlog_ids.typ(typ);
-                                let def_ss: SymbolScope = eqlog.type_definition_symbol_scope(typ_eqlog).unwrap();
-                                let _parent_model: Type = match eqlog.symbol_scope_model(def_ss) {
+                                let _parent_model = match ctx.signature().type_(typ).parents.last().copied() {
                                     None => {
                                         // typ is not a member type, don't apply mapping.
                                         write!(f, "None")?;
-                                        return Ok(())
+                                        return Ok(());
                                     }
                                     Some(parent_model) => parent_model,
                                 };
                                 // TODO: Check that parent_model is actually the model type we're
                                 // mapping over?
 
-                                let mor_app_func = eqlog.mor_app_func(typ_eqlog).expect("mor_app_func should be defined for member types");
-                                let mor_app_rel: Rel = eqlog.func_rel(mor_app_func).unwrap();
-                                let mor_app_rel = eqlog_ids
-                                    .flat_in_rel(mor_app_rel)
-                                    .expect("mor_app relation should have a local relation");
+                                let mor_app_func = ctx
+                                    .signature()
+                                    .mor_app_func_for_type(typ)
+                                    .expect("mor_app_func should be defined for member types");
+                                let mor_app_rel = FlatInRel::Rel(FlatRel::Func(mor_app_func));
 
                                 let mor_app_indices = index_selection
                                     .indices
@@ -2396,8 +1997,10 @@ fn display_recompute_model_indices_fn<'a>(
                                     .exactly_one()
                                     .expect("should have exactly one old index with order [0, 1, 2] for mor_app rel");
 
-                                let mor_app_eval_index_new_name = display_index_field_name(&mor_app_rel, mor_app_eval_index_new, eqlog_ids, identifiers);
-                                let mor_app_eval_index_old_name = display_index_field_name(&mor_app_rel, mor_app_eval_index_old, eqlog_ids, identifiers);
+                                let mor_app_eval_index_new_name =
+                                    display_index_field_name(&mor_app_rel, mor_app_eval_index_new, ctx);
+                                let mor_app_eval_index_old_name =
+                                    display_index_field_name(&mor_app_rel, mor_app_eval_index_old, ctx);
 
                                 writedoc!{f, "
                                     Some(
@@ -2442,8 +2045,7 @@ fn display_recompute_model_indices_fn<'a>(
 
 fn display_module_env_var<'a>(
     ram_module: &'a RamModule,
-    eqlog_ids: &'a EqlogIds<'a>,
-    identifiers: &'a BTreeMap<Ident, String>,
+    ctx: &'a RustGenCtx<'a>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let env_struct_name = display_module_env_struct_name(ram_module);
@@ -2451,12 +2053,8 @@ fn display_module_env_var<'a>(
             .into_iter()
             .map(|(flat_in_rel, index)| {
                 FmtFn(move |f| {
-                    let field_name =
-                        display_index_field_name(&flat_in_rel, &index, eqlog_ids, identifiers);
-                    if flat_in_rel
-                        .parent_model_type(eqlog_ids.signature())
-                        .is_some()
-                    {
+                    let field_name = display_index_field_name(&flat_in_rel, &index, ctx);
+                    if flat_in_rel.parent_model_type(ctx.signature()).is_some() {
                         write!(f, "{field_name}: &self.{field_name}_all,")
                     } else {
                         write!(f, "{field_name}: &self.{field_name},")
@@ -2469,8 +2067,7 @@ fn display_module_env_var<'a>(
             .into_iter()
             .map(|flat_out_rel| {
                 FmtFn(move |f| {
-                    let field_name =
-                        display_out_set_field_name(&flat_out_rel, eqlog_ids, identifiers);
+                    let field_name = display_out_set_field_name(&flat_out_rel, ctx);
                     write!(f, "{field_name}: &mut delta.{field_name},")
                 })
             })
@@ -2488,8 +2085,7 @@ fn display_module_env_var<'a>(
 
 fn display_close_until_fn<'a>(
     ram_modules: &'a [RamModule],
-    eqlog_ids: &'a EqlogIds<'a>,
-    identifiers: &'a BTreeMap<Ident, String>,
+    ctx: &'a RustGenCtx<'a>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let module_calls = ram_modules
@@ -2497,7 +2093,7 @@ fn display_close_until_fn<'a>(
             .map(|ram_module| {
                 FmtFn(move |f: &mut Formatter| -> Result {
                     let name = ram_module.name.as_str();
-                    let env_var = display_module_env_var(ram_module, eqlog_ids, identifiers);
+                    let env_var = display_module_env_var(ram_module, ctx);
                     writedoc! {f, r#"
                         {env_var}
                         {name}(env);
@@ -2563,9 +2159,7 @@ fn display_close_fn() -> impl Display {
 }
 
 fn display_new_fn<'a>(
-    eqlog: &'a Eqlog,
-    eqlog_ids: &'a EqlogIds<'a>,
-    identifiers: &'a BTreeMap<Ident, String>,
+    ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
@@ -2573,20 +2167,17 @@ fn display_new_fn<'a>(
         writeln!(f, "#[allow(dead_code)]").unwrap();
         writeln!(f, "pub fn new() -> Self {{").unwrap();
         writeln!(f, "Self {{").unwrap();
-        for typ in eqlog.iter_type() {
-            let type_snake = display_type(typ, eqlog, identifiers)
-                .to_string()
-                .to_case(Snake);
+        for typ in ctx.signature().iter_types() {
+            let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
             writeln!(f, "{type_snake}_equalities: Unification::new(),").unwrap();
             writeln!(f, "{type_snake}_weights: Vec::new(),").unwrap();
             writeln!(f, "{type_snake}_uprooted: Vec::new(),").unwrap();
         }
         for (flat_rel, indices) in &index_selection.indices {
             for index in indices {
-                let field_name =
-                    display_index_field_name(&flat_rel, &index, eqlog_ids, identifiers);
-                let index_type = display_index_type(&flat_rel, eqlog_ids);
-                if flat_rel.parent_model_type(eqlog_ids.signature()).is_some() {
+                let field_name = display_index_field_name(&flat_rel, &index, ctx);
+                let index_type = display_index_type(&flat_rel, ctx);
+                if flat_rel.parent_model_type(ctx.signature()).is_some() {
                     writeln!(f, "{field_name}_own: {index_type}::new(),").unwrap();
                     writeln!(f, "{field_name}_all: {index_type}::new(),").unwrap();
                 } else {
@@ -2594,12 +2185,10 @@ fn display_new_fn<'a>(
                 }
             }
         }
-        for rel in eqlog.iter_rel() {
-            let type_set: BTreeSet<Type> = type_list_vec(eqlog.arity(rel).unwrap(), eqlog)
-                .into_iter()
-                .collect();
+        for rel in iter_flat_rels(ctx.signature()) {
+            let type_set: BTreeSet<TypeId> = rel.arity(ctx.signature()).into_iter().collect();
             for typ in type_set {
-                let field_name = display_element_index_field_name(rel, typ, eqlog, identifiers);
+                let field_name = display_element_index_field_name(rel, typ, ctx);
                 writeln!(f, "{field_name}: BTreeMap::new(),").unwrap();
             }
         }
@@ -2610,20 +2199,15 @@ fn display_new_fn<'a>(
     })
 }
 
-fn display_define_fn<'a>(
-    func: Func,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl Display + 'a {
+fn display_define_fn<'a>(func: FuncId, ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
     FmtFn(move |f| {
-        let func_name = display_func(func, eqlog, identifiers);
+        let func_name = display_func(func, ctx);
         let func_snake = func_name.to_string().to_case(Snake);
 
-        let domain = type_list_vec(eqlog.flat_domain(func).expect("should be total"), eqlog);
-        let codomain = eqlog.codomain(func).expect("should be total");
+        let domain = flat_domain(func, ctx.signature());
+        let codomain = ctx.signature().func(func).codomain;
 
-        let codomain_camel =
-            format!("{}", display_type(codomain, eqlog, identifiers)).to_case(UpperCamel);
+        let codomain_camel = format!("{}", display_type(codomain, ctx)).to_case(UpperCamel);
         let codomain_snake = codomain_camel.to_case(Snake);
 
         let func_arg_vars: Vec<ElVar> = (0..domain.len()).map(ElVar::from).collect();
@@ -2635,8 +2219,7 @@ fn display_define_fn<'a>(
             .zip(domain.iter().copied())
             .map(|(var, var_typ)| {
                 FmtFn(move |f: &mut Formatter| -> Result {
-                    let type_camel = format!("{}", display_type(var_typ, eqlog, identifiers))
-                        .to_case(UpperCamel);
+                    let type_camel = format!("{}", display_type(var_typ, ctx)).to_case(UpperCamel);
                     write!(f, "{var}: {type_camel}")
                 })
             })
@@ -2655,36 +2238,30 @@ fn display_define_fn<'a>(
             .map(display_var)
             .format(", ");
 
-        let codomain_parent_pred: Option<Pred> = eqlog.model_member_pred(codomain);
+        let codomain_parent_model = ctx.signature().type_(codomain).parents.last().copied();
 
-        let parent_var: &str = if codomain_parent_pred.is_none() {
+        let parent_var: &str = if codomain_parent_model.is_none() {
             ""
         } else {
             "parent_el"
         };
 
         let define_parent_var = FmtFn(move |f| {
-            if codomain_parent_pred.is_none() {
+            let Some(model_type) = codomain_parent_model else {
                 return Ok(());
-            }
+            };
 
-            let member_scope = eqlog.type_definition_symbol_scope(codomain).unwrap();
-            let model_type = eqlog.symbol_scope_model(member_scope).unwrap();
-
-            let func_is_mor_app = eqlog
-                .iter_mor_app_func()
-                .any(|(_member_type, mor_app_func)| eqlog.are_equal_func(mor_app_func, func));
+            let func_is_mor_app = ctx.signature().type_for_mor_app_func(func).is_some();
 
             if !func_is_mor_app {
-                let func_def_scope = eqlog
-                    .rel_definition_symbol_scope(eqlog.func_rel(func).unwrap())
-                    .unwrap();
-
                 // This works if `func` is a model member function, in which case its first argument is
                 // parent model. That's OK for now, but when we introduce dependent types in function
                 // signatures it will break, since then the codomain might be a member type while the
                 // function is not a member.
-                assert!(eqlog.are_equal_symbol_scope(func_def_scope, member_scope));
+                assert_eq!(
+                    ctx.signature().func(func).parents.last().copied(),
+                    Some(model_type)
+                );
                 let parent_arg = ElVar::from(0);
                 writedoc! {f, "
                     let {parent_var} = {parent_arg};"
@@ -2692,9 +2269,12 @@ fn display_define_fn<'a>(
                 return Ok(());
             }
 
-            let morphism_type = eqlog.mor_type(model_type).unwrap();
-            let cod_func = eqlog.mor_type_cod_func(morphism_type).unwrap();
-            let cod_func_snake = display_func(cod_func, eqlog, identifiers);
+            let cod_func = ctx
+                .signature()
+                .ids_for_model_type(model_type)
+                .expect("parent model type should have model ids")
+                .cod;
+            let cod_func_snake = display_func(cod_func, ctx);
 
             assert!(func_is_mor_app);
             let mor_arg = ElVar::from(0);
@@ -2734,31 +2314,23 @@ impl Display for IndexAge {
 fn display_index_field_name<'a>(
     rel: &'a FlatInRel,
     index: &'a IndexSpec,
-    eqlog_ids: &'a EqlogIds<'a>,
-    identifiers: &'a BTreeMap<Ident, String>,
+    ctx: &'a RustGenCtx<'a>,
 ) -> impl 'a + Display {
-    let eqlog = eqlog_ids.eqlog();
     FmtFn(move |f| {
         let order = index.order.iter().format("_");
         let age = index.age;
         match rel {
             FlatInRel::Rel(rel) => {
-                let rel_snake = display_rel(eqlog_ids.flat_rel(*rel), eqlog, identifiers)
-                    .to_string()
-                    .to_case(Snake);
+                let rel_snake = display_rel(*rel, ctx).to_string().to_case(Snake);
                 write!(f, "{rel_snake}_{age}_order_{order}")
             }
             FlatInRel::RelWithDiagonals { rel, equalities } => {
-                let rel_snake = display_rel(eqlog_ids.flat_rel(*rel), eqlog, identifiers)
-                    .to_string()
-                    .to_case(Snake);
+                let rel_snake = display_rel(*rel, ctx).to_string().to_case(Snake);
                 let equalities = equalities.iter().format("_");
                 write!(f, "{rel_snake}_{age}_eqs_{equalities}_order_{order}")
             }
             FlatInRel::TypeSet(typ) => {
-                let type_snake = display_type(eqlog_ids.typ(*typ), eqlog, identifiers)
-                    .to_string()
-                    .to_case(Snake);
+                let type_snake = display_type(*typ, ctx).to_string().to_case(Snake);
                 write!(f, "{type_snake}_{age}_order_0")
             }
             FlatInRel::Equality(_) => {
@@ -2771,15 +2343,11 @@ fn display_index_field_name<'a>(
 fn display_own_index_field_name<'a>(
     flat_in_rel: &'a FlatInRel,
     index: &'a IndexSpec,
-    eqlog_ids: &'a EqlogIds<'a>,
-    identifiers: &'a BTreeMap<Ident, String>,
+    ctx: &'a RustGenCtx<'a>,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
-        let index_field = display_index_field_name(&flat_in_rel, &index, eqlog_ids, identifiers);
-        if flat_in_rel
-            .parent_model_type(eqlog_ids.signature())
-            .is_some()
-        {
+        let index_field = display_index_field_name(&flat_in_rel, &index, ctx);
+        if flat_in_rel.parent_model_type(ctx.signature()).is_some() {
             write!(f, "{index_field}_own")
         } else {
             write!(f, "{index_field}")
@@ -2790,75 +2358,54 @@ fn display_own_index_field_name<'a>(
 fn display_index_expr<'a>(
     flat_in_rel: &'a FlatInRel,
     index: &'a IndexSpec,
-    eqlog_ids: &'a EqlogIds<'a>,
-    identifiers: &'a BTreeMap<Ident, String>,
+    ctx: &'a RustGenCtx<'a>,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
-        let index_field = display_index_field_name(&flat_in_rel, &index, eqlog_ids, identifiers);
-        if flat_in_rel
-            .parent_model_type(eqlog_ids.signature())
-            .is_some()
-        {
+        let index_field = display_index_field_name(&flat_in_rel, &index, ctx);
+        if flat_in_rel.parent_model_type(ctx.signature()).is_some() {
             write!(f, "(&self.{index_field}_all)")
         } else {
-            let index_field =
-                display_index_field_name(&flat_in_rel, &index, eqlog_ids, identifiers);
+            let index_field = display_index_field_name(&flat_in_rel, &index, ctx);
             write!(f, "(&self.{index_field})")
         }
     })
 }
 
 fn display_element_index_field_name<'a>(
-    rel: Rel,
-    typ: Type,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
+    rel: FlatRel,
+    typ: TypeId,
+    ctx: &'a RustGenCtx<'a>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let rel_snake = display_rel(rel, eqlog, identifiers)
-            .to_string()
-            .to_case(Snake);
-        let type_snake = display_type(typ, eqlog, identifiers)
-            .to_string()
-            .to_case(Snake);
+        let rel_snake = display_rel(rel, ctx).to_string().to_case(Snake);
+        let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
         write!(f, "{rel_snake}_{type_snake}_element_index")
     })
 }
 
-fn display_index_type<'a>(rel: &'a FlatInRel, eqlog_ids: &'a EqlogIds<'a>) -> impl Display + 'a {
+fn display_index_type<'a>(rel: &'a FlatInRel, ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
     FmtFn(move |f| {
-        let arity_len = rel.arity(eqlog_ids.signature()).len();
+        let arity_len = rel.arity(ctx.signature()).len();
         write!(f, "PrefixTree{arity_len}")
     })
 }
 
-fn display_weight_static_name<'a>(
-    rel: Rel,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
+fn display_weight_static_name<'a>(rel: FlatRel, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
     FmtFn(move |f| {
-        let rel_screaming_snake = display_rel(rel, eqlog, identifiers)
-            .to_string()
-            .to_case(UpperSnake);
+        let rel_screaming_snake = display_rel(rel, ctx).to_string().to_case(UpperSnake);
         write!(f, "{rel_screaming_snake}_WEIGHT")
     })
 }
 
 fn display_weight_static<'a>(
-    rel: Rel,
+    rel: FlatRel,
     index_selection: &'a IndexSelection,
-    eqlog: &'a Eqlog,
-    eqlog_ids: &'a EqlogIds<'a>,
-    identifiers: &'a BTreeMap<Ident, String>,
+    ctx: &'a RustGenCtx<'a>,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
-        let static_name = display_weight_static_name(rel, eqlog, identifiers);
+        let static_name = display_weight_static_name(rel, ctx);
 
-        let el_lookup_weight = type_list_vec(eqlog.arity(rel).unwrap(), eqlog).len();
-        let rel = eqlog_ids
-            .rel_id(rel)
-            .expect("weighted relation should have a local flat relation");
+        let el_lookup_weight = rel.arity(ctx.signature()).len();
 
         let relevant_indices: BTreeSet<(FlatInRel, IndexSpec)> = index_selection
             .indices
@@ -2914,9 +2461,7 @@ fn display_weight_static<'a>(
 
 fn display_theory_struct<'a>(
     name: &'a str,
-    eqlog: &'a Eqlog,
-    eqlog_ids: &'a EqlogIds<'a>,
-    identifiers: &'a BTreeMap<Ident, String>,
+    ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
@@ -2930,9 +2475,9 @@ fn display_theory_struct<'a>(
             })
             .map(|(rel, index)| {
                 FmtFn(move |f| {
-                    let index_name = display_index_field_name(&rel, &index, eqlog_ids, identifiers);
-                    let index_type = display_index_type(&rel, eqlog_ids);
-                    if rel.parent_model_type(eqlog_ids.signature()).is_some() {
+                    let index_name = display_index_field_name(&rel, &index, ctx);
+                    let index_type = display_index_type(&rel, ctx);
+                    if rel.parent_model_type(ctx.signature()).is_some() {
                         writedoc! {f, "
                             {index_name}_own: {index_type},
                             {index_name}_all: {index_type},
@@ -2943,20 +2488,16 @@ fn display_theory_struct<'a>(
                 })
             })
             .format("\n");
-        let element_index_fields = eqlog
-            .iter_rel()
+        let element_index_fields = iter_flat_rels(ctx.signature())
             .map(|rel| {
-                let arity: Vec<Type> = type_list_vec(eqlog.arity(rel).unwrap(), eqlog)
-                    .into_iter()
-                    .collect();
+                let arity: Vec<TypeId> = rel.arity(ctx.signature()).into_iter().collect();
                 let arity_len = arity.len();
-                let arity_set: BTreeSet<Type> = arity.iter().copied().collect();
+                let arity_set: BTreeSet<TypeId> = arity.iter().copied().collect();
                 arity_set
                     .into_iter()
                     .map(move |typ| {
                         FmtFn(move |f| {
-                            let field_name =
-                                display_element_index_field_name(rel, typ, eqlog, identifiers);
+                            let field_name = display_element_index_field_name(rel, typ, ctx);
                             write!(f, "{field_name}: BTreeMap<u32, Vec<[u32; {arity_len}]>>,")
                         })
                     })
@@ -2964,9 +2505,10 @@ fn display_theory_struct<'a>(
             })
             .format("\n");
 
-        let type_fields = eqlog
-            .iter_type()
-            .map(|typ| display_type_fields(typ, eqlog, identifiers))
+        let type_fields = ctx
+            .signature()
+            .iter_types()
+            .map(|typ| display_type_fields(typ, ctx))
             .format("\n");
 
         writedoc! {f, "
@@ -2985,157 +2527,120 @@ fn display_theory_struct<'a>(
 fn display_theory_impl<'a>(
     name: &'a str,
     ram_modules: &'a [RamModule],
-    eqlog: &'a Eqlog,
-    eqlog_ids: &'a EqlogIds<'a>,
-    identifiers: &'a BTreeMap<Ident, String>,
+    ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         writeln!(f, "impl {} {{", name)?;
 
-        let new_fn = display_new_fn(eqlog, eqlog_ids, identifiers, index_selection);
+        let new_fn = display_new_fn(ctx, index_selection);
         write!(f, "{}", new_fn)?;
         writeln!(f, "")?;
 
         let close_fn = display_close_fn();
         write!(f, "{}", close_fn)?;
 
-        let close_until_fn = display_close_until_fn(ram_modules, eqlog_ids, identifiers);
+        let close_until_fn = display_close_until_fn(ram_modules, ctx);
         write!(f, "{}", close_until_fn)?;
 
-        for typ in eqlog.iter_type() {
-            let iter_type_fn =
-                display_iter_type_fn(typ, eqlog, eqlog_ids, identifiers, index_selection);
+        for typ in ctx.signature().iter_types() {
+            let iter_type_fn = display_iter_type_fn(typ, ctx, index_selection);
             write!(f, "{}", iter_type_fn)?;
 
-            let root_fn = display_root_fn(typ, eqlog, identifiers);
+            let root_fn = display_root_fn(typ, ctx);
             write!(f, "{}", root_fn)?;
 
-            let are_equal_fn = display_are_equal_fn(typ, eqlog, identifiers);
+            let are_equal_fn = display_are_equal_fn(typ, ctx);
             write!(f, "{}", are_equal_fn)?;
 
             writeln!(f, "")?;
         }
 
-        for typ in eqlog.iter_type() {
-            let new_element_fn_internal = display_new_element_fn_internal(
-                typ,
-                eqlog,
-                eqlog_ids,
-                identifiers,
-                index_selection,
-            );
+        for typ in ctx.signature().iter_types() {
+            let new_element_fn_internal =
+                display_new_element_fn_internal(typ, ctx, index_selection);
             writeln!(f, "{new_element_fn_internal}")?;
 
-            let equate_elements =
-                display_equate_elements(typ, eqlog, eqlog_ids, identifiers, index_selection);
+            let equate_elements = display_equate_elements(typ, ctx, index_selection);
             write!(f, "{}", equate_elements)?;
         }
 
-        for typ in eqlog.iter_type() {
-            if eqlog.is_normal_type(typ) || eqlog.is_model_type(typ) || eqlog.is_mor_type(typ) {
-                let new_el_fn = display_new_element_fn(typ, eqlog, identifiers);
-                writeln!(f, "{new_el_fn}")?;
-            } else if eqlog.is_enum_type(typ) {
-                let type_def_sym_scope = eqlog.type_definition_symbol_scope(typ).unwrap();
-                let enum_node = eqlog
-                    .iter_enum_decl()
-                    .find_map(|(enum_node, ident, _)| {
-                        let typ0 = eqlog.semantic_type(type_def_sym_scope, ident)?;
-                        if eqlog.are_equal_type(typ0, typ) {
-                            Some(enum_node)
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap();
-                let new_enum_el_fn = display_new_enum_element(enum_node, eqlog, identifiers);
-                let enum_cases_fn = display_enum_cases_fn(enum_node, eqlog, identifiers);
-                writedoc! {f, "
-                    {new_enum_el_fn}
-                    {enum_cases_fn}
-                "}?;
-            } else {
-                unreachable!("Unhandled type kind");
+        for typ in ctx.signature().iter_types() {
+            match ctx.signature().type_(typ).kind {
+                TypeKind::Plain | TypeKind::Model | TypeKind::Mor(_) => {
+                    let new_el_fn = display_new_element_fn(typ, ctx);
+                    writeln!(f, "{new_el_fn}")?;
+                }
+                TypeKind::Enum => {
+                    let enum_node = ctx
+                        .signature()
+                        .enum_decl_for_type(typ)
+                        .expect("enum type should have an enum declaration");
+                    let new_enum_el_fn = display_new_enum_element(enum_node, ctx);
+                    let enum_cases_fn = display_enum_cases_fn(enum_node, ctx);
+                    writedoc! {f, "
+                        {new_enum_el_fn}
+                        {enum_cases_fn}
+                    "}?;
+                }
             }
         }
 
-        for func in eqlog.iter_func() {
-            let rel = eqlog.func_rel(func).unwrap();
-            let eval_fn =
-                display_pub_function_eval_fn(func, eqlog, eqlog_ids, identifiers, index_selection);
+        for func in ctx.signature().iter_funcs() {
+            let rel = FlatRel::Func(func);
+            let eval_fn = display_pub_function_eval_fn(func, ctx, index_selection);
             write!(f, "{eval_fn}")?;
 
-            let iter_fn = display_pub_iter_fn(rel, eqlog, eqlog_ids, identifiers, index_selection);
+            let iter_fn = display_pub_iter_fn(rel, ctx, index_selection);
             write!(f, "{}", iter_fn)?;
 
-            let insert_relation = display_pub_insert_relation(
-                rel,
-                eqlog,
-                eqlog_ids,
-                identifiers,
-                index_selection,
-                true,
-            );
+            let insert_relation = display_pub_insert_relation(rel, ctx, index_selection, true);
             write!(f, "{}", insert_relation)?;
 
             writeln!(f, "")?;
         }
 
-        for func in eqlog.iter_func() {
-            if eqlog.function_can_be_made_defined(func) {
-                let define_fn = display_define_fn(func, eqlog, identifiers);
+        for func in ctx.signature().iter_funcs() {
+            if ctx.function_can_be_made_defined(func) {
+                let define_fn = display_define_fn(func, ctx);
                 write!(f, "{}", define_fn)?;
             }
         }
 
-        for pred in eqlog.iter_pred() {
-            let rel = eqlog.pred_rel(pred).unwrap();
-            let arity = type_list_vec(eqlog.arity(rel).unwrap(), eqlog);
+        for rel in ctx.pred_like_rels() {
+            let arity = rel.arity(ctx.signature());
             let arity: Vec<String> = arity
                 .into_iter()
-                .map(|typ| display_type(typ, eqlog, identifiers).to_string())
+                .map(|typ| display_type(typ, ctx).to_string())
                 .collect();
             let arity: Vec<&str> = arity.iter().map(|s| s.as_str()).collect();
 
-            let predicate_holds_fn =
-                display_pub_predicate_holds_fn(rel, eqlog, eqlog_ids, identifiers, index_selection);
+            let predicate_holds_fn = display_pub_predicate_holds_fn(rel, ctx, index_selection);
             write!(f, "{}", predicate_holds_fn)?;
 
             if !arity.is_empty() {
-                let iter_fn =
-                    display_pub_iter_fn(rel, eqlog, eqlog_ids, identifiers, index_selection);
+                let iter_fn = display_pub_iter_fn(rel, ctx, index_selection);
                 write!(f, "{}", iter_fn)?;
             }
 
-            let insert_relation = display_pub_insert_relation(
-                rel,
-                eqlog,
-                eqlog_ids,
-                identifiers,
-                index_selection,
-                false,
-            );
+            let insert_relation = display_pub_insert_relation(rel, ctx, index_selection, false);
             write!(f, "{}", insert_relation)?;
 
             writeln!(f, "")?;
         }
 
-        let canonicalize_fn =
-            display_canonicalize_fn(eqlog, eqlog_ids, identifiers, index_selection);
+        let canonicalize_fn = display_canonicalize_fn(ctx, index_selection);
         write!(f, "{canonicalize_fn}\n")?;
 
-        let is_dirty_fn = display_is_dirty_fn(eqlog, eqlog_ids, identifiers, index_selection);
+        let is_dirty_fn = display_is_dirty_fn(ctx, index_selection);
         write!(f, "{}", is_dirty_fn)?;
 
         writeln!(f, "")?;
 
-        let recompute_model_indices_fn =
-            display_recompute_model_indices_fn(eqlog, eqlog_ids, identifiers, index_selection);
+        let recompute_model_indices_fn = display_recompute_model_indices_fn(ctx, index_selection);
         write!(f, "{}", recompute_model_indices_fn)?;
 
-        let move_new_to_old_fn =
-            display_move_new_to_old_fn(eqlog, eqlog_ids, identifiers, index_selection);
+        let move_new_to_old_fn = display_move_new_to_old_fn(ctx, index_selection);
         write!(f, "{move_new_to_old_fn}")?;
 
         write!(f, "}}")?;
@@ -3146,21 +2651,14 @@ fn display_theory_impl<'a>(
 fn display_rule_modules<'a>(
     ram_modules: &'a [RamModule],
     index_selection: &'a IndexSelection,
-    eqlog_ids: &'a EqlogIds<'a>,
-    identifiers: &'a BTreeMap<Ident, String>,
+    ctx: &'a RustGenCtx<'a>,
     symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     ram_modules
         .iter()
         .map(move |ram_module| {
             FmtFn(move |f| {
-                let lib = display_ram_module(
-                    ram_module,
-                    index_selection,
-                    eqlog_ids,
-                    identifiers,
-                    symbol_prefix,
-                );
+                let lib = display_ram_module(ram_module, index_selection, ctx, symbol_prefix);
                 let ram_module_name = ram_module.name.as_str();
                 writedoc! {f, "
                     mod {ram_module_name} {{
@@ -3174,9 +2672,7 @@ fn display_rule_modules<'a>(
 
 pub fn display_module<'a>(
     name: &'a str,
-    eqlog: &'a Eqlog,
-    eqlog_ids: &'a EqlogIds<'a>,
-    identifiers: &'a BTreeMap<Ident, String>,
+    ctx: &'a RustGenCtx<'a>,
     ram_modules: &'a [RamModule],
     index_selection: &'a IndexSelection,
     symbol_prefix: &'a str,
@@ -3190,20 +2686,13 @@ pub fn display_module<'a>(
         match build_type {
             BuildType::Component => {}
             BuildType::Module => {
-                display_rule_modules(
-                    ram_modules,
-                    index_selection,
-                    eqlog_ids,
-                    identifiers,
-                    symbol_prefix,
-                )
-                .fmt(f)?;
+                display_rule_modules(ram_modules, index_selection, ctx, symbol_prefix).fmt(f)?;
             }
         }
 
         let module_env_structs = ram_modules
             .iter()
-            .map(|ram_module| display_module_env_struct(ram_module, eqlog_ids, identifiers))
+            .map(|ram_module| display_module_env_struct(ram_module, ctx))
             .format("\n");
         writeln!(f, "{module_env_structs}")?;
 
@@ -3217,50 +2706,41 @@ pub fn display_module<'a>(
             }}
         "#}?;
 
-        for rel in eqlog.iter_rel() {
-            let weight_static =
-                display_weight_static(rel, index_selection, eqlog, eqlog_ids, identifiers);
+        for rel in iter_flat_rels(ctx.signature()) {
+            let weight_static = display_weight_static(rel, index_selection, ctx);
             write!(f, "{weight_static}")?;
         }
 
-        for typ in eqlog.iter_type() {
-            let type_struct = display_type_struct(typ, eqlog, identifiers);
+        for typ in ctx.signature().iter_types() {
+            let type_struct = display_type_struct(typ, ctx);
             write!(f, "{}", type_struct)?;
-            let type_impl = display_type_impl(typ, eqlog, identifiers);
+            let type_impl = display_type_impl(typ, ctx);
             write!(f, "{}", type_impl)?;
         }
         write!(f, "\n")?;
 
-        for (enum_decl, _, _) in eqlog.iter_enum_decl() {
-            writeln!(f, "{}", display_enum(enum_decl, eqlog, identifiers))?;
+        for (enum_decl, _) in ctx.signature().iter_enum_decls() {
+            writeln!(f, "{}", display_enum(enum_decl, ctx))?;
         }
 
-        for func in eqlog.iter_func() {
-            let func_args_struct = display_func_args_struct(func, eqlog, identifiers);
+        for func in ctx.signature().iter_funcs() {
+            let func_args_struct = display_func_args_struct(func, ctx);
             writeln!(f, "{func_args_struct}")?;
         }
 
         write!(f, "\n")?;
 
-        let model_delta_struct = display_model_delta_struct(eqlog, identifiers);
+        let model_delta_struct = display_model_delta_struct(ctx);
         write!(f, "{}", model_delta_struct)?;
 
-        let theory_struct =
-            display_theory_struct(name, eqlog, eqlog_ids, identifiers, index_selection);
+        let theory_struct = display_theory_struct(name, ctx, index_selection);
         write!(f, "{}", theory_struct)?;
 
-        let model_delta_impl = display_model_delta_impl(eqlog, identifiers);
+        let model_delta_impl = display_model_delta_impl(ctx);
         write!(f, "{}", model_delta_impl)?;
         write!(f, "\n")?;
 
-        let theory_impl = display_theory_impl(
-            name,
-            ram_modules,
-            eqlog,
-            eqlog_ids,
-            identifiers,
-            index_selection,
-        );
+        let theory_impl = display_theory_impl(name, ram_modules, ctx, index_selection);
         write!(f, "{}", theory_impl)?;
 
         Ok(())

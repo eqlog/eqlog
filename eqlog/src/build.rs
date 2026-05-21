@@ -2,7 +2,6 @@ use crate::algebra::build_structures;
 use crate::algebra::signature::build_signature;
 use crate::algebra::symbols::check_symbol_lookups;
 use crate::ast::{Ast, ModuleId};
-use crate::ast_to_eqlog::populate_eqlog;
 use crate::casing::check_casing;
 use crate::error::*;
 use crate::flat_eqlog::*;
@@ -474,11 +473,6 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     let symbol_lookup_errors =
         check_symbol_lookups(&ast, &scopes, &signature, module, &rule_structures);
 
-    let (mut eqlog, identifiers, _locations, eqlog_ast_maps, _module) =
-        populate_eqlog(&ast, module);
-    eqlog.close();
-    let eqlog_ids = EqlogIds::new(&eqlog, &signature, &eqlog_ast_maps);
-
     // Merge compile errors by `CompileError`'s `Ord`, which applies the kind
     // precedence (e.g. UndeclaredSymbol beats VariableOccursOnlyOnce) before
     // falling back to source location.
@@ -498,8 +492,6 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
         }
         .into());
     }
-    assert!(!eqlog.absurd());
-
     let flatten_ctx = FlattenCtx::new(&ast, module, &signature, &rule_structures);
     let flat_rule_groups = flatten(&flatten_ctx);
     let flat_rules_iter = flat_rule_groups.iter().flat_map(|group| group.rules.iter());
@@ -512,12 +504,11 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
 
     let theory_name_len = theory_name.len();
     let symbol_prefix = format!("eql_{theory_name_len}_{theory_name}");
+    let rust_gen_ctx = RustGenCtx::new(&ast, &signature);
 
     let module_contents = display_module(
         &theory_name.to_case(Case::UpperCamel),
-        &eqlog,
-        &eqlog_ids,
-        &identifiers,
+        &rust_gen_ctx,
         ram_modules.as_slice(),
         &index_selection,
         symbol_prefix.as_str(),
@@ -549,8 +540,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
             let rule_lib = display_ram_module(
                 ram_module,
                 &index_selection,
-                &eqlog_ids,
-                &identifiers,
+                &rust_gen_ctx,
                 symbol_prefix.as_str(),
             )
             .to_string();
