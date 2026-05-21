@@ -2,8 +2,8 @@ use super::ast::*;
 
 fn transform_stmt(stmt: &FlatIfStmt) -> FlatIfStmt {
     let rel = match &stmt.rel {
-        FlatInRel::EqlogRel(rel) => *rel,
-        FlatInRel::TypeSet(_) | FlatInRel::EqlogRelWithDiagonals { .. } => {
+        FlatInRel::Rel(rel) => *rel,
+        FlatInRel::TypeSet(_) | FlatInRel::RelWithDiagonals { .. } => {
             return stmt.clone();
         }
         FlatInRel::Equality(_) => {
@@ -42,7 +42,7 @@ fn transform_stmt(stmt: &FlatIfStmt) -> FlatIfStmt {
         return stmt.clone();
     }
 
-    let rel = FlatInRel::EqlogRelWithDiagonals {
+    let rel = FlatInRel::RelWithDiagonals {
         rel,
         equalities: equalities.into(),
     };

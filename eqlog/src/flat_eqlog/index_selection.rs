@@ -4,9 +4,7 @@ use std::{
 };
 
 use super::ast::*;
-use crate::eqlog_util::*;
-use crate::flatten::FlattenCtx;
-use eqlog_eqlog::*;
+use crate::algebra::signature::{FuncId, Signature};
 use itertools::Itertools as _;
 use maplit::btreeset;
 use std::sync::Arc;
@@ -68,18 +66,18 @@ impl QuerySpec {
         }
     }
     /// The [QuerySpec] to query for one specific tuple in a relation.
-    pub fn one(rel: FlatInRel, eqlog: &Eqlog) -> Self {
-        let arity = rel.arity(eqlog);
+    pub fn one(rel: FlatInRel, signature: &Signature) -> Self {
+        let arity = rel.arity(signature);
         QuerySpec {
             projections: (0..arity.len()).collect(),
             age: QueryAge::All,
         }
     }
     /// The [QuerySpec] for evaluating a function.
-    pub fn eval_func(func: Func, eqlog: &Eqlog) -> Self {
-        let flat_dom = type_list_vec(eqlog.flat_domain(func).unwrap(), eqlog);
-        let rel = FlatInRel::EqlogRel(eqlog.func_rel(func).unwrap());
-        let arity = rel.arity(eqlog);
+    pub fn eval_func(func: FuncId, signature: &Signature) -> Self {
+        let flat_dom = flat_domain(func, signature);
+        let rel = FlatInRel::Rel(FlatRel::Func(func));
+        let arity = rel.arity(signature);
         assert!(
             arity.len() > 0,
             "The codomain of a function is always in the arity"
@@ -164,11 +162,20 @@ pub struct IndexSelection {
     pub queries: BTreeMap<(FlatInRel, QuerySpec), Vec<IndexSpec>>,
 }
 
+pub fn iter_flat_rels(signature: &Signature) -> impl Iterator<Item = FlatRel> + '_ {
+    signature
+        .iter_preds()
+        .map(FlatRel::Pred)
+        .chain(signature.iter_funcs().map(FlatRel::Func))
+        .chain(signature.iter_types().filter_map(|typ| {
+            (!signature.type_(typ).parents.is_empty()).then_some(FlatRel::ModelMember(typ))
+        }))
+}
+
 pub fn select_indices<'a>(
     rules: impl IntoIterator<Item = &'a FlatRule>,
-    ctx: &FlattenCtx<'_>,
+    signature: &Signature,
 ) -> IndexSelection {
-    let eqlog = ctx.eqlog();
     let mut query_specs: BTreeSet<(FlatInRel, QuerySpec)> = BTreeSet::new();
 
     query_specs.extend(
@@ -184,12 +191,12 @@ pub fn select_indices<'a>(
     // The query specs for public relation functions
     // - The iter_{rel}() method needs a QuerySpec to iterate over all tuples.
     // - The contains_{rel}() method needs a QuerySpec to check for one specific tuple.
-    query_specs.extend(eqlog.iter_rel().flat_map(|rel| {
-        let rel = FlatInRel::EqlogRel(rel);
+    query_specs.extend(iter_flat_rels(signature).flat_map(|rel| {
+        let rel = FlatInRel::Rel(rel);
         let new_spec = QuerySpec::all_new();
         let old_spec = QuerySpec::all_old();
         let iter_all_spec = QuerySpec::all();
-        let check_one_spec = QuerySpec::one(rel.clone(), eqlog);
+        let check_one_spec = QuerySpec::one(rel.clone(), signature);
         [
             (rel.clone(), new_spec),
             (rel.clone(), old_spec),
@@ -199,7 +206,7 @@ pub fn select_indices<'a>(
     }));
 
     // The query specs to iterate over element of a given type.
-    query_specs.extend(eqlog.iter_type().flat_map(|ty| {
+    query_specs.extend(signature.iter_types().flat_map(|ty| {
         let rel = FlatInRel::TypeSet(ty);
         [
             (rel.clone(), QuerySpec::all()),
@@ -208,24 +215,18 @@ pub fn select_indices<'a>(
     }));
 
     // The query specs for public function evaluation functions.
-    query_specs.extend(eqlog.iter_func().map(|func| {
-        let rel = eqlog.func_rel(func).unwrap();
-        (FlatInRel::EqlogRel(rel), QuerySpec::eval_func(func, eqlog))
+    query_specs.extend(signature.iter_funcs().map(|func| {
+        (
+            FlatInRel::Rel(FlatRel::Func(func)),
+            QuerySpec::eval_func(func, signature),
+        )
     }));
 
     // The query specs needed for topological sorting of the model morphism graph.
-    query_specs.extend(eqlog.iter_is_model_type().flat_map(|model_type| {
-        let mor_type = eqlog.mor_type(model_type).unwrap();
-        let dom = eqlog
-            .func_rel(eqlog.mor_type_dom_func(mor_type).unwrap())
-            .unwrap();
-        let cod = eqlog
-            .func_rel(eqlog.mor_type_cod_func(mor_type).unwrap())
-            .unwrap();
-
-        let mor_type = FlatInRel::TypeSet(mor_type);
-        let dom = FlatInRel::EqlogRel(dom);
-        let cod = FlatInRel::EqlogRel(cod);
+    query_specs.extend(signature.iter_model_decls().flat_map(|(_decl, ids)| {
+        let mor_type = FlatInRel::TypeSet(ids.mor);
+        let dom = FlatInRel::Rel(FlatRel::Func(ids.dom));
+        let cod = FlatInRel::Rel(FlatRel::Func(ids.cod));
 
         [
             // Given an object, look up the set of outgoing morphisms.
@@ -262,7 +263,7 @@ pub fn select_indices<'a>(
             let queries: Vec<QuerySpec> = queries.map(|(_rel, query)| query).collect();
             let query_chains = query_spec_chains(queries);
 
-            let arity = rel.arity(eqlog);
+            let arity = rel.arity(signature);
 
             query_chains.into_iter().flat_map(move |query_chain| {
                 let indices = IndexSpec::from_query_spec_chain(arity.len(), query_chain.as_slice());

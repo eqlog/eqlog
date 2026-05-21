@@ -2,14 +2,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use convert_case::{Case::Snake, Casing as _};
-use eqlog_eqlog::{Eqlog, Func, Ident, Pred, Rel, SymbolScope, Type};
 
 use crate::algebra::populate::{MorphismKind, RuleStructures};
-use crate::algebra::signature::{FuncId, PredId, Signature, TypeId};
+use crate::algebra::signature::{FuncId, Signature};
 use crate::algebra::structure::{ConcreteType, ElId, FuncApp, PredApp, Structure, StructureId};
 use crate::ast::*;
-use crate::ast_to_eqlog::EqlogAstMaps;
-use crate::eqlog_util::display_rel;
 use crate::flat_eqlog::*;
 
 type FlatElKey = (StructureId, ElId);
@@ -19,10 +16,6 @@ pub(crate) struct FlattenCtx<'a> {
     module: ModuleId,
     signature: &'a Signature,
     rule_structures: &'a BTreeMap<RuleDeclId, RuleStructures>,
-    /// Eqlog-backed facts currently consumed by flat lowering and index selection.
-    eqlog: &'a Eqlog,
-    eqlog_ast_maps: &'a EqlogAstMaps,
-    identifiers: &'a BTreeMap<Ident, String>,
 }
 
 impl<'a> FlattenCtx<'a> {
@@ -31,23 +24,13 @@ impl<'a> FlattenCtx<'a> {
         module: ModuleId,
         signature: &'a Signature,
         rule_structures: &'a BTreeMap<RuleDeclId, RuleStructures>,
-        eqlog: &'a Eqlog,
-        eqlog_ast_maps: &'a EqlogAstMaps,
-        identifiers: &'a BTreeMap<Ident, String>,
     ) -> Self {
         Self {
             ast,
             module,
             signature,
             rule_structures,
-            eqlog,
-            eqlog_ast_maps,
-            identifiers,
         }
-    }
-
-    pub(crate) fn eqlog(&self) -> &Eqlog {
-        self.eqlog
     }
 }
 
@@ -60,251 +43,8 @@ struct RuleMorphism {
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct FlatRelApp {
-    rel: Rel,
+    rel: FlatRel,
     args: Vec<ElId>,
-}
-
-struct EqlogBridge<'a> {
-    eqlog: &'a Eqlog,
-    types: BTreeMap<TypeId, Type>,
-    preds: BTreeMap<PredId, Pred>,
-    funcs: BTreeMap<FuncId, Func>,
-}
-
-impl<'a> EqlogBridge<'a> {
-    fn new(ctx: &'a FlattenCtx<'_>) -> Self {
-        let eqlog = ctx.eqlog;
-        let signature = ctx.signature;
-        let maps = ctx.eqlog_ast_maps;
-        let mut types = BTreeMap::new();
-        for (decl, typ) in signature.iter_type_decls() {
-            types.insert(typ, eqlog_type_decl_type(eqlog, maps, decl));
-        }
-        for (decl, typ) in signature.iter_enum_decls() {
-            types.insert(typ, eqlog_enum_decl_type(eqlog, maps, decl));
-        }
-        for (decl, ids) in signature.iter_model_decls() {
-            let model_type = eqlog_model_decl_type(eqlog, maps, decl);
-            let mor_type = eqlog
-                .mor_type(model_type)
-                .expect("Eqlog metadata should define model morphism type");
-            types.insert(ids.type_, model_type);
-            types.insert(ids.mor, mor_type);
-        }
-
-        let mut preds = BTreeMap::new();
-        for (decl, pred) in signature.iter_pred_decls() {
-            preds.insert(pred, eqlog_pred_decl_pred(eqlog, maps, decl));
-        }
-
-        let mut funcs = BTreeMap::new();
-        for (decl, func) in signature.iter_func_decls() {
-            funcs.insert(func, eqlog_func_decl_func(eqlog, maps, decl));
-        }
-        for (decl, func) in signature.iter_ctor_decls() {
-            funcs.insert(func, eqlog_ctor_decl_func(eqlog, maps, decl));
-        }
-        for (_decl, ids) in signature.iter_model_decls() {
-            let mor_type = types[&ids.mor];
-            funcs.insert(
-                ids.dom,
-                eqlog
-                    .mor_type_dom_func(mor_type)
-                    .expect("Eqlog metadata should define dom function"),
-            );
-            funcs.insert(
-                ids.cod,
-                eqlog
-                    .mor_type_cod_func(mor_type)
-                    .expect("Eqlog metadata should define cod function"),
-            );
-        }
-        for (member_type, func) in signature.iter_mor_app_funcs() {
-            funcs.insert(
-                func,
-                eqlog
-                    .mor_app_func(types[&member_type])
-                    .expect("Eqlog metadata should define morphism application function"),
-            );
-        }
-
-        Self {
-            eqlog,
-            types,
-            preds,
-            funcs,
-        }
-    }
-
-    fn typ(&self, typ: TypeId) -> Type {
-        self.types[&typ]
-    }
-
-    fn func(&self, func: FuncId) -> Func {
-        self.funcs[&func]
-    }
-
-    fn pred_rel(&self, pred: PredId) -> Rel {
-        self.eqlog
-            .pred_rel(self.preds[&pred])
-            .expect("Eqlog metadata should define predicate relation")
-    }
-
-    fn func_rel(&self, func: FuncId) -> Rel {
-        self.eqlog
-            .func_rel(self.func(func))
-            .expect("Eqlog metadata should define function relation")
-    }
-
-    fn model_member_rel(&self, member_type: TypeId) -> Rel {
-        let pred = self
-            .eqlog
-            .model_member_pred(self.typ(member_type))
-            .expect("Eqlog metadata should define model member predicate");
-        self.eqlog
-            .pred_rel(pred)
-            .expect("Eqlog metadata should define model member relation")
-    }
-
-    fn is_model_member_rel(&self, rel: Rel) -> bool {
-        self.eqlog.iter_model_member_pred().any(|(_, member_pred)| {
-            let member_rel = self
-                .eqlog
-                .pred_rel(member_pred)
-                .expect("model member predicate should have relation");
-            self.eqlog.are_equal_rel(member_rel, rel)
-        })
-    }
-}
-
-fn eqlog_type_decl_type(eqlog: &Eqlog, maps: &EqlogAstMaps, decl: TypeDeclId) -> Type {
-    let node = maps.type_decl_nodes[&decl];
-    let ident = eqlog
-        .iter_type_decl()
-        .find_map(|(node0, ident)| eqlog.are_equal_type_decl_node(node0, node).then_some(ident))
-        .expect("type declaration node should be populated in Eqlog metadata");
-    let scope = decl_scope_for_type_decl(eqlog, node);
-    eqlog
-        .semantic_type(scope, ident)
-        .expect("type declaration should have semantic type")
-}
-
-fn eqlog_enum_decl_type(eqlog: &Eqlog, maps: &EqlogAstMaps, decl: EnumDeclId) -> Type {
-    let node = maps.enum_decl_nodes[&decl];
-    let ident = eqlog
-        .iter_enum_decl()
-        .find_map(|(node0, ident, _)| eqlog.are_equal_enum_decl_node(node0, node).then_some(ident))
-        .expect("enum declaration node should be populated in Eqlog metadata");
-    let scope = decl_scope_for_enum_decl(eqlog, node);
-    eqlog
-        .semantic_type(scope, ident)
-        .expect("enum declaration should have semantic type")
-}
-
-fn eqlog_model_decl_type(eqlog: &Eqlog, maps: &EqlogAstMaps, decl: ModelDeclId) -> Type {
-    let node = maps.model_decl_nodes[&decl];
-    let ident = eqlog
-        .iter_model_decl()
-        .find_map(|(node0, ident, _)| {
-            eqlog
-                .are_equal_model_decl_node(node0, node)
-                .then_some(ident)
-        })
-        .expect("model declaration node should be populated in Eqlog metadata");
-    let scope = decl_scope_for_model_decl(eqlog, node);
-    eqlog
-        .semantic_type(scope, ident)
-        .expect("model declaration should have semantic type")
-}
-
-fn eqlog_pred_decl_pred(eqlog: &Eqlog, maps: &EqlogAstMaps, decl: PredDeclId) -> Pred {
-    let node = maps.pred_decl_nodes[&decl];
-    let ident = eqlog
-        .iter_pred_decl()
-        .find_map(|(node0, ident, _)| eqlog.are_equal_pred_decl_node(node0, node).then_some(ident))
-        .expect("predicate declaration node should be populated in Eqlog metadata");
-    let scope = decl_scope_for_pred_decl(eqlog, node);
-    eqlog
-        .semantic_pred(scope, ident)
-        .expect("predicate declaration should have semantic predicate")
-}
-
-fn eqlog_func_decl_func(eqlog: &Eqlog, maps: &EqlogAstMaps, decl: FuncDeclId) -> Func {
-    let node = maps.func_decl_nodes[&decl];
-    let ident = eqlog
-        .iter_func_decl()
-        .find_map(|(node0, ident, _, _)| {
-            eqlog.are_equal_func_decl_node(node0, node).then_some(ident)
-        })
-        .expect("function declaration node should be populated in Eqlog metadata");
-    let scope = decl_scope_for_func_decl(eqlog, node);
-    eqlog
-        .semantic_func(scope, ident)
-        .expect("function declaration should have semantic function")
-}
-
-fn eqlog_ctor_decl_func(eqlog: &Eqlog, maps: &EqlogAstMaps, decl: CtorDeclId) -> Func {
-    let node = maps.ctor_decl_nodes[&decl];
-    let ident = eqlog
-        .iter_ctor_decl()
-        .find_map(|(node0, ident, _)| eqlog.are_equal_ctor_decl_node(node0, node).then_some(ident))
-        .expect("constructor declaration node should be populated in Eqlog metadata");
-    let scope = eqlog
-        .ctor_symbol_scope(node)
-        .expect("constructor declaration should have symbol scope");
-    eqlog
-        .semantic_func(scope, ident)
-        .expect("constructor declaration should have semantic function")
-}
-
-fn decl_scope_for_type_decl(eqlog: &Eqlog, node: eqlog_eqlog::TypeDeclNode) -> SymbolScope {
-    let decl = eqlog
-        .iter_decl_node_type()
-        .find_map(|(decl, node0)| eqlog.are_equal_type_decl_node(node0, node).then_some(decl))
-        .expect("type declaration should have parent declaration node");
-    eqlog
-        .decl_symbol_scope(decl)
-        .expect("declaration node should have symbol scope")
-}
-
-fn decl_scope_for_pred_decl(eqlog: &Eqlog, node: eqlog_eqlog::PredDeclNode) -> SymbolScope {
-    let decl = eqlog
-        .iter_decl_node_pred()
-        .find_map(|(decl, node0)| eqlog.are_equal_pred_decl_node(node0, node).then_some(decl))
-        .expect("predicate declaration should have parent declaration node");
-    eqlog
-        .decl_symbol_scope(decl)
-        .expect("declaration node should have symbol scope")
-}
-
-fn decl_scope_for_func_decl(eqlog: &Eqlog, node: eqlog_eqlog::FuncDeclNode) -> SymbolScope {
-    let decl = eqlog
-        .iter_decl_node_func()
-        .find_map(|(decl, node0)| eqlog.are_equal_func_decl_node(node0, node).then_some(decl))
-        .expect("function declaration should have parent declaration node");
-    eqlog
-        .decl_symbol_scope(decl)
-        .expect("declaration node should have symbol scope")
-}
-
-fn decl_scope_for_enum_decl(eqlog: &Eqlog, node: eqlog_eqlog::EnumDeclNode) -> SymbolScope {
-    let decl = eqlog
-        .iter_decl_node_enum()
-        .find_map(|(decl, node0)| eqlog.are_equal_enum_decl_node(node0, node).then_some(decl))
-        .expect("enum declaration should have parent declaration node");
-    eqlog
-        .decl_symbol_scope(decl)
-        .expect("declaration node should have symbol scope")
-}
-
-fn decl_scope_for_model_decl(eqlog: &Eqlog, node: eqlog_eqlog::ModelDeclNode) -> SymbolScope {
-    let decl = eqlog
-        .iter_decl_node_model()
-        .find_map(|(decl, node0)| eqlog.are_equal_model_decl_node(node0, node).then_some(decl))
-        .expect("model declaration should have parent declaration node");
-    eqlog
-        .decl_symbol_scope(decl)
-        .expect("declaration node should have symbol scope")
 }
 
 fn flatten_morphisms(rule: &RuleStructures) -> Vec<RuleMorphism> {
@@ -354,19 +94,11 @@ fn assign_el_vars(
     ctx: &FlattenCtx<'_>,
     rule: &RuleStructures,
     morphisms: &[RuleMorphism],
-    bridge: &EqlogBridge<'_>,
 ) -> BTreeMap<FlatElKey, FlatVar> {
     let mut el_vars: BTreeMap<FlatElKey, FlatVar> = BTreeMap::new();
     let mut available_vars = 0..;
 
-    assign_structure_el_vars(
-        ctx,
-        rule,
-        StructureId(0),
-        bridge,
-        &mut el_vars,
-        &mut available_vars,
-    );
+    assign_structure_el_vars(ctx, rule, StructureId(0), &mut el_vars, &mut available_vars);
 
     for morphism in morphisms {
         let src_st = &rule.cat.structures[morphism.src.0];
@@ -385,14 +117,7 @@ fn assign_el_vars(
             }
         }
 
-        assign_structure_el_vars(
-            ctx,
-            rule,
-            morphism.tgt,
-            bridge,
-            &mut el_vars,
-            &mut available_vars,
-        );
+        assign_structure_el_vars(ctx, rule, morphism.tgt, &mut el_vars, &mut available_vars);
     }
 
     el_vars
@@ -402,7 +127,6 @@ fn assign_structure_el_vars(
     ctx: &FlattenCtx<'_>,
     rule: &RuleStructures,
     structure: StructureId,
-    bridge: &EqlogBridge<'_>,
     el_vars: &mut BTreeMap<FlatElKey, FlatVar>,
     available_vars: &mut impl Iterator<Item = usize>,
 ) {
@@ -410,7 +134,7 @@ fn assign_structure_el_vars(
     for &el in st.els.keys() {
         let el = st.unification.root_const(el);
         el_vars.entry((structure, el)).or_insert_with(|| {
-            let typ = bridge.typ(concrete_type_of(rule, structure, el).typ);
+            let typ = concrete_type_of(rule, structure, el).typ;
             let base_name = el_base_name(ctx, rule, structure, el);
             let name: Arc<str> = format!("{base_name}{}", available_vars.next().unwrap()).into();
             FlatVar { name, typ }
@@ -470,19 +194,19 @@ fn concrete_type_of(rule: &RuleStructures, structure: StructureId, el: ElId) -> 
 fn flat_rel_apps(
     rule: &RuleStructures,
     structure: StructureId,
-    bridge: &EqlogBridge<'_>,
+    signature: &Signature,
 ) -> BTreeSet<FlatRelApp> {
     let st = &rule.cat.structures[structure.0];
     let mut apps = BTreeSet::new();
 
     for app in &st.pred_apps {
-        let rel = bridge.pred_rel(app.pred);
+        let rel = FlatRel::Pred(app.pred);
         let args = flat_pred_args(st, app);
         apps.insert(FlatRelApp { rel, args });
     }
 
     for (app, &result) in &st.func_apps {
-        let rel = bridge.func_rel(app.func);
+        let rel = FlatRel::Func(app.func);
         let mut args = flat_func_domain_args(st, app);
         args.push(flat_el(st, result));
         apps.insert(FlatRelApp { rel, args });
@@ -496,7 +220,7 @@ fn flat_rel_apps(
             // through model-member relations.
             continue;
         };
-        let rel = bridge.model_member_rel(concrete_type.typ);
+        let rel = FlatRel::ModelMember(concrete_type.typ);
         let args = vec![flat_el(st, parent), el];
         apps.insert(FlatRelApp { rel, args });
     }
@@ -504,8 +228,8 @@ fn flat_rel_apps(
     for app in &apps {
         assert_eq!(
             app.args.len(),
-            app.rel_arity_len(bridge),
-            "lowered relation app should match Eqlog metadata arity"
+            app.rel_arity_len(signature),
+            "lowered relation app should match signature arity"
         );
     }
 
@@ -513,15 +237,8 @@ fn flat_rel_apps(
 }
 
 impl FlatRelApp {
-    fn rel_arity_len(&self, bridge: &EqlogBridge<'_>) -> usize {
-        crate::eqlog_util::type_list_vec(
-            bridge
-                .eqlog
-                .arity(self.rel)
-                .expect("Eqlog metadata should define relation arity"),
-            bridge.eqlog,
-        )
-        .len()
+    fn rel_arity_len(&self, signature: &Signature) -> usize {
+        self.rel.arity(signature).len()
     }
 }
 
@@ -574,9 +291,9 @@ fn image_els(rule: &RuleStructures, morphism: &RuleMorphism) -> BTreeSet<ElId> {
 fn mapped_rel_apps(
     rule: &RuleStructures,
     morphism: &RuleMorphism,
-    bridge: &EqlogBridge<'_>,
+    signature: &Signature,
 ) -> BTreeSet<FlatRelApp> {
-    let src_apps = flat_rel_apps(rule, morphism.src, bridge);
+    let src_apps = flat_rel_apps(rule, morphism.src, signature);
     let src_st = &rule.cat.structures[morphism.src.0];
     let tgt_st = &rule.cat.structures[morphism.tgt.0];
     let map = &rule.cat.morphisms[&(morphism.src, morphism.tgt)];
@@ -626,9 +343,9 @@ fn kernel_pairs(rule: &RuleStructures, morphism: &RuleMorphism) -> Vec<(ElId, El
 
 /// Returns if statements matching the delta of `morphism` with arbitrary data.
 fn flatten_if_arbitrary(
+    signature: &Signature,
     rule: &RuleStructures,
     morphism: &RuleMorphism,
-    bridge: &EqlogBridge<'_>,
     el_vars: &BTreeMap<FlatElKey, FlatVar>,
 ) -> Vec<FlatIfStmt> {
     let mut stmts = Vec::new();
@@ -646,8 +363,8 @@ fn flatten_if_arbitrary(
         });
     }
 
-    let cod_apps = flat_rel_apps(rule, tgt, bridge);
-    let img_apps = mapped_rel_apps(rule, morphism, bridge);
+    let cod_apps = flat_rel_apps(rule, tgt, signature);
+    let img_apps = mapped_rel_apps(rule, morphism, signature);
     let cod_st = &rule.cat.structures[tgt.0];
     let constrained = constrained_els(cod_st);
 
@@ -655,7 +372,7 @@ fn flatten_if_arbitrary(
         if img_apps.contains(&app) {
             continue;
         }
-        if bridge.is_model_member_rel(app.rel) {
+        if app.rel.is_model_member() {
             assert_eq!(app.args.len(), 2, "model member predicates have arity 2");
             if constrained.contains(&app.args[1]) {
                 continue;
@@ -668,7 +385,7 @@ fn flatten_if_arbitrary(
             .map(|&el| el_vars[&(tgt, el)].clone())
             .collect();
         stmts.push(FlatIfStmt {
-            rel: FlatInRel::EqlogRel(app.rel),
+            rel: FlatInRel::Rel(app.rel),
             args,
             age: QueryAge::All,
         });
@@ -687,7 +404,7 @@ fn flatten_if_arbitrary(
         }
 
         stmts.push(FlatIfStmt {
-            rel: FlatInRel::TypeSet(bridge.typ(concrete_type.typ)),
+            rel: FlatInRel::TypeSet(concrete_type.typ),
             args: vec![el_vars[&(tgt, el)].clone()],
             age: QueryAge::All,
         });
@@ -698,9 +415,9 @@ fn flatten_if_arbitrary(
 
 /// Emits a then block corresponding to the lift against a surjective morphism.
 fn flatten_surj_then(
+    signature: &Signature,
     rule: &RuleStructures,
     morphism: &RuleMorphism,
-    bridge: &EqlogBridge<'_>,
     el_vars: &BTreeMap<FlatElKey, FlatVar>,
 ) -> Vec<FlatThenStmt> {
     let mut stmts = Vec::new();
@@ -717,8 +434,8 @@ fn flatten_surj_then(
         });
     }
 
-    let img_apps = mapped_rel_apps(rule, morphism, bridge);
-    for app in flat_rel_apps(rule, tgt, bridge) {
+    let img_apps = mapped_rel_apps(rule, morphism, signature);
+    for app in flat_rel_apps(rule, tgt, signature) {
         if img_apps.contains(&app) {
             continue;
         }
@@ -728,7 +445,7 @@ fn flatten_surj_then(
             .map(|&el| el_vars[&(tgt, el)].clone())
             .collect();
         stmts.push(FlatThenStmt {
-            rel: FlatOutRel::EqlogRel(app.rel),
+            rel: FlatOutRel::Rel(app.rel),
             args,
         });
     }
@@ -750,7 +467,6 @@ fn flatten_surj_then(
 fn flatten_non_surj_then(
     rule: &RuleStructures,
     morphism: &RuleMorphism,
-    bridge: &EqlogBridge<'_>,
     el_vars: &BTreeMap<FlatElKey, FlatVar>,
 ) -> Option<(FlatIfStmt, FlatThenStmt)> {
     let tgt = morphism.tgt;
@@ -781,9 +497,6 @@ fn flatten_non_surj_then(
         "Arguments to obtain new element should be in image"
     );
 
-    let func = bridge.func(app.func);
-    let rel = bridge.func_rel(app.func);
-
     let flat_func_args: Vec<FlatVar> = flat_func_args
         .iter()
         .map(|&el| el_vars[&(tgt, el)].clone())
@@ -791,11 +504,11 @@ fn flatten_non_surj_then(
     let result_var = el_vars[&(tgt, new_el)].clone();
 
     let then_stmt = FlatThenStmt {
-        rel: FlatOutRel::FuncDomain(func),
+        rel: FlatOutRel::FuncDomain(app.func),
         args: flat_func_args.clone(),
     };
     let if_stmt = FlatIfStmt {
-        rel: FlatInRel::EqlogRel(rel),
+        rel: FlatInRel::Rel(FlatRel::Func(app.func)),
         args: flat_func_args.into_iter().chain([result_var]).collect(),
         age: QueryAge::All,
     };
@@ -804,22 +517,22 @@ fn flatten_non_surj_then(
 }
 
 fn initial_matching_stmts(
+    signature: &Signature,
     rule: &RuleStructures,
-    bridge: &EqlogBridge<'_>,
     el_vars: &BTreeMap<FlatElKey, FlatVar>,
 ) -> Vec<FlatIfStmt> {
     let structure = StructureId(0);
     let st = &rule.cat.structures[structure.0];
     let mut stmts = Vec::new();
 
-    for app in flat_rel_apps(rule, structure, bridge) {
+    for app in flat_rel_apps(rule, structure, signature) {
         let args = app
             .args
             .iter()
             .map(|&el| el_vars[&(structure, el)].clone())
             .collect();
         stmts.push(FlatIfStmt {
-            rel: FlatInRel::EqlogRel(app.rel),
+            rel: FlatInRel::Rel(app.rel),
             args,
             age: QueryAge::All,
         });
@@ -832,7 +545,7 @@ fn initial_matching_stmts(
             continue;
         }
         stmts.push(FlatIfStmt {
-            rel: FlatInRel::TypeSet(bridge.typ(concrete_type.typ)),
+            rel: FlatInRel::TypeSet(concrete_type.typ),
             args: vec![el_vars[&(structure, el)].clone()],
             age: QueryAge::All,
         });
@@ -847,7 +560,6 @@ fn flatten_rule(
     rule_id: RuleDeclId,
     anonymous_index: usize,
     rule: &RuleStructures,
-    bridge: &EqlogBridge<'_>,
 ) -> FlatRuleGroup {
     let name = ctx
         .ast
@@ -857,13 +569,13 @@ fn flatten_rule(
         .unwrap_or_else(|| format!("anonymous_rule_{anonymous_index}"));
 
     let morphisms = flatten_morphisms(rule);
-    let el_vars = assign_el_vars(ctx, rule, &morphisms, bridge);
+    let el_vars = assign_el_vars(ctx, rule, &morphisms);
 
     let mut rules: Vec<FlatRule> = Vec::new();
     let mut matching_stmts: BTreeMap<StructureId, Vec<FlatIfStmt>> = BTreeMap::new();
     matching_stmts.insert(
         StructureId(0),
-        initial_matching_stmts(rule, bridge, &el_vars),
+        initial_matching_stmts(ctx.signature, rule, &el_vars),
     );
 
     for morphism in &morphisms {
@@ -876,11 +588,16 @@ fn flatten_rule(
             MorphismKind::If => dom_matching_stmts
                 .iter()
                 .cloned()
-                .chain(flatten_if_arbitrary(rule, morphism, bridge, &el_vars))
+                .chain(flatten_if_arbitrary(
+                    ctx.signature,
+                    rule,
+                    morphism,
+                    &el_vars,
+                ))
                 .collect(),
             MorphismKind::SurjThen => {
                 let rule_name = format!("{name}_{}", rules.len());
-                let conclusion = flatten_surj_then(rule, morphism, bridge, &el_vars);
+                let conclusion = flatten_surj_then(ctx.signature, rule, morphism, &el_vars);
                 rules.push(FlatRule {
                     name: rule_name,
                     premise: dom_matching_stmts.clone(),
@@ -891,8 +608,7 @@ fn flatten_rule(
             MorphismKind::NonSurjThen => {
                 let rule_name = format!("{name}_{}", rules.len());
                 let mut cod_matching_stmts = dom_matching_stmts.clone();
-                if let Some((if_stmt, then_stmt)) =
-                    flatten_non_surj_then(rule, morphism, bridge, &el_vars)
+                if let Some((if_stmt, then_stmt)) = flatten_non_surj_then(rule, morphism, &el_vars)
                 {
                     rules.push(FlatRule {
                         name: rule_name,
@@ -917,18 +633,14 @@ fn flatten_rule(
 }
 
 pub fn flatten(ctx: &FlattenCtx<'_>) -> Vec<FlatRuleGroup> {
-    let bridge = EqlogBridge::new(ctx);
     let mut groups: Vec<FlatRuleGroup> = Vec::new();
 
     groups.extend(ctx.signature.iter_funcs().map(|func_id| {
-        let func = bridge.func(func_id);
-        let rel = bridge.func_rel(func_id);
-        let rel_snake = display_rel(rel, ctx.eqlog, ctx.identifiers)
-            .to_string()
-            .to_case(Snake);
-        let rule = semi_naive_functionality(func, ctx.eqlog);
+        let rel_snake = func_base_name(ctx, func_id).to_case(Snake);
+        let rule_name = format!("functionality_{rel_snake}");
+        let rule = semi_naive_functionality(func_id, ctx.signature, rule_name.clone());
         FlatRuleGroup {
-            name: format!("functionality_{rel_snake}"),
+            name: rule_name,
             rules: vec![rule],
         }
     }));
@@ -944,11 +656,45 @@ pub fn flatten(ctx: &FlattenCtx<'_>) -> Vec<FlatRuleGroup> {
                     .rule_structures
                     .get(&rule_id)
                     .expect("rule structure should be built for every rule");
-                postprocess_rule_group(flatten_rule(ctx, rule_id, anonymous_index, rule, &bridge))
+                postprocess_rule_group(flatten_rule(ctx, rule_id, anonymous_index, rule))
             }),
     );
 
     groups
+}
+
+fn func_base_name(ctx: &FlattenCtx<'_>, func: FuncId) -> String {
+    if let Some((decl, _)) = ctx
+        .signature
+        .iter_func_decls()
+        .find(|(_, func0)| *func0 == func)
+    {
+        return ctx.ast.func_decl(decl).name.clone();
+    }
+    if let Some((decl, _)) = ctx
+        .signature
+        .iter_ctor_decls()
+        .find(|(_, func0)| *func0 == func)
+    {
+        return ctx.ast.ctor_decl(decl).name.clone();
+    }
+    if let Some((decl, ids)) = ctx
+        .signature
+        .iter_model_decls()
+        .find(|(_, ids)| ids.dom == func || ids.cod == func)
+    {
+        let model_name = &ctx.ast.model_decl(decl).name;
+        let suffix = if ids.dom == func { "dom" } else { "cod" };
+        return format!("{model_name}_mor_{suffix}");
+    }
+    if let Some((member_type, _)) = ctx
+        .signature
+        .iter_mor_app_funcs()
+        .find(|(_, func0)| *func0 == func)
+    {
+        return format!("{}_mor_app", ctx.signature.type_name(ctx.ast, member_type));
+    }
+    format!("func_{}", func.as_usize())
 }
 
 fn collect_rule_ids(ast: &Ast, decls: &[DeclId], out: &mut Vec<RuleDeclId>) {

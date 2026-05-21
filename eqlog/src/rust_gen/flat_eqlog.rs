@@ -1,41 +1,30 @@
-use std::{collections::BTreeMap, fmt::Display};
+use std::fmt::Display;
 
-use eqlog_eqlog::{Eqlog, Ident};
 use indoc::writedoc;
 use itertools::Itertools;
 
 use crate::{
     flat_eqlog::{FlatIfStmt, FlatOutRel, FlatRule, FlatThenStmt, QueryAge},
     fmt_util::FmtFn,
-    rust_gen::display_type,
+    rust_gen::{display_rel, display_type, RustGenCtx},
 };
 
-fn display_flat_if_stmt<'a>(
-    stmt: &'a FlatIfStmt,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
+fn display_flat_if_stmt<'a>(stmt: &'a FlatIfStmt, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
     FmtFn(move |f| {
         let rel_name = match &stmt.rel {
-            crate::flat_eqlog::FlatInRel::EqlogRel(rel) => {
-                crate::rust_gen::display_rel(*rel, eqlog, identifiers).to_string()
-            }
-            crate::flat_eqlog::FlatInRel::EqlogRelWithDiagonals { rel, equalities } => {
+            crate::flat_eqlog::FlatInRel::Rel(rel) => display_rel(*rel, ctx).to_string(),
+            crate::flat_eqlog::FlatInRel::RelWithDiagonals { rel, equalities } => {
                 format!(
                     "{}[diag={}]",
-                    crate::rust_gen::display_rel(*rel, eqlog, identifiers),
+                    display_rel(*rel, ctx),
                     equalities.iter().format(",")
                 )
             }
             crate::flat_eqlog::FlatInRel::Equality(typ) => {
-                format!(
-                    "{}=={}",
-                    display_type(*typ, eqlog, identifiers),
-                    display_type(*typ, eqlog, identifiers)
-                )
+                format!("{}=={}", display_type(*typ, ctx), display_type(*typ, ctx))
             }
             crate::flat_eqlog::FlatInRel::TypeSet(typ) => {
-                format!("{}Set", display_type(*typ, eqlog, identifiers))
+                format!("{}Set", display_type(*typ, ctx))
             }
         };
 
@@ -52,26 +41,18 @@ fn display_flat_if_stmt<'a>(
 
 fn display_flat_then_stmt<'a>(
     stmt: &'a FlatThenStmt,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
+    ctx: &'a RustGenCtx<'a>,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let rel_name = match stmt.rel {
-            FlatOutRel::EqlogRel(rel) => {
-                crate::rust_gen::display_rel(rel, eqlog, identifiers).to_string()
-            }
+            FlatOutRel::Rel(rel) => display_rel(rel, ctx).to_string(),
             FlatOutRel::Equality(typ) => {
-                format!(
-                    "{}=={}",
-                    display_type(typ, eqlog, identifiers),
-                    display_type(typ, eqlog, identifiers)
-                )
+                format!("{}=={}", display_type(typ, ctx), display_type(typ, ctx))
             }
             FlatOutRel::FuncDomain(func) => {
-                let rel = eqlog.func_rel(func).unwrap();
                 format!(
                     "{}Def",
-                    crate::rust_gen::display_rel(rel, eqlog, identifiers)
+                    display_rel(crate::flat_eqlog::FlatRel::Func(func), ctx)
                 )
             }
         };
@@ -87,18 +68,17 @@ pub fn display_flat_rule<'a>(
         premise,
         conclusion,
     }: &'a FlatRule,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
+    ctx: &'a RustGenCtx<'a>,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let premise = premise
             .iter()
-            .map(move |stmt| display_flat_if_stmt(stmt, eqlog, identifiers))
+            .map(move |stmt| display_flat_if_stmt(stmt, ctx))
             .format("\n");
 
         let conclusion = conclusion
             .iter()
-            .map(move |stmt| display_flat_then_stmt(stmt, eqlog, identifiers))
+            .map(move |stmt| display_flat_then_stmt(stmt, ctx))
             .format("\n");
 
         writedoc! {f, "

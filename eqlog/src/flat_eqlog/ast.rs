@@ -1,28 +1,87 @@
-use crate::eqlog_util::*;
+use crate::algebra::signature::{FuncId, PredId, Signature, TypeId};
 use std::sync::Arc;
 
-use eqlog_eqlog::*;
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub enum FlatRel {
+    Pred(PredId),
+    Func(FuncId),
+    ModelMember(TypeId),
+}
+
+impl FlatRel {
+    pub fn arity(&self, signature: &Signature) -> Vec<TypeId> {
+        match self {
+            FlatRel::Pred(pred) => {
+                let pred = signature.pred(*pred);
+                flat_args(&pred.parents, &pred.arity)
+            }
+            FlatRel::Func(func) => {
+                let func = signature.func(*func);
+                let mut arity = flat_args(&func.parents, &func.domain);
+                arity.push(func.codomain);
+                arity
+            }
+            FlatRel::ModelMember(typ) => {
+                let parent = signature
+                    .type_(*typ)
+                    .parents
+                    .last()
+                    .copied()
+                    .expect("model-member relation requires a member type");
+                vec![parent, *typ]
+            }
+        }
+    }
+
+    pub fn parent_model_type(&self, signature: &Signature) -> Option<TypeId> {
+        match self {
+            FlatRel::Pred(pred) => signature.pred(*pred).parents.last().copied(),
+            FlatRel::Func(func) => signature.func(*func).parents.last().copied(),
+            FlatRel::ModelMember(member_type) => {
+                signature.type_(*member_type).parents.last().copied()
+            }
+        }
+    }
+
+    pub fn is_model_member(self) -> bool {
+        matches!(self, FlatRel::ModelMember(_))
+    }
+}
+
+pub fn flat_domain(func: FuncId, signature: &Signature) -> Vec<TypeId> {
+    let func = signature.func(func);
+    flat_args(&func.parents, &func.domain)
+}
+
+fn flat_args(parents: &[TypeId], args: &[TypeId]) -> Vec<TypeId> {
+    let mut flat_args = Vec::with_capacity(args.len() + usize::from(!parents.is_empty()));
+    if let Some(&parent) = parents.last() {
+        flat_args.push(parent);
+    }
+    flat_args.extend(args.iter().copied());
+    flat_args
+}
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub enum FlatInRel {
-    EqlogRel(Rel),
-    EqlogRelWithDiagonals {
-        rel: Rel,
-        // We must have: equalities.len() == rel.flat_arity().len()
+    Rel(FlatRel),
+    RelWithDiagonals {
+        rel: FlatRel,
+        // We must have: equalities.len() == relation arity.
         // equalities[i] = j if j is the smallest index such that rel[i] == rel[j]
         // for this diagonal.
         equalities: Arc<[usize]>,
     },
-    Equality(Type),
-    TypeSet(Type),
+    Equality(TypeId),
+    TypeSet(TypeId),
 }
 
 impl FlatInRel {
-    pub fn arity(&self, eqlog: &Eqlog) -> Vec<Type> {
+    pub fn arity(&self, signature: &Signature) -> Vec<TypeId> {
         match self {
-            FlatInRel::EqlogRel(rel) => type_list_vec(eqlog.arity(*rel).unwrap(), eqlog),
-            FlatInRel::EqlogRelWithDiagonals { rel, equalities } => {
-                let arity = type_list_vec(eqlog.arity(*rel).unwrap(), eqlog);
+            FlatInRel::Rel(rel) => rel.arity(signature),
+            FlatInRel::RelWithDiagonals { rel, equalities } => {
+                let arity = rel.arity(signature);
                 assert_eq!(equalities.len(), arity.len());
 
                 arity
@@ -39,46 +98,31 @@ impl FlatInRel {
         }
     }
 
-    pub fn parent_model_type(&self, eqlog: &Eqlog) -> Option<Type> {
-        let eqlog_rel = match self {
-            FlatInRel::EqlogRel(rel) => *rel,
-            FlatInRel::EqlogRelWithDiagonals { rel, equalities: _ } => *rel,
-            FlatInRel::Equality(_) => {
-                return None;
+    pub fn parent_model_type(&self, signature: &Signature) -> Option<TypeId> {
+        match self {
+            FlatInRel::Rel(rel) | FlatInRel::RelWithDiagonals { rel, .. } => {
+                rel.parent_model_type(signature)
             }
-            FlatInRel::TypeSet(_) => {
-                return None;
-            }
-        };
-
-        let parent_symbol_scope: SymbolScope =
-            eqlog.rel_definition_symbol_scope(eqlog_rel).unwrap();
-        let parent_model_type: Type = match eqlog.symbol_scope_model(parent_symbol_scope) {
-            None => {
-                return None;
-            }
-            Some(parent_model_type) => parent_model_type,
-        };
-
-        Some(parent_model_type)
+            FlatInRel::Equality(_) | FlatInRel::TypeSet(_) => None,
+        }
     }
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub enum FlatOutRel {
-    EqlogRel(Rel),
-    Equality(Type),
-    FuncDomain(Func),
+    Rel(FlatRel),
+    Equality(TypeId),
+    FuncDomain(FuncId),
 }
 
 impl FlatOutRel {
-    pub fn arity(&self, eqlog: &Eqlog) -> Vec<Type> {
+    pub fn arity(&self, signature: &Signature) -> Vec<TypeId> {
         match self {
-            FlatOutRel::EqlogRel(rel) => type_list_vec(eqlog.arity(*rel).unwrap(), eqlog),
+            FlatOutRel::Rel(rel) => rel.arity(signature),
             FlatOutRel::Equality(typ) => {
                 vec![*typ, *typ]
             }
-            FlatOutRel::FuncDomain(func) => type_list_vec(eqlog.flat_domain(*func).unwrap(), eqlog),
+            FlatOutRel::FuncDomain(func) => flat_domain(*func, signature),
         }
     }
 }
@@ -86,7 +130,7 @@ impl FlatOutRel {
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct FlatVar {
     pub name: Arc<str>,
-    pub typ: Type,
+    pub typ: TypeId,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
