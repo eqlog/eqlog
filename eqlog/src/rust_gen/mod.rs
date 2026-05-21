@@ -1,7 +1,9 @@
+mod eqlog_ids;
 mod flat_eqlog;
 mod rule;
 mod types;
 
+pub(crate) use eqlog_ids::EqlogIds;
 pub use rule::*;
 pub use types::*;
 
@@ -278,14 +280,14 @@ fn display_type_fields<'a>(
 
 fn display_is_dirty_fn<'a>(
     eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
     index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let sets_dirty = eqlog
-            .iter_rel()
-            .map(FlatInRel::EqlogRel)
-            .chain(eqlog.iter_type().map(FlatInRel::TypeSet))
+        let sets_dirty = iter_flat_rels(eqlog_ids.signature())
+            .map(FlatInRel::Rel)
+            .chain(eqlog_ids.signature().iter_types().map(FlatInRel::TypeSet))
             .map(|rel: FlatInRel| {
                 FmtFn(move |f| {
                     let query_spec = QuerySpec::all_new();
@@ -302,7 +304,7 @@ fn display_is_dirty_fn<'a>(
                     );
 
                     let field_name =
-                        display_own_index_field_name(&rel, &index[0], eqlog, identifiers);
+                        display_own_index_field_name(&rel, &index[0], eqlog_ids, identifiers);
                     write!(f, "|| !self.{field_name}.is_empty()")
                 })
             })
@@ -333,6 +335,7 @@ fn display_is_dirty_fn<'a>(
 fn display_pub_predicate_holds_fn<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
     index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
@@ -366,8 +369,10 @@ fn display_pub_predicate_holds_fn<'a>(
         let rel_args_doc =
             (0..arity_types.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
 
-        let rel = FlatInRel::EqlogRel(rel);
-        let query = QuerySpec::one(rel.clone(), eqlog);
+        let rel = eqlog_ids
+            .flat_in_rel(rel)
+            .expect("public relation should have a local flat relation");
+        let query = QuerySpec::one(rel.clone(), eqlog_ids.signature());
         let indices = index_selection
             .queries
             .get(&(rel.clone(), query))
@@ -378,7 +383,7 @@ fn display_pub_predicate_holds_fn<'a>(
         let checks = indices
             .into_iter()
             .map(|index_spec| {
-                let index_expr = display_index_expr(rel, &index_spec, eqlog, identifiers);
+                let index_expr = display_index_expr(rel, &index_spec, eqlog_ids, identifiers);
                 let IndexSpec { order, age: _ } = index_spec;
                 let row_args = order
                     .iter()
@@ -404,6 +409,7 @@ fn display_pub_predicate_holds_fn<'a>(
 fn display_pub_function_eval_fn<'a>(
     func: Func,
     eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
     index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
@@ -457,8 +463,11 @@ fn display_pub_function_eval_fn<'a>(
             .format(", ")
             .to_string();
 
-        let query_spec = QuerySpec::eval_func(func, eqlog);
-        let flat_in_rel = FlatInRel::EqlogRel(rel);
+        let func_id = eqlog_ids
+            .func_id(func)
+            .expect("public function should have a local function id");
+        let query_spec = QuerySpec::eval_func(func_id, eqlog_ids.signature());
+        let flat_in_rel = FlatInRel::Rel(FlatRel::Func(func_id));
 
         let indices = index_selection
             .queries
@@ -471,7 +480,8 @@ fn display_pub_function_eval_fn<'a>(
             .into_iter()
             .map(move |index| {
                 FmtFn(move |f| {
-                    let index_expr = display_index_expr(&flat_in_rel, &index, eqlog, identifiers);
+                    let index_expr =
+                        display_index_expr(&flat_in_rel, &index, eqlog_ids, identifiers);
                     assert_eq!(*index.order.last().unwrap(), flat_dom_len);
 
                     let gets = index.order[0..index.order.len() - 1]
@@ -513,6 +523,7 @@ fn display_pub_function_eval_fn<'a>(
 fn display_pub_iter_fn<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
     index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
@@ -572,7 +583,9 @@ fn display_pub_iter_fn<'a>(
             }
         };
 
-        let flat_in_rel = FlatInRel::EqlogRel(rel);
+        let flat_in_rel = eqlog_ids
+            .flat_in_rel(rel)
+            .expect("public relation should have a local flat relation");
         let query_spec = QuerySpec::all();
         let indices = index_selection
             .queries
@@ -587,7 +600,8 @@ fn display_pub_iter_fn<'a>(
                 let flat_in_rel = flat_in_rel.clone();
                 FmtFn(move |f| {
                     let flat_in_rel = flat_in_rel.clone();
-                    let index_expr = display_index_expr(&flat_in_rel, &index, eqlog, identifiers);
+                    let index_expr =
+                        display_index_expr(&flat_in_rel, &index, eqlog_ids, identifiers);
                     let row_unpack_args = index
                         .order
                         .iter()
@@ -646,10 +660,13 @@ fn display_insert_row_block<'a>(
     args: &'a [ElVar],
     age: IndexAge,
     rel: Rel,
-    eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
     index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
+    let rel = eqlog_ids
+        .rel_id(rel)
+        .expect("inserted relation should have a local flat relation");
     index_selection
         .indices
         .iter()
@@ -664,8 +681,8 @@ fn display_insert_row_block<'a>(
             }
 
             match flat_in_rel {
-                FlatInRel::EqlogRel(r0) => *r0 == rel,
-                FlatInRel::EqlogRelWithDiagonals {
+                FlatInRel::Rel(r0) => *r0 == rel,
+                FlatInRel::RelWithDiagonals {
                     rel: r0,
                     equalities: _,
                 } => *r0 == rel,
@@ -674,8 +691,9 @@ fn display_insert_row_block<'a>(
         })
         .map(move |(flat_in_rel, index)| {
             FmtFn(move |f| {
-                let index_name = display_index_field_name(&flat_in_rel, &index, eqlog, identifiers);
-                if let FlatInRel::EqlogRelWithDiagonals { rel: _, equalities } = &flat_in_rel {
+                let index_name =
+                    display_index_field_name(&flat_in_rel, &index, eqlog_ids, identifiers);
+                if let FlatInRel::RelWithDiagonals { rel: _, equalities } = &flat_in_rel {
                     let checks = equalities
                         .iter()
                         .copied()
@@ -702,7 +720,10 @@ fn display_insert_row_block<'a>(
                         .format(", ")
                         .to_string();
 
-                    if flat_in_rel.parent_model_type(eqlog).is_some() {
+                    if flat_in_rel
+                        .parent_model_type(eqlog_ids.signature())
+                        .is_some()
+                    {
                         writedoc! {f, "
                             if {checks} {{
                             self.{index_name}_own.insert([{args}]);
@@ -724,7 +745,10 @@ fn display_insert_row_block<'a>(
                         .map(|i| args[*i].clone())
                         .format(", ")
                         .to_string();
-                    if flat_in_rel.parent_model_type(eqlog).is_some() {
+                    if flat_in_rel
+                        .parent_model_type(eqlog_ids.signature())
+                        .is_some()
+                    {
                         writedoc! {f, "
                             self.{index_name}_own.insert([{args}]);
                             self.{index_name}_all.insert([{args}]);
@@ -743,6 +767,7 @@ fn display_insert_row_block<'a>(
 fn display_pub_insert_relation<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
     index_selection: &'a IndexSelection,
     is_function: bool,
@@ -834,13 +859,15 @@ fn display_pub_insert_relation<'a>(
             rel_args,
             IndexAge::New,
             rel,
-            eqlog,
+            eqlog_ids,
             identifiers,
             index_selection,
         );
 
-        let flat_rel = FlatInRel::EqlogRel(rel);
-        let contains_query = QuerySpec::one(flat_rel.clone(), eqlog);
+        let flat_rel = eqlog_ids
+            .flat_in_rel(rel)
+            .expect("inserted relation should have a local flat relation");
+        let contains_query = QuerySpec::one(flat_rel.clone(), eqlog_ids.signature());
         let contains_indices = index_selection
             .queries
             .get(&(flat_rel.clone(), contains_query))
@@ -851,7 +878,7 @@ fn display_pub_insert_relation<'a>(
         let contains_checks = contains_indices
             .into_iter()
             .map(|index_spec| {
-                let index_expr = display_index_expr(flat_rel, &index_spec, eqlog, identifiers);
+                let index_expr = display_index_expr(flat_rel, &index_spec, eqlog_ids, identifiers);
                 let IndexSpec { order, age: _ } = index_spec;
                 let row_args = order.iter().map(|i| rel_args[*i].clone()).format(", ");
                 FmtFn(move |f| {
@@ -923,6 +950,7 @@ fn display_pub_insert_relation<'a>(
 fn display_new_element_fn_internal<'a>(
     typ: Type,
     eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
     index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
@@ -963,7 +991,9 @@ fn display_new_element_fn_internal<'a>(
             write!(f, "self.insert_{parent_pred}(parent, el.into());")
         });
 
-        let type_set_rel = FlatInRel::TypeSet(typ);
+        let type_set_rel = eqlog_ids
+            .type_set(typ)
+            .expect("new element type should have a local type id");
         let new_index = index_selection
             .indices
             .get(&type_set_rel)
@@ -974,7 +1004,7 @@ fn display_new_element_fn_internal<'a>(
             .expect("should have exactly one new index for type set");
 
         let new_index_field =
-            display_index_field_name(&type_set_rel, new_index, eqlog, identifiers);
+            display_index_field_name(&type_set_rel, new_index, eqlog_ids, identifiers);
 
         writedoc! {f, "
             /// Adjoins a new element of type [{type_camel}].
@@ -1214,6 +1244,7 @@ fn display_enum_cases_fn<'a>(
 fn display_equate_elements<'a>(
     typ: Type,
     eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
     index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
@@ -1221,7 +1252,9 @@ fn display_equate_elements<'a>(
         let type_camel = format!("{}", display_type(typ, eqlog, identifiers)).to_case(UpperCamel);
         let type_snake = type_camel.to_case(Snake);
 
-        let type_set_rel = FlatInRel::TypeSet(typ);
+        let type_set_rel = eqlog_ids
+            .type_set(typ)
+            .expect("equated type should have a local type id");
         let indices = index_selection
             .indices
             .get(&type_set_rel)
@@ -1238,8 +1271,8 @@ fn display_equate_elements<'a>(
             .exactly_one()
             .expect("should have exactly one old index for type set");
 
-        let index_new = display_index_field_name(&type_set_rel, index_new, eqlog, identifiers);
-        let index_old = display_index_field_name(&type_set_rel, index_old, eqlog, identifiers);
+        let index_new = display_index_field_name(&type_set_rel, index_new, eqlog_ids, identifiers);
+        let index_old = display_index_field_name(&type_set_rel, index_old, eqlog_ids, identifiers);
 
         writedoc! {f, "
             /// Enforces the equality `lhs = rhs`.
@@ -1317,6 +1350,7 @@ fn display_are_equal_fn<'a>(
 fn display_iter_type_fn<'a>(
     typ: Type,
     eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
     index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
@@ -1325,7 +1359,9 @@ fn display_iter_type_fn<'a>(
             .to_string()
             .to_case(Snake);
         let type_camel = type_snake.to_case(UpperCamel);
-        let rel = FlatInRel::TypeSet(typ);
+        let rel = eqlog_ids
+            .type_set(typ)
+            .expect("iterated type should have a local type id");
         let query = QuerySpec::all();
         let indices = index_selection.queries.get(&(rel.clone(), query)).unwrap();
 
@@ -1336,7 +1372,7 @@ fn display_iter_type_fn<'a>(
 
                 let rel = rel.clone();
                 FmtFn(move |f| {
-                    let index_field = display_index_field_name(&rel, index, eqlog, identifiers);
+                    let index_field = display_index_field_name(&rel, index, eqlog_ids, identifiers);
                     writedoc! {f, "
                         .chain(self.{index_field}.iter())
                     "}
@@ -1361,13 +1397,13 @@ fn display_remove_from_index_expr<'a>(
     rel: FlatInRel,
     index: IndexSpec,
     row_args: &'a [ElVar],
-    eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let equalities = match &rel {
-            FlatInRel::EqlogRel(_) => None,
-            FlatInRel::EqlogRelWithDiagonals { rel: _, equalities } => Some(equalities),
+            FlatInRel::Rel(_) => None,
+            FlatInRel::RelWithDiagonals { rel: _, equalities } => Some(equalities),
             FlatInRel::Equality(_) | FlatInRel::TypeSet(_) => None,
         };
 
@@ -1393,7 +1429,7 @@ fn display_remove_from_index_expr<'a>(
             .map(|i| row_args[*i].clone())
             .format(", ");
 
-        let field_name = display_own_index_field_name(&rel, &index, eqlog, identifiers);
+        let field_name = display_own_index_field_name(&rel, &index, eqlog_ids, identifiers);
 
         write!(f, "self.{field_name}.remove([{permuted_row_args}])")
     })
@@ -1402,6 +1438,7 @@ fn display_remove_from_index_expr<'a>(
 fn display_canonicalize_rel_block<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
     index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
@@ -1458,16 +1495,19 @@ fn display_canonicalize_rel_block<'a>(
                 })
                 .format("\n");
 
+        let flat_rel = eqlog_ids
+            .flat_in_rel(rel)
+            .expect("canonicalized relation should have a local flat relation");
         let primary_new_indices = index_selection
             .queries
-            .get(&(FlatInRel::EqlogRel(rel), QuerySpec::all_new()))
+            .get(&(flat_rel.clone(), QuerySpec::all_new()))
             .unwrap();
         assert_eq!(primary_new_indices.len(), 1);
         let primary_new_index: IndexSpec = primary_new_indices[0].clone();
 
         let primary_old_indices = index_selection
             .queries
-            .get(&(FlatInRel::EqlogRel(rel), QuerySpec::all_old()))
+            .get(&(flat_rel.clone(), QuerySpec::all_old()))
             .unwrap();
         assert_eq!(primary_old_indices.len(), 1);
         let primary_old_index: IndexSpec = primary_old_indices[0].clone();
@@ -1476,16 +1516,16 @@ fn display_canonicalize_rel_block<'a>(
         let mut secondary_old_indices: BTreeSet<(FlatInRel, IndexSpec)> = BTreeSet::new();
         for (r0, indices) in &index_selection.indices {
             match r0 {
-                FlatInRel::EqlogRel(rel0) => {
-                    if *rel0 != rel {
+                FlatInRel::Rel(_) => {
+                    if r0 != &flat_rel {
                         continue;
                     }
                 }
-                FlatInRel::EqlogRelWithDiagonals {
+                FlatInRel::RelWithDiagonals {
                     rel: rel0,
                     equalities: _,
                 } => {
-                    if *rel0 != rel {
+                    if Some(*rel0) != eqlog_ids.rel_id(rel) {
                         continue;
                     }
                 }
@@ -1493,7 +1533,7 @@ fn display_canonicalize_rel_block<'a>(
             };
 
             for index in indices {
-                if r0 == &FlatInRel::EqlogRel(rel) {
+                if r0 == &flat_rel {
                     if *index == primary_new_index || *index == primary_old_index {
                         continue;
                     }
@@ -1518,7 +1558,7 @@ fn display_canonicalize_rel_block<'a>(
                         r.clone(),
                         index.clone(),
                         row_args,
-                        eqlog,
+                        eqlog_ids,
                         identifiers,
                     );
                     write!(f, "{remove_from_index_expr};")
@@ -1533,7 +1573,7 @@ fn display_canonicalize_rel_block<'a>(
                         r.clone(),
                         index.clone(),
                         row_args,
-                        eqlog,
+                        eqlog_ids,
                         identifiers,
                     );
                     write!(f, "{remove_from_index_expr};")
@@ -1542,17 +1582,17 @@ fn display_canonicalize_rel_block<'a>(
             .format("\n");
 
         let remove_from_primary_new_index = display_remove_from_index_expr(
-            FlatInRel::EqlogRel(rel),
+            flat_rel.clone(),
             primary_new_index,
             row_args,
-            eqlog,
+            eqlog_ids,
             identifiers,
         );
         let remove_from_primary_old_index = display_remove_from_index_expr(
-            FlatInRel::EqlogRel(rel),
+            flat_rel,
             primary_old_index,
             row_args,
-            eqlog,
+            eqlog_ids,
             identifiers,
         );
 
@@ -1601,6 +1641,7 @@ fn display_canonicalize_rel_block<'a>(
 
 fn display_canonicalize_fn<'a>(
     eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
     index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
@@ -1609,8 +1650,13 @@ fn display_canonicalize_fn<'a>(
             .iter_rel()
             .map(|rel| {
                 FmtFn(move |f| {
-                    let block =
-                        display_canonicalize_rel_block(rel, eqlog, identifiers, index_selection);
+                    let block = display_canonicalize_rel_block(
+                        rel,
+                        eqlog,
+                        eqlog_ids,
+                        identifiers,
+                        index_selection,
+                    );
                     let rel = display_rel(rel, eqlog, identifiers);
                     writedoc! {f, "
                         // Canonicalize {rel}.
@@ -1659,24 +1705,25 @@ fn display_func_args_type<'a>(func: Func, eqlog: &'a Eqlog) -> impl 'a + Display
 
 fn display_out_set_field_name<'a>(
     rel: &'a FlatOutRel,
-    eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
+    let eqlog = eqlog_ids.eqlog();
     FmtFn(move |f| match rel {
-        FlatOutRel::EqlogRel(rel) => {
-            let rel_snake = display_rel(*rel, eqlog, identifiers)
+        FlatOutRel::Rel(rel) => {
+            let rel_snake = display_rel(eqlog_ids.flat_rel(*rel), eqlog, identifiers)
                 .to_string()
                 .to_case(Snake);
             write!(f, "new_{rel_snake}")
         }
         FlatOutRel::Equality(typ) => {
-            let type_snake = display_type(*typ, eqlog, identifiers)
+            let type_snake = display_type(eqlog_ids.typ(*typ), eqlog, identifiers)
                 .to_string()
                 .to_case(Snake);
             write!(f, "new_{type_snake}_equalities")
         }
         FlatOutRel::FuncDomain(func) => {
-            let rel = eqlog.func_rel(*func).unwrap();
+            let rel = eqlog_ids.func_rel(*func);
             let rel_snake = display_rel(rel, eqlog, identifiers)
                 .to_string()
                 .to_case(Snake);
@@ -1685,9 +1732,9 @@ fn display_out_set_field_name<'a>(
     })
 }
 
-fn display_out_set_type<'a>(rel: &'a FlatOutRel, eqlog: &'a Eqlog) -> impl 'a + Display {
+fn display_out_set_type<'a>(rel: &'a FlatOutRel, eqlog_ids: &'a EqlogIds<'a>) -> impl 'a + Display {
     FmtFn(move |f| {
-        let arity_len = rel.arity(eqlog).len();
+        let arity_len = rel.arity(eqlog_ids.signature()).len();
         write!(f, "Vec<[u32; {arity_len}]>")
     })
 }
@@ -1969,6 +2016,7 @@ fn display_var(var: ElVar) -> impl Display {
 
 fn display_move_new_to_old_fn<'a>(
     eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
     index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
@@ -1977,7 +2025,9 @@ fn display_move_new_to_old_fn<'a>(
             .iter_rel()
             .map(|rel| {
                 FmtFn(move |f| {
-                    let flat_rel = FlatInRel::EqlogRel(rel);
+                    let flat_rel = eqlog_ids
+                        .flat_in_rel(rel)
+                        .expect("relation should have a local flat relation");
                     let query_new = QuerySpec::all_new();
                     let indices_new = index_selection
                         .queries
@@ -1989,8 +2039,9 @@ fn display_move_new_to_old_fn<'a>(
                     );
                     let primary_index_new = &indices_new[0];
 
-                    let args: Vec<ElVar> =
-                        (0..flat_rel.arity(eqlog).len()).map(ElVar::from).collect();
+                    let args: Vec<ElVar> = (0..flat_rel.arity(eqlog_ids.signature()).len())
+                        .map(ElVar::from)
+                        .collect();
                     let primary_new_args = primary_index_new
                         .order
                         .iter()
@@ -2000,7 +2051,7 @@ fn display_move_new_to_old_fn<'a>(
                     let primary_new_index = display_own_index_field_name(
                         &flat_rel,
                         &primary_index_new,
-                        eqlog,
+                        eqlog_ids,
                         identifiers,
                     );
 
@@ -2008,7 +2059,7 @@ fn display_move_new_to_old_fn<'a>(
                         args.as_slice(),
                         IndexAge::Old,
                         rel,
-                        eqlog,
+                        eqlog_ids,
                         identifiers,
                         index_selection,
                     );
@@ -2030,8 +2081,20 @@ fn display_move_new_to_old_fn<'a>(
                             }
 
                             match flat_in_rel {
-                                FlatInRel::EqlogRel(rel0) => *rel0 == rel,
-                                FlatInRel::EqlogRelWithDiagonals { rel: rel0, .. } => *rel0 == rel,
+                                FlatInRel::Rel(rel0) => {
+                                    *rel0
+                                        == match &flat_rel {
+                                            FlatInRel::Rel(rel) => *rel,
+                                            _ => unreachable!("flat relation should be a relation"),
+                                        }
+                                }
+                                FlatInRel::RelWithDiagonals { rel: rel0, .. } => {
+                                    *rel0
+                                        == match &flat_rel {
+                                            FlatInRel::Rel(rel) => *rel,
+                                            _ => unreachable!("flat relation should be a relation"),
+                                        }
+                                }
                                 FlatInRel::TypeSet(_) => false,
                                 FlatInRel::Equality(_) => false,
                             }
@@ -2041,7 +2104,7 @@ fn display_move_new_to_old_fn<'a>(
                                 let field_name = display_own_index_field_name(
                                     &flat_in_rel,
                                     &index,
-                                    eqlog,
+                                    eqlog_ids,
                                     identifiers,
                                 );
                                 write!(f, "self.{field_name}.clear();")
@@ -2063,7 +2126,9 @@ fn display_move_new_to_old_fn<'a>(
             .iter_type()
             .map(|typ| {
                 FmtFn(move |f| {
-                    let flat_rel = FlatInRel::TypeSet(typ);
+                    let flat_rel = eqlog_ids
+                        .type_set(typ)
+                        .expect("type should have a local type id");
 
                     let indices = index_selection
                         .indices
@@ -2082,9 +2147,9 @@ fn display_move_new_to_old_fn<'a>(
                         .expect("should have exactly one old index for type set");
 
                     let new_index =
-                        display_index_field_name(&flat_rel, index_new, eqlog, identifiers);
+                        display_index_field_name(&flat_rel, index_new, eqlog_ids, identifiers);
                     let old_index =
-                        display_index_field_name(&flat_rel, index_old, eqlog, identifiers);
+                        display_index_field_name(&flat_rel, index_old, eqlog_ids, identifiers);
 
                     writedoc! {f, "
                         for r in self.{new_index}.iter() {{
@@ -2110,6 +2175,7 @@ fn display_move_new_to_old_fn<'a>(
 
 fn display_recompute_model_indices_fn<'a>(
     eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
     index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
@@ -2127,11 +2193,15 @@ fn display_recompute_model_indices_fn<'a>(
                     let dom_rel = eqlog.func_rel(eqlog.mor_type_dom_func(mor_type).expect("typ is model type")).unwrap();
                     let cod_rel = eqlog.func_rel(eqlog.mor_type_cod_func(mor_type).expect("typ is model type")).unwrap();
 
-                    let dom_rel =
-                        FlatInRel::EqlogRel(dom_rel);
-                    let cod_rel =
-                        FlatInRel::EqlogRel(cod_rel);
-                    let set_rel = FlatInRel::TypeSet(typ);
+                    let dom_rel = eqlog_ids
+                        .flat_in_rel(dom_rel)
+                        .expect("dom relation should have a local relation");
+                    let cod_rel = eqlog_ids
+                        .flat_in_rel(cod_rel)
+                        .expect("cod relation should have a local relation");
+                    let set_rel = eqlog_ids
+                        .type_set(typ)
+                        .expect("model type should have a local type id");
 
                     let dom_indices = index_selection
                         .indices
@@ -2149,9 +2219,9 @@ fn display_recompute_model_indices_fn<'a>(
                         .expect("should have exactly one old index with order [1, 0] for dom rel");
 
                     let dom_new_order_1_0 =
-                        display_index_field_name(&dom_rel, new_order_1_0, eqlog, identifiers);
+                        display_index_field_name(&dom_rel, new_order_1_0, eqlog_ids, identifiers);
                     let dom_old_order_1_0 =
-                        display_index_field_name(&dom_rel, old_order_1_0, eqlog, identifiers);
+                        display_index_field_name(&dom_rel, old_order_1_0, eqlog_ids, identifiers);
 
                     let cod_indices = index_selection
                         .indices
@@ -2169,9 +2239,9 @@ fn display_recompute_model_indices_fn<'a>(
                         .expect("should have exactly one old index with order [0, 1] for cod rel");
 
                     let cod_new_order_0_1 =
-                        display_index_field_name(&cod_rel, new_order_0_1, eqlog, identifiers);
+                        display_index_field_name(&cod_rel, new_order_0_1, eqlog_ids, identifiers);
                     let cod_old_order_0_1 =
-                        display_index_field_name(&cod_rel, old_order_0_1, eqlog, identifiers);
+                        display_index_field_name(&cod_rel, old_order_0_1, eqlog_ids, identifiers);
 
                     let set_indices = index_selection
                         .indices
@@ -2188,8 +2258,8 @@ fn display_recompute_model_indices_fn<'a>(
                         .exactly_one()
                         .expect("should have exactly one old index for set rel");
 
-                    let obj_new_order_0 = display_index_field_name(&set_rel, new_order_0, eqlog, identifiers);
-                    let obj_old_order_0 = display_index_field_name(&set_rel, old_order_0, eqlog, identifiers);
+                    let obj_new_order_0 = display_index_field_name(&set_rel, new_order_0, eqlog_ids, identifiers);
+                    let obj_old_order_0 = display_index_field_name(&set_rel, old_order_0, eqlog_ids, identifiers);
 
                     writedoc! {f, r#"
                         let ordered_{type_snake}_mor: Vec<eqlog_runtime::MorphismWithSignature> =
@@ -2216,18 +2286,18 @@ fn display_recompute_model_indices_fn<'a>(
                     .map(move |index| (rel.clone(), index.clone()))
             })
             .filter_map(|(flat_in_rel, index_spec)| {
-                let parent_model_type = flat_in_rel.parent_model_type(eqlog)?;
+                let parent_model_type = flat_in_rel.parent_model_type(eqlog_ids.signature())?;
                 Some((flat_in_rel, index_spec, parent_model_type))
             })
             .map(|(flat_in_rel, index_spec, parent_model_type)| {
                 FmtFn(move |f| {
                     let flat_in_rel = &flat_in_rel;
-                    let arity: Vec<Type> = flat_in_rel.arity(eqlog);
-                    let arity: Vec<Type> =
+                    let arity = flat_in_rel.arity(eqlog_ids.signature());
+                    let arity: Vec<_> =
                         index_spec.order.iter().copied().map(|i| arity[i]).collect();
-                    let arity: &[Type] = arity.as_slice();
+                    let arity = arity.as_slice();
 
-                    let index_field_name = display_index_field_name(&flat_in_rel, &index_spec, eqlog, identifiers).to_string();
+                    let index_field_name = display_index_field_name(&flat_in_rel, &index_spec, eqlog_ids, identifiers).to_string();
                     let index_field_name = index_field_name.as_str();
 
                     // The model el is, semantically, always the 0th argument, but due to the
@@ -2271,7 +2341,7 @@ fn display_recompute_model_indices_fn<'a>(
                         }).format("\n");
 
                     let parent_model_type_snake =
-                        display_type(parent_model_type, eqlog, identifiers).to_string().to_case(Snake);
+                        display_type(eqlog_ids.typ(parent_model_type), eqlog, identifiers).to_string().to_case(Snake);
 
                     let remove_from_own =
                         FmtFn(|f| {
@@ -2292,7 +2362,8 @@ fn display_recompute_model_indices_fn<'a>(
                         ((parent_el_pos + 1)..arity.len()).map(|i| {
                             FmtFn(move |f| {
                                 let typ = arity[i];
-                                let def_ss: SymbolScope = eqlog.type_definition_symbol_scope(typ).unwrap();
+                                let typ_eqlog = eqlog_ids.typ(typ);
+                                let def_ss: SymbolScope = eqlog.type_definition_symbol_scope(typ_eqlog).unwrap();
                                 let _parent_model: Type = match eqlog.symbol_scope_model(def_ss) {
                                     None => {
                                         // typ is not a member type, don't apply mapping.
@@ -2304,9 +2375,11 @@ fn display_recompute_model_indices_fn<'a>(
                                 // TODO: Check that parent_model is actually the model type we're
                                 // mapping over?
 
-                                let mor_app_func = eqlog.mor_app_func(typ).expect("mor_app_func should be defined for member types");
+                                let mor_app_func = eqlog.mor_app_func(typ_eqlog).expect("mor_app_func should be defined for member types");
                                 let mor_app_rel: Rel = eqlog.func_rel(mor_app_func).unwrap();
-                                let mor_app_rel: FlatInRel = FlatInRel::EqlogRel(mor_app_rel);
+                                let mor_app_rel = eqlog_ids
+                                    .flat_in_rel(mor_app_rel)
+                                    .expect("mor_app relation should have a local relation");
 
                                 let mor_app_indices = index_selection
                                     .indices
@@ -2323,8 +2396,8 @@ fn display_recompute_model_indices_fn<'a>(
                                     .exactly_one()
                                     .expect("should have exactly one old index with order [0, 1, 2] for mor_app rel");
 
-                                let mor_app_eval_index_new_name = display_index_field_name(&mor_app_rel, mor_app_eval_index_new, eqlog, identifiers);
-                                let mor_app_eval_index_old_name = display_index_field_name(&mor_app_rel, mor_app_eval_index_old, eqlog, identifiers);
+                                let mor_app_eval_index_new_name = display_index_field_name(&mor_app_rel, mor_app_eval_index_new, eqlog_ids, identifiers);
+                                let mor_app_eval_index_old_name = display_index_field_name(&mor_app_rel, mor_app_eval_index_old, eqlog_ids, identifiers);
 
                                 writedoc!{f, "
                                     Some(
@@ -2369,7 +2442,7 @@ fn display_recompute_model_indices_fn<'a>(
 
 fn display_module_env_var<'a>(
     ram_module: &'a RamModule,
-    eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
@@ -2379,8 +2452,11 @@ fn display_module_env_var<'a>(
             .map(|(flat_in_rel, index)| {
                 FmtFn(move |f| {
                     let field_name =
-                        display_index_field_name(&flat_in_rel, &index, eqlog, identifiers);
-                    if flat_in_rel.parent_model_type(eqlog).is_some() {
+                        display_index_field_name(&flat_in_rel, &index, eqlog_ids, identifiers);
+                    if flat_in_rel
+                        .parent_model_type(eqlog_ids.signature())
+                        .is_some()
+                    {
                         write!(f, "{field_name}: &self.{field_name}_all,")
                     } else {
                         write!(f, "{field_name}: &self.{field_name},")
@@ -2393,7 +2469,8 @@ fn display_module_env_var<'a>(
             .into_iter()
             .map(|flat_out_rel| {
                 FmtFn(move |f| {
-                    let field_name = display_out_set_field_name(&flat_out_rel, eqlog, identifiers);
+                    let field_name =
+                        display_out_set_field_name(&flat_out_rel, eqlog_ids, identifiers);
                     write!(f, "{field_name}: &mut delta.{field_name},")
                 })
             })
@@ -2411,7 +2488,7 @@ fn display_module_env_var<'a>(
 
 fn display_close_until_fn<'a>(
     ram_modules: &'a [RamModule],
-    eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
@@ -2420,7 +2497,7 @@ fn display_close_until_fn<'a>(
             .map(|ram_module| {
                 FmtFn(move |f: &mut Formatter| -> Result {
                     let name = ram_module.name.as_str();
-                    let env_var = display_module_env_var(ram_module, eqlog, identifiers);
+                    let env_var = display_module_env_var(ram_module, eqlog_ids, identifiers);
                     writedoc! {f, r#"
                         {env_var}
                         {name}(env);
@@ -2487,6 +2564,7 @@ fn display_close_fn() -> impl Display {
 
 fn display_new_fn<'a>(
     eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
     index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
@@ -2505,9 +2583,10 @@ fn display_new_fn<'a>(
         }
         for (flat_rel, indices) in &index_selection.indices {
             for index in indices {
-                let field_name = display_index_field_name(&flat_rel, &index, eqlog, identifiers);
-                let index_type = display_index_type(&flat_rel, eqlog);
-                if flat_rel.parent_model_type(eqlog).is_some() {
+                let field_name =
+                    display_index_field_name(&flat_rel, &index, eqlog_ids, identifiers);
+                let index_type = display_index_type(&flat_rel, eqlog_ids);
+                if flat_rel.parent_model_type(eqlog_ids.signature()).is_some() {
                     writeln!(f, "{field_name}_own: {index_type}::new(),").unwrap();
                     writeln!(f, "{field_name}_all: {index_type}::new(),").unwrap();
                 } else {
@@ -2655,28 +2734,29 @@ impl Display for IndexAge {
 fn display_index_field_name<'a>(
     rel: &'a FlatInRel,
     index: &'a IndexSpec,
-    eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
+    let eqlog = eqlog_ids.eqlog();
     FmtFn(move |f| {
         let order = index.order.iter().format("_");
         let age = index.age;
         match rel {
-            FlatInRel::EqlogRel(rel) => {
-                let rel_snake = display_rel(*rel, eqlog, identifiers)
+            FlatInRel::Rel(rel) => {
+                let rel_snake = display_rel(eqlog_ids.flat_rel(*rel), eqlog, identifiers)
                     .to_string()
                     .to_case(Snake);
                 write!(f, "{rel_snake}_{age}_order_{order}")
             }
-            FlatInRel::EqlogRelWithDiagonals { rel, equalities } => {
-                let rel_snake = display_rel(*rel, eqlog, identifiers)
+            FlatInRel::RelWithDiagonals { rel, equalities } => {
+                let rel_snake = display_rel(eqlog_ids.flat_rel(*rel), eqlog, identifiers)
                     .to_string()
                     .to_case(Snake);
                 let equalities = equalities.iter().format("_");
                 write!(f, "{rel_snake}_{age}_eqs_{equalities}_order_{order}")
             }
             FlatInRel::TypeSet(typ) => {
-                let type_snake = display_type(*typ, eqlog, identifiers)
+                let type_snake = display_type(eqlog_ids.typ(*typ), eqlog, identifiers)
                     .to_string()
                     .to_case(Snake);
                 write!(f, "{type_snake}_{age}_order_0")
@@ -2691,12 +2771,15 @@ fn display_index_field_name<'a>(
 fn display_own_index_field_name<'a>(
     flat_in_rel: &'a FlatInRel,
     index: &'a IndexSpec,
-    eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
-        let index_field = display_index_field_name(&flat_in_rel, &index, eqlog, identifiers);
-        if flat_in_rel.parent_model_type(eqlog).is_some() {
+        let index_field = display_index_field_name(&flat_in_rel, &index, eqlog_ids, identifiers);
+        if flat_in_rel
+            .parent_model_type(eqlog_ids.signature())
+            .is_some()
+        {
             write!(f, "{index_field}_own")
         } else {
             write!(f, "{index_field}")
@@ -2707,15 +2790,19 @@ fn display_own_index_field_name<'a>(
 fn display_index_expr<'a>(
     flat_in_rel: &'a FlatInRel,
     index: &'a IndexSpec,
-    eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
-        let index_field = display_index_field_name(&flat_in_rel, &index, eqlog, identifiers);
-        if flat_in_rel.parent_model_type(eqlog).is_some() {
+        let index_field = display_index_field_name(&flat_in_rel, &index, eqlog_ids, identifiers);
+        if flat_in_rel
+            .parent_model_type(eqlog_ids.signature())
+            .is_some()
+        {
             write!(f, "(&self.{index_field}_all)")
         } else {
-            let index_field = display_index_field_name(&flat_in_rel, &index, eqlog, identifiers);
+            let index_field =
+                display_index_field_name(&flat_in_rel, &index, eqlog_ids, identifiers);
             write!(f, "(&self.{index_field})")
         }
     })
@@ -2738,9 +2825,9 @@ fn display_element_index_field_name<'a>(
     })
 }
 
-fn display_index_type<'a>(rel: &'a FlatInRel, eqlog: &'a Eqlog) -> impl Display + 'a {
+fn display_index_type<'a>(rel: &'a FlatInRel, eqlog_ids: &'a EqlogIds<'a>) -> impl Display + 'a {
     FmtFn(move |f| {
-        let arity_len = rel.arity(eqlog).len();
+        let arity_len = rel.arity(eqlog_ids.signature()).len();
         write!(f, "PrefixTree{arity_len}")
     })
 }
@@ -2762,24 +2849,28 @@ fn display_weight_static<'a>(
     rel: Rel,
     index_selection: &'a IndexSelection,
     eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let static_name = display_weight_static_name(rel, eqlog, identifiers);
 
         let el_lookup_weight = type_list_vec(eqlog.arity(rel).unwrap(), eqlog).len();
+        let rel = eqlog_ids
+            .rel_id(rel)
+            .expect("weighted relation should have a local flat relation");
 
         let relevant_indices: BTreeSet<(FlatInRel, IndexSpec)> = index_selection
             .indices
             .iter()
             .filter_map(|(flat_in_rel, index_specs)| {
                 match flat_in_rel {
-                    FlatInRel::EqlogRel(rel0) => {
+                    FlatInRel::Rel(rel0) => {
                         if *rel0 != rel {
                             return None;
                         }
                     }
-                    FlatInRel::EqlogRelWithDiagonals {
+                    FlatInRel::RelWithDiagonals {
                         rel: rel0,
                         equalities: _,
                     } => {
@@ -2824,6 +2915,7 @@ fn display_weight_static<'a>(
 fn display_theory_struct<'a>(
     name: &'a str,
     eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
     index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
@@ -2838,9 +2930,9 @@ fn display_theory_struct<'a>(
             })
             .map(|(rel, index)| {
                 FmtFn(move |f| {
-                    let index_name = display_index_field_name(&rel, &index, eqlog, identifiers);
-                    let index_type = display_index_type(&rel, eqlog);
-                    if rel.parent_model_type(eqlog).is_some() {
+                    let index_name = display_index_field_name(&rel, &index, eqlog_ids, identifiers);
+                    let index_type = display_index_type(&rel, eqlog_ids);
+                    if rel.parent_model_type(eqlog_ids.signature()).is_some() {
                         writedoc! {f, "
                             {index_name}_own: {index_type},
                             {index_name}_all: {index_type},
@@ -2894,24 +2986,26 @@ fn display_theory_impl<'a>(
     name: &'a str,
     ram_modules: &'a [RamModule],
     eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
     index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         writeln!(f, "impl {} {{", name)?;
 
-        let new_fn = display_new_fn(eqlog, identifiers, index_selection);
+        let new_fn = display_new_fn(eqlog, eqlog_ids, identifiers, index_selection);
         write!(f, "{}", new_fn)?;
         writeln!(f, "")?;
 
         let close_fn = display_close_fn();
         write!(f, "{}", close_fn)?;
 
-        let close_until_fn = display_close_until_fn(ram_modules, eqlog, identifiers);
+        let close_until_fn = display_close_until_fn(ram_modules, eqlog_ids, identifiers);
         write!(f, "{}", close_until_fn)?;
 
         for typ in eqlog.iter_type() {
-            let iter_type_fn = display_iter_type_fn(typ, eqlog, identifiers, index_selection);
+            let iter_type_fn =
+                display_iter_type_fn(typ, eqlog, eqlog_ids, identifiers, index_selection);
             write!(f, "{}", iter_type_fn)?;
 
             let root_fn = display_root_fn(typ, eqlog, identifiers);
@@ -2924,11 +3018,17 @@ fn display_theory_impl<'a>(
         }
 
         for typ in eqlog.iter_type() {
-            let new_element_fn_internal =
-                display_new_element_fn_internal(typ, eqlog, identifiers, index_selection);
+            let new_element_fn_internal = display_new_element_fn_internal(
+                typ,
+                eqlog,
+                eqlog_ids,
+                identifiers,
+                index_selection,
+            );
             writeln!(f, "{new_element_fn_internal}")?;
 
-            let equate_elements = display_equate_elements(typ, eqlog, identifiers, index_selection);
+            let equate_elements =
+                display_equate_elements(typ, eqlog, eqlog_ids, identifiers, index_selection);
             write!(f, "{}", equate_elements)?;
         }
 
@@ -2962,14 +3062,21 @@ fn display_theory_impl<'a>(
 
         for func in eqlog.iter_func() {
             let rel = eqlog.func_rel(func).unwrap();
-            let eval_fn = display_pub_function_eval_fn(func, eqlog, identifiers, index_selection);
+            let eval_fn =
+                display_pub_function_eval_fn(func, eqlog, eqlog_ids, identifiers, index_selection);
             write!(f, "{eval_fn}")?;
 
-            let iter_fn = display_pub_iter_fn(rel, eqlog, identifiers, index_selection);
+            let iter_fn = display_pub_iter_fn(rel, eqlog, eqlog_ids, identifiers, index_selection);
             write!(f, "{}", iter_fn)?;
 
-            let insert_relation =
-                display_pub_insert_relation(rel, eqlog, identifiers, index_selection, true);
+            let insert_relation = display_pub_insert_relation(
+                rel,
+                eqlog,
+                eqlog_ids,
+                identifiers,
+                index_selection,
+                true,
+            );
             write!(f, "{}", insert_relation)?;
 
             writeln!(f, "")?;
@@ -2992,34 +3099,43 @@ fn display_theory_impl<'a>(
             let arity: Vec<&str> = arity.iter().map(|s| s.as_str()).collect();
 
             let predicate_holds_fn =
-                display_pub_predicate_holds_fn(rel, eqlog, identifiers, index_selection);
+                display_pub_predicate_holds_fn(rel, eqlog, eqlog_ids, identifiers, index_selection);
             write!(f, "{}", predicate_holds_fn)?;
 
             if !arity.is_empty() {
-                let iter_fn = display_pub_iter_fn(rel, eqlog, identifiers, index_selection);
+                let iter_fn =
+                    display_pub_iter_fn(rel, eqlog, eqlog_ids, identifiers, index_selection);
                 write!(f, "{}", iter_fn)?;
             }
 
-            let insert_relation =
-                display_pub_insert_relation(rel, eqlog, identifiers, index_selection, false);
+            let insert_relation = display_pub_insert_relation(
+                rel,
+                eqlog,
+                eqlog_ids,
+                identifiers,
+                index_selection,
+                false,
+            );
             write!(f, "{}", insert_relation)?;
 
             writeln!(f, "")?;
         }
 
-        let canonicalize_fn = display_canonicalize_fn(eqlog, identifiers, index_selection);
+        let canonicalize_fn =
+            display_canonicalize_fn(eqlog, eqlog_ids, identifiers, index_selection);
         write!(f, "{canonicalize_fn}\n")?;
 
-        let is_dirty_fn = display_is_dirty_fn(eqlog, identifiers, index_selection);
+        let is_dirty_fn = display_is_dirty_fn(eqlog, eqlog_ids, identifiers, index_selection);
         write!(f, "{}", is_dirty_fn)?;
 
         writeln!(f, "")?;
 
         let recompute_model_indices_fn =
-            display_recompute_model_indices_fn(eqlog, identifiers, index_selection);
+            display_recompute_model_indices_fn(eqlog, eqlog_ids, identifiers, index_selection);
         write!(f, "{}", recompute_model_indices_fn)?;
 
-        let move_new_to_old_fn = display_move_new_to_old_fn(eqlog, identifiers, index_selection);
+        let move_new_to_old_fn =
+            display_move_new_to_old_fn(eqlog, eqlog_ids, identifiers, index_selection);
         write!(f, "{move_new_to_old_fn}")?;
 
         write!(f, "}}")?;
@@ -3030,7 +3146,7 @@ fn display_theory_impl<'a>(
 fn display_rule_modules<'a>(
     ram_modules: &'a [RamModule],
     index_selection: &'a IndexSelection,
-    eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
     symbol_prefix: &'a str,
 ) -> impl 'a + Display {
@@ -3041,7 +3157,7 @@ fn display_rule_modules<'a>(
                 let lib = display_ram_module(
                     ram_module,
                     index_selection,
-                    eqlog,
+                    eqlog_ids,
                     identifiers,
                     symbol_prefix,
                 );
@@ -3059,6 +3175,7 @@ fn display_rule_modules<'a>(
 pub fn display_module<'a>(
     name: &'a str,
     eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
     ram_modules: &'a [RamModule],
     index_selection: &'a IndexSelection,
@@ -3076,7 +3193,7 @@ pub fn display_module<'a>(
                 display_rule_modules(
                     ram_modules,
                     index_selection,
-                    eqlog,
+                    eqlog_ids,
                     identifiers,
                     symbol_prefix,
                 )
@@ -3086,7 +3203,7 @@ pub fn display_module<'a>(
 
         let module_env_structs = ram_modules
             .iter()
-            .map(|ram_module| display_module_env_struct(ram_module, eqlog, identifiers))
+            .map(|ram_module| display_module_env_struct(ram_module, eqlog_ids, identifiers))
             .format("\n");
         writeln!(f, "{module_env_structs}")?;
 
@@ -3101,7 +3218,8 @@ pub fn display_module<'a>(
         "#}?;
 
         for rel in eqlog.iter_rel() {
-            let weight_static = display_weight_static(rel, index_selection, eqlog, identifiers);
+            let weight_static =
+                display_weight_static(rel, index_selection, eqlog, eqlog_ids, identifiers);
             write!(f, "{weight_static}")?;
         }
 
@@ -3127,15 +3245,22 @@ pub fn display_module<'a>(
         let model_delta_struct = display_model_delta_struct(eqlog, identifiers);
         write!(f, "{}", model_delta_struct)?;
 
-        let theory_struct = display_theory_struct(name, eqlog, identifiers, index_selection);
+        let theory_struct =
+            display_theory_struct(name, eqlog, eqlog_ids, identifiers, index_selection);
         write!(f, "{}", theory_struct)?;
 
         let model_delta_impl = display_model_delta_impl(eqlog, identifiers);
         write!(f, "{}", model_delta_impl)?;
         write!(f, "\n")?;
 
-        let theory_impl =
-            display_theory_impl(name, ram_modules, eqlog, identifiers, index_selection);
+        let theory_impl = display_theory_impl(
+            name,
+            ram_modules,
+            eqlog,
+            eqlog_ids,
+            identifiers,
+            index_selection,
+        );
         write!(f, "{}", theory_impl)?;
 
         Ok(())

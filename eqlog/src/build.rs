@@ -477,6 +477,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     let (mut eqlog, identifiers, _locations, eqlog_ast_maps, _module) =
         populate_eqlog(&ast, module);
     eqlog.close();
+    let eqlog_ids = EqlogIds::new(&eqlog, &signature, &eqlog_ast_maps);
 
     // Merge compile errors by `CompileError`'s `Ord`, which applies the kind
     // precedence (e.g. UndeclaredSymbol beats VariableOccursOnlyOnce) before
@@ -499,18 +500,10 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     }
     assert!(!eqlog.absurd());
 
-    let flatten_ctx = FlattenCtx::new(
-        &ast,
-        module,
-        &signature,
-        &rule_structures,
-        &eqlog,
-        &eqlog_ast_maps,
-        &identifiers,
-    );
+    let flatten_ctx = FlattenCtx::new(&ast, module, &signature, &rule_structures);
     let flat_rule_groups = flatten(&flatten_ctx);
     let flat_rules_iter = flat_rule_groups.iter().flat_map(|group| group.rules.iter());
-    let index_selection = select_indices(flat_rules_iter, &flatten_ctx);
+    let index_selection = select_indices(flat_rules_iter, &signature);
 
     let ram_modules: Vec<RamModule> = flat_rule_groups
         .into_iter()
@@ -523,6 +516,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     let module_contents = display_module(
         &theory_name.to_case(Case::UpperCamel),
         &eqlog,
+        &eqlog_ids,
         &identifiers,
         ram_modules.as_slice(),
         &index_selection,
@@ -555,7 +549,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
             let rule_lib = display_ram_module(
                 ram_module,
                 &index_selection,
-                &eqlog,
+                &eqlog_ids,
                 &identifiers,
                 symbol_prefix.as_str(),
             )

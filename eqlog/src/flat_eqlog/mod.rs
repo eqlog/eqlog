@@ -6,8 +6,7 @@ mod sort;
 
 use std::{iter::once, sync::Arc};
 
-use crate::eqlog_util::*;
-use eqlog_eqlog::*;
+use crate::algebra::signature::{FuncId, Signature};
 
 pub use ast::*;
 pub use diagonals::*;
@@ -15,16 +14,15 @@ pub use index_selection::*;
 pub use semi_naive::*;
 pub use sort::*;
 
-pub fn semi_naive_functionality(func: Func, eqlog: &Eqlog) -> FlatRule {
-    let domain = type_list_vec(
-        eqlog
-            .flat_domain(func)
-            .expect("flat_domain should be total"),
-        eqlog,
-    );
-    let codomain = eqlog.codomain(func).expect("codomain should be total");
+pub fn semi_naive_functionality(
+    func: FuncId,
+    signature: &Signature,
+    rule_name: impl Into<String>,
+) -> FlatRule {
+    let domain = flat_domain(func, signature);
+    let codomain = signature.func(func).codomain;
 
-    let func_rel = FlatInRel::EqlogRel(eqlog.func_rel(func).expect("func_rel should be total"));
+    let func_rel = FlatInRel::Rel(FlatRel::Func(func));
 
     let func_args: Vec<FlatVar> = (0..domain.len())
         .map(|i| {
@@ -68,10 +66,8 @@ pub fn semi_naive_functionality(func: Func, eqlog: &Eqlog) -> FlatRule {
         args: vec![result0, result1],
     }];
 
-    let name = format!("functionality_{}", func.0);
-
     FlatRule {
-        name,
+        name: rule_name.into(),
         premise,
         conclusion,
     }

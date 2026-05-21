@@ -1,0 +1,7 @@
+Migrate flat lowering off eqlog-eqlog ids
+
+Flattened rules and RAM/codegen index selection now use algebra
+Signature ids instead of generated eqlog-eqlog relation and type ids.
+Keep generated Eqlog id translation localized to Rust codegen while
+removing stale unused flat/codegen modules that still carried the old
+Eqlog-backed IR.
