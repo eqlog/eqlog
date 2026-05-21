@@ -47,6 +47,12 @@ pub struct PredId(usize);
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FuncId(usize);
 
+impl FuncId {
+    pub fn as_usize(self) -> usize {
+        self.0
+    }
+}
+
 /// What flavour of declaration a [`Type`] originated from.
 ///
 /// `Mor(model)` is the auto-generated companion type for morphisms between
@@ -129,6 +135,14 @@ impl Signature {
 
     pub fn iter_funcs(&self) -> impl Iterator<Item = FuncId> + '_ {
         (0..self.funcs.len()).map(FuncId)
+    }
+
+    pub fn iter_preds(&self) -> impl Iterator<Item = PredId> + '_ {
+        (0..self.preds.len()).map(PredId)
+    }
+
+    pub fn iter_types(&self) -> impl Iterator<Item = TypeId> + '_ {
+        (0..self.types.len()).map(TypeId)
     }
 
     pub fn iter_type_decls(&self) -> impl Iterator<Item = (TypeDeclId, TypeId)> + '_ {

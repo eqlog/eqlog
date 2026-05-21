@@ -82,7 +82,7 @@ pub fn module_env_out_rels(ram_module: &RamModule) -> BTreeSet<FlatOutRel> {
 
 pub fn display_module_env_struct<'a>(
     ram_module: &'a RamModule,
-    eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
@@ -90,8 +90,8 @@ pub fn display_module_env_struct<'a>(
             .into_iter()
             .map(|(rel, index_spec)| {
                 FmtFn(move |f| {
-                    let name = display_index_field_name(&rel, &index_spec, eqlog, identifiers);
-                    let typ = display_index_type(&rel, eqlog);
+                    let name = display_index_field_name(&rel, &index_spec, eqlog_ids, identifiers);
+                    let typ = display_index_type(&rel, eqlog_ids);
 
                     write!(f, "{name}: &'a {typ},")
                 })
@@ -102,8 +102,8 @@ pub fn display_module_env_struct<'a>(
             .into_iter()
             .map(|rel| {
                 FmtFn(move |f| {
-                    let name = display_out_set_field_name(&rel, eqlog, identifiers);
-                    let typ = display_out_set_type(&rel, eqlog);
+                    let name = display_out_set_field_name(&rel, eqlog_ids, identifiers);
+                    let typ = display_out_set_type(&rel, eqlog_ids);
 
                     write!(f, "{name}: &'a mut {typ},")
                 })
@@ -127,7 +127,7 @@ pub fn display_module_env_struct<'a>(
 
 fn display_set_var<'a>(
     set_var: &'a SetVar,
-    eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
@@ -137,19 +137,19 @@ fn display_set_var<'a>(
             index,
             restricted,
         } = set_var.name.clone();
-        let field_name = display_index_field_name(&rel, &index, eqlog, identifiers);
+        let field_name = display_index_field_name(&rel, &index, eqlog_ids, identifiers);
         write!(f, "set{stmt_index}_{field_name}_r{restricted}")
     })
 }
 
 fn display_in_set_expr<'a>(
     expr: &'a InSetExpr,
-    eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     FmtFn(move |f| match expr {
         InSetExpr::GetIndex(GetIndexExpr { rel, index_spec }) => {
-            let index_field = display_index_field_name(rel, index_spec, eqlog, identifiers);
+            let index_field = display_index_field_name(rel, index_spec, eqlog_ids, identifiers);
             write!(f, "env.{index_field}")
         }
         InSetExpr::Restrict(RestrictExpr {
@@ -157,7 +157,7 @@ fn display_in_set_expr<'a>(
             first_column_var,
         }) => {
             let result_arity = set.arity - 1;
-            let set = display_set_var(set, eqlog, identifiers);
+            let set = display_set_var(set, eqlog_ids, identifiers);
             write!(f, "{set}.get({first_column_var}).unwrap_or_else(|| PrefixTree{result_arity}::empty())")
         }
     })
@@ -165,15 +165,15 @@ fn display_in_set_expr<'a>(
 
 fn display_stmt_pre<'a>(
     ram_stmt: &'a RamStmt,
-    eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         match ram_stmt {
             RamStmt::DefineSet(DefineSetStmt { defined_var, expr }) => {
-                let expr = display_in_set_expr(expr, eqlog, identifiers);
+                let expr = display_in_set_expr(expr, eqlog_ids, identifiers);
                 let strictness = defined_var.strictness;
-                let defined_var = display_set_var(defined_var, eqlog, identifiers);
+                let defined_var = display_set_var(defined_var, eqlog_ids, identifiers);
                 match strictness {
                     Strictness::Lazy => {
                         writedoc! {f, "
@@ -209,17 +209,17 @@ fn display_stmt_pre<'a>(
                     Strictness::Strict => {}
                 }
                 assert!(sets.len() >= 1, "Expected at least one set in IterStmt");
-                let set_head = display_set_var(&sets[0], eqlog, identifiers);
+                let set_head = display_set_var(&sets[0], eqlog_ids, identifiers);
                 let set_tail_chain_iters = sets[1..]
                     .iter()
                     .map(|set| {
                         FmtFn(move |f| {
-                            let set = display_set_var(set, eqlog, identifiers);
+                            let set = display_set_var(set, eqlog_ids, identifiers);
                             write!(f, ".chain({set}.iter_restrictions())")
                         })
                     })
                     .format("\n");
-                let loop_var_set = display_set_var(loop_var_set, eqlog, identifiers);
+                let loop_var_set = display_set_var(loop_var_set, eqlog_ids, identifiers);
                 writedoc! {f, "
                     #[allow(unused_variables)]
                     for
@@ -231,7 +231,7 @@ fn display_stmt_pre<'a>(
                 "}
             }
             RamStmt::Insert(InsertStmt { rel, args }) => {
-                let rel_field = display_out_set_field_name(rel, eqlog, identifiers);
+                let rel_field = display_out_set_field_name(rel, eqlog_ids, identifiers);
                 let args = args.iter().format(", ");
                 // TODO: Check that this row doesn't exist already in indices.
                 writedoc! {f, "
@@ -243,7 +243,7 @@ fn display_stmt_pre<'a>(
                     .iter()
                     .map(|set| {
                         FmtFn(move |f| {
-                            let set = display_set_var(set, eqlog, identifiers);
+                            let set = display_set_var(set, eqlog_ids, identifiers);
                             write!(f, "|| !{set}.is_empty()")
                         })
                     })
@@ -274,7 +274,7 @@ fn display_routine<'a>(
         stmts,
     }: &'a RamRoutine,
     ram_module: &'a RamModule,
-    eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
@@ -283,7 +283,7 @@ fn display_routine<'a>(
 
         let stmts_pre = stmts
             .iter()
-            .map(|stmt| display_stmt_pre(stmt, eqlog, identifiers))
+            .map(|stmt| display_stmt_pre(stmt, eqlog_ids, identifiers))
             .format("\n");
         let stmts_post = stmts
             .iter()
@@ -291,7 +291,7 @@ fn display_routine<'a>(
             .map(|stmt| display_stmt_post(stmt))
             .format("\n");
 
-        let flat_rule = display_flat_rule(flat_rule, eqlog, identifiers).to_string();
+        let flat_rule = display_flat_rule(flat_rule, eqlog_ids, identifiers).to_string();
         let flat_rule_comment = flat_rule
             .lines()
             .map(|line| FmtFn(move |f| write!(f, "// {line}")))
@@ -354,18 +354,18 @@ fn display_module_main_fn<'a>(
 pub fn display_ram_module<'a>(
     ram_module: &'a RamModule,
     _index_selection: &'a IndexSelection,
-    eqlog: &'a Eqlog,
+    eqlog_ids: &'a EqlogIds<'a>,
     identifiers: &'a BTreeMap<Ident, String>,
     symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
         let imports = display_imports();
-        let env_struct = display_module_env_struct(ram_module, eqlog, identifiers);
+        let env_struct = display_module_env_struct(ram_module, eqlog_ids, identifiers);
         let main_fn = display_module_main_fn(ram_module, symbol_prefix);
         let routines = ram_module
             .routines
             .iter()
-            .map(|routine| display_routine(routine, ram_module, eqlog, identifiers))
+            .map(|routine| display_routine(routine, ram_module, eqlog_ids, identifiers))
             .format("\n");
 
         writedoc! {f, r#"
