@@ -1,0 +1,5 @@
+Address flatten review comments
+
+Assert canonical flattening invariants instead of re-rooting values
+silently, and flatten settled concrete type facts without preserving
+review TODOs.

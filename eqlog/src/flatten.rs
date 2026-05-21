@@ -451,11 +451,20 @@ fn el_base_name(
 fn concrete_type_of(rule: &RuleStructures, structure: StructureId, el: ElId) -> ConcreteType {
     let st = &rule.cat.structures[structure.0];
     let root = st.unification.root_const(el);
-    st.els
+    let types = st
+        .els
         .get(&root)
-        .and_then(|types| types.iter().next())
+        .expect("flattening requires every element to have a type");
+    let mut types = types.iter();
+    let concrete_type = types
+        .next()
         .cloned()
-        .expect("flattening requires every element to have a type")
+        .expect("flattening requires every element to have a type");
+    assert!(
+        types.next().is_none(),
+        "flattening requires every element to have a unique concrete type"
+    );
+    concrete_type
 }
 
 fn flat_rel_apps(
@@ -475,24 +484,25 @@ fn flat_rel_apps(
     for (app, &result) in &st.func_apps {
         let rel = bridge.func_rel(app.func);
         let mut args = flat_func_domain_args(st, app);
-        args.push(st.unification.root_const(result));
+        args.push(flat_el(st, result));
         apps.insert(FlatRelApp { rel, args });
     }
 
-    for (&el, types) in &st.els {
-        let el = st.unification.root_const(el);
-        for concrete_type in types {
-            let Some(&parent) = concrete_type.parents.last() else {
-                continue;
-            };
-            let rel = bridge.model_member_rel(concrete_type.typ);
-            let args = vec![st.unification.root_const(parent), el];
-            apps.insert(FlatRelApp { rel, args });
-        }
+    for &el in st.els.keys() {
+        let el = flat_el(st, el);
+        let concrete_type = concrete_type_of(rule, structure, el);
+        let Some(&parent) = concrete_type.parents.last() else {
+            // Parentless types are lowered through their type sets, not
+            // through model-member relations.
+            continue;
+        };
+        let rel = bridge.model_member_rel(concrete_type.typ);
+        let args = vec![flat_el(st, parent), el];
+        apps.insert(FlatRelApp { rel, args });
     }
 
     for app in &apps {
-        debug_assert_eq!(
+        assert_eq!(
             app.args.len(),
             app.rel_arity_len(bridge),
             "lowered relation app should match Eqlog metadata arity"
@@ -526,10 +536,19 @@ fn flat_func_domain_args(st: &Structure, app: &FuncApp) -> Vec<ElId> {
 fn flat_args(st: &Structure, parents: &[ElId], args: &[ElId]) -> Vec<ElId> {
     let mut flat_args = Vec::with_capacity(args.len() + usize::from(!parents.is_empty()));
     if let Some(&parent) = parents.last() {
-        flat_args.push(st.unification.root_const(parent));
+        flat_args.push(flat_el(st, parent));
     }
-    flat_args.extend(args.iter().map(|&arg| st.unification.root_const(arg)));
+    flat_args.extend(args.iter().map(|&arg| flat_el(st, arg)));
     flat_args
+}
+
+fn flat_el(st: &Structure, el: ElId) -> ElId {
+    assert_eq!(
+        st.unification.root_const(el),
+        el,
+        "flattening requires closed structures to store canonical elements"
+    );
+    el
 }
 
 fn constrained_els(st: &Structure) -> BTreeSet<ElId> {
