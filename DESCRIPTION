@@ -1,0 +1,4 @@
+Migrate rust_gen off eqlog metadata
+
+Pass symbol names and pass result data through Rust generation
+formatting instead of populating and querying the eqlog-eqlog database.
