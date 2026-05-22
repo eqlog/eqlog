@@ -586,7 +586,7 @@ fn find_eqlog_runtime_rlib_path() -> Result<PathBuf> {
     "})?;
     let out_dir: PathBuf = fs::canonicalize(PathBuf::from(out_dir_str))?;
 
-    let tag = env::var("DEP_EQLOG_RUNTIME_0.8_OUT_DIR").unwrap();
+    let tag = env::var("DEP_EQLOG_RUNTIME_0.9_OUT_DIR").unwrap();
 
     // Search for the eqlog runtime rlib in the target directory. It's somewhere under
     // $PROFILE/deps.
