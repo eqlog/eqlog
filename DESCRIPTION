@@ -1,5 +1,5 @@
-Remove eqlog-eqlog crate
+Remove generated Eqlog crates
 
-Drop the generated eqlog-eqlog workspace member and remove the last
-eqlog dependency on it. Keep compile diagnostics independent by using a
+Drop the generated compiler bootstrap crates and the stale tree wrapper
+that depended on them. Keep compile diagnostics independent by using a
 local symbol-kind enum.

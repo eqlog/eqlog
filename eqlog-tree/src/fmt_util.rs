@@ -1,1 +1,0 @@
-../../eqlog/src/fmt_util.rs
