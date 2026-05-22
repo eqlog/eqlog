@@ -1,6 +1,0 @@
-#!/bin/sh
-
-repo_root=$(git rev-parse --show-toplevel)
-
-cd "$repo_root/env"
-docker build --tag exp-epa .
