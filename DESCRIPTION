@@ -1,0 +1,5 @@
+Pin eqlog runtime dependency version
+
+Require the eqlog compiler crate to depend on the exact matching
+eqlog-runtime version, and add a manifest test that keeps the pin in
+sync with the workspace package version.
