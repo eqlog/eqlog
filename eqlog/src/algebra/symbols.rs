@@ -9,13 +9,11 @@
 
 use std::collections::BTreeMap;
 
-use eqlog_eqlog::SymbolKindCase;
-
 use crate::algebra::populate::RuleStructures;
 use crate::algebra::signature::Signature;
 use crate::algebra::structure::StructureId;
 use crate::ast::*;
-use crate::error::CompileError;
+use crate::error::{CompileError, SymbolKind};
 use crate::grammar_util::Location;
 use crate::scopes::{ScopeId, Scopes, Symbol};
 
@@ -68,15 +66,15 @@ enum LookupKind {
 }
 
 impl LookupKind {
-    fn symbol_kind_case(self) -> SymbolKindCase {
+    fn symbol_kind(self) -> SymbolKind {
         match self {
-            LookupKind::Type => SymbolKindCase::TypeSymbol(),
-            LookupKind::Pred => SymbolKindCase::PredSymbol(),
-            LookupKind::Func => SymbolKindCase::FuncSymbol(),
-            LookupKind::Enum => SymbolKindCase::EnumSymbol(),
-            LookupKind::Ctor => SymbolKindCase::CtorSymbol(),
-            LookupKind::Model => SymbolKindCase::ModelSymbol(),
-            LookupKind::Rule => SymbolKindCase::RuleSymbol(),
+            LookupKind::Type => SymbolKind::Type,
+            LookupKind::Pred => SymbolKind::Pred,
+            LookupKind::Func => SymbolKind::Func,
+            LookupKind::Enum => SymbolKind::Enum,
+            LookupKind::Ctor => SymbolKind::Ctor,
+            LookupKind::Model => SymbolKind::Model,
+            LookupKind::Rule => SymbolKind::Rule,
         }
     }
 }
@@ -421,8 +419,8 @@ impl<'a> Checker<'a> {
             .expect("symbol lookup excludes variables and args");
         self.errors.push(CompileError::BadSymbolKind {
             name,
-            expected: expected[0].symbol_kind_case(),
-            found: found_kind.symbol_kind_case(),
+            expected: expected[0].symbol_kind(),
+            found: found_kind.symbol_kind(),
             used_at,
             declared_at: found.location(self.ast),
         });

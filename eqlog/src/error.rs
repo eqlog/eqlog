@@ -1,6 +1,5 @@
 use crate::grammar_util::*;
 use crate::source_display::*;
-use eqlog_eqlog::*;
 use lalrpop_util::{lexer::Token, ParseError};
 use std::cmp::Ordering;
 use std::collections::HashSet;
@@ -11,15 +10,26 @@ use std::sync::LazyLock;
 use strum::IntoEnumIterator as _;
 use strum_macros::EnumIter;
 
-fn display_symbol_kind(symbol_kind: SymbolKindCase) -> &'static str {
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+pub enum SymbolKind {
+    Type,
+    Pred,
+    Func,
+    Rule,
+    Enum,
+    Ctor,
+    Model,
+}
+
+fn display_symbol_kind(symbol_kind: SymbolKind) -> &'static str {
     match symbol_kind {
-        SymbolKindCase::TypeSymbol() => "type",
-        SymbolKindCase::PredSymbol() => "predicate",
-        SymbolKindCase::FuncSymbol() => "function",
-        SymbolKindCase::RuleSymbol() => "rule",
-        SymbolKindCase::EnumSymbol() => "enum",
-        SymbolKindCase::CtorSymbol() => "constructor",
-        SymbolKindCase::ModelSymbol() => "model",
+        SymbolKind::Type => "type",
+        SymbolKind::Pred => "predicate",
+        SymbolKind::Func => "function",
+        SymbolKind::Rule => "rule",
+        SymbolKind::Enum => "enum",
+        SymbolKind::Ctor => "constructor",
+        SymbolKind::Model => "model",
     }
 }
 
@@ -42,12 +52,12 @@ pub enum CompileError {
     SymbolNotCamelCase {
         name: String,
         location: Location,
-        symbol_kind: SymbolKindCase,
+        symbol_kind: SymbolKind,
     },
     SymbolNotSnakeCase {
         name: String,
         location: Location,
-        symbol_kind: SymbolKindCase,
+        symbol_kind: SymbolKind,
     },
     VariableNotSnakeCase {
         name: String,
@@ -73,8 +83,8 @@ pub enum CompileError {
     },
     BadSymbolKind {
         name: String,
-        expected: SymbolKindCase,
-        found: SymbolKindCase,
+        expected: SymbolKind,
+        found: SymbolKind,
         used_at: Location,
         declared_at: Location,
     },

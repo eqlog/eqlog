@@ -1,0 +1,5 @@
+Remove eqlog-eqlog crate
+
+Drop the generated eqlog-eqlog workspace member and remove the last
+eqlog dependency on it. Keep compile diagnostics independent by using a
+local symbol-kind enum.

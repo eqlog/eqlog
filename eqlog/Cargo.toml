@@ -17,7 +17,6 @@ convert_case = ">= 0"
 indoc = ">= 0"
 sha2 = ">= 0"
 base16ct = { version = ">= 0", features = ["alloc"] }
-eqlog-eqlog = { path = "../eqlog-eqlog", version = ">= 0" }
 eqlog-runtime = { path = "../eqlog-runtime", version = ">= 0" }
 clap = { version = ">= 0", features = ["derive"] }
 anyhow = ">= 0"
@@ -33,4 +32,4 @@ base16ct = { version = ">= 0", features = ["alloc"] }
 
 [features]
 default = []
-rebuild = ["eqlog-eqlog/rebuild"]
+rebuild = []

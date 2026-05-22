@@ -31,10 +31,8 @@
 
 use std::collections::BTreeMap;
 
-use eqlog_eqlog::SymbolKindCase;
-
 use crate::ast::*;
-use crate::error::CompileError;
+use crate::error::{CompileError, SymbolKind};
 use crate::grammar_util::Location;
 use crate::scopes::{Scopes, Symbol};
 
@@ -498,7 +496,7 @@ impl<'a> Builder<'a> {
                         // Sig-position ambient accepts type, enum or model.
                         // Mirror eqlog.eql's `should_be_symbol_3(name, type_kind, enum_kind, model_kind, ...)`
                         // by reporting `type` as the primary expected kind.
-                        self.emit_wrong_kind(name, other, SymbolKindCase::TypeSymbol(), used_at);
+                        self.emit_wrong_kind(name, other, SymbolKind::Type, used_at);
                         None
                     }
                     None => {
@@ -516,7 +514,7 @@ impl<'a> Builder<'a> {
                     Some(other) => {
                         // Mirrors eqlog.eql's `should_be_symbol(model_ty_ident, model_kind, ...)`
                         // for sig-position mor type expressions.
-                        self.emit_wrong_kind(name, other, SymbolKindCase::ModelSymbol(), used_at);
+                        self.emit_wrong_kind(name, other, SymbolKind::Model, used_at);
                         None
                     }
                     None => {
@@ -539,7 +537,7 @@ impl<'a> Builder<'a> {
         &mut self,
         name: String,
         found: Symbol,
-        expected: SymbolKindCase,
+        expected: SymbolKind,
         used_at: Location,
     ) {
         match symbol_kind_case(found) {
@@ -556,7 +554,7 @@ impl<'a> Builder<'a> {
                 // The eqlog-side `accessible_symbol` predicate doesn't track
                 // variable bindings (rule-body vars and named args), so it
                 // would report this as undeclared rather than as a wrong
-                // kind. Mirror that to avoid fabricating a SymbolKindCase
+                // kind. Mirror that to avoid fabricating a SymbolKind
                 // that doesn't exist for variables.
                 self.errors
                     .push(CompileError::UndeclaredSymbol { name, used_at });
@@ -565,15 +563,15 @@ impl<'a> Builder<'a> {
     }
 }
 
-fn symbol_kind_case(sym: Symbol) -> Option<SymbolKindCase> {
+fn symbol_kind_case(sym: Symbol) -> Option<SymbolKind> {
     Some(match sym {
-        Symbol::Type(_) => SymbolKindCase::TypeSymbol(),
-        Symbol::Pred(_) => SymbolKindCase::PredSymbol(),
-        Symbol::Func(_) => SymbolKindCase::FuncSymbol(),
-        Symbol::Enum(_) => SymbolKindCase::EnumSymbol(),
-        Symbol::Ctor(_) => SymbolKindCase::CtorSymbol(),
-        Symbol::Model(_) => SymbolKindCase::ModelSymbol(),
-        Symbol::Rule(_) => SymbolKindCase::RuleSymbol(),
+        Symbol::Type(_) => SymbolKind::Type,
+        Symbol::Pred(_) => SymbolKind::Pred,
+        Symbol::Func(_) => SymbolKind::Func,
+        Symbol::Enum(_) => SymbolKind::Enum,
+        Symbol::Ctor(_) => SymbolKind::Ctor,
+        Symbol::Model(_) => SymbolKind::Model,
+        Symbol::Rule(_) => SymbolKind::Rule,
         Symbol::Arg(_) | Symbol::Var(_) => return None,
     })
 }

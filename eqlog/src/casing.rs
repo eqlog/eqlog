@@ -12,10 +12,9 @@
 //! `CompileError`'s `Ord`.
 
 use convert_case::{Case, Casing};
-use eqlog_eqlog::SymbolKindCase;
 
 use crate::ast::*;
-use crate::error::CompileError;
+use crate::error::{CompileError, SymbolKind};
 use crate::grammar_util::Location;
 
 /// Walks `ast` rooted at `module` and returns the first casing error in
@@ -43,28 +42,28 @@ impl<'a> CasingChecker<'a> {
         match *self.ast.decl(decl) {
             Decl::Type(id) => {
                 let name = self.ast.type_decl(id).name.clone();
-                self.check_camel(name, self.ast.loc(id), SymbolKindCase::TypeSymbol())
+                self.check_camel(name, self.ast.loc(id), SymbolKind::Type)
             }
             Decl::Pred(id) => {
                 let name = self.ast.pred_decl(id).name.clone();
-                self.check_snake(name, self.ast.loc(id), SymbolKindCase::PredSymbol())
+                self.check_snake(name, self.ast.loc(id), SymbolKind::Pred)
             }
             Decl::Func(id) => {
                 let name = self.ast.func_decl(id).name.clone();
-                self.check_snake(name, self.ast.loc(id), SymbolKindCase::FuncSymbol())
+                self.check_snake(name, self.ast.loc(id), SymbolKind::Func)
             }
             Decl::Enum(id) => {
                 let name = self.ast.enum_decl(id).name.clone();
-                self.check_camel(name, self.ast.loc(id), SymbolKindCase::EnumSymbol())?;
+                self.check_camel(name, self.ast.loc(id), SymbolKind::Enum)?;
                 for ctor in self.ast.enum_decl(id).ctors.clone() {
                     let cname = self.ast.ctor_decl(ctor).name.clone();
-                    self.check_camel(cname, self.ast.loc(ctor), SymbolKindCase::CtorSymbol())?;
+                    self.check_camel(cname, self.ast.loc(ctor), SymbolKind::Ctor)?;
                 }
                 Ok(())
             }
             Decl::Rule(id) => {
                 if let Some(name) = self.ast.rule_decl(id).name.clone() {
-                    self.check_snake(name, self.ast.loc(id), SymbolKindCase::RuleSymbol())?;
+                    self.check_snake(name, self.ast.loc(id), SymbolKind::Rule)?;
                 }
                 for stmt in self.ast.rule_decl(id).body.clone() {
                     self.walk_stmt(stmt)?;
@@ -73,7 +72,7 @@ impl<'a> CasingChecker<'a> {
             }
             Decl::Model(id) => {
                 let name = self.ast.model_decl(id).name.clone();
-                self.check_camel(name, self.ast.loc(id), SymbolKindCase::ModelSymbol())?;
+                self.check_camel(name, self.ast.loc(id), SymbolKind::Model)?;
                 for child in self.ast.model_decl(id).body.clone() {
                     self.walk_decl(child)?;
                 }
@@ -82,7 +81,7 @@ impl<'a> CasingChecker<'a> {
         }
     }
 
-    fn check_camel(&self, name: String, location: Location, symbol_kind: SymbolKindCase) -> Check {
+    fn check_camel(&self, name: String, location: Location, symbol_kind: SymbolKind) -> Check {
         if name != name.to_case(Case::UpperCamel) {
             return Err(CompileError::SymbolNotCamelCase {
                 name,
@@ -93,7 +92,7 @@ impl<'a> CasingChecker<'a> {
         Ok(())
     }
 
-    fn check_snake(&self, name: String, location: Location, symbol_kind: SymbolKindCase) -> Check {
+    fn check_snake(&self, name: String, location: Location, symbol_kind: SymbolKind) -> Check {
         if name != name.to_case(Case::Snake) {
             return Err(CompileError::SymbolNotSnakeCase {
                 name,
