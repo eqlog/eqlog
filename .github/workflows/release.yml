@@ -1,0 +1,95 @@
+name: Release
+
+"on":
+  push:
+    tags:
+      - "*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish crates
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Validate tag
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
+            echo "Release workflow must run from a tag, got ${GITHUB_REF_TYPE}."
+            exit 1
+          fi
+
+          tag="${GITHUB_REF_NAME}"
+          if [[ ! "${tag}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Release tag must be a Cargo version like 0.8.0 or 0.8.0-rc.1, got ${tag}."
+            exit 1
+          fi
+
+          eqlog_version="$(cargo pkgid -p eqlog | sed 's/.*#//')"
+          runtime_version="$(cargo pkgid -p eqlog-runtime | sed 's/.*#//')"
+
+          if [[ "${eqlog_version}" != "${tag}" ]]; then
+            echo "Tag ${tag} does not match eqlog version ${eqlog_version}."
+            exit 1
+          fi
+
+          if [[ "${runtime_version}" != "${tag}" ]]; then
+            echo "Tag ${tag} does not match eqlog-runtime version ${runtime_version}."
+            exit 1
+          fi
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Test
+        run: cargo test --workspace --locked
+
+      - name: Dry-run package
+        run: cargo publish --dry-run --locked -p eqlog-runtime -p eqlog
+
+      - name: Authenticate with crates.io
+        id: auth
+        uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe
+
+      - name: Publish to crates.io
+        run: |
+          set -euo pipefail
+
+          publish_crate() {
+            local crate="$1"
+            local version="${GITHUB_REF_NAME}"
+            local status
+
+            status="$(curl --silent --output /dev/null --write-out "%{http_code}" \
+              "https://crates.io/api/v1/crates/${crate}/${version}")"
+
+            case "${status}" in
+              200)
+                echo "${crate} ${version} is already published; skipping."
+                ;;
+              404)
+                cargo publish --no-verify --locked -p "${crate}"
+                ;;
+              *)
+                echo "crates.io version check for ${crate} ${version} failed with HTTP ${status}."
+                exit 1
+                ;;
+            esac
+          }
+
+          publish_crate eqlog-runtime
+          publish_crate eqlog
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
