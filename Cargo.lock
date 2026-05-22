@@ -122,12 +122,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "by_address"
-version = "1.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64fa3c856b712db6612c019f14756e64e4bcea13337a6b33b696333a9eaa2d06"
-
-[[package]]
 name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -175,7 +169,7 @@ dependencies = [
  "heck",
  "proc-macro2",
  "quote",
- "syn 2.0.117",
+ "syn",
 ]
 
 [[package]]
@@ -334,8 +328,7 @@ dependencies = [
  "base16ct",
  "clap",
  "convert_case",
- "eqlog-eqlog 0.8.0",
- "eqlog-runtime 0.8.0",
+ "eqlog-runtime",
  "indoc",
  "itertools",
  "lalrpop",
@@ -350,52 +343,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "eqlog"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b142babadf2395a5f738980954b2ed4b3faa93b65f8d9ab4ff8e0899c32a928a"
-dependencies = [
- "base16ct",
- "by_address",
- "clap",
- "convert_case",
- "eqlog-eqlog 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "indoc",
- "itertools",
- "lalrpop",
- "lalrpop-util",
- "maplit",
- "regex",
- "sha2",
-]
-
-[[package]]
-name = "eqlog-eqlog"
-version = "0.8.0"
-dependencies = [
- "eqlog 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eqlog-runtime 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "eqlog-eqlog"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "586e007f233f3632dabfc1b00589d2418e1528fabe140abb05e3aee48e23ae87"
-dependencies = [
- "eqlog-runtime 0.7.2",
-]
-
-[[package]]
-name = "eqlog-runtime"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "787725f6333839f770c51da5538b6a185e57579e23aa6d6363cf90876bffaaf4"
-dependencies = [
- "tabled",
-]
-
-[[package]]
 name = "eqlog-runtime"
 version = "0.8.0"
 dependencies = [
@@ -403,20 +350,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "eqlog-runtime"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ad473ac9e031476c46ff9d114dae5fd2f2312ebcef46d1021d8974fcec467aa"
-dependencies = [
- "tabled",
-]
-
-[[package]]
 name = "eqlog-test-compile"
 version = "0.1.0"
 dependencies = [
  "env_logger",
- "eqlog 0.8.0",
+ "eqlog",
  "indoc",
  "log",
  "tempdir",
@@ -428,8 +366,8 @@ name = "eqlog-test-eval"
 version = "0.1.0"
 dependencies = [
  "env_logger",
- "eqlog 0.8.0",
- "eqlog-runtime 0.8.0",
+ "eqlog",
+ "eqlog-runtime",
  "log",
  "maplit",
 ]
@@ -581,7 +519,7 @@ checksum = "2a8c8b344124222efd714b73bb41f8b5120b27a7cc1c75593a6ff768d9d05aa4"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.117",
+ "syn",
 ]
 
 [[package]]
@@ -706,15 +644,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
-name = "papergrid"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "608b6444acf7f5ea39e8bd06dd6037e34a4b5ddfb29ae840edad49ea798e9e79"
-dependencies = [
- "unicode-width",
-]
-
-[[package]]
 name = "parking_lot"
 version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -797,7 +726,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "479ca8adacdd7ce8f1fb39ce9ecccbfe93a3f1344b3d0d97f20bc0196208f62b"
 dependencies = [
  "proc-macro2",
- "syn 2.0.117",
+ "syn",
 ]
 
 [[package]]
@@ -998,7 +927,7 @@ checksum = "d540f220d3187173da220f885ab66608367b6574e925011a9353e4badda91d79"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.117",
+ "syn",
 ]
 
 [[package]]
@@ -1089,18 +1018,7 @@ dependencies = [
  "heck",
  "proc-macro2",
  "quote",
- "syn 2.0.117",
-]
-
-[[package]]
-name = "syn"
-version = "1.0.109"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72b64191b275b66ffe2469e8af2c1cfe3bafa67b529ead792a6d0160888b4237"
-dependencies = [
- "proc-macro2",
- "quote",
- "unicode-ident",
+ "syn",
 ]
 
 [[package]]
@@ -1112,27 +1030,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
-]
-
-[[package]]
-name = "tabled"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2407502760ccfd538f2fb1f843dd87b6daf1a17848d57bc5a25617e408ef4c7a"
-dependencies = [
- "papergrid",
- "tabled_derive",
-]
-
-[[package]]
-name = "tabled_derive"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "278ea3921cee8c5a69e0542998a089f7a14fa43c9c4e4f9951295da89bd0c943"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
 ]
 
 [[package]]
@@ -1173,7 +1070,7 @@ checksum = "be35209fd0781c5401458ab66e4f98accf63553e8fae7425503e92fdd319783b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.117",
+ "syn",
 ]
 
 [[package]]
@@ -1250,12 +1147,6 @@ name = "unicode-segmentation"
 version = "1.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9629274872b2bfaf8d66f5f15725007f635594914870f65218920345aa11aa8c"
-
-[[package]]
-name = "unicode-width"
-version = "0.1.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7dd6e30e90baa6f72411720665d41d89b9a3d039dc45b8faea1ddd07f617f6af"
 
 [[package]]
 name = "unicode-xid"
@@ -1425,7 +1316,7 @@ dependencies = [
  "heck",
  "indexmap",
  "prettyplease",
- "syn 2.0.117",
+ "syn",
  "wasm-metadata",
  "wit-bindgen-core",
  "wit-component",
@@ -1441,7 +1332,7 @@ dependencies = [
  "prettyplease",
  "proc-macro2",
  "quote",
- "syn 2.0.117",
+ "syn",
  "wit-bindgen-core",
  "wit-bindgen-rust",
 ]
