@@ -1,0 +1,4 @@
+Add crates.io release workflow
+
+Add a GitHub Actions workflow that publishes eqlog-runtime and eqlog
+to crates.io from matching semver tags using trusted publishing.
