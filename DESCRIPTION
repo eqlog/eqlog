@@ -1,4 +1,4 @@
-Bump eqlog to 0.9.0
+Fix crates.io release version check
 
-Update the workspace package version, the eqlog-runtime dependency pin,
-the runtime link name, and the lockfile entries for the 0.9.0 release.
+Send an explicit User-Agent when checking crates.io for
+already-published crate versions during the release workflow.
