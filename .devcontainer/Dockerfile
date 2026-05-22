@@ -41,9 +41,6 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/home/${USER}/.cargo/bin:${PATH}"
 RUN rustup component add rust-analyzer
 
-# The released eqlog is used to bootstrap eqlog-eqlog.
-RUN cargo install eqlog@0.8.0
-
 USER root
 RUN mkdir /workspaces && chown ${USER}:${USER} /workspaces
 USER ${USER}
