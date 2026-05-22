@@ -2,7 +2,7 @@
     "build": {
         "dockerfile": "Dockerfile",
         "args": {
-            "BASE_IMAGE": "${localEnv:BASE_IMAGE:debian:trixie}"
+            "BASE_IMAGE": "${localEnv:BASE_IMAGE}"
         }
     },
     "containerUser": "user"

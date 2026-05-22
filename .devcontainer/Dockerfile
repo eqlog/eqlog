@@ -1,8 +1,5 @@
-# syntax=docker/dockerfile:1.7
-
-ARG BASE_IMAGE=debian:trixie
-
-FROM $BASE_IMAGE
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE:-debian:testing}
 
 USER root
 
