@@ -1,0 +1,4 @@
+Bump eqlog to 0.9.0
+
+Update the workspace package version, the eqlog-runtime dependency pin,
+the runtime link name, and the lockfile entries for the 0.9.0 release.
