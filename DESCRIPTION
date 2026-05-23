@@ -1,0 +1,5 @@
+Add const declarations
+
+Introduce `const name: Type;` declarations as nullary partial
+functions used without parentheses, including member const syntax,
+resolver support, semantic lowering, diagnostics, docs, and tests.

@@ -1,4 +1,4 @@
-//! Purely AST-driven casing checks. See [`check_casing`] for the entry point.
+//! Casing checks. See [`check_casing`] for the entry point.
 //!
 //! Two independent analyses share one walk of the module:
 //!
@@ -16,16 +16,22 @@ use convert_case::{Case, Casing};
 use crate::ast::*;
 use crate::error::{CompileError, SymbolKind};
 use crate::grammar_util::Location;
+use crate::resolution::{NameResolution, ResolvedIdentTerm};
 
 /// Walks `ast` rooted at `module` and returns the first casing error in
 /// source order, or `Ok(())` if the program is clean.
-pub fn check_casing(ast: &Ast, module: ModuleId) -> Result<(), CompileError> {
-    let checker = CasingChecker { ast };
+pub fn check_casing(
+    ast: &Ast,
+    names: &NameResolution,
+    module: ModuleId,
+) -> Result<(), CompileError> {
+    let checker = CasingChecker { ast, names };
     checker.walk_module(module)
 }
 
 struct CasingChecker<'a> {
     ast: &'a Ast,
+    names: &'a NameResolution,
 }
 
 type Check = Result<(), CompileError>;
@@ -51,6 +57,10 @@ impl<'a> CasingChecker<'a> {
             Decl::Func(id) => {
                 let name = self.ast.func_decl(id).name.clone();
                 self.check_snake(name, self.ast.loc(id), SymbolKind::Func)
+            }
+            Decl::Const(id) => {
+                let name = self.ast.const_decl(id).name.clone();
+                self.check_snake(name, self.ast.loc(id), SymbolKind::Const)
             }
             Decl::Enum(id) => {
                 let name = self.ast.enum_decl(id).name.clone();
@@ -151,9 +161,9 @@ impl<'a> CasingChecker<'a> {
                 self.walk_term_list(args)
             }
             IfAtom::Var(id) => {
-                let VarIfAtom { term, typ } = *self.ast.var_if_atom(id);
+                let VarIfAtom { binder, typ } = *self.ast.var_if_atom(id);
                 self.walk_type_expr(typ)?;
-                self.walk_term(term)
+                self.walk_binder(binder)
             }
         }
     }
@@ -166,9 +176,9 @@ impl<'a> CasingChecker<'a> {
                 self.walk_term(rhs)
             }
             ThenAtom::Defined(id) => {
-                let DefinedThenAtom { var, term } = *self.ast.defined_then_atom(id);
-                if let Some(v) = var {
-                    self.walk_term(v)?;
+                let DefinedThenAtom { binder, term } = *self.ast.defined_then_atom(id);
+                if let Some(binder) = binder {
+                    self.walk_binder(binder)?;
                 }
                 self.walk_term(term)
             }
@@ -182,21 +192,16 @@ impl<'a> CasingChecker<'a> {
 
     fn walk_term(&self, term: TermId) -> Check {
         match *self.ast.term(term) {
-            Term::Var(id) => {
-                let name = self.ast.var_term(id).name.clone();
-                if name != name.to_case(Case::Snake) {
-                    return Err(CompileError::VariableNotSnakeCase {
-                        name,
-                        location: self.ast.loc(term),
-                    });
-                }
-                Ok(())
-            }
+            Term::Ident(id) => self.check_ident_term(id, self.ast.loc(term)),
             Term::Wildcard => Ok(()),
             Term::App(id) => {
                 let AppTerm { func, args } = *self.ast.app_term(id);
                 self.walk_func_expr(func)?;
                 self.walk_term_list(args)
+            }
+            Term::MemberConst(id) => {
+                let MemberConstTerm { receiver, .. } = *self.ast.member_const_term(id);
+                self.walk_term(receiver)
             }
             Term::Dom(id) => self.walk_term(self.ast.dom_term(id).arg),
             Term::Cod(id) => self.walk_term(self.ast.cod_term(id).arg),
@@ -211,6 +216,33 @@ impl<'a> CasingChecker<'a> {
     fn walk_term_list(&self, list: TermListId) -> Check {
         for term in self.ast.term_list(list).terms.clone() {
             self.walk_term(term)?;
+        }
+        Ok(())
+    }
+
+    fn walk_binder(&self, binder: BinderId) -> Check {
+        match *self.ast.binder(binder) {
+            Binder::Ident(id) => {
+                let name = self.ast.binder_ident(id).name.clone();
+                self.check_variable_name(name, self.ast.loc(binder))
+            }
+            Binder::Wildcard => Ok(()),
+        }
+    }
+
+    fn check_ident_term(&self, id: IdentTermId, location: Location) -> Check {
+        match self.names.resolved_ident(id) {
+            ResolvedIdentTerm::Var(_) => {
+                let name = self.ast.ident_term(id).name.clone();
+                self.check_variable_name(name, location)
+            }
+            ResolvedIdentTerm::AmbientConst(_) => Ok(()),
+        }
+    }
+
+    fn check_variable_name(&self, name: String, location: Location) -> Check {
+        if name != name.to_case(Case::Snake) {
+            return Err(CompileError::VariableNotSnakeCase { name, location });
         }
         Ok(())
     }

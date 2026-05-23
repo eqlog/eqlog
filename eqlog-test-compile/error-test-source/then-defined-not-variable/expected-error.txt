@@ -1,6 +1,6 @@
-Error: expected a variable
+Error: unrecognized token
  --> error-test-source/then-defined-not-variable/theory.eql:7
-  | 
+  |
 7 |     then bar() := foo()!;
-  |          ^^^^^           
-  | 
+  |                ^^
+  |

@@ -23,6 +23,7 @@ use crate::algebra::structure::{ConcreteType, ElId, Structure, StructureId, Type
 use crate::ast::*;
 use crate::error::CompileError;
 use crate::grammar_util::Location;
+use crate::resolution::NameResolution;
 use crate::scopes::{Scopes, Symbol};
 
 /// One rule declaration together with the chain of model types it is
@@ -41,6 +42,7 @@ struct RuleNode {
 pub fn build_structures(
     ast: &Ast,
     scopes: &Scopes,
+    names: &NameResolution,
     signature: &Signature,
     module: ModuleId,
 ) -> (BTreeMap<RuleDeclId, RuleStructures>, Vec<CompileError>) {
@@ -69,6 +71,7 @@ pub fn build_structures(
                 &enclosing_models,
                 ast,
                 scopes,
+                names,
                 signature,
                 &mut last_arg_num_errors,
             );
@@ -91,7 +94,7 @@ pub fn build_structures(
         // at a settled state without higher-priority structure errors.
         if errors.is_empty() {
             errors.extend(enum_ctor_surjectivity_errors(
-                rid, ast, scopes, signature, &rule,
+                rid, ast, scopes, names, signature, &rule,
             ));
             errors.extend(surjectivity_errors(ast, &rule));
         }
@@ -208,6 +211,18 @@ fn undetermined_type_errors(ast: &Ast, rule: &RuleStructures) -> Vec<CompileErro
             }
         }
     }
+    for (sid, semantic_binders) in rule.semantic_binders.iter().enumerate() {
+        let structure = &rule.cat.structures[sid];
+        for (&binder, &el) in semantic_binders {
+            let root = structure.unification.root_const(el);
+            let has_type = structure.els.get(&root).is_some_and(|cts| !cts.is_empty());
+            if !has_type {
+                errors.push(CompileError::UndeterminedTermType {
+                    location: ast.loc(binder),
+                });
+            }
+        }
+    }
 
     errors
 }
@@ -222,6 +237,7 @@ fn enum_ctor_surjectivity_errors(
     rid: RuleDeclId,
     ast: &Ast,
     scopes: &Scopes,
+    names: &NameResolution,
     signature: &Signature,
     rule: &RuleStructures,
 ) -> Vec<CompileError> {
@@ -246,7 +262,16 @@ fn enum_ctor_surjectivity_errors(
         let Some(enum_decl) = signature.enum_decl_for_type(term_type.typ) else {
             continue;
         };
-        if is_ctor_app_for_enum(term, term_type.typ, target, ast, scopes, signature, rule) {
+        if is_ctor_app_for_enum(
+            term,
+            term_type.typ,
+            target,
+            ast,
+            scopes,
+            names,
+            signature,
+            rule,
+        ) {
             continue;
         }
 
@@ -290,6 +315,7 @@ fn is_ctor_app_for_enum(
     sid: StructureId,
     ast: &Ast,
     scopes: &Scopes,
+    names: &NameResolution,
     signature: &Signature,
     rule: &RuleStructures,
 ) -> bool {
@@ -301,7 +327,10 @@ fn is_ctor_app_for_enum(
         FuncExpr::Ambient(ambient_id) => {
             let scope = scopes.entry(ambient_id);
             let name = &ast.ambient_func_expr(ambient_id).name;
-            ctor_symbol_has_codomain(scopes.lookup(scope, name), enum_type, signature)
+            let symbol = (!names.entry(ambient_id).lookup(name).is_some())
+                .then(|| scopes.lookup(scope, name))
+                .flatten();
+            ctor_symbol_has_codomain(symbol, enum_type, signature)
         }
         FuncExpr::Member(member_id) => {
             let MemberFuncExpr { term, name } = ast.member_func_expr(member_id).clone();
@@ -479,7 +508,7 @@ fn collect_rules(
                 nested.push(model_tid);
                 collect_rules(ast, signature, &body, &nested, out);
             }
-            Decl::Type(_) | Decl::Pred(_) | Decl::Func(_) | Decl::Enum(_) => {}
+            Decl::Type(_) | Decl::Pred(_) | Decl::Func(_) | Decl::Const(_) | Decl::Enum(_) => {}
         }
     }
 }
@@ -489,7 +518,7 @@ fn collect_rules(
 /// with `conflict.el`. Each [`ConcreteType`] renders as `TypeName` for
 /// global types or `parent_name.TypeName` for member types.
 ///
-/// Panics if no term backs `el` in any reachable structure.
+/// Panics if no source syntax backs `el` in any reachable structure.
 fn conflict_to_error(
     ast: &Ast,
     signature: &Signature,
@@ -499,13 +528,13 @@ fn conflict_to_error(
 ) -> CompileError {
     let TypeConflict { el, a, b } = conflict;
     let structure = &rule.cat.structures[sid.0];
-    let term_id = find_earliest_term(ast, rule, sid, el);
+    let location = find_earliest_location(ast, rule, sid, el);
     CompileError::ConflictingTermType {
         types: vec![
             concrete_type_to_string(ast, signature, structure, &a),
             concrete_type_to_string(ast, signature, structure, &b),
         ],
-        location: ast.loc(term_id),
+        location,
     }
 }
 
@@ -536,13 +565,18 @@ fn concrete_type_to_string(
     format!("{parent_name}.{type_name}")
 }
 
-/// Locates the earliest source term reachable from `target` by walking
+/// Locates the earliest source syntax reachable from `target` by walking
 /// incoming morphisms.
-fn find_earliest_term(ast: &Ast, rule: &RuleStructures, sid: StructureId, target: ElId) -> TermId {
+fn find_earliest_location(
+    ast: &Ast,
+    rule: &RuleStructures,
+    sid: StructureId,
+    target: ElId,
+) -> Location {
     let start_root = rule.cat.structures[sid.0].unification.root_const(target);
     let mut visited: BTreeSet<(StructureId, ElId)> = BTreeSet::new();
     let mut worklist: Vec<(StructureId, ElId)> = vec![(sid, start_root)];
-    let mut best: Option<(Location, TermId)> = None;
+    let mut best: Option<Location> = None;
 
     while let Some((s, el_root)) = worklist.pop() {
         if !visited.insert((s, el_root)) {
@@ -555,8 +589,18 @@ fn find_earliest_term(ast: &Ast, rule: &RuleStructures, sid: StructureId, target
                 continue;
             }
             let loc = ast.loc(term);
-            if best.is_none_or(|(best_loc, _)| (loc.1, loc.0) < (best_loc.1, best_loc.0)) {
-                best = Some((loc, term));
+            if best.is_none_or(|best_loc| (loc.1, loc.0) < (best_loc.1, best_loc.0)) {
+                best = Some(loc);
+            }
+        }
+
+        for (&binder, &e) in &rule.semantic_binders[s.0] {
+            if s_st.unification.root_const(e) != el_root {
+                continue;
+            }
+            let loc = ast.loc(binder);
+            if best.is_none_or(|best_loc| (loc.1, loc.0) < (best_loc.1, best_loc.0)) {
+                best = Some(loc);
             }
         }
 
@@ -577,8 +621,8 @@ fn find_earliest_term(ast: &Ast, rule: &RuleStructures, sid: StructureId, target
         }
     }
 
-    if let Some((_, term)) = best {
-        return term;
+    if let Some(location) = best {
+        return location;
     }
 
     let is_ambient_at_sid = rule.cat.structures[sid.0]
@@ -586,7 +630,7 @@ fn find_earliest_term(ast: &Ast, rule: &RuleStructures, sid: StructureId, target
         .values()
         .any(|&e| rule.cat.structures[sid.0].unification.root_const(e) == start_root);
     panic!(
-        "conflict on class {target:?} at {sid:?} has no term in any reachable structure \
+        "conflict on class {target:?} at {sid:?} has no source syntax in any reachable structure \
          (ambient model el at sid: {is_ambient_at_sid})"
     );
 }

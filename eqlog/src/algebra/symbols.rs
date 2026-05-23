@@ -15,6 +15,7 @@ use crate::algebra::structure::StructureId;
 use crate::ast::*;
 use crate::error::{CompileError, SymbolKind};
 use crate::grammar_util::Location;
+use crate::resolution::{NameResolution, VariableScope};
 use crate::scopes::{ScopeId, Scopes, Symbol};
 
 /// Checks every rule body under `module` for symbol lookup failures.
@@ -25,6 +26,7 @@ use crate::scopes::{ScopeId, Scopes, Symbol};
 pub fn check_symbol_lookups(
     ast: &Ast,
     scopes: &Scopes,
+    names: &NameResolution,
     signature: &Signature,
     module: ModuleId,
     rules: &BTreeMap<RuleDeclId, RuleStructures>,
@@ -32,6 +34,7 @@ pub fn check_symbol_lookups(
     let mut checker = Checker {
         ast,
         scopes,
+        names,
         signature,
         rules,
         errors: Vec::new(),
@@ -43,6 +46,7 @@ pub fn check_symbol_lookups(
 struct Checker<'a> {
     ast: &'a Ast,
     scopes: &'a Scopes,
+    names: &'a NameResolution,
     signature: &'a Signature,
     rules: &'a BTreeMap<RuleDeclId, RuleStructures>,
     errors: Vec<CompileError>,
@@ -59,6 +63,7 @@ enum LookupKind {
     Type,
     Pred,
     Func,
+    Const,
     Enum,
     Ctor,
     Model,
@@ -71,6 +76,7 @@ impl LookupKind {
             LookupKind::Type => SymbolKind::Type,
             LookupKind::Pred => SymbolKind::Pred,
             LookupKind::Func => SymbolKind::Func,
+            LookupKind::Const => SymbolKind::Const,
             LookupKind::Enum => SymbolKind::Enum,
             LookupKind::Ctor => SymbolKind::Ctor,
             LookupKind::Model => SymbolKind::Model,
@@ -85,11 +91,12 @@ impl Symbol {
             Symbol::Type(_) => LookupKind::Type,
             Symbol::Pred(_) => LookupKind::Pred,
             Symbol::Func(_) => LookupKind::Func,
+            Symbol::Const(_) => LookupKind::Const,
             Symbol::Enum(_) => LookupKind::Enum,
             Symbol::Ctor(_) => LookupKind::Ctor,
             Symbol::Model(_) => LookupKind::Model,
             Symbol::Rule(_) => LookupKind::Rule,
-            Symbol::Arg(_) | Symbol::Var(_) => return None,
+            Symbol::Arg(_) => return None,
         })
     }
 }
@@ -116,7 +123,7 @@ impl<'a> Checker<'a> {
                     self.walk_decl(child);
                 }
             }
-            Decl::Type(_) | Decl::Pred(_) | Decl::Func(_) | Decl::Enum(_) => {}
+            Decl::Type(_) | Decl::Pred(_) | Decl::Func(_) | Decl::Const(_) | Decl::Enum(_) => {}
         }
     }
 
@@ -187,9 +194,8 @@ impl<'a> Checker<'a> {
             }
             IfAtom::Pred(id) => self.walk_pred_atom(id, ctx),
             IfAtom::Var(id) => {
-                let VarIfAtom { term, typ } = *self.ast.var_if_atom(id);
+                let VarIfAtom { typ, .. } = *self.ast.var_if_atom(id);
                 self.check_type_expr(typ, ctx, self.ast.loc(atom));
-                self.walk_term(term, ctx);
             }
         }
     }
@@ -202,10 +208,7 @@ impl<'a> Checker<'a> {
                 self.walk_term(rhs, ctx);
             }
             ThenAtom::Defined(id) => {
-                let DefinedThenAtom { var, term } = *self.ast.defined_then_atom(id);
-                if let Some(var) = var {
-                    self.walk_term(var, ctx);
-                }
+                let DefinedThenAtom { term, .. } = *self.ast.defined_then_atom(id);
                 self.walk_term(term, ctx);
             }
             ThenAtom::Pred(id) => self.walk_pred_atom(id, ctx),
@@ -222,12 +225,20 @@ impl<'a> Checker<'a> {
 
     fn walk_term(&mut self, term: TermId, ctx: RuleCtx<'a>) {
         match *self.ast.term(term) {
-            Term::Var(_) | Term::Wildcard => {}
+            Term::Ident(_) | Term::Wildcard => {}
             Term::App(id) => {
                 let AppTerm { func, args } = *self.ast.app_term(id);
                 self.check_func_expr(func, ctx, &[LookupKind::Func, LookupKind::Ctor]);
                 for arg in self.ast.term_list(args).terms.clone() {
                     self.walk_term(arg, ctx);
+                }
+            }
+            Term::MemberConst(id) => {
+                let MemberConstTerm { receiver, name } = *self.ast.member_const_term(id);
+                self.walk_term(receiver, ctx);
+                let name = self.ast.ident_term(name).name.clone();
+                for scope in self.member_receiver_scopes(receiver, ctx) {
+                    self.check_member_const_lookup(scope, name.clone(), self.ast.loc(term));
                 }
             }
             Term::Dom(id) => self.walk_term(self.ast.dom_term(id).arg, ctx),
@@ -251,6 +262,7 @@ impl<'a> Checker<'a> {
             let name = self.ast.ambient_func_expr(id).name.clone();
             self.check_lookup(
                 self.scopes.entry(pattern),
+                self.names.entry(id),
                 name,
                 &[LookupKind::Ctor],
                 self.ast.loc(pattern),
@@ -273,6 +285,7 @@ impl<'a> Checker<'a> {
                 let name = self.ast.ambient_type_expr(id).name.clone();
                 self.check_lookup(
                     self.scopes.entry(id),
+                    self.names.entry(id),
                     name,
                     &[LookupKind::Type, LookupKind::Enum, LookupKind::Model],
                     used_at,
@@ -280,7 +293,13 @@ impl<'a> Checker<'a> {
             }
             TypeExpr::Mor(id) => {
                 let name = self.ast.mor_type_expr(id).name.clone();
-                self.check_lookup(self.scopes.entry(id), name, &[LookupKind::Model], used_at);
+                self.check_lookup(
+                    self.scopes.entry(id),
+                    self.names.entry(id),
+                    name,
+                    &[LookupKind::Model],
+                    used_at,
+                );
             }
             TypeExpr::Member(id) => {
                 let MemberTypeExpr { term, name } = self.ast.member_type_expr(id).clone();
@@ -303,6 +322,7 @@ impl<'a> Checker<'a> {
                 let name = self.ast.ambient_pred_expr(id).name.clone();
                 self.check_lookup(
                     self.scopes.entry(id),
+                    self.names.entry(id),
                     name,
                     &[LookupKind::Pred],
                     self.ast.loc(pred),
@@ -327,13 +347,19 @@ impl<'a> Checker<'a> {
         match *self.ast.func_expr(func) {
             FuncExpr::Ambient(id) => {
                 let name = self.ast.ambient_func_expr(id).name.clone();
-                self.check_lookup(self.scopes.entry(id), name, ambient, self.ast.loc(func));
+                self.check_func_call_lookup(
+                    self.scopes.entry(id),
+                    self.names.entry(id),
+                    name,
+                    ambient,
+                    self.ast.loc(func),
+                );
             }
             FuncExpr::Member(id) => {
                 let MemberFuncExpr { term, name } = self.ast.member_func_expr(id).clone();
                 self.walk_term(term, ctx);
                 for scope in self.member_receiver_scopes(term, ctx) {
-                    self.check_member_lookup(
+                    self.check_member_func_call_lookup(
                         scope,
                         name.clone(),
                         &[LookupKind::Func, LookupKind::Ctor],
@@ -374,11 +400,31 @@ impl<'a> Checker<'a> {
     fn check_lookup(
         &mut self,
         scope: ScopeId,
+        var_scope: &VariableScope,
         name: String,
         expected: &[LookupKind],
         used_at: Location,
     ) {
-        let decls = lookup_decl_symbols(self.scopes, scope, &name);
+        let decls = lookup_decl_symbols(self.scopes, var_scope, scope, &name);
+        self.check_decl_symbols(name, expected, used_at, decls);
+    }
+
+    fn check_func_call_lookup(
+        &mut self,
+        scope: ScopeId,
+        var_scope: &VariableScope,
+        name: String,
+        expected: &[LookupKind],
+        used_at: Location,
+    ) {
+        let decls = lookup_decl_symbols(self.scopes, var_scope, scope, &name);
+        if decls.iter().any(|sym| matches!(sym, Symbol::Const(_))) {
+            self.errors.push(CompileError::ConstCalledAsFunction {
+                name,
+                location: used_at,
+            });
+            return;
+        }
         self.check_decl_symbols(name, expected, used_at, decls);
     }
 
@@ -391,6 +437,42 @@ impl<'a> Checker<'a> {
     ) {
         let decls = lookup_direct_decl_symbols(self.scopes, scope, &name);
         self.check_decl_symbols(name, expected, used_at, decls);
+    }
+
+    fn check_member_func_call_lookup(
+        &mut self,
+        scope: ScopeId,
+        name: String,
+        expected: &[LookupKind],
+        used_at: Location,
+    ) {
+        let decls = lookup_direct_decl_symbols(self.scopes, scope, &name);
+        if decls.iter().any(|sym| matches!(sym, Symbol::Const(_))) {
+            self.errors.push(CompileError::ConstCalledAsFunction {
+                name,
+                location: used_at,
+            });
+            return;
+        }
+        self.check_decl_symbols(name, expected, used_at, decls);
+    }
+
+    fn check_member_const_lookup(&mut self, scope: ScopeId, name: String, used_at: Location) {
+        let decls = lookup_direct_decl_symbols(self.scopes, scope, &name);
+        if decls.iter().any(|sym| matches!(sym, Symbol::Const(_))) {
+            return;
+        }
+        if decls
+            .iter()
+            .any(|sym| matches!(sym, Symbol::Func(_) | Symbol::Ctor(_)))
+        {
+            self.errors.push(CompileError::FunctionUsedWithoutCall {
+                name,
+                location: used_at,
+            });
+            return;
+        }
+        self.check_decl_symbols(name, &[LookupKind::Const], used_at, decls);
     }
 
     fn check_decl_symbols(
@@ -434,13 +516,21 @@ fn lookup_direct_decl_symbols(scopes: &Scopes, scope: ScopeId, name: &str) -> Ve
         .get(name)
         .copied()
         .into_iter()
-        .filter(|sym| !matches!(sym, Symbol::Arg(_) | Symbol::Var(_)))
+        .filter(|sym| !matches!(sym, Symbol::Arg(_)))
         .collect()
 }
 
-fn lookup_decl_symbols(scopes: &Scopes, scope: ScopeId, name: &str) -> Vec<Symbol> {
+fn lookup_decl_symbols(
+    scopes: &Scopes,
+    var_scope: &VariableScope,
+    scope: ScopeId,
+    name: &str,
+) -> Vec<Symbol> {
+    if var_scope.lookup(name).is_some() {
+        return Vec::new();
+    }
     match scopes.lookup(scope, name) {
-        Some(Symbol::Arg(_) | Symbol::Var(_)) | None => Vec::new(),
+        Some(Symbol::Arg(_)) | None => Vec::new(),
         Some(sym) => vec![sym],
     }
 }

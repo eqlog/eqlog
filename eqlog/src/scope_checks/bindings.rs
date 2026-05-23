@@ -18,14 +18,14 @@
 
 use crate::ast::*;
 use crate::error::CompileError;
-use crate::scopes::{ScopeId, Scopes, Symbol};
+use crate::resolution::{NameResolution, ResolvedIdentTerm, VarBindingId};
 
 /// Walks rule bodies under `module` and returns all binding-position errors
 /// in source order.
-pub fn check_bindings(ast: &Ast, scopes: &Scopes, module: ModuleId) -> Vec<CompileError> {
+pub fn check_bindings(ast: &Ast, names: &NameResolution, module: ModuleId) -> Vec<CompileError> {
     let mut checker = BindingsChecker {
         ast,
-        scopes,
+        names,
         errors: Vec::new(),
     };
     checker.walk_module(module);
@@ -34,7 +34,7 @@ pub fn check_bindings(ast: &Ast, scopes: &Scopes, module: ModuleId) -> Vec<Compi
 
 struct BindingsChecker<'a> {
     ast: &'a Ast,
-    scopes: &'a Scopes,
+    names: &'a NameResolution,
     errors: Vec<CompileError>,
 }
 
@@ -47,7 +47,7 @@ impl<'a> BindingsChecker<'a> {
 
     fn walk_decl(&mut self, decl: DeclId) {
         match *self.ast.decl(decl) {
-            Decl::Type(_) | Decl::Pred(_) | Decl::Func(_) | Decl::Enum(_) => {}
+            Decl::Type(_) | Decl::Pred(_) | Decl::Func(_) | Decl::Const(_) | Decl::Enum(_) => {}
             Decl::Rule(id) => {
                 let body = self.ast.rule_decl(id).body.clone();
                 self.walk_stmt_block(&body);
@@ -96,9 +96,9 @@ impl<'a> BindingsChecker<'a> {
                 self.check_epic_term(rhs);
             }
             ThenAtom::Defined(id) => {
-                let DefinedThenAtom { var, term } = *self.ast.defined_then_atom(id);
-                if let Some(var_term) = var {
-                    self.check_then_defined_var(var_term);
+                let DefinedThenAtom { binder, term } = *self.ast.defined_then_atom(id);
+                if let Some(binder) = binder {
+                    self.check_then_defined_binder(atom, binder);
                 }
                 self.check_epic_term(term);
             }
@@ -116,14 +116,19 @@ impl<'a> BindingsChecker<'a> {
     /// variable in such a position is an error unless it was bound earlier.
     fn check_epic_term(&mut self, term: TermId) {
         match *self.ast.term(term) {
-            Term::Var(id) => {
-                let entry = self.scopes.entry(term);
-                if !var_name_bound(self.scopes, entry, &self.ast.var_term(id).name) {
-                    self.errors
-                        .push(CompileError::VariableIntroducedInThenStmt {
-                            location: self.ast.loc(term),
-                        });
+            Term::Ident(id) => {
+                if let ResolvedIdentTerm::Var(binding) = self.names.resolved_ident(id) {
+                    let name = &self.names.binding(binding).name;
+                    if !self.binding_visible_before(term, name, binding) {
+                        self.errors
+                            .push(CompileError::VariableIntroducedInThenStmt {
+                                location: self.ast.loc(term),
+                            });
+                    }
                 }
+            }
+            Term::MemberConst(id) => {
+                self.check_epic_term(self.ast.member_const_term(id).receiver);
             }
             Term::Wildcard => {}
             Term::App(id) => {
@@ -136,19 +141,22 @@ impl<'a> BindingsChecker<'a> {
         }
     }
 
-    /// The variable slot of `then v := t`. Wildcards are fine; a variable must
-    /// not already be in scope.
-    fn check_then_defined_var(&mut self, var_term: TermId) {
-        if let Term::Var(id) = *self.ast.term(var_term) {
-            let entry = self.scopes.entry(var_term);
-            if var_name_bound(self.scopes, entry, &self.ast.var_term(id).name) {
-                self.errors.push(CompileError::ThenDefinedVarNotNew {
-                    location: self.ast.loc(var_term),
-                });
-            }
+    fn binding_visible_before(&self, term: TermId, name: &str, binding: VarBindingId) -> bool {
+        self.names.entry(term).lookup(name) == Some(binding)
+    }
+
+    /// The binder slot of `then v := t`. Wildcards are fine; an identifier
+    /// must not already be in scope before the initializer is resolved.
+    fn check_then_defined_binder(&mut self, atom: ThenAtomId, binder: BinderId) {
+        let Binder::Ident(id) = *self.ast.binder(binder) else {
+            return;
+        };
+        let name = &self.ast.binder_ident(id).name;
+        if self.names.entry(atom).lookup(name).is_some() {
+            self.errors.push(CompileError::ThenDefinedVarNotNew {
+                location: self.ast.loc(binder),
+            });
         }
-        // Wildcards don't bind anything; non-var/non-wildcard patterns were
-        // rejected by the syntactic pass as ThenDefinedNotVar.
     }
 
     /// Variables used as direct constructor arguments in a match pattern must
@@ -162,22 +170,17 @@ impl<'a> BindingsChecker<'a> {
         };
         let args = self.ast.app_term(app).args;
         for arg in self.ast.term_list(args).terms.clone() {
-            if let Term::Var(id) = *self.ast.term(arg) {
-                let entry = self.scopes.entry(arg);
-                if var_name_bound(self.scopes, entry, &self.ast.var_term(id).name) {
-                    self.errors
-                        .push(CompileError::MatchPatternArgVarIsNotFresh {
-                            location: self.ast.loc(arg),
-                        });
+            if let Term::Ident(id) = *self.ast.term(arg) {
+                if let ResolvedIdentTerm::Var(binding) = self.names.resolved_ident(id) {
+                    let name = &self.names.binding(binding).name;
+                    if self.names.entry(arg).lookup(name).is_some() {
+                        self.errors
+                            .push(CompileError::MatchPatternArgVarIsNotFresh {
+                                location: self.ast.loc(arg),
+                            });
+                    }
                 }
             }
         }
     }
-}
-
-/// True when `name` resolves to an earlier variable binding reachable from
-/// `scope`. Non-variable symbols (decls, args) don't count as "already bound
-/// as a variable," matching eqlog's `var_in_scope`.
-fn var_name_bound(scopes: &Scopes, scope: ScopeId, name: &str) -> bool {
-    matches!(scopes.lookup(scope, name), Some(Symbol::Var(_)))
 }

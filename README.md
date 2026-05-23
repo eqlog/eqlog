@@ -131,7 +131,7 @@ Note that a special invocation that specifies the full path is needed for eqlog 
 
 ## Language
 
-Each eqlog file consists of a sequence of type, predicate, function and rule declarations.
+Each eqlog file consists of a sequence of type, predicate, function, constant and rule declarations.
 Mathematically, eqlog is a way to specify [essentially algebraic theories](https://ncatlab.org/nlab/show/essentially+algebraic+theory#definition).
 
 ### Types
@@ -155,11 +155,11 @@ func <FuncName>(<ArgType_1>, ..., <ArgType_n>) -> <ResultType>;
 ```
 Each function has a domain, which is the list of types appearing before the arrow, and a codomain type after the arrow.
 
-A function with empty domain is a constant.
-Constants are declared as follows:
+Constants are nullary partial functions declared as follows:
 ```eqlog
-func <ConstantName> : <Type>;
+const <ConstantName>: <Type>;
 ```
+Constants are used without parentheses, e.g. `foo` and `model.foo`.
 
 To eqlog, functions are synonymous to *partial* functions; they need not be total.
 

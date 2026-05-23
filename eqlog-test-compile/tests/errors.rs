@@ -52,7 +52,7 @@ fn test_case(case_src: &Path) {
         Err(err) => format!("{err}"),
     };
 
-    if actual_error != expected_error {
+    if normalize_error_text(&actual_error) != normalize_error_text(&expected_error) {
         panic!(
             "{}",
             formatdoc! {"
@@ -66,6 +66,18 @@ fn test_case(case_src: &Path) {
         "}
         );
     }
+}
+
+fn normalize_error_text(text: &str) -> String {
+    let mut normalized = text
+        .lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n");
+    if text.ends_with('\n') {
+        normalized.push('\n');
+    }
+    normalized
 }
 
 #[test]
@@ -92,6 +104,21 @@ fn undeclared_predicate_shadowed_by_var() {
 #[test]
 fn undeclared_function() {
     test_case(Path::new("undeclared-function"));
+}
+
+#[test]
+fn const_called_as_function() {
+    test_case(Path::new("const-called-as-function"));
+}
+
+#[test]
+fn member_const_called_as_function() {
+    test_case(Path::new("member-const-called-as-function"));
+}
+
+#[test]
+fn member_function_used_without_call() {
+    test_case(Path::new("member-function-used-without-call"));
 }
 
 // // TODO: Figure out which casing rules we should continue to enforce. E.g. constructors can/should

@@ -15,6 +15,7 @@ pub enum SymbolKind {
     Type,
     Pred,
     Func,
+    Const,
     Rule,
     Enum,
     Ctor,
@@ -26,6 +27,7 @@ fn display_symbol_kind(symbol_kind: SymbolKind) -> &'static str {
         SymbolKind::Type => "type",
         SymbolKind::Pred => "predicate",
         SymbolKind::Func => "function",
+        SymbolKind::Const => "constant",
         SymbolKind::Rule => "rule",
         SymbolKind::Enum => "enum",
         SymbolKind::Ctor => "constructor",
@@ -93,6 +95,14 @@ pub enum CompileError {
         first_declaration: Location,
         second_declaration: Location,
     },
+    ConstCalledAsFunction {
+        name: String,
+        location: Location,
+    },
+    FunctionUsedWithoutCall {
+        name: String,
+        location: Location,
+    },
     UndeterminedTermType {
         location: Location,
     },
@@ -107,12 +117,6 @@ pub enum CompileError {
         location: Location,
     },
     SurjectivityViolation {
-        location: Location,
-    },
-    ThenDefinedNotVar {
-        location: Location,
-    },
-    IfVarLhsNotVarOrWildcard {
         location: Location,
     },
     ThenDefinedVarNotNew {
@@ -220,13 +224,13 @@ impl CompileError {
             CompileError::SymbolDeclaredTwice {
                 second_declaration, ..
             } => *second_declaration,
+            CompileError::ConstCalledAsFunction { location, .. } => *location,
+            CompileError::FunctionUsedWithoutCall { location, .. } => *location,
             CompileError::UndeterminedTermType { location } => *location,
             CompileError::ConflictingTermType { location, .. } => *location,
             CompileError::VariableIntroducedInThenStmt { location } => *location,
             CompileError::WildcardInThenStmt { location } => *location,
             CompileError::SurjectivityViolation { location } => *location,
-            CompileError::ThenDefinedNotVar { location } => *location,
-            CompileError::IfVarLhsNotVarOrWildcard { location } => *location,
             CompileError::ThenDefinedVarNotNew { location } => *location,
             CompileError::EnumCtorsNotSurjective {
                 term_location,
@@ -265,13 +269,13 @@ pub enum CompileErrorKind {
     UndeclaredSymbol,
     BadSymbolKind,
     SymbolDeclaredTwice,
+    ConstCalledAsFunction,
+    FunctionUsedWithoutCall,
     UndeterminedTermType,
     ConflictingTermType,
     VariableIntroducedInThenStmt,
     WildcardInThenStmt,
     SurjectivityViolation,
-    ThenDefinedNotVar,
-    IfVarLhsNotVarOrWildcard,
     ThenDefinedVarNotNew,
     EnumCtorsNotSurjective,
     MatchPatternIsVariable,
@@ -303,13 +307,13 @@ impl From<&CompileError> for CompileErrorKind {
             UndeclaredSymbol { .. } => CompileErrorKind::UndeclaredSymbol,
             BadSymbolKind { .. } => CompileErrorKind::BadSymbolKind,
             SymbolDeclaredTwice { .. } => CompileErrorKind::SymbolDeclaredTwice,
+            ConstCalledAsFunction { .. } => CompileErrorKind::ConstCalledAsFunction,
+            FunctionUsedWithoutCall { .. } => CompileErrorKind::FunctionUsedWithoutCall,
             UndeterminedTermType { .. } => CompileErrorKind::UndeterminedTermType,
             ConflictingTermType { .. } => CompileErrorKind::ConflictingTermType,
             VariableIntroducedInThenStmt { .. } => CompileErrorKind::VariableIntroducedInThenStmt,
             WildcardInThenStmt { .. } => CompileErrorKind::WildcardInThenStmt,
             SurjectivityViolation { .. } => CompileErrorKind::SurjectivityViolation,
-            ThenDefinedNotVar { .. } => CompileErrorKind::ThenDefinedNotVar,
-            IfVarLhsNotVarOrWildcard { .. } => CompileErrorKind::IfVarLhsNotVarOrWildcard,
             ThenDefinedVarNotNew { .. } => CompileErrorKind::ThenDefinedVarNotNew,
             EnumCtorsNotSurjective { .. } => CompileErrorKind::EnumCtorsNotSurjective,
             MatchPatternIsVariable { .. } => CompileErrorKind::MatchPatternIsVariable,
@@ -380,6 +384,16 @@ static COMPILE_ERROR_KIND_ORDER: LazyLock<HashSet<[CompileErrorKind; 2]>> = Lazy
     for k in CompileErrorKind::iter() {
         if !relation.contains(&[k, BadSymbolKind]) {
             relation.insert([BadSymbolKind, k]);
+        }
+    }
+    transitive_closure(&mut relation);
+
+    for k in CompileErrorKind::iter() {
+        if !relation.contains(&[k, ConstCalledAsFunction]) {
+            relation.insert([ConstCalledAsFunction, k]);
+        }
+        if !relation.contains(&[k, FunctionUsedWithoutCall]) {
+            relation.insert([FunctionUsedWithoutCall, k]);
         }
     }
     transitive_closure(&mut relation);
@@ -601,6 +615,14 @@ impl Display for CompileErrorWithContext {
                 write!(f, "Previously declared here:\n")?;
                 write_loc(f, *first_declaration)?;
             }
+            ConstCalledAsFunction { name, location } => {
+                write!(f, "constant \"{name}\" must be used without parentheses\n")?;
+                write_loc(f, *location)?;
+            }
+            FunctionUsedWithoutCall { name, location } => {
+                write!(f, "function \"{name}\" must be called with parentheses\n")?;
+                write_loc(f, *location)?;
+            }
             UndeterminedTermType { location } => {
                 write!(f, "type of term undetermined\n")?;
                 write_loc(f, *location)?;
@@ -622,17 +644,6 @@ impl Display for CompileErrorWithContext {
             }
             SurjectivityViolation { location } => {
                 write!(f, "term does not appear earlier in this rule\n")?;
-                write_loc(f, *location)?;
-            }
-            ThenDefinedNotVar { location } => {
-                write!(f, "expected a variable\n")?;
-                write_loc(f, *location)?;
-            }
-            IfVarLhsNotVarOrWildcard { location } => {
-                write!(
-                    f,
-                    "the left-hand side of 'var : Type' must be a variable or wildcard\n"
-                )?;
                 write_loc(f, *location)?;
             }
             ThenDefinedVarNotNew { location } => {

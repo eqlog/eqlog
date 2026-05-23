@@ -18,6 +18,7 @@ syntax keyword eqlogDecl
   \ type
   \ pred
   \ func
+  \ const
   \ rule
   \ nextgroup=eqlogIdentifier skipwhite skipempty
 highlight default link eqlogDecl Keyword

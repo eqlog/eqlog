@@ -60,6 +60,14 @@ impl<'a> RustGenCtx<'a> {
 
         if let Some((decl, _)) = self
             .signature
+            .iter_const_decls()
+            .find(|(_, func0)| *func0 == func)
+        {
+            return self.ast.const_decl(decl).name.clone();
+        }
+
+        if let Some((decl, _)) = self
+            .signature
             .iter_ctor_decls()
             .find(|(_, func0)| *func0 == func)
         {

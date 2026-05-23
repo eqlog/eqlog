@@ -41,6 +41,10 @@ impl<'a> SyntacticChecker<'a> {
                 self.check_signature_arg_list(args)?;
                 self.check_signature_type_expr(result)
             }
+            Decl::Const(id) => {
+                let result = self.ast.const_decl(id).result;
+                self.check_signature_type_expr(result)
+            }
             Decl::Enum(id) => {
                 for ctor in self.ast.enum_decl(id).ctors.clone() {
                     let args = self.ast.ctor_decl(ctor).args;
@@ -114,24 +118,8 @@ impl<'a> SyntacticChecker<'a> {
 
     fn check_if_atom(&self, atom: IfAtomId) -> Check {
         match *self.ast.if_atom(atom) {
-            IfAtom::Var(id) => {
-                let VarIfAtom { term, .. } = *self.ast.var_if_atom(id);
-                self.check_if_var_lhs(term)
-            }
+            IfAtom::Var(_) => Ok(()),
             IfAtom::Equal(_) | IfAtom::Defined(_) | IfAtom::Pred(_) => Ok(()),
-        }
-    }
-
-    /// The left-hand side of an if-side `var : Type` atom must be a
-    /// variable or wildcard.
-    fn check_if_var_lhs(&self, var_term: TermId) -> Check {
-        match *self.ast.term(var_term) {
-            Term::Var(_) | Term::Wildcard => Ok(()),
-            Term::App(_) | Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => {
-                Err(CompileError::IfVarLhsNotVarOrWildcard {
-                    location: self.ast.loc(var_term),
-                })
-            }
         }
     }
 
@@ -143,10 +131,7 @@ impl<'a> SyntacticChecker<'a> {
                 self.check_then_term(rhs)
             }
             ThenAtom::Defined(id) => {
-                let DefinedThenAtom { var, term } = *self.ast.defined_then_atom(id);
-                if let Some(var_term) = var {
-                    self.check_defined_then_var(var_term)?;
-                }
+                let DefinedThenAtom { term, .. } = *self.ast.defined_then_atom(id);
                 self.check_then_term(term)
             }
             ThenAtom::Pred(id) => {
@@ -167,7 +152,7 @@ impl<'a> SyntacticChecker<'a> {
             Term::Wildcard => Err(CompileError::WildcardInThenStmt {
                 location: self.ast.loc(term),
             }),
-            Term::Var(_) => Ok(()),
+            Term::Ident(_) => Ok(()),
             Term::App(id) => {
                 let AppTerm { func, args } = *self.ast.app_term(id);
                 self.check_then_func_expr(func)?;
@@ -175,6 +160,10 @@ impl<'a> SyntacticChecker<'a> {
                     self.check_then_term(arg)?;
                 }
                 Ok(())
+            }
+            Term::MemberConst(id) => {
+                let MemberConstTerm { receiver, .. } = *self.ast.member_const_term(id);
+                self.check_then_term(receiver)
             }
             Term::Dom(id) => self.check_then_term(self.ast.dom_term(id).arg),
             Term::Cod(id) => self.check_then_term(self.ast.cod_term(id).arg),
@@ -200,24 +189,11 @@ impl<'a> SyntacticChecker<'a> {
         }
     }
 
-    /// The variable slot of a `defined := term` statement must be a variable
-    /// or a wildcard.
-    fn check_defined_then_var(&self, var_term: TermId) -> Check {
-        match *self.ast.term(var_term) {
-            Term::Var(_) | Term::Wildcard => Ok(()),
-            Term::App(_) | Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => {
-                Err(CompileError::ThenDefinedNotVar {
-                    location: self.ast.loc(var_term),
-                })
-            }
-        }
-    }
-
     fn check_match_case(&self, case: MatchCaseId) -> Check {
         let pattern = self.ast.match_case(case).pattern;
         let location = self.ast.loc(pattern);
         match *self.ast.term(pattern) {
-            Term::Var(_) => Err(CompileError::MatchPatternIsVariable { location }),
+            Term::Ident(_) => Err(CompileError::MatchPatternIsVariable { location }),
             Term::Wildcard => Err(CompileError::MatchPatternIsWildcard { location }),
             Term::App(id) => {
                 let AppTerm { func, args } = *self.ast.app_term(id);
@@ -234,8 +210,9 @@ impl<'a> SyntacticChecker<'a> {
                                 location: self.ast.loc(arg),
                             });
                         }
-                        Term::Var(_)
+                        Term::Ident(_)
                         | Term::Wildcard
+                        | Term::MemberConst(_)
                         | Term::Dom(_)
                         | Term::Cod(_)
                         | Term::MorApp(_) => {}
@@ -243,7 +220,7 @@ impl<'a> SyntacticChecker<'a> {
                 }
                 Ok(())
             }
-            Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => Ok(()),
+            Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => Ok(()),
         }
     }
 }
