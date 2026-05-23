@@ -73,6 +73,7 @@ jobs:
             local status
 
             status="$(curl --silent --output /dev/null --write-out "%{http_code}" \
+              --user-agent "eqlog release workflow (https://github.com/eqlog/eqlog)" \
               "https://crates.io/api/v1/crates/${crate}/${version}")"
 
             case "${status}" in
