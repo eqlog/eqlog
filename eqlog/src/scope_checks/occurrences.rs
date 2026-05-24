@@ -1,33 +1,27 @@
-//! Per-rule "variable occurs at least twice" check. See [`check_occurrences`]
-//! for the entry point.
+//! Per-rule "resolved variable binding occurs at least twice" check. See
+//! [`check_occurrences`] for the entry point.
 
 use std::collections::BTreeMap;
 
 use crate::ast::*;
 use crate::error::CompileError;
-use crate::resolution::{NameResolution, ResolvedIdentTerm, VarBindingId};
+use crate::scopes::{Scopes, Symbol};
 
-/// Walk `ast` rooted at `module` and report the first variable occurrence
-/// that is not reachable from (and to) another occurrence of the same name
-/// via the scope graph, i.e. the first variable that is used only once in
-/// its scope.
-pub fn check_occurrences(
-    ast: &Ast,
-    names: &NameResolution,
-    module: ModuleId,
-) -> Result<(), CompileError> {
-    let checker = OccurrencesChecker { ast, names };
+/// Walk `ast` rooted at `module` and report the first resolved variable
+/// binding that occurs only once in its rule body.
+pub fn check_occurrences(ast: &Ast, scopes: &Scopes, module: ModuleId) -> Result<(), CompileError> {
+    let checker = OccurrencesChecker { ast, scopes };
     checker.check_module(module)
 }
 
 struct OccurrencesChecker<'a> {
     ast: &'a Ast,
-    names: &'a NameResolution,
+    scopes: &'a Scopes,
 }
 
 #[derive(Copy, Clone)]
 struct VarOccurrence {
-    binding: VarBindingId,
+    binding: IdentTermId,
     location: crate::grammar_util::Location,
 }
 
@@ -62,7 +56,7 @@ impl<'a> OccurrencesChecker<'a> {
             self.collect_stmt(stmt, &mut occurrences);
         }
 
-        let mut counts: BTreeMap<VarBindingId, usize> = BTreeMap::new();
+        let mut counts: BTreeMap<IdentTermId, usize> = BTreeMap::new();
         for occ in &occurrences {
             *counts.entry(occ.binding).or_default() += 1;
         }
@@ -72,7 +66,7 @@ impl<'a> OccurrencesChecker<'a> {
             .find(|occ| counts.get(&occ.binding).copied().unwrap_or(0) < 2)
         {
             Some(occ) => Err(CompileError::VariableOccursOnlyOnce {
-                name: self.names.binding_name(occ.binding).to_string(),
+                name: self.ast.ident_term(occ.binding).name.clone(),
                 location: occ.location,
             }),
             None => Ok(()),
@@ -157,7 +151,9 @@ impl<'a> OccurrencesChecker<'a> {
     fn collect_term(&self, term: TermId, occ: &mut Vec<VarOccurrence>) {
         match *self.ast.term(term) {
             Term::Ident(id) => {
-                if let ResolvedIdentTerm::Var(binding) = self.names.resolved_ident(id) {
+                let name = &self.ast.ident_term(id).name;
+                if let Some(Symbol::Var(binding)) = self.scopes.lookup(self.scopes.exit(term), name)
+                {
                     occ.push(VarOccurrence {
                         binding,
                         location: self.ast.loc(term),

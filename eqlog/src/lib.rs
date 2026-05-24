@@ -11,7 +11,6 @@ mod flat_eqlog;
 mod flatten;
 mod fmt_util;
 mod ram;
-mod resolution;
 mod rust_gen;
 mod scope_checks;
 mod scopes;

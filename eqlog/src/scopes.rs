@@ -20,6 +20,7 @@ pub enum Symbol {
     Model(ModelDeclId),
     Rule(RuleDeclId),
     Arg(ArgDeclId),
+    Var(IdentTermId),
 }
 
 #[derive(Clone, Debug)]
@@ -126,10 +127,11 @@ ordered_from!(MemberFuncExprId);
 ///   scopes of the node. Sibling nodes chain so that names bound in an
 ///   earlier sibling are visible in a later one.
 ///
-/// Every named arg declaration extends the current scope with a fresh child
-/// scope that contains the corresponding [`Symbol`]. Rule-body variables are
-/// resolved separately by [`crate::resolution`]; the ordered scopes here only
-/// tell later passes which declaration scope a syntax node sits in.
+/// Every named arg declaration and rule-body variable introduction extends the
+/// current scope with a fresh child scope that contains the corresponding
+/// [`Symbol`]. [`Scopes::lookup`] walks the `parent` chain, so later
+/// occurrences see variables introduced by earlier ordered nodes while still
+/// reaching ambient declarations through the surrounding unordered scopes.
 #[derive(Clone, Debug, Default)]
 #[allow(dead_code)]
 pub struct Scopes {
@@ -237,6 +239,7 @@ impl Symbol {
             Symbol::Model(id) => ast.loc(id),
             Symbol::Rule(id) => ast.loc(id),
             Symbol::Arg(id) => ast.loc(id),
+            Symbol::Var(id) => ast.loc(id),
         }
     }
 }
@@ -277,6 +280,33 @@ impl<'a> ScopeBuilder<'a> {
         }
         self.scopes[scope.0].symbols.insert(name.to_string(), sym);
         Ok(())
+    }
+
+    fn insert_var_symbol(&mut self, current: ScopeId, name: String, ident: IdentTermId) -> ScopeId {
+        let new_scope = self.new_scope(Some(current));
+        self.scopes[new_scope.0]
+            .symbols
+            .insert(name, Symbol::Var(ident));
+        new_scope
+    }
+
+    fn lookup_var(&self, scope: ScopeId, name: &str) -> Option<IdentTermId> {
+        match self.lookup(scope, name) {
+            Some(Symbol::Var(id)) => Some(id),
+            _ => None,
+        }
+    }
+
+    fn lookup(&self, scope: ScopeId, name: &str) -> Option<Symbol> {
+        let mut cur = Some(scope);
+        while let Some(id) = cur {
+            let s = &self.scopes[id.0];
+            if let Some(sym) = s.symbols.get(name) {
+                return Some(*sym);
+            }
+            cur = s.parent;
+        }
+        None
     }
 
     /// Unordered scope, breadth-first: populate `scope` with the symbols
@@ -488,8 +518,9 @@ impl<'a> ScopeBuilder<'a> {
             }
             IfAtom::Var(id) => {
                 let VarIfAtom { term, typ } = *self.ast.var_if_atom(id);
+                // The variable is not visible inside its own annotation.
                 let after_type = self.walk_type_expr(current, typ);
-                let after_var = self.walk_term(after_type, term);
+                let after_var = self.walk_var_term(after_type, term);
                 self.insert_ordered(id, current, after_var);
                 after_var
             }
@@ -510,9 +541,11 @@ impl<'a> ScopeBuilder<'a> {
             }
             ThenAtom::Defined(id) => {
                 let DefinedThenAtom { var, term } = *self.ast.defined_then_atom(id);
+                // The initializer does not see a binding introduced by the
+                // variable slot of the same atom.
                 let after_term = self.walk_term(current, term);
                 let exit = match var {
-                    Some(var) => self.walk_term(after_term, var),
+                    Some(var) => self.walk_then_defined_var(current, after_term, var),
                     None => after_term,
                 };
                 self.insert_ordered(id, current, exit);
@@ -533,10 +566,7 @@ impl<'a> ScopeBuilder<'a> {
     /// Ordered scope, depth-first.
     fn walk_term(&mut self, current: ScopeId, term: TermId) -> ScopeId {
         let exit = match *self.ast.term(term) {
-            Term::Ident(id) => {
-                self.insert_ordered(id, current, current);
-                current
-            }
+            Term::Ident(id) => self.walk_ident_term(current, id),
             Term::Wildcard => current,
             Term::App(id) => {
                 let AppTerm { func, args } = *self.ast.app_term(id);
@@ -573,6 +603,73 @@ impl<'a> ScopeBuilder<'a> {
             }
         };
         self.insert_ordered(term, current, exit);
+        exit
+    }
+
+    fn walk_ident_term(&mut self, current: ScopeId, ident: IdentTermId) -> ScopeId {
+        let name = self.ast.ident_term(ident).name.clone();
+        let exit = match self.lookup(current, &name) {
+            Some(Symbol::Var(_) | Symbol::Const(_)) => current,
+            Some(
+                Symbol::Type(_)
+                | Symbol::Pred(_)
+                | Symbol::Func(_)
+                | Symbol::Enum(_)
+                | Symbol::Ctor(_)
+                | Symbol::Model(_)
+                | Symbol::Rule(_)
+                | Symbol::Arg(_),
+            )
+            | None => self.insert_var_symbol(current, name, ident),
+        };
+        self.insert_ordered(ident, current, exit);
+        exit
+    }
+
+    fn walk_var_term(&mut self, current: ScopeId, term: TermId) -> ScopeId {
+        let exit = match *self.ast.term(term) {
+            Term::Ident(id) => {
+                let name = self.ast.ident_term(id).name.clone();
+                let exit = if self.lookup_var(current, &name).is_some() {
+                    current
+                } else {
+                    self.insert_var_symbol(current, name, id)
+                };
+                self.insert_ordered(id, current, exit);
+                exit
+            }
+            Term::Wildcard => current,
+            Term::App(_) | Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => {
+                unreachable!("if-var terms are checked by syntactic.rs")
+            }
+        };
+        self.insert_ordered(term, current, exit);
+        exit
+    }
+
+    fn walk_then_defined_var(
+        &mut self,
+        before_term: ScopeId,
+        after_term: ScopeId,
+        term: TermId,
+    ) -> ScopeId {
+        let exit = match *self.ast.term(term) {
+            Term::Ident(id) => {
+                let name = self.ast.ident_term(id).name.clone();
+                let exit = if self.lookup_var(before_term, &name).is_some() {
+                    after_term
+                } else {
+                    self.insert_var_symbol(after_term, name, id)
+                };
+                self.insert_ordered(id, after_term, exit);
+                exit
+            }
+            Term::Wildcard => after_term,
+            Term::App(_) | Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => {
+                unreachable!("defined-then variable terms are checked by syntactic.rs")
+            }
+        };
+        self.insert_ordered(term, after_term, exit);
         exit
     }
 

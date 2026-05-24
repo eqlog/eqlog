@@ -16,22 +16,18 @@ use convert_case::{Case, Casing};
 use crate::ast::*;
 use crate::error::{CompileError, SymbolKind};
 use crate::grammar_util::Location;
-use crate::resolution::{NameResolution, ResolvedIdentTerm};
+use crate::scopes::{Scopes, Symbol};
 
 /// Walks `ast` rooted at `module` and returns the first casing error in
 /// source order, or `Ok(())` if the program is clean.
-pub fn check_casing(
-    ast: &Ast,
-    names: &NameResolution,
-    module: ModuleId,
-) -> Result<(), CompileError> {
-    let checker = CasingChecker { ast, names };
+pub fn check_casing(ast: &Ast, scopes: &Scopes, module: ModuleId) -> Result<(), CompileError> {
+    let checker = CasingChecker { ast, scopes };
     checker.walk_module(module)
 }
 
 struct CasingChecker<'a> {
     ast: &'a Ast,
-    names: &'a NameResolution,
+    scopes: &'a Scopes,
 }
 
 type Check = Result<(), CompileError>;
@@ -221,12 +217,10 @@ impl<'a> CasingChecker<'a> {
     }
 
     fn check_ident_term(&self, id: IdentTermId, location: Location) -> Check {
-        match self.names.resolved_ident(id) {
-            ResolvedIdentTerm::Var(_) => {
-                let name = self.ast.ident_term(id).name.clone();
-                self.check_variable_name(name, location)
-            }
-            ResolvedIdentTerm::AmbientConst(_) => Ok(()),
+        let name = self.ast.ident_term(id).name.clone();
+        match self.scopes.lookup(self.scopes.exit(id), &name) {
+            Some(Symbol::Var(_)) => self.check_variable_name(name, location),
+            _ => Ok(()),
         }
     }
 

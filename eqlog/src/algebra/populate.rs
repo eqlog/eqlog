@@ -21,7 +21,6 @@ use crate::algebra::structure::{
 };
 use crate::ast::*;
 use crate::error::CompileError;
-use crate::resolution::{NameResolution, ResolvedIdentTerm, VarBindingId};
 use crate::scopes::{Scope, ScopeId, Scopes, Symbol};
 
 /// Origin tag for the morphism associated with a statement. Mirrors
@@ -144,7 +143,6 @@ pub fn walk_rule(
     enclosing_models: &[TypeId],
     ast: &Ast,
     scopes: &Scopes,
-    names: &NameResolution,
     signature: &Signature,
     errors: &mut Vec<CompileError>,
 ) -> bool {
@@ -159,7 +157,7 @@ pub fn walk_rule(
 
     let body = ast.rule_decl(rid).body.clone();
     let (_after, walk_changed) =
-        walk_stmt_block(&body, initial, rule, ast, scopes, names, signature, errors);
+        walk_stmt_block(&body, initial, rule, ast, scopes, signature, errors);
     changed | walk_changed
 }
 
@@ -174,7 +172,6 @@ fn walk_stmt_block(
     rule: &mut RuleStructures,
     ast: &Ast,
     scopes: &Scopes,
-    names: &NameResolution,
     signature: &Signature,
     errors: &mut Vec<CompileError>,
 ) -> (StructureId, bool) {
@@ -192,8 +189,7 @@ fn walk_stmt_block(
             before, current,
             "stmt_before for {stmt:?} drifted between populate calls"
         );
-        let (after, stmt_changed) =
-            walk_stmt(*stmt, before, rule, ast, scopes, names, signature, errors);
+        let (after, stmt_changed) = walk_stmt(*stmt, before, rule, ast, scopes, signature, errors);
         changed |= stmt_changed;
         current = after;
     }
@@ -206,7 +202,6 @@ fn walk_stmt(
     rule: &mut RuleStructures,
     ast: &Ast,
     scopes: &Scopes,
-    names: &NameResolution,
     signature: &Signature,
     errors: &mut Vec<CompileError>,
 ) -> (StructureId, bool) {
@@ -214,7 +209,7 @@ fn walk_stmt(
         Stmt::If(id) => {
             let (next, mut changed) = ensure_stmt_after(rule, stmt, current, MorphismKind::If);
             let atom = ast.if_stmt(id).atom;
-            changed |= walk_if_atom(atom, next, rule, ast, scopes, names, signature, errors);
+            changed |= walk_if_atom(atom, next, rule, ast, scopes, signature, errors);
             (next, changed)
         }
         Stmt::Then(id) => {
@@ -224,7 +219,7 @@ fn walk_stmt(
                 ThenAtom::Defined(_) => MorphismKind::NonSurjThen,
             };
             let (next, mut changed) = ensure_stmt_after(rule, stmt, current, kind);
-            changed |= walk_then_atom(atom, next, rule, ast, scopes, names, signature, errors);
+            changed |= walk_then_atom(atom, next, rule, ast, scopes, signature, errors);
             (next, changed)
         }
         Stmt::Branch(id) => {
@@ -239,16 +234,8 @@ fn walk_stmt(
             for (idx, block) in blocks.iter().enumerate() {
                 let (block_start, c1) = ensure_branch_block_start(rule, id, idx, current);
                 changed |= c1;
-                let (block_end, c2) = walk_stmt_block(
-                    block,
-                    block_start,
-                    rule,
-                    ast,
-                    scopes,
-                    names,
-                    signature,
-                    errors,
-                );
+                let (block_end, c2) =
+                    walk_stmt_block(block, block_start, rule, ast, scopes, signature, errors);
                 changed |= c2;
                 block_ends.push(block_end);
             }
@@ -262,16 +249,8 @@ fn walk_stmt(
             let term = *term;
             let cases = cases.clone();
             let (after_scrutinee, mut changed) = ensure_match_after_scrutinee(rule, id, current);
-            let (term_el, c1) = walk_term(
-                term,
-                after_scrutinee,
-                rule,
-                ast,
-                scopes,
-                names,
-                signature,
-                errors,
-            );
+            let (term_el, c1) =
+                walk_term(term, after_scrutinee, rule, ast, scopes, signature, errors);
             changed |= c1;
             // Same pre-allocation pattern as for `Branch`: the match's
             // after-structure must precede every case-end in arena order
@@ -284,14 +263,12 @@ fn walk_stmt(
                 let MatchCase { pattern, body } = ast.match_case(*case).clone();
                 let (case_start, c2) = ensure_match_case_start(rule, *case, after_scrutinee);
                 changed |= c2;
-                let (pattern_el, c3) = walk_term(
-                    pattern, case_start, rule, ast, scopes, names, signature, errors,
-                );
+                let (pattern_el, c3) =
+                    walk_term(pattern, case_start, rule, ast, scopes, signature, errors);
                 changed |= c3;
                 changed |= rule.cat.structures[case_start.0].equate(term_el, pattern_el);
-                let (case_end, c4) = walk_stmt_block(
-                    &body, case_start, rule, ast, scopes, names, signature, errors,
-                );
+                let (case_end, c4) =
+                    walk_stmt_block(&body, case_start, rule, ast, scopes, signature, errors);
                 changed |= c4;
                 case_ends.push(case_end);
             }
@@ -367,26 +344,23 @@ fn walk_if_atom(
     rule: &mut RuleStructures,
     ast: &Ast,
     scopes: &Scopes,
-    names: &NameResolution,
     signature: &Signature,
     errors: &mut Vec<CompileError>,
 ) -> bool {
     match *ast.if_atom(atom) {
         IfAtom::Equal(id) => {
             let EqualAtom { lhs, rhs } = *ast.equal_atom(id);
-            let (lhs_el, c1) = walk_term(lhs, current, rule, ast, scopes, names, signature, errors);
-            let (rhs_el, c2) = walk_term(rhs, current, rule, ast, scopes, names, signature, errors);
+            let (lhs_el, c1) = walk_term(lhs, current, rule, ast, scopes, signature, errors);
+            let (rhs_el, c2) = walk_term(rhs, current, rule, ast, scopes, signature, errors);
             let eq = rule.cat.structures[current.0].equate(lhs_el, rhs_el);
             c1 || c2 || eq
         }
         IfAtom::Defined(id) => {
             let DefinedIfAtom { term } = *ast.defined_if_atom(id);
-            let (_el, c) = walk_term(term, current, rule, ast, scopes, names, signature, errors);
+            let (_el, c) = walk_term(term, current, rule, ast, scopes, signature, errors);
             c
         }
-        IfAtom::Pred(id) => {
-            walk_pred_atom(id, current, rule, ast, scopes, names, signature, errors)
-        }
+        IfAtom::Pred(id) => walk_pred_atom(id, current, rule, ast, scopes, signature, errors),
         IfAtom::Var(id) => {
             let VarIfAtom { term, typ } = *ast.var_if_atom(id);
             // Resolve the annotation first: a member type expr walks its
@@ -394,8 +368,8 @@ fn walk_if_atom(
             // once the parent's type becomes known. Ambient/Mor cases
             // resolve immediately and don't mutate the structure.
             let (cts, mut changed) =
-                walk_var_type_expr(typ, current, rule, ast, scopes, names, signature, errors);
-            let (el_id, c) = walk_term(term, current, rule, ast, scopes, names, signature, errors);
+                walk_var_type_expr(typ, current, rule, ast, scopes, signature, errors);
+            let (el_id, c) = walk_term(term, current, rule, ast, scopes, signature, errors);
             changed |= c;
             // Queue the annotations for the close pass to apply. A member
             // annotation may stay unresolved until a later pass settles
@@ -415,15 +389,14 @@ fn walk_then_atom(
     rule: &mut RuleStructures,
     ast: &Ast,
     scopes: &Scopes,
-    names: &NameResolution,
     signature: &Signature,
     errors: &mut Vec<CompileError>,
 ) -> bool {
     match *ast.then_atom(atom) {
         ThenAtom::Equal(id) => {
             let EqualAtom { lhs, rhs } = *ast.equal_atom(id);
-            let (lhs_el, c1) = walk_term(lhs, current, rule, ast, scopes, names, signature, errors);
-            let (rhs_el, c2) = walk_term(rhs, current, rule, ast, scopes, names, signature, errors);
+            let (lhs_el, c1) = walk_term(lhs, current, rule, ast, scopes, signature, errors);
+            let (rhs_el, c2) = walk_term(rhs, current, rule, ast, scopes, signature, errors);
             let eq = rule.cat.structures[current.0].equate(lhs_el, rhs_el);
             c1 || c2 || eq
         }
@@ -431,23 +404,20 @@ fn walk_then_atom(
             let DefinedThenAtom { var, term } = *ast.defined_then_atom(id);
             let mut changed = false;
             let var_el = if let Some(var) = var {
-                let (e, c) = walk_term(var, current, rule, ast, scopes, names, signature, errors);
+                let (e, c) = walk_term(var, current, rule, ast, scopes, signature, errors);
                 changed |= c;
                 Some(e)
             } else {
                 None
             };
-            let (term_el, c) =
-                walk_term(term, current, rule, ast, scopes, names, signature, errors);
+            let (term_el, c) = walk_term(term, current, rule, ast, scopes, signature, errors);
             changed |= c;
             if let Some(var_el) = var_el {
                 changed |= rule.cat.structures[current.0].equate(var_el, term_el);
             }
             changed
         }
-        ThenAtom::Pred(id) => {
-            walk_pred_atom(id, current, rule, ast, scopes, names, signature, errors)
-        }
+        ThenAtom::Pred(id) => walk_pred_atom(id, current, rule, ast, scopes, signature, errors),
     }
 }
 
@@ -457,7 +427,6 @@ fn walk_pred_atom(
     rule: &mut RuleStructures,
     ast: &Ast,
     scopes: &Scopes,
-    names: &NameResolution,
     signature: &Signature,
     errors: &mut Vec<CompileError>,
 ) -> bool {
@@ -467,14 +436,13 @@ fn walk_pred_atom(
     let arg_els: Vec<ElId> = arg_terms
         .iter()
         .map(|t| {
-            let (e, c) = walk_term(*t, current, rule, ast, scopes, names, signature, errors);
+            let (e, c) = walk_term(*t, current, rule, ast, scopes, signature, errors);
             changed |= c;
             e
         })
         .collect();
 
-    let (resolved, c) =
-        resolve_pred_expr(pred, current, rule, ast, scopes, names, signature, errors);
+    let (resolved, c) = resolve_pred_expr(pred, current, rule, ast, scopes, signature, errors);
     changed |= c;
     if resolved.is_empty() {
         return changed;
@@ -531,7 +499,6 @@ fn resolve_pred_expr(
     rule: &mut RuleStructures,
     ast: &Ast,
     scopes: &Scopes,
-    names: &NameResolution,
     signature: &Signature,
     errors: &mut Vec<CompileError>,
 ) -> (Vec<(PredId, Vec<ElId>)>, bool) {
@@ -539,7 +506,7 @@ fn resolve_pred_expr(
         PredExpr::Ambient(aid) => {
             let scope = scopes.entry(aid);
             let name = &ast.ambient_pred_expr(aid).name;
-            let pred_id = match lookup_decl(scopes, names, aid, scope, name) {
+            let pred_id = match lookup_decl(scopes, scope, name) {
                 Some(Symbol::Pred(pd)) => signature.pred_for_pred_decl(pd),
                 _ => None,
             };
@@ -557,16 +524,8 @@ fn resolve_pred_expr(
                 term: parent_term,
                 name,
             } = ast.member_pred_expr(mid).clone();
-            let (parent_el, changed) = walk_term(
-                parent_term,
-                current,
-                rule,
-                ast,
-                scopes,
-                names,
-                signature,
-                errors,
-            );
+            let (parent_el, changed) =
+                walk_term(parent_term, current, rule, ast, scopes, signature, errors);
             let resolved = member_scopes_and_parents(rule, current, parent_el, scopes, signature)
                 .into_iter()
                 .filter_map(|(body, parents)| {
@@ -588,42 +547,51 @@ fn resolve_pred_expr(
 ///
 /// `prior_el` is the el this `(current, term)` resolved to on an earlier
 /// pass, if any. Reusing it keeps el identity stable across re-walks.
-/// `Var` and `Wildcard` reuse it directly; `App` recurses into its
-/// arguments and re-attempts func resolution so a previously-unresolvable
-/// [`FuncApp`] gets emitted now, while the result el still falls back to
-/// `prior_el` when present.
+/// Identifier terms resolve through [`Scopes`] to either a variable binding
+/// or ambient const app. `Wildcard` reuses `prior_el` directly; `App`
+/// recurses into its arguments and re-attempts func resolution so a
+/// previously-unresolvable [`FuncApp`] gets emitted now, while the result el
+/// still falls back to `prior_el` when present.
 fn walk_term(
     term: TermId,
     current: StructureId,
     rule: &mut RuleStructures,
     ast: &Ast,
     scopes: &Scopes,
-    names: &NameResolution,
     signature: &Signature,
     errors: &mut Vec<CompileError>,
 ) -> (ElId, bool) {
     let prior_el = rule.semantic_els[current.0].get(&term).copied();
     let mut changed = false;
     let el = match *ast.term(term) {
-        Term::Ident(id) => match names.resolved_ident(id) {
-            ResolvedIdentTerm::Var(binding) => {
-                let (el, c) = ensure_var_binding_el(binding, current, rule, names);
-                changed |= c;
-                el
-            }
-            ResolvedIdentTerm::AmbientConst(const_decl) => {
-                let Some(func_id) = signature.func_for_const_decl(const_decl) else {
+        Term::Ident(id) => {
+            let name = &ast.ident_term(id).name;
+            match scopes.lookup(scopes.exit(term), name) {
+                Some(Symbol::Var(binding)) => {
+                    let (el, c) = ensure_var_binding_el(binding, current, rule, ast);
+                    changed |= c;
+                    el
+                }
+                Some(Symbol::Const(const_decl)) => {
+                    let Some(func_id) = signature.func_for_const_decl(const_decl) else {
+                        let (e, c) = expected_or_fresh(prior_el, current, rule);
+                        changed |= c;
+                        return (e, changed);
+                    };
+                    let parents = rule.cat.structures[current.0]
+                        .ambient_parents(&signature.func(func_id).parents);
+                    let (e, c) =
+                        emit_known_app(func_id, parents, Vec::new(), prior_el, current, rule);
+                    changed |= c;
+                    e
+                }
+                _ => {
                     let (e, c) = expected_or_fresh(prior_el, current, rule);
                     changed |= c;
-                    return (e, changed);
-                };
-                let parents = rule.cat.structures[current.0]
-                    .ambient_parents(&signature.func(func_id).parents);
-                let (e, c) = emit_known_app(func_id, parents, Vec::new(), prior_el, current, rule);
-                changed |= c;
-                e
+                    e
+                }
             }
-        },
+        }
         Term::Wildcard => {
             if let Some(el) = prior_el {
                 el
@@ -638,23 +606,21 @@ fn walk_term(
             let arg_els: Vec<ElId> = arg_terms
                 .iter()
                 .map(|t| {
-                    let (e, c) =
-                        walk_term(*t, current, rule, ast, scopes, names, signature, errors);
+                    let (e, c) = walk_term(*t, current, rule, ast, scopes, signature, errors);
                     changed |= c;
                     e
                 })
                 .collect();
             let (e, c) = emit_app(
-                aid, func, arg_els, prior_el, current, rule, ast, scopes, names, signature, errors,
+                aid, func, arg_els, prior_el, current, rule, ast, scopes, signature, errors,
             );
             changed |= c;
             e
         }
         Term::MemberConst(mid) => {
             let MemberConstTerm { receiver, name } = *ast.member_const_term(mid);
-            let (receiver_el, c) = walk_term(
-                receiver, current, rule, ast, scopes, names, signature, errors,
-            );
+            let (receiver_el, c) =
+                walk_term(receiver, current, rule, ast, scopes, signature, errors);
             changed |= c;
             let const_name = ast.ident_term(name).name.clone();
             let candidates =
@@ -683,7 +649,7 @@ fn walk_term(
         }
         Term::Dom(did) => {
             let DomTerm { arg } = *ast.dom_term(did);
-            let (arg_el, c) = walk_term(arg, current, rule, ast, scopes, names, signature, errors);
+            let (arg_el, c) = walk_term(arg, current, rule, ast, scopes, signature, errors);
             changed |= c;
             let candidates = resolve_mor_projection_apps(
                 MorProjection::Dom,
@@ -707,7 +673,7 @@ fn walk_term(
         }
         Term::Cod(cid) => {
             let CodTerm { arg } = *ast.cod_term(cid);
-            let (arg_el, c) = walk_term(arg, current, rule, ast, scopes, names, signature, errors);
+            let (arg_el, c) = walk_term(arg, current, rule, ast, scopes, signature, errors);
             changed |= c;
             let candidates = resolve_mor_projection_apps(
                 MorProjection::Cod,
@@ -731,8 +697,8 @@ fn walk_term(
         }
         Term::MorApp(mid) => {
             let MorAppTerm { mor, arg } = *ast.mor_app_term(mid);
-            let (mor_el, c1) = walk_term(mor, current, rule, ast, scopes, names, signature, errors);
-            let (arg_el, c2) = walk_term(arg, current, rule, ast, scopes, names, signature, errors);
+            let (mor_el, c1) = walk_term(mor, current, rule, ast, scopes, signature, errors);
+            let (arg_el, c2) = walk_term(arg, current, rule, ast, scopes, signature, errors);
             changed |= c1 || c2;
             let candidates =
                 resolve_mor_app_apps(mor_el, arg_el, prior_el, current, rule, signature);
@@ -757,19 +723,19 @@ fn walk_term(
 }
 
 fn ensure_var_binding_el(
-    binding: VarBindingId,
+    binding: IdentTermId,
     current: StructureId,
     rule: &mut RuleStructures,
-    names: &NameResolution,
+    ast: &Ast,
 ) -> (ElId, bool) {
-    let name = names.binding_name(binding);
+    let name = &ast.ident_term(binding).name;
     let structure = &mut rule.cat.structures[current.0];
     if let Some(&el_id) = structure.var_els.get(name) {
         return (el_id, false);
     }
 
     let el_id = structure.push_el();
-    structure.var_els.insert(name.to_string(), el_id);
+    structure.var_els.insert(name.clone(), el_id);
     (el_id, true)
 }
 
@@ -987,12 +953,11 @@ fn emit_app(
     rule: &mut RuleStructures,
     ast: &Ast,
     scopes: &Scopes,
-    names: &NameResolution,
     signature: &Signature,
     errors: &mut Vec<CompileError>,
 ) -> (ElId, bool) {
     let (resolved, mut changed) =
-        resolve_func_expr(func, current, rule, ast, scopes, names, signature, errors);
+        resolve_func_expr(func, current, rule, ast, scopes, signature, errors);
 
     if resolved.is_empty() {
         let structure = &mut rule.cat.structures[current.0];
@@ -1039,7 +1004,6 @@ fn resolve_func_expr(
     rule: &mut RuleStructures,
     ast: &Ast,
     scopes: &Scopes,
-    names: &NameResolution,
     signature: &Signature,
     errors: &mut Vec<CompileError>,
 ) -> (Vec<(FuncId, Vec<ElId>)>, bool) {
@@ -1047,7 +1011,7 @@ fn resolve_func_expr(
         FuncExpr::Ambient(aid) => {
             let scope = scopes.entry(aid);
             let name = &ast.ambient_func_expr(aid).name;
-            let func_id = match lookup_decl(scopes, names, aid, scope, name) {
+            let func_id = match lookup_decl(scopes, scope, name) {
                 Some(Symbol::Func(fd)) => signature.func_for_func_decl(fd),
                 Some(Symbol::Ctor(cd)) => signature.func_for_ctor_decl(cd),
                 _ => None,
@@ -1066,16 +1030,8 @@ fn resolve_func_expr(
                 term: parent_term,
                 name,
             } = ast.member_func_expr(mid).clone();
-            let (parent_el, changed) = walk_term(
-                parent_term,
-                current,
-                rule,
-                ast,
-                scopes,
-                names,
-                signature,
-                errors,
-            );
+            let (parent_el, changed) =
+                walk_term(parent_term, current, rule, ast, scopes, signature, errors);
             let resolved = member_scopes_and_parents(rule, current, parent_el, scopes, signature)
                 .into_iter()
                 .filter_map(|(body, parents)| {
@@ -1135,7 +1091,6 @@ fn walk_var_type_expr(
     rule: &mut RuleStructures,
     ast: &Ast,
     scopes: &Scopes,
-    names: &NameResolution,
     signature: &Signature,
     errors: &mut Vec<CompileError>,
 ) -> (Vec<ConcreteType>, bool) {
@@ -1143,7 +1098,7 @@ fn walk_var_type_expr(
     match *ast.type_expr(type_expr) {
         TypeExpr::Ambient(id) => {
             let name = &ast.ambient_type_expr(id).name;
-            let tid = match lookup_decl(scopes, names, id, scope, name) {
+            let tid = match lookup_decl(scopes, scope, name) {
                 Some(Symbol::Type(td)) => Some(signature.type_for_type_decl(td)),
                 Some(Symbol::Enum(ed)) => Some(signature.type_for_enum_decl(ed)),
                 Some(Symbol::Model(md)) => Some(signature.ids_for_model_decl(md).type_),
@@ -1159,7 +1114,7 @@ fn walk_var_type_expr(
         }
         TypeExpr::Mor(id) => {
             let name = &ast.mor_type_expr(id).name;
-            let tid = match lookup_decl(scopes, names, id, scope, name) {
+            let tid = match lookup_decl(scopes, scope, name) {
                 Some(Symbol::Model(md)) => Some(signature.ids_for_model_decl(md).mor),
                 _ => None,
             };
@@ -1176,16 +1131,8 @@ fn walk_var_type_expr(
                 term: parent_term,
                 name,
             } = ast.member_type_expr(mid).clone();
-            let (parent_el, changed) = walk_term(
-                parent_term,
-                current,
-                rule,
-                ast,
-                scopes,
-                names,
-                signature,
-                errors,
-            );
+            let (parent_el, changed) =
+                walk_term(parent_term, current, rule, ast, scopes, signature, errors);
             let resolved = member_scopes_and_parents(rule, current, parent_el, scopes, signature)
                 .into_iter()
                 .filter_map(|(body, parents)| {
@@ -1218,18 +1165,8 @@ fn concrete_type_for(
     })
 }
 
-fn lookup_decl(
-    scopes: &Scopes,
-    names: &NameResolution,
-    node: impl Into<crate::scopes::OrderedNodeId>,
-    scope: ScopeId,
-    name: &str,
-) -> Option<Symbol> {
-    if names.entry(node).lookup(name).is_some() {
-        None
-    } else {
-        scopes.lookup(scope, name)
-    }
+fn lookup_decl(scopes: &Scopes, scope: ScopeId, name: &str) -> Option<Symbol> {
+    scopes.lookup(scope, name)
 }
 
 /// Ensures the initial structure carries one ambient model el per enclosing

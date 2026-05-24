@@ -23,7 +23,6 @@ use crate::algebra::structure::{ConcreteType, ElId, Structure, StructureId, Type
 use crate::ast::*;
 use crate::error::CompileError;
 use crate::grammar_util::Location;
-use crate::resolution::NameResolution;
 use crate::scopes::{Scopes, Symbol};
 
 /// One rule declaration together with the chain of model types it is
@@ -42,7 +41,6 @@ struct RuleNode {
 pub fn build_structures(
     ast: &Ast,
     scopes: &Scopes,
-    names: &NameResolution,
     signature: &Signature,
     module: ModuleId,
 ) -> (BTreeMap<RuleDeclId, RuleStructures>, Vec<CompileError>) {
@@ -71,7 +69,6 @@ pub fn build_structures(
                 &enclosing_models,
                 ast,
                 scopes,
-                names,
                 signature,
                 &mut last_arg_num_errors,
             );
@@ -94,7 +91,7 @@ pub fn build_structures(
         // at a settled state without higher-priority structure errors.
         if errors.is_empty() {
             errors.extend(enum_ctor_surjectivity_errors(
-                rid, ast, scopes, names, signature, &rule,
+                rid, ast, scopes, signature, &rule,
             ));
             errors.extend(surjectivity_errors(ast, &rule));
         }
@@ -225,7 +222,6 @@ fn enum_ctor_surjectivity_errors(
     rid: RuleDeclId,
     ast: &Ast,
     scopes: &Scopes,
-    names: &NameResolution,
     signature: &Signature,
     rule: &RuleStructures,
 ) -> Vec<CompileError> {
@@ -250,16 +246,7 @@ fn enum_ctor_surjectivity_errors(
         let Some(enum_decl) = signature.enum_decl_for_type(term_type.typ) else {
             continue;
         };
-        if is_ctor_app_for_enum(
-            term,
-            term_type.typ,
-            target,
-            ast,
-            scopes,
-            names,
-            signature,
-            rule,
-        ) {
+        if is_ctor_app_for_enum(term, term_type.typ, target, ast, scopes, signature, rule) {
             continue;
         }
 
@@ -303,7 +290,6 @@ fn is_ctor_app_for_enum(
     sid: StructureId,
     ast: &Ast,
     scopes: &Scopes,
-    names: &NameResolution,
     signature: &Signature,
     rule: &RuleStructures,
 ) -> bool {
@@ -315,9 +301,7 @@ fn is_ctor_app_for_enum(
         FuncExpr::Ambient(ambient_id) => {
             let scope = scopes.entry(ambient_id);
             let name = &ast.ambient_func_expr(ambient_id).name;
-            let symbol = (!names.entry(ambient_id).lookup(name).is_some())
-                .then(|| scopes.lookup(scope, name))
-                .flatten();
+            let symbol = scopes.lookup(scope, name);
             ctor_symbol_has_codomain(symbol, enum_type, signature)
         }
         FuncExpr::Member(member_id) => {

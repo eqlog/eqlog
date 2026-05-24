@@ -18,14 +18,14 @@
 
 use crate::ast::*;
 use crate::error::CompileError;
-use crate::resolution::{NameResolution, ResolvedIdentTerm, VarBindingId};
+use crate::scopes::{Scopes, Symbol};
 
 /// Walks rule bodies under `module` and returns all binding-position errors
 /// in source order.
-pub fn check_bindings(ast: &Ast, names: &NameResolution, module: ModuleId) -> Vec<CompileError> {
+pub fn check_bindings(ast: &Ast, scopes: &Scopes, module: ModuleId) -> Vec<CompileError> {
     let mut checker = BindingsChecker {
         ast,
-        names,
+        scopes,
         errors: Vec::new(),
     };
     checker.walk_module(module);
@@ -34,7 +34,7 @@ pub fn check_bindings(ast: &Ast, names: &NameResolution, module: ModuleId) -> Ve
 
 struct BindingsChecker<'a> {
     ast: &'a Ast,
-    names: &'a NameResolution,
+    scopes: &'a Scopes,
     errors: Vec<CompileError>,
 }
 
@@ -112,13 +112,15 @@ impl<'a> BindingsChecker<'a> {
     }
 
     /// Mirrors eqlog's `term_should_be_epic_ok` propagation: seeded by
-    /// `then`-atom terms and descending only into app-term arguments. A
-    /// variable in such a position is an error unless it was bound earlier.
+    /// `then`-atom terms and descending into subterms that determine the
+    /// value being constructed. A variable in such a position is an error
+    /// unless it was bound earlier.
     fn check_epic_term(&mut self, term: TermId) {
         match *self.ast.term(term) {
             Term::Ident(id) => {
-                if let ResolvedIdentTerm::Var(binding) = self.names.resolved_ident(id) {
-                    let name = self.names.binding_name(binding);
+                let name = &self.ast.ident_term(id).name;
+                if let Some(Symbol::Var(binding)) = self.scopes.lookup(self.scopes.exit(term), name)
+                {
                     if !self.binding_visible_before(term, name, binding) {
                         self.errors
                             .push(CompileError::VariableIntroducedInThenStmt {
@@ -141,8 +143,8 @@ impl<'a> BindingsChecker<'a> {
         }
     }
 
-    fn binding_visible_before(&self, term: TermId, name: &str, binding: VarBindingId) -> bool {
-        self.names.entry(term).lookup(name) == Some(binding)
+    fn binding_visible_before(&self, term: TermId, name: &str, binding: IdentTermId) -> bool {
+        self.scopes.lookup(self.scopes.entry(term), name) == Some(Symbol::Var(binding))
     }
 
     /// The variable slot of `then v := t`. Wildcards are fine; an identifier
@@ -155,7 +157,10 @@ impl<'a> BindingsChecker<'a> {
                 unreachable!("defined-then variable terms are checked by syntactic.rs")
             }
         };
-        if self.names.entry(atom).lookup(name).is_some() {
+        if matches!(
+            self.scopes.lookup(self.scopes.entry(atom), name),
+            Some(Symbol::Var(_))
+        ) {
             self.errors.push(CompileError::ThenDefinedVarNotNew {
                 location: self.ast.loc(var),
             });
@@ -174,9 +179,15 @@ impl<'a> BindingsChecker<'a> {
         let args = self.ast.app_term(app).args;
         for arg in self.ast.term_list(args).terms.clone() {
             if let Term::Ident(id) = *self.ast.term(arg) {
-                if let ResolvedIdentTerm::Var(binding) = self.names.resolved_ident(id) {
-                    let name = self.names.binding_name(binding);
-                    if self.names.entry(arg).lookup(name).is_some() {
+                let name = &self.ast.ident_term(id).name;
+                if matches!(
+                    self.scopes.lookup(self.scopes.exit(arg), name),
+                    Some(Symbol::Var(_))
+                ) {
+                    if matches!(
+                        self.scopes.lookup(self.scopes.entry(arg), name),
+                        Some(Symbol::Var(_))
+                    ) {
                         self.errors
                             .push(CompileError::MatchPatternArgVarIsNotFresh {
                                 location: self.ast.loc(arg),

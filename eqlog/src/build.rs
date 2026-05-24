@@ -8,9 +8,9 @@ use crate::flat_eqlog::*;
 use crate::flatten::*;
 use crate::grammar::*;
 use crate::ram::*;
-use crate::resolution::resolve;
 use crate::rust_gen::*;
 use crate::scope_checks::{check_bindings, check_occurrences};
+use crate::scopes::resolve_scopes;
 use crate::syntactic::check_syntactic;
 use crate::to_ram::*;
 use anyhow::anyhow;
@@ -453,8 +453,8 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
         .into());
     }
 
-    let resolution = match resolve(&ast, module) {
-        Ok(resolution) => resolution,
+    let scopes = match resolve_scopes(&ast, module) {
+        Ok(scopes) => scopes,
         Err(error) => {
             return Err(CompileErrorWithContext {
                 error,
@@ -464,17 +464,14 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
             .into());
         }
     };
-    let scopes = &resolution.scopes;
-    let names = &resolution.names;
 
-    let casing_err = check_casing(&ast, names, module).err();
-    let binding_errors = check_bindings(&ast, names, module);
-    let occurrence_err = check_occurrences(&ast, names, module).err();
-    let (signature, signature_errors) = build_signature(&ast, scopes, module);
-    let (rule_structures, structure_errors) =
-        build_structures(&ast, scopes, names, &signature, module);
+    let casing_err = check_casing(&ast, &scopes, module).err();
+    let binding_errors = check_bindings(&ast, &scopes, module);
+    let occurrence_err = check_occurrences(&ast, &scopes, module).err();
+    let (signature, signature_errors) = build_signature(&ast, &scopes, module);
+    let (rule_structures, structure_errors) = build_structures(&ast, &scopes, &signature, module);
     let symbol_lookup_errors =
-        check_symbol_lookups(&ast, scopes, names, &signature, module, &rule_structures);
+        check_symbol_lookups(&ast, &scopes, &signature, module, &rule_structures);
 
     // Merge compile errors by `CompileError`'s `Ord`, which applies the kind
     // precedence (e.g. UndeclaredSymbol beats VariableOccursOnlyOnce) before

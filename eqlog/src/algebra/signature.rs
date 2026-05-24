@@ -595,6 +595,6 @@ fn symbol_kind_case(sym: Symbol) -> Option<SymbolKind> {
         Symbol::Ctor(_) => SymbolKind::Ctor,
         Symbol::Model(_) => SymbolKind::Model,
         Symbol::Rule(_) => SymbolKind::Rule,
-        Symbol::Arg(_) => return None,
+        Symbol::Arg(_) | Symbol::Var(_) => return None,
     })
 }

@@ -15,7 +15,6 @@ use crate::algebra::structure::StructureId;
 use crate::ast::*;
 use crate::error::{CompileError, SymbolKind};
 use crate::grammar_util::Location;
-use crate::resolution::{NameResolution, VariableScope};
 use crate::scopes::{ScopeId, Scopes, Symbol};
 
 /// Checks every rule body under `module` for symbol lookup failures.
@@ -26,7 +25,6 @@ use crate::scopes::{ScopeId, Scopes, Symbol};
 pub fn check_symbol_lookups(
     ast: &Ast,
     scopes: &Scopes,
-    names: &NameResolution,
     signature: &Signature,
     module: ModuleId,
     rules: &BTreeMap<RuleDeclId, RuleStructures>,
@@ -34,7 +32,6 @@ pub fn check_symbol_lookups(
     let mut checker = Checker {
         ast,
         scopes,
-        names,
         signature,
         rules,
         errors: Vec::new(),
@@ -46,7 +43,6 @@ pub fn check_symbol_lookups(
 struct Checker<'a> {
     ast: &'a Ast,
     scopes: &'a Scopes,
-    names: &'a NameResolution,
     signature: &'a Signature,
     rules: &'a BTreeMap<RuleDeclId, RuleStructures>,
     errors: Vec<CompileError>,
@@ -96,7 +92,7 @@ impl Symbol {
             Symbol::Ctor(_) => LookupKind::Ctor,
             Symbol::Model(_) => LookupKind::Model,
             Symbol::Rule(_) => LookupKind::Rule,
-            Symbol::Arg(_) => return None,
+            Symbol::Arg(_) | Symbol::Var(_) => return None,
         })
     }
 }
@@ -261,8 +257,7 @@ impl<'a> Checker<'a> {
         if let FuncExpr::Ambient(id) = *self.ast.func_expr(func) {
             let name = self.ast.ambient_func_expr(id).name.clone();
             self.check_lookup(
-                self.scopes.entry(pattern),
-                self.names.entry(id),
+                self.scopes.entry(id),
                 name,
                 &[LookupKind::Ctor],
                 self.ast.loc(pattern),
@@ -285,7 +280,6 @@ impl<'a> Checker<'a> {
                 let name = self.ast.ambient_type_expr(id).name.clone();
                 self.check_lookup(
                     self.scopes.entry(id),
-                    self.names.entry(id),
                     name,
                     &[LookupKind::Type, LookupKind::Enum, LookupKind::Model],
                     used_at,
@@ -293,13 +287,7 @@ impl<'a> Checker<'a> {
             }
             TypeExpr::Mor(id) => {
                 let name = self.ast.mor_type_expr(id).name.clone();
-                self.check_lookup(
-                    self.scopes.entry(id),
-                    self.names.entry(id),
-                    name,
-                    &[LookupKind::Model],
-                    used_at,
-                );
+                self.check_lookup(self.scopes.entry(id), name, &[LookupKind::Model], used_at);
             }
             TypeExpr::Member(id) => {
                 let MemberTypeExpr { term, name } = self.ast.member_type_expr(id).clone();
@@ -322,7 +310,6 @@ impl<'a> Checker<'a> {
                 let name = self.ast.ambient_pred_expr(id).name.clone();
                 self.check_lookup(
                     self.scopes.entry(id),
-                    self.names.entry(id),
                     name,
                     &[LookupKind::Pred],
                     self.ast.loc(pred),
@@ -349,7 +336,6 @@ impl<'a> Checker<'a> {
                 let name = self.ast.ambient_func_expr(id).name.clone();
                 self.check_func_call_lookup(
                     self.scopes.entry(id),
-                    self.names.entry(id),
                     name,
                     ambient,
                     self.ast.loc(func),
@@ -400,24 +386,22 @@ impl<'a> Checker<'a> {
     fn check_lookup(
         &mut self,
         scope: ScopeId,
-        var_scope: &VariableScope,
         name: String,
         expected: &[LookupKind],
         used_at: Location,
     ) {
-        let decls = lookup_decl_symbols(self.scopes, var_scope, scope, &name);
+        let decls = lookup_decl_symbols(self.scopes, scope, &name);
         self.check_decl_symbols(name, expected, used_at, decls);
     }
 
     fn check_func_call_lookup(
         &mut self,
         scope: ScopeId,
-        var_scope: &VariableScope,
         name: String,
         expected: &[LookupKind],
         used_at: Location,
     ) {
-        let decls = lookup_decl_symbols(self.scopes, var_scope, scope, &name);
+        let decls = lookup_decl_symbols(self.scopes, scope, &name);
         if decls.iter().any(|sym| matches!(sym, Symbol::Const(_))) {
             self.errors.push(CompileError::ConstCalledAsFunction {
                 name,
@@ -516,21 +500,13 @@ fn lookup_direct_decl_symbols(scopes: &Scopes, scope: ScopeId, name: &str) -> Ve
         .get(name)
         .copied()
         .into_iter()
-        .filter(|sym| !matches!(sym, Symbol::Arg(_)))
+        .filter(|sym| !matches!(sym, Symbol::Arg(_) | Symbol::Var(_)))
         .collect()
 }
 
-fn lookup_decl_symbols(
-    scopes: &Scopes,
-    var_scope: &VariableScope,
-    scope: ScopeId,
-    name: &str,
-) -> Vec<Symbol> {
-    if var_scope.lookup(name).is_some() {
-        return Vec::new();
-    }
+fn lookup_decl_symbols(scopes: &Scopes, scope: ScopeId, name: &str) -> Vec<Symbol> {
     match scopes.lookup(scope, name) {
-        Some(Symbol::Arg(_)) | None => Vec::new(),
+        Some(Symbol::Arg(_) | Symbol::Var(_)) | None => Vec::new(),
         Some(sym) => vec![sym],
     }
 }

@@ -90,9 +90,9 @@ pub struct Structure {
     pub func_apps: BTreeMap<FuncApp, ElId>,
     /// Variable bindings that have entered scope in this structure, keyed
     /// by the variable's source name. Analogous to
-    /// `var(Structure, ElName) -> El` in eqlog.eql. Within a single rule
-    /// body distinct names always denote distinct bindings, so name-keying
-    /// is equivalent to binding-id-keying.
+    /// `var(Structure, ElName) -> El` in eqlog.eql. For accepted programs,
+    /// binding checks rule out same-name distinct bindings in any one live
+    /// structure, so name-keying is enough here.
     pub var_els: BTreeMap<String, ElId>,
     /// Elements introduced as ambient model instances by the rule's
     /// enclosing-model scopes, keyed by the model type. These elements
