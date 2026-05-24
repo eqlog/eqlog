@@ -172,9 +172,29 @@ IfAtom: IfAtomId = {
         let p = ast.push_pred_atom(loc, PredAtom { pred, args });
         ast.push_if_atom(loc, IfAtom::Pred(p))
     },
-    <l: @L> <binder: Binder> ":" <typ: TypeExpr> <r: @R> => {
+    // Parse the left side broadly for the same reason as defined-then
+    // binders below: invalid terms should get the dedicated syntactic
+    // diagnostic instead of a parser error at `:`.
+    <l: @L> <lhs: Term> ":" <typ: TypeExpr> <r: @R> => {
         let loc = Location(l, r);
-        let v = ast.push_var_if_atom(loc, VarIfAtom { binder, typ });
+        let (binder, invalid_binder) = match *ast.term(lhs) {
+            Term::Ident(id) => {
+                let name = ast.ident_term(id).name.clone();
+                let binder_ident = ast.push_binder_ident(ast.loc(lhs), BinderIdent { name });
+                let binder = ast.push_binder(ast.loc(lhs), Binder::Ident(binder_ident));
+                (Some(binder), None)
+            }
+            Term::Wildcard => {
+                let binder = ast.push_binder(ast.loc(lhs), Binder::Wildcard);
+                (Some(binder), None)
+            }
+            Term::App(_)
+            | Term::MemberConst(_)
+            | Term::Dom(_)
+            | Term::Cod(_)
+            | Term::MorApp(_) => (None, Some(lhs)),
+        };
+        let v = ast.push_var_if_atom(loc, VarIfAtom { binder, invalid_binder, typ });
         ast.push_if_atom(loc, IfAtom::Var(v))
     },
 }

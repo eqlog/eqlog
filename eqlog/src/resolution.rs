@@ -242,9 +242,12 @@ impl<'a> Resolver<'a> {
                 after_args
             }
             IfAtom::Var(id) => {
-                let VarIfAtom { binder, typ } = *self.ast.var_if_atom(id);
+                let VarIfAtom { binder, typ, .. } = *self.ast.var_if_atom(id);
                 let after_type = self.walk_type_expr(current.clone(), typ);
-                let after_binder = self.resolve_binder_ref_or_create(after_type, binder);
+                let after_binder = match binder {
+                    Some(binder) => self.resolve_binder_ref_or_create(after_type, binder),
+                    None => after_type,
+                };
                 self.insert_ordered(id, current, after_binder.clone());
                 after_binder
             }

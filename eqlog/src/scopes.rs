@@ -489,9 +489,12 @@ impl<'a> ScopeBuilder<'a> {
                 after_args
             }
             IfAtom::Var(id) => {
-                let VarIfAtom { binder, typ } = *self.ast.var_if_atom(id);
+                let VarIfAtom { binder, typ, .. } = *self.ast.var_if_atom(id);
                 let after_type = self.walk_type_expr(current, typ);
-                let after_binder = self.walk_binder(after_type, binder);
+                let after_binder = match binder {
+                    Some(binder) => self.walk_binder(after_type, binder),
+                    None => after_type,
+                };
                 self.insert_ordered(id, current, after_binder);
                 after_binder
             }

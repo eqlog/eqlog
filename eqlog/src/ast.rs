@@ -293,7 +293,8 @@ pub struct DefinedIfAtom {
 
 #[derive(Copy, Clone, Debug)]
 pub struct VarIfAtom {
-    pub binder: BinderId,
+    pub binder: Option<BinderId>,
+    pub invalid_binder: Option<TermId>,
     pub typ: TypeExprId,
 }
 

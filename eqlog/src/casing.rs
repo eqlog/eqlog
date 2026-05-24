@@ -161,9 +161,12 @@ impl<'a> CasingChecker<'a> {
                 self.walk_term_list(args)
             }
             IfAtom::Var(id) => {
-                let VarIfAtom { binder, typ } = *self.ast.var_if_atom(id);
+                let VarIfAtom { binder, typ, .. } = *self.ast.var_if_atom(id);
                 self.walk_type_expr(typ)?;
-                self.walk_binder(binder)
+                if let Some(binder) = binder {
+                    self.walk_binder(binder)?;
+                }
+                Ok(())
             }
         }
     }

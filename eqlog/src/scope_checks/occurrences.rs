@@ -125,9 +125,11 @@ impl<'a> OccurrencesChecker<'a> {
                 self.collect_term_list(args, occ);
             }
             IfAtom::Var(id) => {
-                let VarIfAtom { binder, typ } = *self.ast.var_if_atom(id);
+                let VarIfAtom { binder, typ, .. } = *self.ast.var_if_atom(id);
                 self.collect_type_expr(typ, occ);
-                self.collect_binder(binder, occ);
+                if let Some(binder) = binder {
+                    self.collect_binder(binder, occ);
+                }
             }
         }
     }

@@ -391,21 +391,23 @@ fn walk_if_atom(
             walk_pred_atom(id, current, rule, ast, scopes, names, signature, errors)
         }
         IfAtom::Var(id) => {
-            let VarIfAtom { binder, typ } = *ast.var_if_atom(id);
+            let VarIfAtom { binder, typ, .. } = *ast.var_if_atom(id);
             // Resolve the annotation first: a member type expr walks its
             // parent term, which must run on every pass so it gets re-tried
             // once the parent's type becomes known. Ambient/Mor cases
             // resolve immediately and don't mutate the structure.
             let (cts, mut changed) =
                 walk_var_type_expr(typ, current, rule, ast, scopes, names, signature, errors);
-            let (el_id, c) = ensure_binder_el(binder, current, rule, names);
-            changed |= c;
-            // Queue the annotations for the close pass to apply. A member
-            // annotation may stay unresolved until a later pass settles
-            // its parent's type; until then the el simply has no concrete
-            // type, like any unannotated el.
-            for ct in cts {
-                changed |= rule.cat.structures[current.0].impose_type(el_id, ct);
+            if let Some(binder) = binder {
+                let (el_id, c) = ensure_binder_el(binder, current, rule, names);
+                changed |= c;
+                // Queue the annotations for the close pass to apply. A member
+                // annotation may stay unresolved until a later pass settles
+                // its parent's type; until then the el simply has no concrete
+                // type, like any unannotated el.
+                for ct in cts {
+                    changed |= rule.cat.structures[current.0].impose_type(el_id, ct);
+                }
             }
             changed
         }

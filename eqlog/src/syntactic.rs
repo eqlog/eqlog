@@ -118,7 +118,15 @@ impl<'a> SyntacticChecker<'a> {
 
     fn check_if_atom(&self, atom: IfAtomId) -> Check {
         match *self.ast.if_atom(atom) {
-            IfAtom::Var(_) => Ok(()),
+            IfAtom::Var(id) => {
+                let VarIfAtom { invalid_binder, .. } = *self.ast.var_if_atom(id);
+                if let Some(invalid_binder) = invalid_binder {
+                    return Err(CompileError::IfVarLhsNotVarOrWildcard {
+                        location: self.ast.loc(invalid_binder),
+                    });
+                }
+                Ok(())
+            }
             IfAtom::Equal(_) | IfAtom::Defined(_) | IfAtom::Pred(_) => Ok(()),
         }
     }
