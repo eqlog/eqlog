@@ -1784,6 +1784,231 @@ fn display_move_new_to_old_fn<'a>(
     })
 }
 
+#[derive(Copy, Clone)]
+enum MorphismIndexColumnKind {
+    Parent,
+    Member(TypeId),
+    Copy,
+}
+
+impl MorphismIndexColumnKind {
+    fn needs_mapping(self) -> bool {
+        matches!(
+            self,
+            MorphismIndexColumnKind::Parent | MorphismIndexColumnKind::Member(_)
+        )
+    }
+}
+
+fn morphism_index_column_kind(
+    parent_model_type: TypeId,
+    column_index: usize,
+    typ: TypeId,
+    ctx: &RustGenCtx<'_>,
+) -> MorphismIndexColumnKind {
+    if column_index == 0 {
+        assert_eq!(typ, parent_model_type);
+        return MorphismIndexColumnKind::Parent;
+    }
+
+    if ctx.signature().type_(typ).parents.last().copied() == Some(parent_model_type) {
+        return MorphismIndexColumnKind::Member(typ);
+    }
+
+    MorphismIndexColumnKind::Copy
+}
+
+fn display_prefix_tree_type(arity_len: usize) -> impl Display {
+    FmtFn(move |f| write!(f, "PrefixTree{arity_len}"))
+}
+
+fn display_mor_app_map_expr<'a>(
+    typ: TypeId,
+    ctx: &'a RustGenCtx<'a>,
+    index_selection: &'a IndexSelection,
+) -> impl Display + 'a {
+    FmtFn(move |f| {
+        let mor_app_func = ctx
+            .signature()
+            .mor_app_func_for_type(typ)
+            .expect("mor_app_func should be defined for member types");
+        let mor_app_rel = FlatInRel::Rel(FlatRel::Func(mor_app_func));
+
+        let mor_app_indices = index_selection
+            .indices
+            .get(&mor_app_rel)
+            .expect("mor_app rel should have indices");
+        let mor_app_eval_index_new = mor_app_indices
+            .iter()
+            .filter(|index| index.age == IndexAge::New && index.order.as_ref() == [0, 1, 2])
+            .exactly_one()
+            .expect("should have exactly one new index with order [0, 1, 2] for mor_app rel");
+        let mor_app_eval_index_old = mor_app_indices
+            .iter()
+            .filter(|index| index.age == IndexAge::Old && index.order.as_ref() == [0, 1, 2])
+            .exactly_one()
+            .expect("should have exactly one old index with order [0, 1, 2] for mor_app rel");
+
+        let mor_app_eval_index_new_name =
+            display_index_field_name(&mor_app_rel, mor_app_eval_index_new, ctx);
+        let mor_app_eval_index_old_name =
+            display_index_field_name(&mor_app_rel, mor_app_eval_index_old, ctx);
+
+        writedoc! {f, "
+            self.{mor_app_eval_index_new_name}
+            .get(*morph)
+            .unwrap_or_else(|| PrefixTree2::empty())
+            .union(
+            self.{mor_app_eval_index_old_name}
+            .get(*morph)
+            .unwrap_or_else(|| PrefixTree2::empty()),
+            )
+        "}
+    })
+}
+
+fn display_morphism_index_prefix_walk<'a>(
+    columns: &'a [MorphismIndexColumnKind],
+    arity_len: usize,
+    source_tree: String,
+    source_tree_is_ref: bool,
+) -> impl Display + 'a {
+    FmtFn(move |f| {
+        let body = display_morphism_index_prefix_walk_from(
+            columns,
+            0,
+            arity_len,
+            source_tree.clone(),
+            source_tree_is_ref,
+            Vec::new(),
+        );
+        write!(f, "{body}")
+    })
+}
+
+fn display_morphism_index_prefix_walk_from(
+    columns: &[MorphismIndexColumnKind],
+    pos: usize,
+    current_dim: usize,
+    source_tree: String,
+    source_tree_is_ref: bool,
+    target_prefix: Vec<String>,
+) -> String {
+    if pos == columns.len() {
+        let target_prefix = target_prefix.iter().format(", ");
+        let suffix = if source_tree_is_ref {
+            format!("(*{source_tree}).clone()")
+        } else {
+            format!("{source_tree}.clone()")
+        };
+        return format!("propagated.push(([{target_prefix}], {suffix}));");
+    }
+
+    let el = format!("el{pos}");
+    let subtree = format!("{source_tree}_{pos}");
+    let subtree_is_ref = current_dim > 1;
+
+    match columns[pos] {
+        MorphismIndexColumnKind::Parent => {
+            let mut target_prefix = target_prefix;
+            target_prefix.push("*cod".to_string());
+            let body = display_morphism_index_prefix_walk_from(
+                columns,
+                pos + 1,
+                current_dim - 1,
+                subtree.clone(),
+                true,
+                target_prefix,
+            );
+            formatdoc! {"
+                let {subtree} = match {source_tree}.get(*dom) {{
+                    Some({subtree}) => {subtree},
+                    None => {{ continue; }},
+                }};
+                {body}
+            "}
+        }
+        MorphismIndexColumnKind::Member(_) => {
+            let mut target_prefix = target_prefix;
+            target_prefix.push(format!("mapped_{el}"));
+            let body = display_morphism_index_prefix_walk_from(
+                columns,
+                pos + 1,
+                current_dim - 1,
+                subtree.clone(),
+                subtree_is_ref,
+                target_prefix,
+            );
+            formatdoc! {"
+                for ({el}, {subtree}) in {source_tree}.iter_restrictions() {{
+                    let Some(mapped_{el}) = map_{el}
+                        .get({el})
+                        .and_then(|restriction| restriction.iter().next().map(|[mapped]| mapped))
+                    else {{
+                        continue;
+                    }};
+                    {body}
+                }}
+            "}
+        }
+        MorphismIndexColumnKind::Copy => {
+            let mut target_prefix = target_prefix;
+            target_prefix.push(el.clone());
+            let body = display_morphism_index_prefix_walk_from(
+                columns,
+                pos + 1,
+                current_dim - 1,
+                subtree.clone(),
+                subtree_is_ref,
+                target_prefix,
+            );
+            formatdoc! {"
+                for ({el}, {subtree}) in {source_tree}.iter_restrictions() {{
+                    {body}
+                }}
+            "}
+        }
+    }
+}
+
+fn display_apply_morphism_index_propagated<'a>(
+    index_field_name: &'a str,
+    arity_len: usize,
+    prefix_len: usize,
+    suffix_len: usize,
+) -> impl Display + 'a {
+    FmtFn(move |f| {
+        let prefix_vars = (0..prefix_len)
+            .map(|i| FmtFn(move |f| write!(f, "el{i}")))
+            .format(", ");
+        let wrap_suffix = (1..prefix_len)
+            .rev()
+            .map(|i| {
+                let tree_type = display_prefix_tree_type(arity_len - i);
+                FmtFn(move |f| {
+                    writedoc! {f, "
+                        let mapped_dom_set = {{
+                            let mut tree = {tree_type}::new();
+                            tree.insert_restriction(el{i}, mapped_dom_set);
+                            tree
+                        }};
+                    "}
+                })
+            })
+            .format("\n");
+
+        let suffix_type = display_prefix_tree_type(suffix_len);
+        writedoc! {f, "
+            for ([{prefix_vars}], mapped_dom_set) in propagated {{
+                let mapped_dom_set: {suffix_type} = mapped_dom_set;
+                {wrap_suffix}
+                {index_field_name}_own.remove_restriction(el0, &mapped_dom_set);
+                {index_field_name}_all.insert_restriction(el0, mapped_dom_set);
+            }}
+        "}
+    })
+}
+
 fn display_recompute_model_indices_fn<'a>(
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
@@ -1894,140 +2119,81 @@ fn display_recompute_model_indices_fn<'a>(
             .map(|(flat_in_rel, index_spec, parent_model_type)| {
                 FmtFn(move |f| {
                     let flat_in_rel = &flat_in_rel;
-                    let arity = flat_in_rel.arity(ctx.signature());
-                    let arity: Vec<_> =
-                        index_spec.order.iter().copied().map(|i| arity[i]).collect();
+                    let flat_arity = flat_in_rel.arity(ctx.signature());
+                    let arity: Vec<_> = index_spec
+                        .order
+                        .iter()
+                        .copied()
+                        .map(|i| flat_arity[i])
+                        .collect();
                     let arity = arity.as_slice();
 
                     let index_field_name =
                         display_index_field_name(&flat_in_rel, &index_spec, ctx).to_string();
                     let index_field_name = index_field_name.as_str();
 
-                    // The model el is, semantically, always the 0th argument, but due to the
-                    // permutation described by the index field it might be further back.
-                    let parent_el_pos =
-                        index_spec.order.iter().position(|p| *p == 0).expect("Index orders should be permutations");
-
-                    // TODO: This doesn't work in case an element before the parent el position is
-                    // a member element. In that case, we need to distinguish
-                    // {index_field_name}_own for domain and codomain.
-                    let before_model_els_loop_headers =
-                        (0..parent_el_pos).map(|i| {
-                            FmtFn(move |f| {
-                                let get_own_mut =
-                                    FmtFn(move |f| {
-                                        if i == 0 {
-                                            // In this case, {index_field_name}_own is a
-                                            // PrefixTree<n>.
-                                            write!(f, "{index_field_name}_own.get_mut(el{i})")
-                                        } else {
-                                            // In this case, {index_field_name}_own is a
-                                            // LazyCell<Option<PrefixTree<n>>>.
-                                            write!(f, "(*{index_field_name}_own)?.get_mut(el{i})")
-                                        }
-                                    });
-                                writedoc!{f, "
-                                    for (el{i}, {index_field_name}_all)
-                                    in {index_field_name}_all.iter_restrictions_mut()
-                                    {{
-                                    let mut {index_field_name}_own = LazyCell::new(|| -> Option<_> {{
-                                    {get_own_mut}
-                                    }});
-                                "}
-                            })
-                        }).format("");
-                    let before_model_els_loop_footers =
-                        (0..parent_el_pos).map(|_| {
-                            FmtFn(move |f| {
-                                write!(f, "}}")
-                            })
-                        }).format("\n");
+                    let columns: Vec<_> = index_spec
+                        .order
+                        .iter()
+                        .copied()
+                        .map(|column_index| {
+                            morphism_index_column_kind(
+                                parent_model_type,
+                                column_index,
+                                flat_arity[column_index],
+                                ctx,
+                            )
+                        })
+                        .collect();
+                    let prefix_len = columns
+                        .iter()
+                        .rposition(|column| column.needs_mapping())
+                        .expect("index over a parented relation should contain the parent")
+                        + 1;
+                    let suffix_len = arity.len() - prefix_len;
+                    let prefix_columns = &columns[..prefix_len];
 
                     let parent_model_type_snake =
                         display_type(parent_model_type, ctx).to_string().to_case(Snake);
 
-                    let remove_from_own =
-                        FmtFn(|f| {
-                            if parent_el_pos == 0 {
-                                writedoc!{f, "
-                                    {index_field_name}_own.remove_restriction(*cod, &mapped_dom_set);
+                    let member_maps = prefix_columns
+                        .iter()
+                        .copied()
+                        .enumerate()
+                        .filter_map(|(i, column)| match column {
+                            MorphismIndexColumnKind::Member(typ) => Some(FmtFn(move |f| {
+                                let map = display_mor_app_map_expr(typ, ctx, index_selection);
+                                writedoc! {f, "
+                                    let map_el{i} = {map};
                                 "}
-                            } else {
-                                writedoc!{f, "
-                                    if let Some({index_field_name}_own) = {index_field_name}_own.deref_mut() {{
-                                    {index_field_name}_own.remove_restriction(*cod, &mapped_dom_set);
-                                    }}
-                                "}
-                            }
-                        });
-
-                    let dom_cod_maps =
-                        ((parent_el_pos + 1)..arity.len()).map(|i| {
-                            FmtFn(move |f| {
-                                let typ = arity[i];
-                                let _parent_model = match ctx.signature().type_(typ).parents.last().copied() {
-                                    None => {
-                                        // typ is not a member type, don't apply mapping.
-                                        write!(f, "None")?;
-                                        return Ok(());
-                                    }
-                                    Some(parent_model) => parent_model,
-                                };
-                                // TODO: Check that parent_model is actually the model type we're
-                                // mapping over?
-
-                                let mor_app_func = ctx
-                                    .signature()
-                                    .mor_app_func_for_type(typ)
-                                    .expect("mor_app_func should be defined for member types");
-                                let mor_app_rel = FlatInRel::Rel(FlatRel::Func(mor_app_func));
-
-                                let mor_app_indices = index_selection
-                                    .indices
-                                    .get(&mor_app_rel)
-                                    .expect("mor_app rel should have indices");
-                                let mor_app_eval_index_new = mor_app_indices
-                                    .iter()
-                                    .filter(|index| index.age == IndexAge::New && index.order.as_ref() == [0, 1, 2])
-                                    .exactly_one()
-                                    .expect("should have exactly one new index with order [0, 1, 2] for mor_app rel");
-                                let mor_app_eval_index_old = mor_app_indices
-                                    .iter()
-                                    .filter(|index| index.age == IndexAge::Old && index.order.as_ref() == [0, 1, 2])
-                                    .exactly_one()
-                                    .expect("should have exactly one old index with order [0, 1, 2] for mor_app rel");
-
-                                let mor_app_eval_index_new_name =
-                                    display_index_field_name(&mor_app_rel, mor_app_eval_index_new, ctx);
-                                let mor_app_eval_index_old_name =
-                                    display_index_field_name(&mor_app_rel, mor_app_eval_index_old, ctx);
-
-                                writedoc!{f, "
-                                    Some(
-                                    self.{mor_app_eval_index_new_name}.get(*morph).unwrap_or_else(||PrefixTree2::empty())
-                                    .union(self.{mor_app_eval_index_old_name}.get(*morph).unwrap_or_else(|| PrefixTree2::empty()))
-                                    ),
-                                "}
-                            })
+                            })),
+                            MorphismIndexColumnKind::Parent | MorphismIndexColumnKind::Copy => None,
                         })
                         .format("\n");
+
+                    let collect_propagated = display_morphism_index_prefix_walk(
+                        prefix_columns,
+                        arity.len(),
+                        format!("{index_field_name}_all"),
+                        true,
+                    );
+                    let apply_propagated = display_apply_morphism_index_propagated(
+                        index_field_name,
+                        arity.len(),
+                        prefix_len,
+                        suffix_len,
+                    );
+                    let suffix_type = display_prefix_tree_type(suffix_len);
 
                     writedoc!{f, r#"
                         let mut {index_field_name}_all = self.{index_field_name}_own.clone();
                         let {index_field_name}_own = &mut self.{index_field_name}_own;
                         #[allow(unused)]
                         for MorphismWithSignature {{ morph, dom, cod }} in ordered_{parent_model_type_snake}_mor.iter() {{
-                        {before_model_els_loop_headers}
-                        let dom_set = match {index_field_name}_all.get(*dom) {{
-                        Some(dom_set) => dom_set.clone(),
-                        None => {{ continue; }},
-                        }};
-                        let mapped_dom_set = dom_set.mapped(
-                        {dom_cod_maps}
-                        );
-                        {remove_from_own}
-                        {index_field_name}_all.insert_restriction(*cod, mapped_dom_set);
-                        {before_model_els_loop_footers}
+                        {member_maps}
+                        let mut propagated: Vec<([u32; {prefix_len}], {suffix_type})> = Vec::new();
+                        {collect_propagated}
+                        {apply_propagated}
                         }}
                         self.{index_field_name}_all = {index_field_name}_all;
                     "#}

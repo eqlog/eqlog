@@ -108,3 +108,44 @@ fn merge_non_empty_models_internal() {
     assert_eq!(model.iter_s().count(), 1);
     assert!(model.are_equal_s(a, b));
 }
+
+#[test]
+fn morphism_propagates_member_before_parent_index() {
+    let mut model = IndexedSet::new();
+
+    let set0 = model.new_set();
+    let set1 = model.new_set();
+    let morphism = model.new_set_mor();
+    model.insert_set_mor_dom(morphism, set0);
+    model.insert_set_mor_cod(morphism, set1);
+
+    let x = model.new_s(set0);
+    let y = model.new_s(set1);
+    model.insert_s_mor_app(morphism, x, y);
+    model.insert_flagged(set0, x);
+
+    model.close();
+
+    assert!(model.reached_flagged_image(set1));
+}
+
+#[test]
+fn morphism_copies_visible_model_arguments() {
+    let mut model = IndexedSet::new();
+
+    let set0 = model.new_set();
+    let set1 = model.new_set();
+    let unrelated = model.new_set();
+    let morphism = model.new_set_mor();
+    model.insert_set_mor_dom(morphism, set0);
+    model.insert_set_mor_cod(morphism, set1);
+
+    let x = model.new_s(set0);
+    let y = model.new_s(set1);
+    model.insert_s_mor_app(morphism, x, y);
+    model.insert_tagged_by(set0, unrelated, x);
+
+    model.close();
+
+    assert!(model.tagged_by(set1, unrelated, y));
+}

@@ -1,0 +1,10 @@
+Fix morphism index propagation order
+
+Generate morphism index propagation from the shortest index prefix
+containing all parent and member columns. This handles indices where
+the hidden model parent is not the first index key while preserving
+whole-tree propagation for unchanged suffix columns.
+
+Add indexed-set regressions for member-before-parent indices and
+visible model arguments that must be copied rather than mapped as
+parent columns.
