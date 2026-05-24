@@ -39,15 +39,6 @@ Wildcard: TermId = {
     <l: @L> "_" <r: @R> => ast.push_term(Location(l, r), Term::Wildcard),
 }
 
-Binder: BinderId = {
-    <l: @L> <name: Id> <r: @R> => {
-        let loc = Location(l, r);
-        let ident = ast.push_binder_ident(loc, BinderIdent { name });
-        ast.push_binder(loc, Binder::Ident(ident))
-    },
-    <l: @L> "_" <r: @R> => ast.push_binder(Location(l, r), Binder::Wildcard),
-}
-
 ApplicationTerm: TermId = {
     <l: @L> <func: FuncExpr> <args: ArgList> <r: @R> => {
         let loc = Location(l, r);
@@ -172,29 +163,12 @@ IfAtom: IfAtomId = {
         let p = ast.push_pred_atom(loc, PredAtom { pred, args });
         ast.push_if_atom(loc, IfAtom::Pred(p))
     },
-    // Parse the left side broadly for the same reason as defined-then
-    // binders below: invalid terms should get the dedicated syntactic
-    // diagnostic instead of a parser error at `:`.
-    <l: @L> <lhs: Term> ":" <typ: TypeExpr> <r: @R> => {
+    // Keep the left side as a term so invalid binders such as `f(x) : T`
+    // reach the syntactic checker and get a dedicated diagnostic instead
+    // of a parser error at `:`.
+    <l: @L> <term: Term> ":" <typ: TypeExpr> <r: @R> => {
         let loc = Location(l, r);
-        let (binder, invalid_binder) = match *ast.term(lhs) {
-            Term::Ident(id) => {
-                let name = ast.ident_term(id).name.clone();
-                let binder_ident = ast.push_binder_ident(ast.loc(lhs), BinderIdent { name });
-                let binder = ast.push_binder(ast.loc(lhs), Binder::Ident(binder_ident));
-                (Some(binder), None)
-            }
-            Term::Wildcard => {
-                let binder = ast.push_binder(ast.loc(lhs), Binder::Wildcard);
-                (Some(binder), None)
-            }
-            Term::App(_)
-            | Term::MemberConst(_)
-            | Term::Dom(_)
-            | Term::Cod(_)
-            | Term::MorApp(_) => (None, Some(lhs)),
-        };
-        let v = ast.push_var_if_atom(loc, VarIfAtom { binder, invalid_binder, typ });
+        let v = ast.push_var_if_atom(loc, VarIfAtom { term, typ });
         ast.push_if_atom(loc, IfAtom::Var(v))
     },
 }
@@ -205,32 +179,12 @@ ThenAtom: ThenAtomId = {
         let e = ast.push_equal_atom(loc, EqualAtom { lhs, rhs });
         ast.push_then_atom(loc, ThenAtom::Equal(e))
     },
-    // Parse the optional binder as a term first so `then bar() := foo()!`
+    // Keep the optional binder as a term so `then bar() := foo()!`
     // reaches the syntactic checker and reports "expected a variable" over
     // the whole invalid binder, rather than failing at `:=`.
-    <l: @L> <lhs: PairFirst<Term, ":=">?> <term: Term> "!" <r: @R> => {
+    <l: @L> <var: PairFirst<Term, ":=">?> <term: Term> "!" <r: @R> => {
         let loc = Location(l, r);
-        let (binder, invalid_binder) = match lhs {
-            Some(lhs) => match *ast.term(lhs) {
-                Term::Ident(id) => {
-                    let name = ast.ident_term(id).name.clone();
-                    let binder_ident = ast.push_binder_ident(ast.loc(lhs), BinderIdent { name });
-                    let binder = ast.push_binder(ast.loc(lhs), Binder::Ident(binder_ident));
-                    (Some(binder), None)
-                }
-                Term::Wildcard => {
-                    let binder = ast.push_binder(ast.loc(lhs), Binder::Wildcard);
-                    (Some(binder), None)
-                }
-                Term::App(_)
-                | Term::MemberConst(_)
-                | Term::Dom(_)
-                | Term::Cod(_)
-                | Term::MorApp(_) => (None, Some(lhs)),
-            },
-            None => (None, None),
-        };
-        let d = ast.push_defined_then_atom(loc, DefinedThenAtom { binder, invalid_binder, term });
+        let d = ast.push_defined_then_atom(loc, DefinedThenAtom { var, term });
         ast.push_then_atom(loc, ThenAtom::Defined(d))
     },
     <l: @L> <pred: PredExpr> <args: ArgList> <r: @R> => {

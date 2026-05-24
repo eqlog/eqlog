@@ -21,7 +21,6 @@ pub struct Resolution {
 #[derive(Clone, Debug, Default)]
 pub struct NameResolution {
     pub ident_terms: BTreeMap<IdentTermId, ResolvedIdentTerm>,
-    pub binders: BTreeMap<BinderId, ResolvedBinder>,
     pub var_bindings: Vec<VarBinding>,
     entries: BTreeMap<OrderedNodeId, VariableScope>,
     exits: BTreeMap<OrderedNodeId, VariableScope>,
@@ -31,12 +30,6 @@ pub struct NameResolution {
 pub enum ResolvedIdentTerm {
     Var(VarBindingId),
     AmbientConst(ConstDeclId),
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum ResolvedBinder {
-    Var(VarBindingId),
-    Wildcard,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -52,7 +45,7 @@ pub struct VarBinding {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum VarIntro {
     Implicit(IdentTermId),
-    Binder(BinderId),
+    Explicit(TermId),
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -66,10 +59,6 @@ impl NameResolution {
             .ident_terms
             .get(&id)
             .expect("identifier term was not resolved")
-    }
-
-    pub fn resolved_binder(&self, id: BinderId) -> ResolvedBinder {
-        *self.binders.get(&id).expect("binder was not resolved")
     }
 
     pub fn binding(&self, id: VarBindingId) -> &VarBinding {
@@ -242,14 +231,13 @@ impl<'a> Resolver<'a> {
                 after_args
             }
             IfAtom::Var(id) => {
-                let VarIfAtom { binder, typ, .. } = *self.ast.var_if_atom(id);
+                let VarIfAtom { term, typ } = *self.ast.var_if_atom(id);
+                // The annotation is resolved before the variable term so the
+                // introduced variable is not visible inside its own type.
                 let after_type = self.walk_type_expr(current.clone(), typ);
-                let after_binder = match binder {
-                    Some(binder) => self.resolve_binder_ref_or_create(after_type, binder),
-                    None => after_type,
-                };
-                self.insert_ordered(id, current, after_binder.clone());
-                after_binder
+                let after_var = self.resolve_if_var_ref_or_create(after_type, term);
+                self.insert_ordered(id, current, after_var.clone());
+                after_var
             }
         };
         self.insert_ordered(atom, entry, exit.clone());
@@ -267,12 +255,10 @@ impl<'a> Resolver<'a> {
                 after_rhs
             }
             ThenAtom::Defined(id) => {
-                let DefinedThenAtom { binder, term, .. } = *self.ast.defined_then_atom(id);
+                let DefinedThenAtom { var, term } = *self.ast.defined_then_atom(id);
                 let after_term = self.walk_term(current.clone(), term);
-                let exit = match binder {
-                    Some(binder) => {
-                        self.resolve_then_defined_binder(current.clone(), after_term, binder)
-                    }
+                let exit = match var {
+                    Some(var) => self.resolve_then_defined_var(current.clone(), after_term, var),
                     None => after_term,
                 };
                 self.insert_ordered(id, current, exit.clone());
@@ -433,62 +419,68 @@ impl<'a> Resolver<'a> {
         current
     }
 
-    fn resolve_binder_ref_or_create(
+    fn resolve_if_var_ref_or_create(
         &mut self,
         mut current: VariableScope,
-        binder: BinderId,
+        term: TermId,
     ) -> VariableScope {
-        match *self.ast.binder(binder) {
-            Binder::Ident(id) => {
-                let name = self.ast.binder_ident(id).name.clone();
+        let entry = current.clone();
+        match *self.ast.term(term) {
+            Term::Ident(id) => {
+                let ident_entry = current.clone();
+                let name = self.ast.ident_term(id).name.clone();
                 let binding = match current.lookup(&name) {
                     Some(binding) => binding,
                     None => {
-                        let binding = self.push_binding(name.clone(), VarIntro::Binder(binder));
+                        let binding = self.push_binding(name.clone(), VarIntro::Explicit(term));
                         current.insert(name, binding);
                         binding
                     }
                 };
                 self.names
-                    .binders
-                    .insert(binder, ResolvedBinder::Var(binding));
-                self.insert_ordered(id, current.clone(), current.clone());
+                    .ident_terms
+                    .insert(id, ResolvedIdentTerm::Var(binding));
+                self.insert_ordered(id, ident_entry, current.clone());
             }
-            Binder::Wildcard => {
-                self.names.binders.insert(binder, ResolvedBinder::Wildcard);
+            Term::Wildcard => {}
+            Term::App(_) | Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => {
+                unreachable!("if-var terms are checked by syntactic.rs")
             }
         }
-        self.insert_ordered(binder, current.clone(), current.clone());
+        self.insert_ordered(term, entry, current.clone());
         current
     }
 
-    fn resolve_then_defined_binder(
+    fn resolve_then_defined_var(
         &mut self,
         before_term: VariableScope,
         mut after_term: VariableScope,
-        binder: BinderId,
+        term: TermId,
     ) -> VariableScope {
-        match *self.ast.binder(binder) {
-            Binder::Ident(id) => {
-                let name = self.ast.binder_ident(id).name.clone();
+        let entry = after_term.clone();
+        match *self.ast.term(term) {
+            Term::Ident(id) => {
+                let ident_entry = after_term.clone();
+                let name = self.ast.ident_term(id).name.clone();
                 let binding = match before_term.lookup(&name) {
                     Some(binding) => binding,
                     None => {
-                        let binding = self.push_binding(name.clone(), VarIntro::Binder(binder));
+                        let binding = self.push_binding(name.clone(), VarIntro::Explicit(term));
                         after_term.insert(name, binding);
                         binding
                     }
                 };
                 self.names
-                    .binders
-                    .insert(binder, ResolvedBinder::Var(binding));
-                self.insert_ordered(id, after_term.clone(), after_term.clone());
+                    .ident_terms
+                    .insert(id, ResolvedIdentTerm::Var(binding));
+                self.insert_ordered(id, ident_entry, after_term.clone());
             }
-            Binder::Wildcard => {
-                self.names.binders.insert(binder, ResolvedBinder::Wildcard);
+            Term::Wildcard => {}
+            Term::App(_) | Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => {
+                unreachable!("defined-then variable terms are checked by syntactic.rs")
             }
         }
-        self.insert_ordered(binder, after_term.clone(), after_term.clone());
+        self.insert_ordered(term, entry, after_term.clone());
         after_term
     }
 }

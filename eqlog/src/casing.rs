@@ -161,12 +161,9 @@ impl<'a> CasingChecker<'a> {
                 self.walk_term_list(args)
             }
             IfAtom::Var(id) => {
-                let VarIfAtom { binder, typ, .. } = *self.ast.var_if_atom(id);
+                let VarIfAtom { term, typ } = *self.ast.var_if_atom(id);
                 self.walk_type_expr(typ)?;
-                if let Some(binder) = binder {
-                    self.walk_binder(binder)?;
-                }
-                Ok(())
+                self.walk_term(term)
             }
         }
     }
@@ -179,9 +176,9 @@ impl<'a> CasingChecker<'a> {
                 self.walk_term(rhs)
             }
             ThenAtom::Defined(id) => {
-                let DefinedThenAtom { binder, term, .. } = *self.ast.defined_then_atom(id);
-                if let Some(binder) = binder {
-                    self.walk_binder(binder)?;
+                let DefinedThenAtom { var, term } = *self.ast.defined_then_atom(id);
+                if let Some(var) = var {
+                    self.walk_term(var)?;
                 }
                 self.walk_term(term)
             }
@@ -221,16 +218,6 @@ impl<'a> CasingChecker<'a> {
             self.walk_term(term)?;
         }
         Ok(())
-    }
-
-    fn walk_binder(&self, binder: BinderId) -> Check {
-        match *self.ast.binder(binder) {
-            Binder::Ident(id) => {
-                let name = self.ast.binder_ident(id).name.clone();
-                self.check_variable_name(name, self.ast.loc(binder))
-            }
-            Binder::Wildcard => Ok(()),
-        }
     }
 
     fn check_ident_term(&self, id: IdentTermId, location: Location) -> Check {

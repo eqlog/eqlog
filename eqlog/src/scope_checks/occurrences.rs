@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use crate::ast::*;
 use crate::error::CompileError;
-use crate::resolution::{NameResolution, ResolvedBinder, ResolvedIdentTerm, VarBindingId};
+use crate::resolution::{NameResolution, ResolvedIdentTerm, VarBindingId};
 
 /// Walk `ast` rooted at `module` and report the first variable occurrence
 /// that is not reachable from (and to) another occurrence of the same name
@@ -125,11 +125,9 @@ impl<'a> OccurrencesChecker<'a> {
                 self.collect_term_list(args, occ);
             }
             IfAtom::Var(id) => {
-                let VarIfAtom { binder, typ, .. } = *self.ast.var_if_atom(id);
+                let VarIfAtom { term, typ } = *self.ast.var_if_atom(id);
                 self.collect_type_expr(typ, occ);
-                if let Some(binder) = binder {
-                    self.collect_binder(binder, occ);
-                }
+                self.collect_term(term, occ);
             }
         }
     }
@@ -142,9 +140,9 @@ impl<'a> OccurrencesChecker<'a> {
                 self.collect_term(rhs, occ);
             }
             ThenAtom::Defined(id) => {
-                let DefinedThenAtom { binder, term, .. } = *self.ast.defined_then_atom(id);
-                if let Some(binder) = binder {
-                    self.collect_binder(binder, occ);
+                let DefinedThenAtom { var, term } = *self.ast.defined_then_atom(id);
+                if let Some(var) = var {
+                    self.collect_term(var, occ);
                 }
                 self.collect_term(term, occ);
             }
@@ -189,15 +187,6 @@ impl<'a> OccurrencesChecker<'a> {
     fn collect_term_list(&self, list: TermListId, occ: &mut Vec<VarOccurrence>) {
         for term in self.ast.term_list(list).terms.clone() {
             self.collect_term(term, occ);
-        }
-    }
-
-    fn collect_binder(&self, binder: BinderId, occ: &mut Vec<VarOccurrence>) {
-        if let ResolvedBinder::Var(binding) = self.names.resolved_binder(binder) {
-            occ.push(VarOccurrence {
-                binding,
-                location: self.ast.loc(binder),
-            });
         }
     }
 

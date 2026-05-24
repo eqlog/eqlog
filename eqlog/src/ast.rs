@@ -50,9 +50,6 @@ typed_id!(MorAppTermId);
 
 typed_id!(TermListId);
 
-typed_id!(BinderId);
-typed_id!(BinderIdentId);
-
 typed_id!(TypeExprId);
 typed_id!(AmbientTypeExprId);
 typed_id!(MemberTypeExprId);
@@ -207,17 +204,6 @@ pub struct TermList {
 }
 
 #[derive(Clone, Debug)]
-pub struct BinderIdent {
-    pub name: String,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum Binder {
-    Ident(BinderIdentId),
-    Wildcard,
-}
-
-#[derive(Clone, Debug)]
 pub struct AmbientTypeExpr {
     pub name: String,
 }
@@ -293,15 +279,13 @@ pub struct DefinedIfAtom {
 
 #[derive(Copy, Clone, Debug)]
 pub struct VarIfAtom {
-    pub binder: Option<BinderId>,
-    pub invalid_binder: Option<TermId>,
+    pub term: TermId,
     pub typ: TypeExprId,
 }
 
 #[derive(Copy, Clone, Debug)]
 pub struct DefinedThenAtom {
-    pub binder: Option<BinderId>,
-    pub invalid_binder: Option<TermId>,
+    pub var: Option<TermId>,
     pub term: TermId,
 }
 
@@ -377,8 +361,6 @@ pub enum Node {
     CodTerm(CodTerm),
     MorAppTerm(MorAppTerm),
     TermList(TermList),
-    Binder(Binder),
-    BinderIdent(BinderIdent),
     TypeExpr(TypeExpr),
     AmbientTypeExpr(AmbientTypeExpr),
     MemberTypeExpr(MemberTypeExpr),
@@ -473,8 +455,6 @@ accessor!(dom_term, push_dom_term, DomTermId, DomTerm);
 accessor!(cod_term, push_cod_term, CodTermId, CodTerm);
 accessor!(mor_app_term, push_mor_app_term, MorAppTermId, MorAppTerm);
 accessor!(term_list, push_term_list, TermListId, TermList);
-accessor!(binder, push_binder, BinderId, Binder);
-accessor!(binder_ident, push_binder_ident, BinderIdentId, BinderIdent);
 accessor!(type_expr, push_type_expr, TypeExprId, TypeExpr);
 accessor!(
     ambient_type_expr,

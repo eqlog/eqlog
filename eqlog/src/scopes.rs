@@ -93,8 +93,6 @@ ordered_from!(PredAtomId);
 ordered_from!(DefinedIfAtomId);
 ordered_from!(VarIfAtomId);
 ordered_from!(DefinedThenAtomId);
-ordered_from!(BinderId);
-ordered_from!(BinderIdentId);
 ordered_from!(TermId);
 ordered_from!(IdentTermId);
 ordered_from!(AppTermId);
@@ -489,14 +487,11 @@ impl<'a> ScopeBuilder<'a> {
                 after_args
             }
             IfAtom::Var(id) => {
-                let VarIfAtom { binder, typ, .. } = *self.ast.var_if_atom(id);
+                let VarIfAtom { term, typ } = *self.ast.var_if_atom(id);
                 let after_type = self.walk_type_expr(current, typ);
-                let after_binder = match binder {
-                    Some(binder) => self.walk_binder(after_type, binder),
-                    None => after_type,
-                };
-                self.insert_ordered(id, current, after_binder);
-                after_binder
+                let after_var = self.walk_term(after_type, term);
+                self.insert_ordered(id, current, after_var);
+                after_var
             }
         };
         self.insert_ordered(atom, current, exit);
@@ -514,10 +509,10 @@ impl<'a> ScopeBuilder<'a> {
                 after_rhs
             }
             ThenAtom::Defined(id) => {
-                let DefinedThenAtom { binder, term, .. } = *self.ast.defined_then_atom(id);
+                let DefinedThenAtom { var, term } = *self.ast.defined_then_atom(id);
                 let after_term = self.walk_term(current, term);
-                let exit = match binder {
-                    Some(binder) => self.walk_binder(after_term, binder),
+                let exit = match var {
+                    Some(var) => self.walk_term(after_term, var),
                     None => after_term,
                 };
                 self.insert_ordered(id, current, exit);
@@ -579,16 +574,6 @@ impl<'a> ScopeBuilder<'a> {
         };
         self.insert_ordered(term, current, exit);
         exit
-    }
-
-    /// Ordered scope, depth-first.
-    fn walk_binder(&mut self, current: ScopeId, binder: BinderId) -> ScopeId {
-        match *self.ast.binder(binder) {
-            Binder::Ident(id) => self.insert_ordered(id, current, current),
-            Binder::Wildcard => {}
-        }
-        self.insert_ordered(binder, current, current);
-        current
     }
 
     /// Ordered scope, depth-first.

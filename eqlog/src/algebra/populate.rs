@@ -21,7 +21,7 @@ use crate::algebra::structure::{
 };
 use crate::ast::*;
 use crate::error::CompileError;
-use crate::resolution::{NameResolution, ResolvedBinder, ResolvedIdentTerm, VarBindingId};
+use crate::resolution::{NameResolution, ResolvedIdentTerm, VarBindingId};
 use crate::scopes::{Scope, ScopeId, Scopes, Symbol};
 
 /// Origin tag for the morphism associated with a statement. Mirrors
@@ -58,7 +58,6 @@ pub struct RuleStructures {
     /// structure only; cross-structure el equality is reconstructed
     /// via morphisms.
     pub semantic_els: Vec<BTreeMap<TermId, ElId>>,
-    pub semantic_binders: Vec<BTreeMap<BinderId, ElId>>,
     pub stmt_before: BTreeMap<StmtId, StructureId>,
     pub stmt_after: BTreeMap<StmtId, StructureId>,
     /// Origin tag for each statement's morphism, keyed by the
@@ -88,7 +87,6 @@ impl RuleStructures {
     fn push_blank(&mut self) -> StructureId {
         let id = self.cat.push(Structure::default());
         self.semantic_els.push(BTreeMap::new());
-        self.semantic_binders.push(BTreeMap::new());
         id
     }
 
@@ -101,7 +99,6 @@ impl RuleStructures {
         let identity = identity_elmap(&clone);
         let new_id = self.cat.push(clone);
         self.semantic_els.push(BTreeMap::new());
-        self.semantic_binders.push(BTreeMap::new());
         self.cat.add_morphism(id, new_id, identity);
         new_id
     }
@@ -391,23 +388,21 @@ fn walk_if_atom(
             walk_pred_atom(id, current, rule, ast, scopes, names, signature, errors)
         }
         IfAtom::Var(id) => {
-            let VarIfAtom { binder, typ, .. } = *ast.var_if_atom(id);
+            let VarIfAtom { term, typ } = *ast.var_if_atom(id);
             // Resolve the annotation first: a member type expr walks its
             // parent term, which must run on every pass so it gets re-tried
             // once the parent's type becomes known. Ambient/Mor cases
             // resolve immediately and don't mutate the structure.
             let (cts, mut changed) =
                 walk_var_type_expr(typ, current, rule, ast, scopes, names, signature, errors);
-            if let Some(binder) = binder {
-                let (el_id, c) = ensure_binder_el(binder, current, rule, names);
-                changed |= c;
-                // Queue the annotations for the close pass to apply. A member
-                // annotation may stay unresolved until a later pass settles
-                // its parent's type; until then the el simply has no concrete
-                // type, like any unannotated el.
-                for ct in cts {
-                    changed |= rule.cat.structures[current.0].impose_type(el_id, ct);
-                }
+            let (el_id, c) = walk_term(term, current, rule, ast, scopes, names, signature, errors);
+            changed |= c;
+            // Queue the annotations for the close pass to apply. A member
+            // annotation may stay unresolved until a later pass settles
+            // its parent's type; until then the el simply has no concrete
+            // type, like any unannotated el.
+            for ct in cts {
+                changed |= rule.cat.structures[current.0].impose_type(el_id, ct);
             }
             changed
         }
@@ -433,10 +428,10 @@ fn walk_then_atom(
             c1 || c2 || eq
         }
         ThenAtom::Defined(id) => {
-            let DefinedThenAtom { binder, term, .. } = *ast.defined_then_atom(id);
+            let DefinedThenAtom { var, term } = *ast.defined_then_atom(id);
             let mut changed = false;
-            let binder_el = if let Some(binder) = binder {
-                let (e, c) = ensure_binder_el(binder, current, rule, names);
+            let var_el = if let Some(var) = var {
+                let (e, c) = walk_term(var, current, rule, ast, scopes, names, signature, errors);
                 changed |= c;
                 Some(e)
             } else {
@@ -445,8 +440,8 @@ fn walk_then_atom(
             let (term_el, c) =
                 walk_term(term, current, rule, ast, scopes, names, signature, errors);
             changed |= c;
-            if let Some(binder_el) = binder_el {
-                changed |= rule.cat.structures[current.0].equate(binder_el, term_el);
+            if let Some(var_el) = var_el {
+                changed |= rule.cat.structures[current.0].equate(var_el, term_el);
             }
             changed
         }
@@ -776,25 +771,6 @@ fn ensure_var_binding_el(
     let el_id = structure.push_el();
     structure.var_els.insert(name, el_id);
     (el_id, true)
-}
-
-fn ensure_binder_el(
-    binder: BinderId,
-    current: StructureId,
-    rule: &mut RuleStructures,
-    names: &NameResolution,
-) -> (ElId, bool) {
-    if let Some(el) = rule.semantic_binders[current.0].get(&binder).copied() {
-        return (el, false);
-    }
-
-    let el = match names.resolved_binder(binder) {
-        ResolvedBinder::Var(binding) => ensure_var_binding_el(binding, current, rule, names),
-        ResolvedBinder::Wildcard => (rule.cat.structures[current.0].push_el(), true),
-    }
-    .0;
-    rule.semantic_binders[current.0].insert(binder, el);
-    (el, true)
 }
 
 #[derive(Copy, Clone)]

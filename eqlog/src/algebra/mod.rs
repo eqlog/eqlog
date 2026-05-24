@@ -211,18 +211,6 @@ fn undetermined_type_errors(ast: &Ast, rule: &RuleStructures) -> Vec<CompileErro
             }
         }
     }
-    for (sid, semantic_binders) in rule.semantic_binders.iter().enumerate() {
-        let structure = &rule.cat.structures[sid];
-        for (&binder, &el) in semantic_binders {
-            let root = structure.unification.root_const(el);
-            let has_type = structure.els.get(&root).is_some_and(|cts| !cts.is_empty());
-            if !has_type {
-                errors.push(CompileError::UndeterminedTermType {
-                    location: ast.loc(binder),
-                });
-            }
-        }
-    }
 
     errors
 }
@@ -589,16 +577,6 @@ fn find_earliest_location(
                 continue;
             }
             let loc = ast.loc(term);
-            if best.is_none_or(|best_loc| (loc.1, loc.0) < (best_loc.1, best_loc.0)) {
-                best = Some(loc);
-            }
-        }
-
-        for (&binder, &e) in &rule.semantic_binders[s.0] {
-            if s_st.unification.root_const(e) != el_root {
-                continue;
-            }
-            let loc = ast.loc(binder);
             if best.is_none_or(|best_loc| (loc.1, loc.0) < (best_loc.1, best_loc.0)) {
                 best = Some(loc);
             }

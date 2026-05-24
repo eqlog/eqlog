@@ -96,9 +96,9 @@ impl<'a> BindingsChecker<'a> {
                 self.check_epic_term(rhs);
             }
             ThenAtom::Defined(id) => {
-                let DefinedThenAtom { binder, term, .. } = *self.ast.defined_then_atom(id);
-                if let Some(binder) = binder {
-                    self.check_then_defined_binder(atom, binder);
+                let DefinedThenAtom { var, term } = *self.ast.defined_then_atom(id);
+                if let Some(var) = var {
+                    self.check_then_defined_var(atom, var);
                 }
                 self.check_epic_term(term);
             }
@@ -145,16 +145,19 @@ impl<'a> BindingsChecker<'a> {
         self.names.entry(term).lookup(name) == Some(binding)
     }
 
-    /// The binder slot of `then v := t`. Wildcards are fine; an identifier
+    /// The variable slot of `then v := t`. Wildcards are fine; an identifier
     /// must not already be in scope before the initializer is resolved.
-    fn check_then_defined_binder(&mut self, atom: ThenAtomId, binder: BinderId) {
-        let Binder::Ident(id) = *self.ast.binder(binder) else {
-            return;
+    fn check_then_defined_var(&mut self, atom: ThenAtomId, var: TermId) {
+        let name = match *self.ast.term(var) {
+            Term::Ident(id) => &self.ast.ident_term(id).name,
+            Term::Wildcard => return,
+            Term::App(_) | Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => {
+                unreachable!("defined-then variable terms are checked by syntactic.rs")
+            }
         };
-        let name = &self.ast.binder_ident(id).name;
         if self.names.entry(atom).lookup(name).is_some() {
             self.errors.push(CompileError::ThenDefinedVarNotNew {
-                location: self.ast.loc(binder),
+                location: self.ast.loc(var),
             });
         }
     }

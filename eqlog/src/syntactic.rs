@@ -119,15 +119,21 @@ impl<'a> SyntacticChecker<'a> {
     fn check_if_atom(&self, atom: IfAtomId) -> Check {
         match *self.ast.if_atom(atom) {
             IfAtom::Var(id) => {
-                let VarIfAtom { invalid_binder, .. } = *self.ast.var_if_atom(id);
-                if let Some(invalid_binder) = invalid_binder {
-                    return Err(CompileError::IfVarLhsNotVarOrWildcard {
-                        location: self.ast.loc(invalid_binder),
-                    });
-                }
-                Ok(())
+                let VarIfAtom { term, .. } = *self.ast.var_if_atom(id);
+                self.check_if_var_lhs(term)
             }
             IfAtom::Equal(_) | IfAtom::Defined(_) | IfAtom::Pred(_) => Ok(()),
+        }
+    }
+
+    fn check_if_var_lhs(&self, term: TermId) -> Check {
+        match *self.ast.term(term) {
+            Term::Ident(_) | Term::Wildcard => Ok(()),
+            Term::App(_) | Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => {
+                Err(CompileError::IfVarLhsNotVarOrWildcard {
+                    location: self.ast.loc(term),
+                })
+            }
         }
     }
 
@@ -139,15 +145,9 @@ impl<'a> SyntacticChecker<'a> {
                 self.check_then_term(rhs)
             }
             ThenAtom::Defined(id) => {
-                let DefinedThenAtom {
-                    invalid_binder,
-                    term,
-                    ..
-                } = *self.ast.defined_then_atom(id);
-                if let Some(invalid_binder) = invalid_binder {
-                    return Err(CompileError::ThenDefinedNotVar {
-                        location: self.ast.loc(invalid_binder),
-                    });
+                let DefinedThenAtom { var, term } = *self.ast.defined_then_atom(id);
+                if let Some(var) = var {
+                    self.check_defined_then_var(var)?;
                 }
                 self.check_then_term(term)
             }
@@ -203,6 +203,17 @@ impl<'a> SyntacticChecker<'a> {
         match *self.ast.func_expr(func_expr) {
             FuncExpr::Ambient(_) => Ok(()),
             FuncExpr::Member(id) => self.check_then_term(self.ast.member_func_expr(id).term),
+        }
+    }
+
+    fn check_defined_then_var(&self, term: TermId) -> Check {
+        match *self.ast.term(term) {
+            Term::Ident(_) | Term::Wildcard => Ok(()),
+            Term::App(_) | Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => {
+                Err(CompileError::ThenDefinedNotVar {
+                    location: self.ast.loc(term),
+                })
+            }
         }
     }
 
