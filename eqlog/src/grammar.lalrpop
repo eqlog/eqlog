@@ -48,10 +48,6 @@ ApplicationTerm: TermId = {
 }
 
 MemberConstTerm: TermId = {
-    // Keep `term.member` and `term.member(...)` distinct syntactic forms
-    // without deciding whether `member` is a const or function here. Later
-    // symbol checks use this to report "function used without call" and
-    // "constant called as function" instead of generic parse errors.
     <l: @L> <receiver: Term> "." <name: Id> <r: @R> => {
         let loc = Location(l, r);
         let name = ast.push_ident_term(Location(l, r), IdentTerm { name });
@@ -133,8 +129,6 @@ FuncExpr: FuncExprId = {
         let a = ast.push_ambient_func_expr(loc, AmbientFuncExpr { name });
         ast.push_func_expr(loc, FuncExpr::Ambient(a))
     },
-    // See `MemberConstTerm`: this accepts calls to member names that may
-    // later resolve to consts so semantic diagnostics can be precise.
     <l: @L> <tm: Term> "." <name: Id> <r: @R> => {
         let loc = Location(l, r);
         let m = ast.push_member_func_expr(loc, MemberFuncExpr { term: tm, name });
