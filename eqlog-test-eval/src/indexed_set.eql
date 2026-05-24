@@ -2,6 +2,10 @@ model Set {
     type S;
 
     pred is_subterminal();
+    pred flagged(S);
+    // Regression fixture: visible Set args should copy across morphisms,
+    // while only the hidden parent Set column is rewritten from dom to cod.
+    pred tagged_by(Set, S);
 
     rule reflexivity_member {
         if x: S;
@@ -31,4 +35,13 @@ rule is_subterminal_set_collapse {
     if is_subterminal_set(set_0);
     if set_0 = set_1;
     then x = y;
+}
+
+pred reached_flagged_image(set: Set);
+rule lookup_flagged_image_by_member {
+    if f: Mor(Set);
+    if set_0 = dom(f);
+    if x: set_0.S;
+    if set.flagged(f@(x));
+    then reached_flagged_image(set);
 }
