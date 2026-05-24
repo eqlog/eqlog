@@ -511,7 +511,7 @@ impl<'a> ScopeBuilder<'a> {
                 after_rhs
             }
             ThenAtom::Defined(id) => {
-                let DefinedThenAtom { binder, term } = *self.ast.defined_then_atom(id);
+                let DefinedThenAtom { binder, term, .. } = *self.ast.defined_then_atom(id);
                 let after_term = self.walk_term(current, term);
                 let exit = match binder {
                     Some(binder) => self.walk_binder(after_term, binder),

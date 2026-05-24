@@ -131,7 +131,16 @@ impl<'a> SyntacticChecker<'a> {
                 self.check_then_term(rhs)
             }
             ThenAtom::Defined(id) => {
-                let DefinedThenAtom { term, .. } = *self.ast.defined_then_atom(id);
+                let DefinedThenAtom {
+                    invalid_binder,
+                    term,
+                    ..
+                } = *self.ast.defined_then_atom(id);
+                if let Some(invalid_binder) = invalid_binder {
+                    return Err(CompileError::ThenDefinedNotVar {
+                        location: self.ast.loc(invalid_binder),
+                    });
+                }
                 self.check_then_term(term)
             }
             ThenAtom::Pred(id) => {

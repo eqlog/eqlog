@@ -96,7 +96,7 @@ impl<'a> BindingsChecker<'a> {
                 self.check_epic_term(rhs);
             }
             ThenAtom::Defined(id) => {
-                let DefinedThenAtom { binder, term } = *self.ast.defined_then_atom(id);
+                let DefinedThenAtom { binder, term, .. } = *self.ast.defined_then_atom(id);
                 if let Some(binder) = binder {
                     self.check_then_defined_binder(atom, binder);
                 }

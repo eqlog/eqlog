@@ -300,6 +300,7 @@ pub struct VarIfAtom {
 #[derive(Copy, Clone, Debug)]
 pub struct DefinedThenAtom {
     pub binder: Option<BinderId>,
+    pub invalid_binder: Option<TermId>,
     pub term: TermId,
 }
 

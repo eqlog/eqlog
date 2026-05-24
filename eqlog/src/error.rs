@@ -119,6 +119,9 @@ pub enum CompileError {
     SurjectivityViolation {
         location: Location,
     },
+    ThenDefinedNotVar {
+        location: Location,
+    },
     ThenDefinedVarNotNew {
         location: Location,
     },
@@ -231,6 +234,7 @@ impl CompileError {
             CompileError::VariableIntroducedInThenStmt { location } => *location,
             CompileError::WildcardInThenStmt { location } => *location,
             CompileError::SurjectivityViolation { location } => *location,
+            CompileError::ThenDefinedNotVar { location } => *location,
             CompileError::ThenDefinedVarNotNew { location } => *location,
             CompileError::EnumCtorsNotSurjective {
                 term_location,
@@ -276,6 +280,7 @@ pub enum CompileErrorKind {
     VariableIntroducedInThenStmt,
     WildcardInThenStmt,
     SurjectivityViolation,
+    ThenDefinedNotVar,
     ThenDefinedVarNotNew,
     EnumCtorsNotSurjective,
     MatchPatternIsVariable,
@@ -314,6 +319,7 @@ impl From<&CompileError> for CompileErrorKind {
             VariableIntroducedInThenStmt { .. } => CompileErrorKind::VariableIntroducedInThenStmt,
             WildcardInThenStmt { .. } => CompileErrorKind::WildcardInThenStmt,
             SurjectivityViolation { .. } => CompileErrorKind::SurjectivityViolation,
+            ThenDefinedNotVar { .. } => CompileErrorKind::ThenDefinedNotVar,
             ThenDefinedVarNotNew { .. } => CompileErrorKind::ThenDefinedVarNotNew,
             EnumCtorsNotSurjective { .. } => CompileErrorKind::EnumCtorsNotSurjective,
             MatchPatternIsVariable { .. } => CompileErrorKind::MatchPatternIsVariable,
@@ -644,6 +650,10 @@ impl Display for CompileErrorWithContext {
             }
             SurjectivityViolation { location } => {
                 write!(f, "term does not appear earlier in this rule\n")?;
+                write_loc(f, *location)?;
+            }
+            ThenDefinedNotVar { location } => {
+                write!(f, "expected a variable\n")?;
                 write_loc(f, *location)?;
             }
             ThenDefinedVarNotNew { location } => {

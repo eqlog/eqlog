@@ -176,7 +176,7 @@ impl<'a> CasingChecker<'a> {
                 self.walk_term(rhs)
             }
             ThenAtom::Defined(id) => {
-                let DefinedThenAtom { binder, term } = *self.ast.defined_then_atom(id);
+                let DefinedThenAtom { binder, term, .. } = *self.ast.defined_then_atom(id);
                 if let Some(binder) = binder {
                     self.walk_binder(binder)?;
                 }

@@ -431,7 +431,7 @@ fn walk_then_atom(
             c1 || c2 || eq
         }
         ThenAtom::Defined(id) => {
-            let DefinedThenAtom { binder, term } = *ast.defined_then_atom(id);
+            let DefinedThenAtom { binder, term, .. } = *ast.defined_then_atom(id);
             let mut changed = false;
             let binder_el = if let Some(binder) = binder {
                 let (e, c) = ensure_binder_el(binder, current, rule, names);

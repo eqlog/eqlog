@@ -179,9 +179,29 @@ ThenAtom: ThenAtomId = {
         let e = ast.push_equal_atom(loc, EqualAtom { lhs, rhs });
         ast.push_then_atom(loc, ThenAtom::Equal(e))
     },
-    <l: @L> <binder: PairFirst<Binder, ":=">?> <term: Term> "!" <r: @R> => {
+    <l: @L> <lhs: PairFirst<Term, ":=">?> <term: Term> "!" <r: @R> => {
         let loc = Location(l, r);
-        let d = ast.push_defined_then_atom(loc, DefinedThenAtom { binder, term });
+        let (binder, invalid_binder) = match lhs {
+            Some(lhs) => match *ast.term(lhs) {
+                Term::Ident(id) => {
+                    let name = ast.ident_term(id).name.clone();
+                    let binder_ident = ast.push_binder_ident(ast.loc(lhs), BinderIdent { name });
+                    let binder = ast.push_binder(ast.loc(lhs), Binder::Ident(binder_ident));
+                    (Some(binder), None)
+                }
+                Term::Wildcard => {
+                    let binder = ast.push_binder(ast.loc(lhs), Binder::Wildcard);
+                    (Some(binder), None)
+                }
+                Term::App(_)
+                | Term::MemberConst(_)
+                | Term::Dom(_)
+                | Term::Cod(_)
+                | Term::MorApp(_) => (None, Some(lhs)),
+            },
+            None => (None, None),
+        };
+        let d = ast.push_defined_then_atom(loc, DefinedThenAtom { binder, invalid_binder, term });
         ast.push_then_atom(loc, ThenAtom::Defined(d))
     },
     <l: @L> <pred: PredExpr> <args: ArgList> <r: @R> => {

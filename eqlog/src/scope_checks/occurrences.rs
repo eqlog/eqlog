@@ -140,7 +140,7 @@ impl<'a> OccurrencesChecker<'a> {
                 self.collect_term(rhs, occ);
             }
             ThenAtom::Defined(id) => {
-                let DefinedThenAtom { binder, term } = *self.ast.defined_then_atom(id);
+                let DefinedThenAtom { binder, term, .. } = *self.ast.defined_then_atom(id);
                 if let Some(binder) = binder {
                     self.collect_binder(binder, occ);
                 }
