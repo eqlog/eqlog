@@ -52,7 +52,7 @@ fn test_case(case_src: &Path) {
         Err(err) => format!("{err}"),
     };
 
-    if normalize_error_text(&actual_error) != normalize_error_text(&expected_error) {
+    if actual_error != expected_error {
         panic!(
             "{}",
             formatdoc! {"
@@ -66,18 +66,6 @@ fn test_case(case_src: &Path) {
         "}
         );
     }
-}
-
-fn normalize_error_text(text: &str) -> String {
-    let mut normalized = text
-        .lines()
-        .map(str::trim_end)
-        .collect::<Vec<_>>()
-        .join("\n");
-    if text.ends_with('\n') {
-        normalized.push('\n');
-    }
-    normalized
 }
 
 #[test]

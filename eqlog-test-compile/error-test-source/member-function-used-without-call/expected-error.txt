@@ -1,6 +1,6 @@
 Error: function "inner" must be called with parentheses
  --> error-test-source/member-function-used-without-call/theory.eql:7
-  |
+  | 
 7 |     if c.inner!;
-  |        ^^^^^^^
-  |
+  |        ^^^^^^^  
+  | 
