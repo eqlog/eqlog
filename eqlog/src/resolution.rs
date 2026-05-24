@@ -21,7 +21,7 @@ pub struct Resolution {
 #[derive(Clone, Debug, Default)]
 pub struct NameResolution {
     pub ident_terms: BTreeMap<IdentTermId, ResolvedIdentTerm>,
-    pub var_bindings: Vec<VarBinding>,
+    var_bindings: Vec<String>,
     entries: BTreeMap<OrderedNodeId, VariableScope>,
     exits: BTreeMap<OrderedNodeId, VariableScope>,
 }
@@ -34,19 +34,6 @@ pub enum ResolvedIdentTerm {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VarBindingId(usize);
-
-#[derive(Clone, Debug)]
-pub struct VarBinding {
-    pub name: String,
-    #[allow(dead_code)]
-    pub introduced_at: VarIntro,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum VarIntro {
-    Implicit(IdentTermId),
-    Explicit(TermId),
-}
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct VariableScope {
@@ -61,7 +48,7 @@ impl NameResolution {
             .expect("identifier term was not resolved")
     }
 
-    pub fn binding(&self, id: VarBindingId) -> &VarBinding {
+    pub fn binding_name(&self, id: VarBindingId) -> &str {
         &self.var_bindings[id.0]
     }
 
@@ -143,12 +130,9 @@ impl<'a> Resolver<'a> {
         self.names.exits.insert(id, exit);
     }
 
-    fn push_binding(&mut self, name: String, introduced_at: VarIntro) -> VarBindingId {
+    fn push_binding(&mut self, name: String) -> VarBindingId {
         let id = VarBindingId(self.names.var_bindings.len());
-        self.names.var_bindings.push(VarBinding {
-            name,
-            introduced_at,
-        });
+        self.names.var_bindings.push(name);
         id
     }
 
@@ -411,7 +395,7 @@ impl<'a> Resolver<'a> {
             return current;
         }
 
-        let binding = self.push_binding(name.clone(), VarIntro::Implicit(ident));
+        let binding = self.push_binding(name.clone());
         current.insert(name, binding);
         self.names
             .ident_terms
@@ -432,7 +416,7 @@ impl<'a> Resolver<'a> {
                 let binding = match current.lookup(&name) {
                     Some(binding) => binding,
                     None => {
-                        let binding = self.push_binding(name.clone(), VarIntro::Explicit(term));
+                        let binding = self.push_binding(name.clone());
                         current.insert(name, binding);
                         binding
                     }
@@ -465,7 +449,7 @@ impl<'a> Resolver<'a> {
                 let binding = match before_term.lookup(&name) {
                     Some(binding) => binding,
                     None => {
-                        let binding = self.push_binding(name.clone(), VarIntro::Explicit(term));
+                        let binding = self.push_binding(name.clone());
                         after_term.insert(name, binding);
                         binding
                     }

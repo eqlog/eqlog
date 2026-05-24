@@ -762,14 +762,14 @@ fn ensure_var_binding_el(
     rule: &mut RuleStructures,
     names: &NameResolution,
 ) -> (ElId, bool) {
-    let name = names.binding(binding).name.clone();
+    let name = names.binding_name(binding);
     let structure = &mut rule.cat.structures[current.0];
-    if let Some(&el_id) = structure.var_els.get(&name) {
+    if let Some(&el_id) = structure.var_els.get(name) {
         return (el_id, false);
     }
 
     let el_id = structure.push_el();
-    structure.var_els.insert(name, el_id);
+    structure.var_els.insert(name.to_string(), el_id);
     (el_id, true)
 }
 

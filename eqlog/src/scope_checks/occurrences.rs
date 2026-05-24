@@ -72,7 +72,7 @@ impl<'a> OccurrencesChecker<'a> {
             .find(|occ| counts.get(&occ.binding).copied().unwrap_or(0) < 2)
         {
             Some(occ) => Err(CompileError::VariableOccursOnlyOnce {
-                name: self.names.binding(occ.binding).name.clone(),
+                name: self.names.binding_name(occ.binding).to_string(),
                 location: occ.location,
             }),
             None => Ok(()),

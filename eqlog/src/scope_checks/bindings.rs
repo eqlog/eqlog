@@ -118,7 +118,7 @@ impl<'a> BindingsChecker<'a> {
         match *self.ast.term(term) {
             Term::Ident(id) => {
                 if let ResolvedIdentTerm::Var(binding) = self.names.resolved_ident(id) {
-                    let name = &self.names.binding(binding).name;
+                    let name = self.names.binding_name(binding);
                     if !self.binding_visible_before(term, name, binding) {
                         self.errors
                             .push(CompileError::VariableIntroducedInThenStmt {
@@ -175,7 +175,7 @@ impl<'a> BindingsChecker<'a> {
         for arg in self.ast.term_list(args).terms.clone() {
             if let Term::Ident(id) = *self.ast.term(arg) {
                 if let ResolvedIdentTerm::Var(binding) = self.names.resolved_ident(id) {
-                    let name = &self.names.binding(binding).name;
+                    let name = self.names.binding_name(binding);
                     if self.names.entry(arg).lookup(name).is_some() {
                         self.errors
                             .push(CompileError::MatchPatternArgVarIsNotFresh {
