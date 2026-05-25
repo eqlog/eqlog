@@ -218,121 +218,101 @@ fn display_is_dirty_fn<'a>(
     })
 }
 
-#[derive(Copy, Clone)]
-enum ArgForm {
-    Wrapped,
-    U32,
-}
-
-fn typed_arg_expr(arg: &ElVar, typ: TypeId, form: ArgForm, ctx: &RustGenCtx<'_>) -> String {
-    match form {
-        ArgForm::Wrapped => arg.to_string(),
-        ArgForm::U32 => {
-            let typ = display_type(typ, ctx).to_string().to_case(UpperCamel);
-            format!("{typ}::from({arg})")
-        }
-    }
-}
-
-fn display_dependent_type_checks(
+fn display_dependent_type_checks<'a>(
     rel: FlatRel,
-    arity_types: &[TypeId],
-    rel_args: &[ElVar],
+    arity_types: &'a [TypeId],
+    rel_args: &'a [ElVar],
     checked_len: usize,
-    form: ArgForm,
-    ctx: &RustGenCtx<'_>,
-) -> String {
-    assert!(checked_len <= arity_types.len());
-    assert_eq!(arity_types.len(), rel_args.len());
+    ctx: &'a RustGenCtx<'_>,
+) -> impl Display + 'a {
+    FmtFn(move |f| {
+        assert!(checked_len <= arity_types.len());
+        assert_eq!(arity_types.len(), rel_args.len());
 
-    let mut checks = String::new();
+        if let FlatRel::Func(func) = rel {
+            if let Some(member_type) = ctx.signature().type_for_mor_app_func(func) {
+                let flat_dom_len = flat_domain(func, ctx.signature()).len();
+                assert!(flat_dom_len >= 2);
+                let mor_pos = flat_dom_len - 2;
+                let arg_pos = flat_dom_len - 1;
+                let result_pos = flat_dom_len;
 
-    if let FlatRel::Func(func) = rel {
-        if let Some(member_type) = ctx.signature().type_for_mor_app_func(func) {
-            let flat_dom_len = flat_domain(func, ctx.signature()).len();
-            assert!(flat_dom_len >= 2);
-            let mor_pos = flat_dom_len - 2;
-            let arg_pos = flat_dom_len - 1;
-            let result_pos = flat_dom_len;
+                let parent_model_type = ctx
+                    .signature()
+                    .type_(member_type)
+                    .parents
+                    .last()
+                    .copied()
+                    .expect("mor_app member type should have a parent model");
+                let model_ids = ctx
+                    .signature()
+                    .ids_for_model_type(parent_model_type)
+                    .expect("member parent should be a model type");
+                let dom_func = display_func(model_ids.dom, ctx);
+                let cod_func = display_func(model_ids.cod, ctx);
+                let member_rel = display_rel(FlatRel::ModelMember(member_type), ctx);
+                let mor_func_args = rel_args[..=mor_pos].iter().format(", ").to_string();
 
-            let parent_model_type = ctx
-                .signature()
-                .type_(member_type)
-                .parents
-                .last()
-                .copied()
-                .expect("mor_app member type should have a parent model");
-            let model_ids = ctx
-                .signature()
-                .ids_for_model_type(parent_model_type)
-                .expect("member parent should be a model type");
-            let dom_func = display_func(model_ids.dom, ctx);
-            let cod_func = display_func(model_ids.cod, ctx);
-            let member_rel = display_rel(FlatRel::ModelMember(member_type), ctx);
-            let mor_func_args = (0..=mor_pos)
-                .map(|pos| typed_arg_expr(&rel_args[pos], arity_types[pos], form, ctx))
-                .format(", ")
-                .to_string();
+                if checked_len > arg_pos {
+                    let arg_expr = &rel_args[arg_pos];
+                    writedoc! {f, "
+                        let dependent_parent_{arg_pos} = self.{dom_func}({mor_func_args})
+                            .expect(\"invalid dependent argument: morphism application requires a defined domain\");
+                        assert!(
+                            self.{member_rel}(dependent_parent_{arg_pos}, {arg_expr}),
+                            \"invalid dependent argument: morphism application argument is not a member of the morphism domain\"
+                        );
+                    "}?;
+                }
 
-            if checked_len > arg_pos {
-                let arg_expr = typed_arg_expr(&rel_args[arg_pos], member_type, form, ctx);
-                checks.push_str(&formatdoc! {"
-                    let dependent_parent_{arg_pos} = self.{dom_func}({mor_func_args})
-                        .expect(\"invalid dependent argument: morphism application requires a defined domain\");
-                    assert!(
-                        self.{member_rel}(dependent_parent_{arg_pos}, {arg_expr}),
-                        \"invalid dependent argument: morphism application argument is not a member of the morphism domain\"
-                    );
-                "});
+                if checked_len > result_pos {
+                    let result_expr = &rel_args[result_pos];
+                    writedoc! {f, "
+                        let dependent_parent_{result_pos} = self.{cod_func}({mor_func_args})
+                            .expect(\"invalid dependent argument: morphism application requires a defined codomain\");
+                        assert!(
+                            self.{member_rel}(dependent_parent_{result_pos}, {result_expr}),
+                            \"invalid dependent argument: morphism application result is not a member of the morphism codomain\"
+                        );
+                    "}?;
+                }
+
+                return Ok(());
             }
-
-            if checked_len > result_pos {
-                let result_expr = typed_arg_expr(&rel_args[result_pos], member_type, form, ctx);
-                checks.push_str(&formatdoc! {"
-                    let dependent_parent_{result_pos} = self.{cod_func}({mor_func_args})
-                        .expect(\"invalid dependent argument: morphism application requires a defined codomain\");
-                    assert!(
-                        self.{member_rel}(dependent_parent_{result_pos}, {result_expr}),
-                        \"invalid dependent argument: morphism application result is not a member of the morphism codomain\"
-                    );
-                "});
-            }
-
-            return checks;
-        }
-    }
-
-    if rel.is_model_member() {
-        return checks;
-    }
-
-    let Some(parent_model_type) = rel.parent_model_type(ctx.signature()) else {
-        return checks;
-    };
-    assert_eq!(
-        arity_types.first().copied(),
-        Some(parent_model_type),
-        "member relations should be flattened with the parent model first"
-    );
-    let parent_expr = typed_arg_expr(&rel_args[0], parent_model_type, form, ctx);
-
-    for pos in 1..checked_len {
-        let typ = arity_types[pos];
-        if ctx.signature().type_(typ).parents.last().copied() != Some(parent_model_type) {
-            continue;
         }
 
-        let member_rel = display_rel(FlatRel::ModelMember(typ), ctx);
-        let member_expr = typed_arg_expr(&rel_args[pos], typ, form, ctx);
-        checks.push_str(&formatdoc! {"
-            assert!(
-                self.{member_rel}({parent_expr}, {member_expr}),
-                \"invalid dependent argument: element is not a member of the supplied parent model\"
-            );
-        "});
-    }
+        if rel.is_model_member() {
+            return Ok(());
+        }
 
-    checks
+        let Some(parent_model_type) = rel.parent_model_type(ctx.signature()) else {
+            return Ok(());
+        };
+        assert_eq!(
+            arity_types.first().copied(),
+            Some(parent_model_type),
+            "member relations should be flattened with the parent model first"
+        );
+        let parent_expr = &rel_args[0];
+
+        for pos in 1..checked_len {
+            let typ = arity_types[pos];
+            if ctx.signature().type_(typ).parents.last().copied() != Some(parent_model_type) {
+                continue;
+            }
+
+            let member_rel = display_rel(FlatRel::ModelMember(typ), ctx);
+            let member_expr = &rel_args[pos];
+            writedoc! {f, "
+                assert!(
+                    self.{member_rel}({parent_expr}, {member_expr}),
+                    \"invalid dependent argument: element is not a member of the supplied parent model\"
+                );
+            "}?;
+        }
+
+        Ok(())
+    })
 }
 
 fn display_pub_predicate_holds_fn<'a>(
@@ -366,14 +346,8 @@ fn display_pub_predicate_holds_fn<'a>(
                 name: format!("arg{i}").into(),
             })
             .collect();
-        let dependent_checks = display_dependent_type_checks(
-            rel,
-            &arity_types,
-            &rel_args,
-            arity_types.len(),
-            ArgForm::Wrapped,
-            ctx,
-        );
+        let dependent_checks =
+            display_dependent_type_checks(rel, &arity_types, &rel_args, arity_types.len(), ctx);
 
         let rel_args_doc =
             (0..arity_types.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
@@ -463,14 +437,8 @@ fn display_pub_function_eval_fn<'a>(
             .collect();
         let mut arity_types = flat_dom.clone();
         arity_types.push(cod);
-        let dependent_checks = display_dependent_type_checks(
-            rel,
-            &arity_types,
-            &rel_args,
-            flat_dom_len,
-            ArgForm::Wrapped,
-            ctx,
-        );
+        let dependent_checks =
+            display_dependent_type_checks(rel, &arity_types, &rel_args, flat_dom_len, ctx);
 
         let doc_args = (0..flat_dom.len())
             .map(|i| FmtFn(move |f| write!(f, "arg{i}")))
@@ -784,19 +752,21 @@ fn display_pub_insert_relation<'a>(
             .map(|(arg, typ)| {
                 FmtFn(move |f: &mut Formatter| -> Result {
                     let type_snake = display_type(*typ, ctx).to_string().to_case(Snake);
-                    write!(f, "let {arg}: u32 = self.root_{type_snake}({arg}).0;")
+                    write!(f, "let {arg} = self.root_{type_snake}({arg});")
                 })
             })
             .format("\n");
 
-        let dependent_checks = display_dependent_type_checks(
-            rel,
-            &arity_types,
-            rel_args,
-            arity_types.len(),
-            ArgForm::U32,
-            ctx,
-        );
+        let dependent_checks =
+            display_dependent_type_checks(rel, &arity_types, rel_args, arity_types.len(), ctx);
+
+        let unwrap_args = rel_args
+            .iter()
+            .cloned()
+            .map(|arg| {
+                FmtFn(move |f: &mut Formatter| -> Result { write!(f, "let {arg}: u32 = {arg}.0;") })
+            })
+            .format("\n");
 
         let weight_static_name = display_weight_static_name(rel, ctx).to_string();
         let update_weights = rel_args
@@ -910,6 +880,7 @@ fn display_pub_insert_relation<'a>(
             pub fn insert_{rel_snake}(&mut self, {rel_fn_args}) {{
                 {canonicalize}
                 {dependent_checks}
+                {unwrap_args}
 
                 {contains_checks}
 
