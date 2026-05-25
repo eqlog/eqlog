@@ -375,7 +375,7 @@ fn flatten_if_arbitrary(
         if img_apps.contains(&app) {
             continue;
         }
-        if app.rel.is_model_member() {
+        if app.rel.is_model_membership_relation() {
             assert_eq!(app.args.len(), 2, "model member predicates have arity 2");
             if constrained.contains(&app.args[1]) {
                 continue;

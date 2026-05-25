@@ -31,6 +31,30 @@ fn singleton_set() {
 }
 
 #[test]
+#[should_panic(expected = "invalid dependent argument")]
+fn member_predicate_insert_rejects_wrong_parent() {
+    let mut model = IndexedSet::new();
+
+    let set0 = model.new_set();
+    let set1 = model.new_set();
+    let x = model.new_s(set0);
+
+    model.insert_flagged(set1, x);
+}
+
+#[test]
+#[should_panic(expected = "invalid dependent argument")]
+fn member_predicate_query_rejects_wrong_parent() {
+    let mut model = IndexedSet::new();
+
+    let set0 = model.new_set();
+    let set1 = model.new_set();
+    let x = model.new_s(set0);
+
+    let _ = model.flagged(set1, x);
+}
+
+#[test]
 fn single_external_terminal_set() {
     let mut model = IndexedSet::new();
 
