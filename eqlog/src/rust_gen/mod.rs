@@ -281,7 +281,7 @@ fn display_dependent_type_checks<'a>(
             }
         }
 
-        if rel.is_model_member() {
+        if rel.is_model_membership_relation() {
             return Ok(());
         }
 
@@ -1448,8 +1448,10 @@ fn display_canonicalize_fn<'a>(
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let rel_blocks = iter_flat_rels(ctx.signature())
-            .filter(|rel| rel.is_model_member())
-            .chain(iter_flat_rels(ctx.signature()).filter(|rel| !rel.is_model_member()))
+            .filter(|rel| rel.is_model_membership_relation())
+            .chain(
+                iter_flat_rels(ctx.signature()).filter(|rel| !rel.is_model_membership_relation()),
+            )
             .map(|rel| {
                 FmtFn(move |f| {
                     let block = display_canonicalize_rel_block(rel, ctx, index_selection);

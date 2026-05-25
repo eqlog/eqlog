@@ -43,7 +43,7 @@ impl FlatRel {
         }
     }
 
-    pub fn is_model_member(self) -> bool {
+    pub fn is_model_membership_relation(self) -> bool {
         matches!(self, FlatRel::ModelMember(_))
     }
 }
