@@ -41,6 +41,113 @@ fn single_z2() {
 }
 
 #[test]
+#[should_panic(expected = "invalid dependent argument")]
+fn member_function_insert_rejects_wrong_input_parent() {
+    let mut model = IndexedAbelianGroup::new();
+
+    let group0 = model.new_abelian_group();
+    let group1 = model.new_abelian_group();
+    let x = model.new_el(group0);
+    let y = model.new_el(group1);
+    let result = model.new_el(group0);
+
+    model.insert_mul(group0, x, y, result);
+}
+
+#[test]
+#[should_panic(expected = "invalid dependent argument")]
+fn member_function_insert_rejects_wrong_result_parent() {
+    let mut model = IndexedAbelianGroup::new();
+
+    let group0 = model.new_abelian_group();
+    let group1 = model.new_abelian_group();
+    let x = model.new_el(group0);
+    let y = model.new_el(group0);
+    let result = model.new_el(group1);
+
+    model.insert_mul(group0, x, y, result);
+}
+
+#[test]
+#[should_panic(expected = "invalid dependent argument")]
+fn member_function_eval_rejects_wrong_input_parent() {
+    let mut model = IndexedAbelianGroup::new();
+
+    let group0 = model.new_abelian_group();
+    let group1 = model.new_abelian_group();
+    let x = model.new_el(group0);
+    let y = model.new_el(group1);
+
+    let _ = model.mul(group0, x, y);
+}
+
+#[test]
+#[should_panic(expected = "invalid dependent argument")]
+fn member_function_define_rejects_wrong_input_parent() {
+    let mut model = IndexedAbelianGroup::new();
+
+    let group0 = model.new_abelian_group();
+    let group1 = model.new_abelian_group();
+    let x = model.new_el(group0);
+    let y = model.new_el(group1);
+
+    let _ = model.define_mul(group0, x, y);
+}
+
+#[test]
+#[should_panic(expected = "invalid dependent argument")]
+fn mor_app_insert_rejects_wrong_domain_member() {
+    let mut model = IndexedAbelianGroup::new();
+
+    let dom = model.new_abelian_group();
+    let cod = model.new_abelian_group();
+    let other = model.new_abelian_group();
+    let morphism = model.new_abelian_group_mor();
+    model.insert_abelian_group_mor_dom(morphism, dom);
+    model.insert_abelian_group_mor_cod(morphism, cod);
+
+    let x = model.new_el(other);
+    let y = model.new_el(cod);
+
+    model.insert_el_mor_app(morphism, x, y);
+}
+
+#[test]
+#[should_panic(expected = "invalid dependent argument")]
+fn mor_app_insert_rejects_wrong_codomain_member() {
+    let mut model = IndexedAbelianGroup::new();
+
+    let dom = model.new_abelian_group();
+    let cod = model.new_abelian_group();
+    let other = model.new_abelian_group();
+    let morphism = model.new_abelian_group_mor();
+    model.insert_abelian_group_mor_dom(morphism, dom);
+    model.insert_abelian_group_mor_cod(morphism, cod);
+
+    let x = model.new_el(dom);
+    let y = model.new_el(other);
+
+    model.insert_el_mor_app(morphism, x, y);
+}
+
+#[test]
+#[should_panic(expected = "invalid dependent argument")]
+fn mor_app_define_rejects_wrong_domain_member() {
+    let mut model = IndexedAbelianGroup::new();
+
+    let dom = model.new_abelian_group();
+    let cod = model.new_abelian_group();
+    let other = model.new_abelian_group();
+    let morphism = model.new_abelian_group_mor();
+    model.insert_abelian_group_mor_dom(morphism, dom);
+    model.insert_abelian_group_mor_cod(morphism, cod);
+
+    let x = model.new_el(other);
+
+    let _ = model.define_el_mor_app(morphism, x);
+}
+
+#[test]
 fn id_on_z2() {
     let mut model = IndexedAbelianGroup::new();
 

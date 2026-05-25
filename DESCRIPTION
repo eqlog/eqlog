@@ -1,0 +1,9 @@
+Check dependent member types in Rust API
+
+Generated Rust APIs now assert that member-typed arguments and function
+results belong to the supplied parent model before accepting rows.
+Morphism application checks use the morphism domain for inputs and the
+codomain for results.
+
+Regression tests cover cross-parent misuse for member predicates, member
+functions, and morphism application.
