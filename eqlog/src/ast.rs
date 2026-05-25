@@ -32,6 +32,7 @@ typed_id!(DeclId);
 typed_id!(TypeDeclId);
 typed_id!(PredDeclId);
 typed_id!(FuncDeclId);
+typed_id!(ConstDeclId);
 typed_id!(RuleDeclId);
 typed_id!(EnumDeclId);
 typed_id!(ModelDeclId);
@@ -40,8 +41,9 @@ typed_id!(ArgDeclId);
 typed_id!(ArgDeclListId);
 
 typed_id!(TermId);
-typed_id!(VarTermId);
+typed_id!(IdentTermId);
 typed_id!(AppTermId);
+typed_id!(MemberConstTermId);
 typed_id!(DomTermId);
 typed_id!(CodTermId);
 typed_id!(MorAppTermId);
@@ -87,6 +89,7 @@ pub enum Decl {
     Type(TypeDeclId),
     Pred(PredDeclId),
     Func(FuncDeclId),
+    Const(ConstDeclId),
     Rule(RuleDeclId),
     Enum(EnumDeclId),
     Model(ModelDeclId),
@@ -107,6 +110,12 @@ pub struct PredDecl {
 pub struct FuncDecl {
     pub name: String,
     pub args: ArgDeclListId,
+    pub result: TypeExprId,
+}
+
+#[derive(Clone, Debug)]
+pub struct ConstDecl {
+    pub name: String,
     pub result: TypeExprId,
 }
 
@@ -146,7 +155,7 @@ pub struct ArgDeclList {
 }
 
 #[derive(Clone, Debug)]
-pub struct VarTerm {
+pub struct IdentTerm {
     pub name: String,
 }
 
@@ -154,6 +163,12 @@ pub struct VarTerm {
 pub struct AppTerm {
     pub func: FuncExprId,
     pub args: TermListId,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct MemberConstTerm {
+    pub receiver: TermId,
+    pub name: IdentTermId,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -174,9 +189,10 @@ pub struct MorAppTerm {
 
 #[derive(Copy, Clone, Debug)]
 pub enum Term {
-    Var(VarTermId),
+    Ident(IdentTermId),
     Wildcard,
     App(AppTermId),
+    MemberConst(MemberConstTermId),
     Dom(DomTermId),
     Cod(CodTermId),
     MorApp(MorAppTermId),
@@ -330,6 +346,7 @@ pub enum Node {
     TypeDecl(TypeDecl),
     PredDecl(PredDecl),
     FuncDecl(FuncDecl),
+    ConstDecl(ConstDecl),
     RuleDecl(RuleDecl),
     EnumDecl(EnumDecl),
     ModelDecl(ModelDecl),
@@ -337,8 +354,9 @@ pub enum Node {
     ArgDecl(ArgDecl),
     ArgDeclList(ArgDeclList),
     Term(Term),
-    VarTerm(VarTerm),
+    IdentTerm(IdentTerm),
     AppTerm(AppTerm),
+    MemberConstTerm(MemberConstTerm),
     DomTerm(DomTerm),
     CodTerm(CodTerm),
     MorAppTerm(MorAppTerm),
@@ -412,6 +430,7 @@ accessor!(decl, push_decl, DeclId, Decl);
 accessor!(type_decl, push_type_decl, TypeDeclId, TypeDecl);
 accessor!(pred_decl, push_pred_decl, PredDeclId, PredDecl);
 accessor!(func_decl, push_func_decl, FuncDeclId, FuncDecl);
+accessor!(const_decl, push_const_decl, ConstDeclId, ConstDecl);
 accessor!(rule_decl, push_rule_decl, RuleDeclId, RuleDecl);
 accessor!(enum_decl, push_enum_decl, EnumDeclId, EnumDecl);
 accessor!(model_decl, push_model_decl, ModelDeclId, ModelDecl);
@@ -424,8 +443,14 @@ accessor!(
     ArgDeclList
 );
 accessor!(term, push_term, TermId, Term);
-accessor!(var_term, push_var_term, VarTermId, VarTerm);
+accessor!(ident_term, push_ident_term, IdentTermId, IdentTerm);
 accessor!(app_term, push_app_term, AppTermId, AppTerm);
+accessor!(
+    member_const_term,
+    push_member_const_term,
+    MemberConstTermId,
+    MemberConstTerm
+);
 accessor!(dom_term, push_dom_term, DomTermId, DomTerm);
 accessor!(cod_term, push_cod_term, CodTermId, CodTerm);
 accessor!(mor_app_term, push_mor_app_term, MorAppTermId, MorAppTerm);

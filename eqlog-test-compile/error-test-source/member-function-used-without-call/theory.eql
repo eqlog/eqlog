@@ -1,0 +1,8 @@
+model Container {
+    type Elem;
+    func inner() -> Elem;
+}
+rule {
+    if c: Container;
+    if c.inner!;
+}

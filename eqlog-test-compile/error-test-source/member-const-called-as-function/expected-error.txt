@@ -1,0 +1,6 @@
+Error: constant "inner" must be used without parentheses
+ --> error-test-source/member-const-called-as-function/theory.eql:7
+  | 
+7 |     if c.inner()!;
+  |        ^^^^^^^    
+  | 

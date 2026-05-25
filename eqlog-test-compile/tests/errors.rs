@@ -94,6 +94,21 @@ fn undeclared_function() {
     test_case(Path::new("undeclared-function"));
 }
 
+#[test]
+fn const_called_as_function() {
+    test_case(Path::new("const-called-as-function"));
+}
+
+#[test]
+fn member_const_called_as_function() {
+    test_case(Path::new("member-const-called-as-function"));
+}
+
+#[test]
+fn member_function_used_without_call() {
+    test_case(Path::new("member-function-used-without-call"));
+}
+
 // // TODO: Figure out which casing rules we should continue to enforce. E.g. constructors can/should
 // // be upper case, but functions should still be snake etc.
 // #[test]

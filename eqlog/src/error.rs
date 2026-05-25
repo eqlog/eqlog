@@ -15,6 +15,7 @@ pub enum SymbolKind {
     Type,
     Pred,
     Func,
+    Const,
     Rule,
     Enum,
     Ctor,
@@ -26,6 +27,7 @@ fn display_symbol_kind(symbol_kind: SymbolKind) -> &'static str {
         SymbolKind::Type => "type",
         SymbolKind::Pred => "predicate",
         SymbolKind::Func => "function",
+        SymbolKind::Const => "constant",
         SymbolKind::Rule => "rule",
         SymbolKind::Enum => "enum",
         SymbolKind::Ctor => "constructor",
@@ -92,6 +94,14 @@ pub enum CompileError {
         name: String,
         first_declaration: Location,
         second_declaration: Location,
+    },
+    ConstCalledAsFunction {
+        name: String,
+        location: Location,
+    },
+    FunctionUsedWithoutCall {
+        name: String,
+        location: Location,
     },
     UndeterminedTermType {
         location: Location,
@@ -220,6 +230,8 @@ impl CompileError {
             CompileError::SymbolDeclaredTwice {
                 second_declaration, ..
             } => *second_declaration,
+            CompileError::ConstCalledAsFunction { location, .. } => *location,
+            CompileError::FunctionUsedWithoutCall { location, .. } => *location,
             CompileError::UndeterminedTermType { location } => *location,
             CompileError::ConflictingTermType { location, .. } => *location,
             CompileError::VariableIntroducedInThenStmt { location } => *location,
@@ -265,6 +277,8 @@ pub enum CompileErrorKind {
     UndeclaredSymbol,
     BadSymbolKind,
     SymbolDeclaredTwice,
+    ConstCalledAsFunction,
+    FunctionUsedWithoutCall,
     UndeterminedTermType,
     ConflictingTermType,
     VariableIntroducedInThenStmt,
@@ -303,6 +317,8 @@ impl From<&CompileError> for CompileErrorKind {
             UndeclaredSymbol { .. } => CompileErrorKind::UndeclaredSymbol,
             BadSymbolKind { .. } => CompileErrorKind::BadSymbolKind,
             SymbolDeclaredTwice { .. } => CompileErrorKind::SymbolDeclaredTwice,
+            ConstCalledAsFunction { .. } => CompileErrorKind::ConstCalledAsFunction,
+            FunctionUsedWithoutCall { .. } => CompileErrorKind::FunctionUsedWithoutCall,
             UndeterminedTermType { .. } => CompileErrorKind::UndeterminedTermType,
             ConflictingTermType { .. } => CompileErrorKind::ConflictingTermType,
             VariableIntroducedInThenStmt { .. } => CompileErrorKind::VariableIntroducedInThenStmt,
@@ -380,6 +396,16 @@ static COMPILE_ERROR_KIND_ORDER: LazyLock<HashSet<[CompileErrorKind; 2]>> = Lazy
     for k in CompileErrorKind::iter() {
         if !relation.contains(&[k, BadSymbolKind]) {
             relation.insert([BadSymbolKind, k]);
+        }
+    }
+    transitive_closure(&mut relation);
+
+    for k in CompileErrorKind::iter() {
+        if !relation.contains(&[k, ConstCalledAsFunction]) {
+            relation.insert([ConstCalledAsFunction, k]);
+        }
+        if !relation.contains(&[k, FunctionUsedWithoutCall]) {
+            relation.insert([FunctionUsedWithoutCall, k]);
         }
     }
     transitive_closure(&mut relation);
@@ -600,6 +626,14 @@ impl Display for CompileErrorWithContext {
                 write_loc(f, *second_declaration)?;
                 write!(f, "Previously declared here:\n")?;
                 write_loc(f, *first_declaration)?;
+            }
+            ConstCalledAsFunction { name, location } => {
+                write!(f, "constant \"{name}\" must be used without parentheses\n")?;
+                write_loc(f, *location)?;
+            }
+            FunctionUsedWithoutCall { name, location } => {
+                write!(f, "function \"{name}\" must be called with parentheses\n")?;
+                write_loc(f, *location)?;
             }
             UndeterminedTermType { location } => {
                 write!(f, "type of term undetermined\n")?;

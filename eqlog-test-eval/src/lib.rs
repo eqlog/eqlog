@@ -27,6 +27,7 @@ eqlog_mod!(indexed_abelian_group);
 eqlog_mod!(empty);
 eqlog_mod!(subset);
 eqlog_mod!(subset_rules);
+eqlog_mod!(consts);
 
 mod category_mod;
 #[cfg(test)]
@@ -45,6 +46,8 @@ mod monoid_test;
 //mod pca_test;
 #[cfg(test)]
 mod branches_test;
+#[cfg(test)]
+mod consts_test;
 #[cfg(test)]
 mod indexed_abelian_group_test;
 #[cfg(test)]

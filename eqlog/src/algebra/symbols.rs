@@ -59,6 +59,7 @@ enum LookupKind {
     Type,
     Pred,
     Func,
+    Const,
     Enum,
     Ctor,
     Model,
@@ -71,6 +72,7 @@ impl LookupKind {
             LookupKind::Type => SymbolKind::Type,
             LookupKind::Pred => SymbolKind::Pred,
             LookupKind::Func => SymbolKind::Func,
+            LookupKind::Const => SymbolKind::Const,
             LookupKind::Enum => SymbolKind::Enum,
             LookupKind::Ctor => SymbolKind::Ctor,
             LookupKind::Model => SymbolKind::Model,
@@ -85,6 +87,7 @@ impl Symbol {
             Symbol::Type(_) => LookupKind::Type,
             Symbol::Pred(_) => LookupKind::Pred,
             Symbol::Func(_) => LookupKind::Func,
+            Symbol::Const(_) => LookupKind::Const,
             Symbol::Enum(_) => LookupKind::Enum,
             Symbol::Ctor(_) => LookupKind::Ctor,
             Symbol::Model(_) => LookupKind::Model,
@@ -116,7 +119,7 @@ impl<'a> Checker<'a> {
                     self.walk_decl(child);
                 }
             }
-            Decl::Type(_) | Decl::Pred(_) | Decl::Func(_) | Decl::Enum(_) => {}
+            Decl::Type(_) | Decl::Pred(_) | Decl::Func(_) | Decl::Const(_) | Decl::Enum(_) => {}
         }
     }
 
@@ -187,9 +190,8 @@ impl<'a> Checker<'a> {
             }
             IfAtom::Pred(id) => self.walk_pred_atom(id, ctx),
             IfAtom::Var(id) => {
-                let VarIfAtom { term, typ } = *self.ast.var_if_atom(id);
+                let VarIfAtom { typ, .. } = *self.ast.var_if_atom(id);
                 self.check_type_expr(typ, ctx, self.ast.loc(atom));
-                self.walk_term(term, ctx);
             }
         }
     }
@@ -202,10 +204,7 @@ impl<'a> Checker<'a> {
                 self.walk_term(rhs, ctx);
             }
             ThenAtom::Defined(id) => {
-                let DefinedThenAtom { var, term } = *self.ast.defined_then_atom(id);
-                if let Some(var) = var {
-                    self.walk_term(var, ctx);
-                }
+                let DefinedThenAtom { term, .. } = *self.ast.defined_then_atom(id);
                 self.walk_term(term, ctx);
             }
             ThenAtom::Pred(id) => self.walk_pred_atom(id, ctx),
@@ -222,12 +221,20 @@ impl<'a> Checker<'a> {
 
     fn walk_term(&mut self, term: TermId, ctx: RuleCtx<'a>) {
         match *self.ast.term(term) {
-            Term::Var(_) | Term::Wildcard => {}
+            Term::Ident(_) | Term::Wildcard => {}
             Term::App(id) => {
                 let AppTerm { func, args } = *self.ast.app_term(id);
                 self.check_func_expr(func, ctx, &[LookupKind::Func, LookupKind::Ctor]);
                 for arg in self.ast.term_list(args).terms.clone() {
                     self.walk_term(arg, ctx);
+                }
+            }
+            Term::MemberConst(id) => {
+                let MemberConstTerm { receiver, name } = *self.ast.member_const_term(id);
+                self.walk_term(receiver, ctx);
+                let name = self.ast.ident_term(name).name.clone();
+                for scope in self.member_receiver_scopes(receiver, ctx) {
+                    self.check_member_const_lookup(scope, name.clone(), self.ast.loc(term));
                 }
             }
             Term::Dom(id) => self.walk_term(self.ast.dom_term(id).arg, ctx),
@@ -250,7 +257,7 @@ impl<'a> Checker<'a> {
         if let FuncExpr::Ambient(id) = *self.ast.func_expr(func) {
             let name = self.ast.ambient_func_expr(id).name.clone();
             self.check_lookup(
-                self.scopes.entry(pattern),
+                self.scopes.entry(id),
                 name,
                 &[LookupKind::Ctor],
                 self.ast.loc(pattern),
@@ -327,13 +334,18 @@ impl<'a> Checker<'a> {
         match *self.ast.func_expr(func) {
             FuncExpr::Ambient(id) => {
                 let name = self.ast.ambient_func_expr(id).name.clone();
-                self.check_lookup(self.scopes.entry(id), name, ambient, self.ast.loc(func));
+                self.check_func_call_lookup(
+                    self.scopes.entry(id),
+                    name,
+                    ambient,
+                    self.ast.loc(func),
+                );
             }
             FuncExpr::Member(id) => {
                 let MemberFuncExpr { term, name } = self.ast.member_func_expr(id).clone();
                 self.walk_term(term, ctx);
                 for scope in self.member_receiver_scopes(term, ctx) {
-                    self.check_member_lookup(
+                    self.check_member_func_call_lookup(
                         scope,
                         name.clone(),
                         &[LookupKind::Func, LookupKind::Ctor],
@@ -382,6 +394,24 @@ impl<'a> Checker<'a> {
         self.check_decl_symbols(name, expected, used_at, decls);
     }
 
+    fn check_func_call_lookup(
+        &mut self,
+        scope: ScopeId,
+        name: String,
+        expected: &[LookupKind],
+        used_at: Location,
+    ) {
+        let decls = lookup_decl_symbols(self.scopes, scope, &name);
+        if decls.iter().any(|sym| matches!(sym, Symbol::Const(_))) {
+            self.errors.push(CompileError::ConstCalledAsFunction {
+                name,
+                location: used_at,
+            });
+            return;
+        }
+        self.check_decl_symbols(name, expected, used_at, decls);
+    }
+
     fn check_member_lookup(
         &mut self,
         scope: ScopeId,
@@ -391,6 +421,42 @@ impl<'a> Checker<'a> {
     ) {
         let decls = lookup_direct_decl_symbols(self.scopes, scope, &name);
         self.check_decl_symbols(name, expected, used_at, decls);
+    }
+
+    fn check_member_func_call_lookup(
+        &mut self,
+        scope: ScopeId,
+        name: String,
+        expected: &[LookupKind],
+        used_at: Location,
+    ) {
+        let decls = lookup_direct_decl_symbols(self.scopes, scope, &name);
+        if decls.iter().any(|sym| matches!(sym, Symbol::Const(_))) {
+            self.errors.push(CompileError::ConstCalledAsFunction {
+                name,
+                location: used_at,
+            });
+            return;
+        }
+        self.check_decl_symbols(name, expected, used_at, decls);
+    }
+
+    fn check_member_const_lookup(&mut self, scope: ScopeId, name: String, used_at: Location) {
+        let decls = lookup_direct_decl_symbols(self.scopes, scope, &name);
+        if decls.iter().any(|sym| matches!(sym, Symbol::Const(_))) {
+            return;
+        }
+        if decls
+            .iter()
+            .any(|sym| matches!(sym, Symbol::Func(_) | Symbol::Ctor(_)))
+        {
+            self.errors.push(CompileError::FunctionUsedWithoutCall {
+                name,
+                location: used_at,
+            });
+            return;
+        }
+        self.check_decl_symbols(name, &[LookupKind::Const], used_at, decls);
     }
 
     fn check_decl_symbols(

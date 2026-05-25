@@ -369,30 +369,8 @@ fn walk_if_atom(
             // resolve immediately and don't mutate the structure.
             let (cts, mut changed) =
                 walk_var_type_expr(typ, current, rule, ast, scopes, signature, errors);
-            let el_id = match rule.semantic_els[current.0].get(&term).copied() {
-                Some(el) => el,
-                None => {
-                    let structure = &mut rule.cat.structures[current.0];
-                    let el_id = structure.push_el();
-                    rule.semantic_els[current.0].insert(term, el_id);
-                    match *ast.term(term) {
-                        Term::Var(vid) => {
-                            let name = ast.var_term(vid).name.clone();
-                            rule.cat.structures[current.0].var_els.insert(name, el_id);
-                        }
-                        Term::Wildcard => {}
-                        // Rejected by check_syntactic::check_if_var_lhs.
-                        Term::App(_) | Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => {
-                            unreachable!(
-                                "VarIfAtom lhs must be a variable or wildcard; \
-                                 enforced by syntactic.rs"
-                            )
-                        }
-                    }
-                    changed = true;
-                    el_id
-                }
-            };
+            let (el_id, c) = walk_term(term, current, rule, ast, scopes, signature, errors);
+            changed |= c;
             // Queue the annotations for the close pass to apply. A member
             // annotation may stay unresolved until a later pass settles
             // its parent's type; until then the el simply has no concrete
@@ -425,8 +403,8 @@ fn walk_then_atom(
         ThenAtom::Defined(id) => {
             let DefinedThenAtom { var, term } = *ast.defined_then_atom(id);
             let mut changed = false;
-            let var_el = if let Some(v) = var {
-                let (e, c) = walk_term(v, current, rule, ast, scopes, signature, errors);
+            let var_el = if let Some(var) = var {
+                let (e, c) = walk_term(var, current, rule, ast, scopes, signature, errors);
                 changed |= c;
                 Some(e)
             } else {
@@ -528,7 +506,7 @@ fn resolve_pred_expr(
         PredExpr::Ambient(aid) => {
             let scope = scopes.entry(aid);
             let name = &ast.ambient_pred_expr(aid).name;
-            let pred_id = match scopes.lookup(scope, name) {
+            let pred_id = match lookup_decl(scopes, scope, name) {
                 Some(Symbol::Pred(pd)) => signature.pred_for_pred_decl(pd),
                 _ => None,
             };
@@ -569,10 +547,11 @@ fn resolve_pred_expr(
 ///
 /// `prior_el` is the el this `(current, term)` resolved to on an earlier
 /// pass, if any. Reusing it keeps el identity stable across re-walks.
-/// `Var` and `Wildcard` reuse it directly; `App` recurses into its
-/// arguments and re-attempts func resolution so a previously-unresolvable
-/// [`FuncApp`] gets emitted now, while the result el still falls back to
-/// `prior_el` when present.
+/// Identifier terms resolve through [`Scopes`] to either a variable binding
+/// or ambient const app. `Wildcard` reuses `prior_el` directly; `App`
+/// recurses into its arguments and re-attempts func resolution so a
+/// previously-unresolvable [`FuncApp`] gets emitted now, while the result el
+/// still falls back to `prior_el` when present.
 fn walk_term(
     term: TermId,
     current: StructureId,
@@ -585,19 +564,31 @@ fn walk_term(
     let prior_el = rule.semantic_els[current.0].get(&term).copied();
     let mut changed = false;
     let el = match *ast.term(term) {
-        Term::Var(vid) => {
-            if let Some(el) = prior_el {
-                el
-            } else {
-                let name = ast.var_term(vid).name.clone();
-                let structure = &mut rule.cat.structures[current.0];
-                if let Some(&el_id) = structure.var_els.get(&name) {
-                    el_id
-                } else {
-                    let el_id = structure.push_el();
-                    structure.var_els.insert(name, el_id);
-                    changed = true;
-                    el_id
+        Term::Ident(id) => {
+            let name = &ast.ident_term(id).name;
+            match scopes.lookup(scopes.exit(term), name) {
+                Some(Symbol::Var(binding)) => {
+                    let (el, c) = ensure_var_binding_el(binding, current, rule, ast);
+                    changed |= c;
+                    el
+                }
+                Some(Symbol::Const(const_decl)) => {
+                    let Some(func_id) = signature.func_for_const_decl(const_decl) else {
+                        let (e, c) = expected_or_fresh(prior_el, current, rule);
+                        changed |= c;
+                        return (e, changed);
+                    };
+                    let parents = rule.cat.structures[current.0]
+                        .ambient_parents(&signature.func(func_id).parents);
+                    let (e, c) =
+                        emit_known_app(func_id, parents, Vec::new(), prior_el, current, rule);
+                    changed |= c;
+                    e
+                }
+                _ => {
+                    let (e, c) = expected_or_fresh(prior_el, current, rule);
+                    changed |= c;
+                    e
                 }
             }
         }
@@ -625,6 +616,36 @@ fn walk_term(
             );
             changed |= c;
             e
+        }
+        Term::MemberConst(mid) => {
+            let MemberConstTerm { receiver, name } = *ast.member_const_term(mid);
+            let (receiver_el, c) =
+                walk_term(receiver, current, rule, ast, scopes, signature, errors);
+            changed |= c;
+            let const_name = ast.ident_term(name).name.clone();
+            let candidates =
+                member_scopes_and_parents(rule, current, receiver_el, scopes, signature)
+                    .into_iter()
+                    .filter_map(|(body, parents)| {
+                        let Symbol::Const(const_decl) = body.symbols.get(&const_name).copied()?
+                        else {
+                            return None;
+                        };
+                        let fid = signature.func_for_const_decl(const_decl)?;
+                        Some((fid, parents))
+                    })
+                    .collect();
+            match emit_known_apps(candidates, Vec::new(), prior_el, current, rule) {
+                Some((e, c)) => {
+                    changed |= c;
+                    e
+                }
+                None => {
+                    let (e, c) = expected_or_fresh(prior_el, current, rule);
+                    changed |= c;
+                    e
+                }
+            }
         }
         Term::Dom(did) => {
             let DomTerm { arg } = *ast.dom_term(did);
@@ -699,6 +720,23 @@ fn walk_term(
         changed = true;
     }
     (el, changed)
+}
+
+fn ensure_var_binding_el(
+    binding: IdentTermId,
+    current: StructureId,
+    rule: &mut RuleStructures,
+    ast: &Ast,
+) -> (ElId, bool) {
+    let name = &ast.ident_term(binding).name;
+    let structure = &mut rule.cat.structures[current.0];
+    if let Some(&el_id) = structure.var_els.get(name) {
+        return (el_id, false);
+    }
+
+    let el_id = structure.push_el();
+    structure.var_els.insert(name.clone(), el_id);
+    (el_id, true)
 }
 
 #[derive(Copy, Clone)]
@@ -973,7 +1011,7 @@ fn resolve_func_expr(
         FuncExpr::Ambient(aid) => {
             let scope = scopes.entry(aid);
             let name = &ast.ambient_func_expr(aid).name;
-            let func_id = match scopes.lookup(scope, name) {
+            let func_id = match lookup_decl(scopes, scope, name) {
                 Some(Symbol::Func(fd)) => signature.func_for_func_decl(fd),
                 Some(Symbol::Ctor(cd)) => signature.func_for_ctor_decl(cd),
                 _ => None,
@@ -1060,7 +1098,7 @@ fn walk_var_type_expr(
     match *ast.type_expr(type_expr) {
         TypeExpr::Ambient(id) => {
             let name = &ast.ambient_type_expr(id).name;
-            let tid = match scopes.lookup(scope, name) {
+            let tid = match lookup_decl(scopes, scope, name) {
                 Some(Symbol::Type(td)) => Some(signature.type_for_type_decl(td)),
                 Some(Symbol::Enum(ed)) => Some(signature.type_for_enum_decl(ed)),
                 Some(Symbol::Model(md)) => Some(signature.ids_for_model_decl(md).type_),
@@ -1076,7 +1114,7 @@ fn walk_var_type_expr(
         }
         TypeExpr::Mor(id) => {
             let name = &ast.mor_type_expr(id).name;
-            let tid = match scopes.lookup(scope, name) {
+            let tid = match lookup_decl(scopes, scope, name) {
                 Some(Symbol::Model(md)) => Some(signature.ids_for_model_decl(md).mor),
                 _ => None,
             };
@@ -1125,6 +1163,10 @@ fn concrete_type_for(
         typ: tid,
         parents: structure.ambient_parents(&signature.type_(tid).parents),
     })
+}
+
+fn lookup_decl(scopes: &Scopes, scope: ScopeId, name: &str) -> Option<Symbol> {
+    scopes.lookup(scope, name)
 }
 
 /// Ensures the initial structure carries one ambient model el per enclosing

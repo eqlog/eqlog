@@ -18,7 +18,7 @@
 
 use crate::ast::*;
 use crate::error::CompileError;
-use crate::scopes::{ScopeId, Scopes, Symbol};
+use crate::scopes::{Scopes, Symbol};
 
 /// Walks rule bodies under `module` and returns all binding-position errors
 /// in source order.
@@ -47,7 +47,7 @@ impl<'a> BindingsChecker<'a> {
 
     fn walk_decl(&mut self, decl: DeclId) {
         match *self.ast.decl(decl) {
-            Decl::Type(_) | Decl::Pred(_) | Decl::Func(_) | Decl::Enum(_) => {}
+            Decl::Type(_) | Decl::Pred(_) | Decl::Func(_) | Decl::Const(_) | Decl::Enum(_) => {}
             Decl::Rule(id) => {
                 let body = self.ast.rule_decl(id).body.clone();
                 self.walk_stmt_block(&body);
@@ -97,8 +97,8 @@ impl<'a> BindingsChecker<'a> {
             }
             ThenAtom::Defined(id) => {
                 let DefinedThenAtom { var, term } = *self.ast.defined_then_atom(id);
-                if let Some(var_term) = var {
-                    self.check_then_defined_var(var_term);
+                if let Some(var) = var {
+                    self.check_then_defined_var(atom, var);
                 }
                 self.check_epic_term(term);
             }
@@ -112,18 +112,25 @@ impl<'a> BindingsChecker<'a> {
     }
 
     /// Mirrors eqlog's `term_should_be_epic_ok` propagation: seeded by
-    /// `then`-atom terms and descending only into app-term arguments. A
-    /// variable in such a position is an error unless it was bound earlier.
+    /// `then`-atom terms and descending into subterms that determine the
+    /// value being constructed. A variable in such a position is an error
+    /// unless it was bound earlier.
     fn check_epic_term(&mut self, term: TermId) {
         match *self.ast.term(term) {
-            Term::Var(id) => {
-                let entry = self.scopes.entry(term);
-                if !var_name_bound(self.scopes, entry, &self.ast.var_term(id).name) {
-                    self.errors
-                        .push(CompileError::VariableIntroducedInThenStmt {
-                            location: self.ast.loc(term),
-                        });
+            Term::Ident(id) => {
+                let name = &self.ast.ident_term(id).name;
+                if let Some(Symbol::Var(binding)) = self.scopes.lookup(self.scopes.exit(term), name)
+                {
+                    if !self.binding_visible_before(term, name, binding) {
+                        self.errors
+                            .push(CompileError::VariableIntroducedInThenStmt {
+                                location: self.ast.loc(term),
+                            });
+                    }
                 }
+            }
+            Term::MemberConst(id) => {
+                self.check_epic_term(self.ast.member_const_term(id).receiver);
             }
             Term::Wildcard => {}
             Term::App(id) => {
@@ -136,19 +143,28 @@ impl<'a> BindingsChecker<'a> {
         }
     }
 
-    /// The variable slot of `then v := t`. Wildcards are fine; a variable must
-    /// not already be in scope.
-    fn check_then_defined_var(&mut self, var_term: TermId) {
-        if let Term::Var(id) = *self.ast.term(var_term) {
-            let entry = self.scopes.entry(var_term);
-            if var_name_bound(self.scopes, entry, &self.ast.var_term(id).name) {
-                self.errors.push(CompileError::ThenDefinedVarNotNew {
-                    location: self.ast.loc(var_term),
-                });
+    fn binding_visible_before(&self, term: TermId, name: &str, binding: IdentTermId) -> bool {
+        self.scopes.lookup(self.scopes.entry(term), name) == Some(Symbol::Var(binding))
+    }
+
+    /// The variable slot of `then v := t`. Wildcards are fine; an identifier
+    /// must not already be in scope before the initializer is resolved.
+    fn check_then_defined_var(&mut self, atom: ThenAtomId, var: TermId) {
+        let name = match *self.ast.term(var) {
+            Term::Ident(id) => &self.ast.ident_term(id).name,
+            Term::Wildcard => return,
+            Term::App(_) | Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => {
+                unreachable!("defined-then variable terms are checked by syntactic.rs")
             }
+        };
+        if matches!(
+            self.scopes.lookup(self.scopes.entry(atom), name),
+            Some(Symbol::Var(_))
+        ) {
+            self.errors.push(CompileError::ThenDefinedVarNotNew {
+                location: self.ast.loc(var),
+            });
         }
-        // Wildcards don't bind anything; non-var/non-wildcard patterns were
-        // rejected by the syntactic pass as ThenDefinedNotVar.
     }
 
     /// Variables used as direct constructor arguments in a match pattern must
@@ -162,22 +178,23 @@ impl<'a> BindingsChecker<'a> {
         };
         let args = self.ast.app_term(app).args;
         for arg in self.ast.term_list(args).terms.clone() {
-            if let Term::Var(id) = *self.ast.term(arg) {
-                let entry = self.scopes.entry(arg);
-                if var_name_bound(self.scopes, entry, &self.ast.var_term(id).name) {
-                    self.errors
-                        .push(CompileError::MatchPatternArgVarIsNotFresh {
-                            location: self.ast.loc(arg),
-                        });
+            if let Term::Ident(id) = *self.ast.term(arg) {
+                let name = &self.ast.ident_term(id).name;
+                if matches!(
+                    self.scopes.lookup(self.scopes.exit(arg), name),
+                    Some(Symbol::Var(_))
+                ) {
+                    if matches!(
+                        self.scopes.lookup(self.scopes.entry(arg), name),
+                        Some(Symbol::Var(_))
+                    ) {
+                        self.errors
+                            .push(CompileError::MatchPatternArgVarIsNotFresh {
+                                location: self.ast.loc(arg),
+                            });
+                    }
                 }
             }
         }
     }
-}
-
-/// True when `name` resolves to an earlier variable binding reachable from
-/// `scope`. Non-variable symbols (decls, args) don't count as "already bound
-/// as a variable," matching eqlog's `var_in_scope`.
-fn var_name_bound(scopes: &Scopes, scope: ScopeId, name: &str) -> bool {
-    matches!(scopes.lookup(scope, name), Some(Symbol::Var(_)))
 }

@@ -27,11 +27,11 @@ Intersperse<Item, Separator>: Vec<Item> = {
     () => vec![],
 }
 
-Variable: TermId = {
+IdentTerm: TermId = {
     <l: @L> <name: Id> <r: @R> => {
         let loc = Location(l, r);
-        let v = ast.push_var_term(loc, VarTerm { name });
-        ast.push_term(loc, Term::Var(v))
+        let ident = ast.push_ident_term(loc, IdentTerm { name });
+        ast.push_term(loc, Term::Ident(ident))
     },
 }
 
@@ -44,6 +44,15 @@ ApplicationTerm: TermId = {
         let loc = Location(l, r);
         let a = ast.push_app_term(loc, AppTerm { func, args });
         ast.push_term(loc, Term::App(a))
+    },
+}
+
+MemberConstTerm: TermId = {
+    <l: @L> <receiver: Term> "." <name: Id> <r: @R> => {
+        let loc = Location(l, r);
+        let name = ast.push_ident_term(Location(l, r), IdentTerm { name });
+        let m = ast.push_member_const_term(loc, MemberConstTerm { receiver, name });
+        ast.push_term(loc, Term::MemberConst(m))
     },
 }
 
@@ -72,9 +81,10 @@ MorAppTerm: TermId = {
 }
 
 Term: TermId = {
-    <var: Variable> => var,
-    <wildcard: Wildcard> => wildcard,
     <application: ApplicationTerm> => application,
+    <member_const: MemberConstTerm> => member_const,
+    <ident: IdentTerm> => ident,
+    <wildcard: Wildcard> => wildcard,
     <dom_term: DomTerm> => dom_term,
     <cod_term: CodTerm> => cod_term,
     <app_term: MorAppTerm> => app_term,
@@ -147,6 +157,9 @@ IfAtom: IfAtomId = {
         let p = ast.push_pred_atom(loc, PredAtom { pred, args });
         ast.push_if_atom(loc, IfAtom::Pred(p))
     },
+    // Keep the left side as a term so invalid binders such as `f(x) : T`
+    // reach the syntactic checker and get a dedicated diagnostic instead
+    // of a parser error at `:`.
     <l: @L> <term: Term> ":" <typ: TypeExpr> <r: @R> => {
         let loc = Location(l, r);
         let v = ast.push_var_if_atom(loc, VarIfAtom { term, typ });
@@ -160,6 +173,9 @@ ThenAtom: ThenAtomId = {
         let e = ast.push_equal_atom(loc, EqualAtom { lhs, rhs });
         ast.push_then_atom(loc, ThenAtom::Equal(e))
     },
+    // Keep the optional binder as a term so `then bar() := foo()!`
+    // reaches the syntactic checker and reports "expected a variable" over
+    // the whole invalid binder, rather than failing at `:=`.
     <l: @L> <var: PairFirst<Term, ":=">?> <term: Term> "!" <r: @R> => {
         let loc = Location(l, r);
         let d = ast.push_defined_then_atom(loc, DefinedThenAtom { var, term });
@@ -234,6 +250,11 @@ FuncDecl: FuncDeclId = {
         ast.push_func_decl(Location(l, r), FuncDecl { name, args, result }),
 }
 
+ConstDecl: ConstDeclId = {
+    <l: @L> "const" <name: Id> ":" <result: TypeExpr> ";" <r: @R> =>
+        ast.push_const_decl(Location(l, r), ConstDecl { name, result }),
+}
+
 CtorDecl: CtorDeclId = {
     <l: @L> <name: Id> <args: ArgDeclList> <r: @R> =>
         ast.push_ctor_decl(Location(l, r), CtorDecl { name, args }),
@@ -255,6 +276,7 @@ Decl: DeclId = {
     <l: @L> <t: TypeDecl> <r: @R> => ast.push_decl(Location(l, r), Decl::Type(t)),
     <l: @L> <p: PredDecl> <r: @R> => ast.push_decl(Location(l, r), Decl::Pred(p)),
     <l: @L> <f: FuncDecl> <r: @R> => ast.push_decl(Location(l, r), Decl::Func(f)),
+    <l: @L> <c: ConstDecl> <r: @R> => ast.push_decl(Location(l, r), Decl::Const(c)),
     <l: @L> <r_: RuleDecl> <r: @R> => ast.push_decl(Location(l, r), Decl::Rule(r_)),
     <l: @L> <e: EnumDecl> <r: @R> => ast.push_decl(Location(l, r), Decl::Enum(e)),
     <l: @L> <m: ModelDecl> <r: @R> => ast.push_decl(Location(l, r), Decl::Model(m)),

@@ -301,7 +301,8 @@ fn is_ctor_app_for_enum(
         FuncExpr::Ambient(ambient_id) => {
             let scope = scopes.entry(ambient_id);
             let name = &ast.ambient_func_expr(ambient_id).name;
-            ctor_symbol_has_codomain(scopes.lookup(scope, name), enum_type, signature)
+            let symbol = scopes.lookup(scope, name);
+            ctor_symbol_has_codomain(symbol, enum_type, signature)
         }
         FuncExpr::Member(member_id) => {
             let MemberFuncExpr { term, name } = ast.member_func_expr(member_id).clone();
@@ -479,7 +480,7 @@ fn collect_rules(
                 nested.push(model_tid);
                 collect_rules(ast, signature, &body, &nested, out);
             }
-            Decl::Type(_) | Decl::Pred(_) | Decl::Func(_) | Decl::Enum(_) => {}
+            Decl::Type(_) | Decl::Pred(_) | Decl::Func(_) | Decl::Const(_) | Decl::Enum(_) => {}
         }
     }
 }
@@ -489,7 +490,7 @@ fn collect_rules(
 /// with `conflict.el`. Each [`ConcreteType`] renders as `TypeName` for
 /// global types or `parent_name.TypeName` for member types.
 ///
-/// Panics if no term backs `el` in any reachable structure.
+/// Panics if no source syntax backs `el` in any reachable structure.
 fn conflict_to_error(
     ast: &Ast,
     signature: &Signature,
@@ -499,13 +500,13 @@ fn conflict_to_error(
 ) -> CompileError {
     let TypeConflict { el, a, b } = conflict;
     let structure = &rule.cat.structures[sid.0];
-    let term_id = find_earliest_term(ast, rule, sid, el);
+    let location = find_earliest_location(ast, rule, sid, el);
     CompileError::ConflictingTermType {
         types: vec![
             concrete_type_to_string(ast, signature, structure, &a),
             concrete_type_to_string(ast, signature, structure, &b),
         ],
-        location: ast.loc(term_id),
+        location,
     }
 }
 
@@ -536,13 +537,18 @@ fn concrete_type_to_string(
     format!("{parent_name}.{type_name}")
 }
 
-/// Locates the earliest source term reachable from `target` by walking
+/// Locates the earliest source syntax reachable from `target` by walking
 /// incoming morphisms.
-fn find_earliest_term(ast: &Ast, rule: &RuleStructures, sid: StructureId, target: ElId) -> TermId {
+fn find_earliest_location(
+    ast: &Ast,
+    rule: &RuleStructures,
+    sid: StructureId,
+    target: ElId,
+) -> Location {
     let start_root = rule.cat.structures[sid.0].unification.root_const(target);
     let mut visited: BTreeSet<(StructureId, ElId)> = BTreeSet::new();
     let mut worklist: Vec<(StructureId, ElId)> = vec![(sid, start_root)];
-    let mut best: Option<(Location, TermId)> = None;
+    let mut best: Option<Location> = None;
 
     while let Some((s, el_root)) = worklist.pop() {
         if !visited.insert((s, el_root)) {
@@ -555,8 +561,8 @@ fn find_earliest_term(ast: &Ast, rule: &RuleStructures, sid: StructureId, target
                 continue;
             }
             let loc = ast.loc(term);
-            if best.is_none_or(|(best_loc, _)| (loc.1, loc.0) < (best_loc.1, best_loc.0)) {
-                best = Some((loc, term));
+            if best.is_none_or(|best_loc| (loc.1, loc.0) < (best_loc.1, best_loc.0)) {
+                best = Some(loc);
             }
         }
 
@@ -577,8 +583,8 @@ fn find_earliest_term(ast: &Ast, rule: &RuleStructures, sid: StructureId, target
         }
     }
 
-    if let Some((_, term)) = best {
-        return term;
+    if let Some(location) = best {
+        return location;
     }
 
     let is_ambient_at_sid = rule.cat.structures[sid.0]
@@ -586,7 +592,7 @@ fn find_earliest_term(ast: &Ast, rule: &RuleStructures, sid: StructureId, target
         .values()
         .any(|&e| rule.cat.structures[sid.0].unification.root_const(e) == start_root);
     panic!(
-        "conflict on class {target:?} at {sid:?} has no term in any reachable structure \
+        "conflict on class {target:?} at {sid:?} has no source syntax in any reachable structure \
          (ambient model el at sid: {is_ambient_at_sid})"
     );
 }

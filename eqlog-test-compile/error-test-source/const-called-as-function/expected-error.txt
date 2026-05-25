@@ -1,0 +1,6 @@
+Error: constant "foo" must be used without parentheses
+ --> error-test-source/const-called-as-function/theory.eql:3
+  | 
+3 | rule { if foo()!; }
+  |           ^^^      
+  | 

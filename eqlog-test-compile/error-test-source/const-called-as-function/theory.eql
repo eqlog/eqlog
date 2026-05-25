@@ -1,0 +1,3 @@
+type Foo;
+const foo: Foo;
+rule { if foo()!; }

@@ -465,7 +465,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
         }
     };
 
-    let casing_err = check_casing(&ast, module).err();
+    let casing_err = check_casing(&ast, &scopes, module).err();
     let binding_errors = check_bindings(&ast, &scopes, module);
     let occurrence_err = check_occurrences(&ast, &scopes, module).err();
     let (signature, signature_errors) = build_signature(&ast, &scopes, module);

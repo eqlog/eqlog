@@ -163,10 +163,13 @@ fn el_base_name(
                 return None;
             }
             match *ctx.ast.term(term) {
-                Term::Var(var) => Some(ctx.ast.var_term(var).name.clone()),
-                Term::Wildcard | Term::App(_) | Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => {
-                    None
-                }
+                Term::Ident(ident) => Some(ctx.ast.ident_term(ident).name.clone()),
+                Term::Wildcard
+                | Term::App(_)
+                | Term::MemberConst(_)
+                | Term::Dom(_)
+                | Term::Cod(_)
+                | Term::MorApp(_) => None,
             }
         })
         .unwrap_or_else(|| "el".into())
@@ -673,6 +676,13 @@ fn func_base_name(ctx: &FlattenCtx<'_>, func: FuncId) -> String {
     }
     if let Some((decl, _)) = ctx
         .signature
+        .iter_const_decls()
+        .find(|(_, func0)| *func0 == func)
+    {
+        return ctx.ast.const_decl(decl).name.clone();
+    }
+    if let Some((decl, _)) = ctx
+        .signature
         .iter_ctor_decls()
         .find(|(_, func0)| *func0 == func)
     {
@@ -702,7 +712,7 @@ fn collect_rule_ids(ast: &Ast, decls: &[DeclId], out: &mut Vec<RuleDeclId>) {
         match *ast.decl(decl) {
             Decl::Rule(rule) => out.push(rule),
             Decl::Model(model) => collect_rule_ids(ast, &ast.model_decl(model).body, out),
-            Decl::Type(_) | Decl::Pred(_) | Decl::Func(_) | Decl::Enum(_) => {}
+            Decl::Type(_) | Decl::Pred(_) | Decl::Func(_) | Decl::Const(_) | Decl::Enum(_) => {}
         }
     }
 }

@@ -110,6 +110,7 @@ pub struct Signature {
     model_decls: BTreeMap<ModelDeclId, ModelIds>,
     pred_decls: BTreeMap<PredDeclId, PredId>,
     func_decls: BTreeMap<FuncDeclId, FuncId>,
+    const_decls: BTreeMap<ConstDeclId, FuncId>,
     ctor_decls: BTreeMap<CtorDeclId, FuncId>,
     /// Per-member-type morphism-application function. Keyed by the
     /// member type `T`. The function takes `(Mor<M>, T)` and returns
@@ -161,6 +162,10 @@ impl Signature {
 
     pub fn iter_func_decls(&self) -> impl Iterator<Item = (FuncDeclId, FuncId)> + '_ {
         self.func_decls.iter().map(|(&decl, &func)| (decl, func))
+    }
+
+    pub fn iter_const_decls(&self) -> impl Iterator<Item = (ConstDeclId, FuncId)> + '_ {
+        self.const_decls.iter().map(|(&decl, &func)| (decl, func))
     }
 
     pub fn iter_ctor_decls(&self) -> impl Iterator<Item = (CtorDeclId, FuncId)> + '_ {
@@ -236,6 +241,12 @@ impl Signature {
     /// malformed.
     pub fn func_for_func_decl(&self, id: FuncDeclId) -> Option<FuncId> {
         self.func_decls.get(&id).copied()
+    }
+
+    /// Returns the [`FuncId`] for the constant `id`, or `None` if the
+    /// constant declaration is malformed.
+    pub fn func_for_const_decl(&self, id: ConstDeclId) -> Option<FuncId> {
+        self.const_decls.get(&id).copied()
     }
 
     /// Returns the [`FuncId`] for the constructor `id`, or `None` if the
@@ -375,7 +386,7 @@ impl<'a> Builder<'a> {
                     new_parents.push(model_tid);
                     self.populate_types(&body, &new_parents);
                 }
-                Decl::Pred(_) | Decl::Func(_) | Decl::Rule(_) => {}
+                Decl::Pred(_) | Decl::Func(_) | Decl::Const(_) | Decl::Rule(_) => {}
             }
         }
     }
@@ -432,6 +443,17 @@ impl<'a> Builder<'a> {
                             codomain,
                         });
                         self.signature.func_decls.insert(id, fid);
+                    }
+                }
+                Decl::Const(id) => {
+                    let result = self.ast.const_decl(id).result;
+                    if let Some(codomain) = self.resolve_signature_type_expr(result) {
+                        let fid = self.signature.push_func(Func {
+                            parents: parents.to_vec(),
+                            domain: Vec::new(),
+                            codomain,
+                        });
+                        self.signature.const_decls.insert(id, fid);
                     }
                 }
                 Decl::Enum(id) => {
@@ -568,6 +590,7 @@ fn symbol_kind_case(sym: Symbol) -> Option<SymbolKind> {
         Symbol::Type(_) => SymbolKind::Type,
         Symbol::Pred(_) => SymbolKind::Pred,
         Symbol::Func(_) => SymbolKind::Func,
+        Symbol::Const(_) => SymbolKind::Const,
         Symbol::Enum(_) => SymbolKind::Enum,
         Symbol::Ctor(_) => SymbolKind::Ctor,
         Symbol::Model(_) => SymbolKind::Model,

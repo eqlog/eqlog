@@ -1,0 +1,35 @@
+type El;
+const foo: El;
+pred present(El);
+
+model Container {
+    type Elem;
+    const inner: Elem;
+    pred inner_present(Elem);
+
+    rule {
+        then inner!;
+    }
+
+    rule {
+        if inner!;
+        then inner_present(inner);
+    }
+}
+
+const main_container: Container;
+
+rule {
+    then foo!;
+    then present(foo);
+}
+
+rule {
+    then main_container!;
+}
+
+rule {
+    if main_container!;
+    if main_container.inner!;
+    then main_container.inner_present(main_container.inner);
+}
