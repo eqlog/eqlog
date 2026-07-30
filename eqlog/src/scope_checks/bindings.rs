@@ -134,12 +134,13 @@ impl<'a> BindingsChecker<'a> {
             }
             Term::Wildcard => {}
             Term::App(id) => {
-                let args = self.ast.app_term(id).args;
+                let AppTerm { head, args } = *self.ast.app_term(id);
+                self.check_epic_term(head);
                 for arg in self.ast.term_list(args).terms.clone() {
                     self.check_epic_term(arg);
                 }
             }
-            Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => {}
+            Term::Dom(_) | Term::Cod(_) => {}
         }
     }
 
@@ -153,7 +154,7 @@ impl<'a> BindingsChecker<'a> {
         let name = match *self.ast.term(var) {
             Term::Ident(id) => &self.ast.ident_term(id).name,
             Term::Wildcard => return,
-            Term::App(_) | Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => {
+            Term::App(_) | Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) => {
                 unreachable!("defined-then variable terms are checked by syntactic.rs")
             }
         };

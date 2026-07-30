@@ -601,7 +601,7 @@ fn walk_term(
             }
         }
         Term::App(aid) => {
-            let AppTerm { func, args } = *ast.app_term(aid);
+            let AppTerm { head, args } = *ast.app_term(aid);
             let arg_terms = ast.term_list(args).terms.clone();
             let arg_els: Vec<ElId> = arg_terms
                 .iter()
@@ -612,7 +612,7 @@ fn walk_term(
                 })
                 .collect();
             let (e, c) = emit_app(
-                aid, func, arg_els, prior_el, current, rule, ast, scopes, signature, errors,
+                aid, head, arg_els, prior_el, current, rule, ast, scopes, signature, errors,
             );
             changed |= c;
             e
@@ -684,25 +684,6 @@ fn walk_term(
                 signature,
             );
             match emit_known_apps(candidates, vec![arg_el], prior_el, current, rule) {
-                Some((e, c)) => {
-                    changed |= c;
-                    e
-                }
-                None => {
-                    let (e, c) = expected_or_fresh(prior_el, current, rule);
-                    changed |= c;
-                    e
-                }
-            }
-        }
-        Term::MorApp(mid) => {
-            let MorAppTerm { mor, arg } = *ast.mor_app_term(mid);
-            let (mor_el, c1) = walk_term(mor, current, rule, ast, scopes, signature, errors);
-            let (arg_el, c2) = walk_term(arg, current, rule, ast, scopes, signature, errors);
-            changed |= c1 || c2;
-            let candidates =
-                resolve_mor_app_apps(mor_el, arg_el, prior_el, current, rule, signature);
-            match emit_known_apps(candidates, vec![mor_el, arg_el], prior_el, current, rule) {
                 Some((e, c)) => {
                     changed |= c;
                     e
@@ -933,20 +914,21 @@ fn emit_known_apps(
     result.map(|el| (el, changed))
 }
 
-/// Resolves `func` and, on success, ensures the corresponding [`FuncApp`]s
-/// are recorded in the current structure. `expected` is the result el the
-/// caller has previously committed for this term, if any (from
-/// `semantic_els`). When provided it is reused, possibly with an `equate`
-/// against an existing entry; otherwise a fresh el is allocated. On
-/// resolution failure or arg-count mismatch the caller's `expected` is
-/// returned unchanged, or a fresh untyped el is allocated.
+/// Resolves an application head and emits the corresponding [`FuncApp`]s.
 ///
-/// Returns `(result_el, changed)`. `changed` is true iff this call
-/// allocated a new el, inserted a new func app, recorded a fresh
-/// concrete type or enqueued a non-trivial equate.
+/// Classification of `head`:
+/// - bare [`Term::Ident`]: function/ctor if that symbol is in scope; morphism
+///   application if the name is already a bound var/const; otherwise neither
+///   (no fresh var is introduced at the head);
+/// - [`Term::MemberConst`]: member function/ctor and/or member const used as
+///   a morphism, depending on the member symbol kind;
+/// - any other term: morphism application only.
+///
+/// `expected` is the result el previously committed for this term, if any.
+/// Returns `(result_el, changed)`.
 fn emit_app(
     app: AppTermId,
-    func: FuncExprId,
+    head: TermId,
     arg_els: Vec<ElId>,
     expected: Option<ElId>,
     current: StructureId,
@@ -956,19 +938,13 @@ fn emit_app(
     signature: &Signature,
     errors: &mut Vec<CompileError>,
 ) -> (ElId, bool) {
-    let (resolved, mut changed) =
-        resolve_func_expr(func, current, rule, ast, scopes, signature, errors);
-
-    if resolved.is_empty() {
-        let structure = &mut rule.cat.structures[current.0];
-        return match expected {
-            Some(el) => (el, changed),
-            None => (structure.push_el(), true),
-        };
-    }
+    let (func_resolved, mut changed) =
+        resolve_func_head(head, current, rule, ast, scopes, signature, errors);
 
     let mut result = expected;
-    for (func_id, parents) in resolved {
+    let mut emitted = false;
+
+    for (func_id, parents) in func_resolved {
         let func_data = signature.func(func_id);
         if arg_els.len() != func_data.domain.len() {
             errors.push(CompileError::FunctionArgumentNumber {
@@ -981,9 +957,35 @@ fn emit_app(
 
         let (el, c) = emit_known_app(func_id, parents, arg_els.clone(), result, current, rule);
         changed |= c;
+        emitted = true;
         if result.is_none() {
             result = Some(el);
         }
+    }
+
+    let (mor_resolved, c) = resolve_mor_app_head(
+        head, &arg_els, result, current, rule, ast, scopes, signature, errors,
+    );
+    changed |= c;
+    if let Some((candidates, mor_el, arg_el)) = mor_resolved {
+        match emit_known_apps(candidates, vec![mor_el, arg_el], result, current, rule) {
+            Some((el, c)) => {
+                changed |= c;
+                emitted = true;
+                if result.is_none() {
+                    result = Some(el);
+                }
+            }
+            None => {}
+        }
+    }
+
+    if !emitted {
+        let structure = &mut rule.cat.structures[current.0];
+        return match expected {
+            Some(el) => (el, changed),
+            None => (structure.push_el(), true),
+        };
     }
 
     match result {
@@ -995,11 +997,10 @@ fn emit_app(
     }
 }
 
-/// Like [`resolve_pred_expr`] but for [`FuncExpr`]. Member ctors are
-/// accepted alongside member funcs; each resulting [`FuncId`] is emitted as
-/// a [`FuncApp`] candidate.
-fn resolve_func_expr(
-    func: FuncExprId,
+/// Function/ctor candidates implied by an application head. Does not walk a
+/// bare identifier as a value term (and never introduces a variable for it).
+fn resolve_func_head(
+    head: TermId,
     current: StructureId,
     rule: &mut RuleStructures,
     ast: &Ast,
@@ -1007,11 +1008,14 @@ fn resolve_func_expr(
     signature: &Signature,
     errors: &mut Vec<CompileError>,
 ) -> (Vec<(FuncId, Vec<ElId>)>, bool) {
-    match *ast.func_expr(func) {
-        FuncExpr::Ambient(aid) => {
-            let scope = scopes.entry(aid);
-            let name = &ast.ambient_func_expr(aid).name;
-            let func_id = match lookup_decl(scopes, scope, name) {
+    match *ast.term(head) {
+        Term::Ident(id) => {
+            let scope = scopes.entry(id);
+            let name = &ast.ident_term(id).name;
+            // Vars shadow function declarations: a bound value head is never
+            // a function application.
+            let func_id = match scopes.lookup(scope, name) {
+                Some(Symbol::Var(_)) | Some(Symbol::Const(_)) => None,
                 Some(Symbol::Func(fd)) => signature.func_for_func_decl(fd),
                 Some(Symbol::Ctor(cd)) => signature.func_for_ctor_decl(cd),
                 _ => None,
@@ -1025,17 +1029,18 @@ fn resolve_func_expr(
                 .unwrap_or_default();
             (resolved, false)
         }
-        FuncExpr::Member(mid) => {
-            let MemberFuncExpr {
-                term: parent_term,
+        Term::MemberConst(mid) => {
+            let MemberConstTerm {
+                receiver: parent_term,
                 name,
-            } = ast.member_func_expr(mid).clone();
+            } = *ast.member_const_term(mid);
+            let member_name = ast.ident_term(name).name.clone();
             let (parent_el, changed) =
                 walk_term(parent_term, current, rule, ast, scopes, signature, errors);
             let resolved = member_scopes_and_parents(rule, current, parent_el, scopes, signature)
                 .into_iter()
                 .filter_map(|(body, parents)| {
-                    let fid = match body.symbols.get(&name).copied()? {
+                    let fid = match body.symbols.get(&member_name).copied()? {
                         Symbol::Func(fd) => signature.func_for_func_decl(fd)?,
                         Symbol::Ctor(cd) => signature.func_for_ctor_decl(cd)?,
                         _ => return None,
@@ -1045,7 +1050,65 @@ fn resolve_func_expr(
                 .collect();
             (resolved, changed)
         }
+        Term::App(_) | Term::Wildcard | Term::Dom(_) | Term::Cod(_) => (Vec::new(), false),
     }
+}
+
+/// Morphism-application candidates for an application head. Returns
+/// `(candidates, mor_el, arg_el)` when the head is interpreted as a value
+/// and there is exactly one argument.
+fn resolve_mor_app_head(
+    head: TermId,
+    arg_els: &[ElId],
+    result_el: Option<ElId>,
+    current: StructureId,
+    rule: &mut RuleStructures,
+    ast: &Ast,
+    scopes: &Scopes,
+    signature: &Signature,
+    errors: &mut Vec<CompileError>,
+) -> (Option<(Vec<(FuncId, Vec<ElId>)>, ElId, ElId)>, bool) {
+    if arg_els.len() != 1 {
+        return (None, false);
+    }
+    let arg_el = arg_els[0];
+
+    let should_walk_head_as_value = match *ast.term(head) {
+        Term::Ident(id) => {
+            let name = &ast.ident_term(id).name;
+            matches!(
+                scopes.lookup(scopes.entry(id), name),
+                Some(Symbol::Var(_)) | Some(Symbol::Const(_))
+            )
+        }
+        Term::MemberConst(mid) => {
+            // Value head only when the member is a const (not a function/ctor).
+            // `resolve_func_head` walks the receiver first so its el is present
+            // when the receiver type is already known; otherwise we wait for a
+            // later fixed-point iteration.
+            let MemberConstTerm {
+                receiver: parent_term,
+                name,
+            } = *ast.member_const_term(mid);
+            let member_name = ast.ident_term(name).name.clone();
+            let Some(&parent_el) = rule.semantic_els[current.0].get(&parent_term) else {
+                return (None, false);
+            };
+            member_scopes_and_parents(rule, current, parent_el, scopes, signature)
+                .into_iter()
+                .any(|(body, _)| matches!(body.symbols.get(&member_name), Some(Symbol::Const(_))))
+        }
+        // Compound heads are always morphism applications.
+        Term::App(_) | Term::Dom(_) | Term::Cod(_) | Term::Wildcard => true,
+    };
+
+    if !should_walk_head_as_value {
+        return (None, false);
+    }
+
+    let (mor_el, changed) = walk_term(head, current, rule, ast, scopes, signature, errors);
+    let candidates = resolve_mor_app_apps(mor_el, arg_el, result_el, current, rule, signature);
+    (Some((candidates, mor_el, arg_el)), changed)
 }
 
 /// Looks up every model [`ConcreteType`] on `parent_el`, resolves each to a

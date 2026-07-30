@@ -162,8 +162,8 @@ impl<'a> OccurrencesChecker<'a> {
             }
             Term::Wildcard => {}
             Term::App(id) => {
-                let AppTerm { func, args } = *self.ast.app_term(id);
-                self.collect_func_expr(func, occ);
+                let AppTerm { head, args } = *self.ast.app_term(id);
+                self.collect_term(head, occ);
                 self.collect_term_list(args, occ);
             }
             Term::MemberConst(id) => {
@@ -172,11 +172,6 @@ impl<'a> OccurrencesChecker<'a> {
             }
             Term::Dom(id) => self.collect_term(self.ast.dom_term(id).arg, occ),
             Term::Cod(id) => self.collect_term(self.ast.cod_term(id).arg, occ),
-            Term::MorApp(id) => {
-                let MorAppTerm { mor, arg } = *self.ast.mor_app_term(id);
-                self.collect_term(mor, occ);
-                self.collect_term(arg, occ);
-            }
         }
     }
 
@@ -197,13 +192,6 @@ impl<'a> OccurrencesChecker<'a> {
         match *self.ast.pred_expr(pred_expr) {
             PredExpr::Ambient(_) => {}
             PredExpr::Member(id) => self.collect_term(self.ast.member_pred_expr(id).term, occ),
-        }
-    }
-
-    fn collect_func_expr(&self, func_expr: FuncExprId, occ: &mut Vec<VarOccurrence>) {
-        match *self.ast.func_expr(func_expr) {
-            FuncExpr::Ambient(_) => {}
-            FuncExpr::Member(id) => self.collect_term(self.ast.member_func_expr(id).term, occ),
         }
     }
 }

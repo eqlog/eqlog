@@ -168,8 +168,7 @@ fn el_base_name(
                 | Term::App(_)
                 | Term::MemberConst(_)
                 | Term::Dom(_)
-                | Term::Cod(_)
-                | Term::MorApp(_) => None,
+                | Term::Cod(_) => None,
             }
         })
         .unwrap_or_else(|| "el".into())

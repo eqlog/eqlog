@@ -46,7 +46,6 @@ typed_id!(AppTermId);
 typed_id!(MemberConstTermId);
 typed_id!(DomTermId);
 typed_id!(CodTermId);
-typed_id!(MorAppTermId);
 
 typed_id!(TermListId);
 
@@ -58,10 +57,6 @@ typed_id!(MorTypeExprId);
 typed_id!(PredExprId);
 typed_id!(AmbientPredExprId);
 typed_id!(MemberPredExprId);
-
-typed_id!(FuncExprId);
-typed_id!(AmbientFuncExprId);
-typed_id!(MemberFuncExprId);
 
 typed_id!(IfAtomId);
 typed_id!(ThenAtomId);
@@ -161,7 +156,9 @@ pub struct IdentTerm {
 
 #[derive(Copy, Clone, Debug)]
 pub struct AppTerm {
-    pub func: FuncExprId,
+    /// Callee term. Classification (function/ctor vs morphism application) is
+    /// deferred to algebraization; an identifier head never introduces a var.
+    pub head: TermId,
     pub args: TermListId,
 }
 
@@ -182,12 +179,6 @@ pub struct CodTerm {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct MorAppTerm {
-    pub mor: TermId,
-    pub arg: TermId,
-}
-
-#[derive(Copy, Clone, Debug)]
 pub enum Term {
     Ident(IdentTermId),
     Wildcard,
@@ -195,7 +186,6 @@ pub enum Term {
     MemberConst(MemberConstTermId),
     Dom(DomTermId),
     Cod(CodTermId),
-    MorApp(MorAppTermId),
 }
 
 #[derive(Clone, Debug)]
@@ -241,23 +231,6 @@ pub struct MemberPredExpr {
 pub enum PredExpr {
     Ambient(AmbientPredExprId),
     Member(MemberPredExprId),
-}
-
-#[derive(Clone, Debug)]
-pub struct AmbientFuncExpr {
-    pub name: String,
-}
-
-#[derive(Clone, Debug)]
-pub struct MemberFuncExpr {
-    pub term: TermId,
-    pub name: String,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum FuncExpr {
-    Ambient(AmbientFuncExprId),
-    Member(MemberFuncExprId),
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -359,7 +332,6 @@ pub enum Node {
     MemberConstTerm(MemberConstTerm),
     DomTerm(DomTerm),
     CodTerm(CodTerm),
-    MorAppTerm(MorAppTerm),
     TermList(TermList),
     TypeExpr(TypeExpr),
     AmbientTypeExpr(AmbientTypeExpr),
@@ -368,9 +340,6 @@ pub enum Node {
     PredExpr(PredExpr),
     AmbientPredExpr(AmbientPredExpr),
     MemberPredExpr(MemberPredExpr),
-    FuncExpr(FuncExpr),
-    AmbientFuncExpr(AmbientFuncExpr),
-    MemberFuncExpr(MemberFuncExpr),
     IfAtom(IfAtom),
     ThenAtom(ThenAtom),
     EqualAtom(EqualAtom),
@@ -453,7 +422,6 @@ accessor!(
 );
 accessor!(dom_term, push_dom_term, DomTermId, DomTerm);
 accessor!(cod_term, push_cod_term, CodTermId, CodTerm);
-accessor!(mor_app_term, push_mor_app_term, MorAppTermId, MorAppTerm);
 accessor!(term_list, push_term_list, TermListId, TermList);
 accessor!(type_expr, push_type_expr, TypeExprId, TypeExpr);
 accessor!(
@@ -486,19 +454,6 @@ accessor!(
     push_member_pred_expr,
     MemberPredExprId,
     MemberPredExpr
-);
-accessor!(func_expr, push_func_expr, FuncExprId, FuncExpr);
-accessor!(
-    ambient_func_expr,
-    push_ambient_func_expr,
-    AmbientFuncExprId,
-    AmbientFuncExpr
-);
-accessor!(
-    member_func_expr,
-    push_member_func_expr,
-    MemberFuncExprId,
-    MemberFuncExpr
 );
 accessor!(if_atom, push_if_atom, IfAtomId, IfAtom);
 accessor!(then_atom, push_then_atom, ThenAtomId, ThenAtom);

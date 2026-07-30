@@ -1,0 +1,8 @@
+Unify morphism and function application as h(x)
+
+Drop the f@(x) form and FuncExpr AST nodes in favor of a single App
+term with a general head. Classify callees during algebraization:
+bound vars/consts and compound heads are morphism apps; function and
+constructor names are ordinary apps. Identifier heads never introduce
+variables, so adding a function declaration cannot silently change
+rule meaning.

@@ -191,8 +191,8 @@ impl<'a> CasingChecker<'a> {
             Term::Ident(id) => self.check_ident_term(id, self.ast.loc(term)),
             Term::Wildcard => Ok(()),
             Term::App(id) => {
-                let AppTerm { func, args } = *self.ast.app_term(id);
-                self.walk_func_expr(func)?;
+                let AppTerm { head, args } = *self.ast.app_term(id);
+                self.walk_term(head)?;
                 self.walk_term_list(args)
             }
             Term::MemberConst(id) => {
@@ -201,11 +201,6 @@ impl<'a> CasingChecker<'a> {
             }
             Term::Dom(id) => self.walk_term(self.ast.dom_term(id).arg),
             Term::Cod(id) => self.walk_term(self.ast.cod_term(id).arg),
-            Term::MorApp(id) => {
-                let MorAppTerm { mor, arg } = *self.ast.mor_app_term(id);
-                self.walk_term(mor)?;
-                self.walk_term(arg)
-            }
         }
     }
 
@@ -242,13 +237,6 @@ impl<'a> CasingChecker<'a> {
         match *self.ast.pred_expr(pred_expr) {
             PredExpr::Ambient(_) => Ok(()),
             PredExpr::Member(id) => self.walk_term(self.ast.member_pred_expr(id).term),
-        }
-    }
-
-    fn walk_func_expr(&self, func_expr: FuncExprId) -> Check {
-        match *self.ast.func_expr(func_expr) {
-            FuncExpr::Ambient(_) => Ok(()),
-            FuncExpr::Member(id) => self.walk_term(self.ast.member_func_expr(id).term),
         }
     }
 }

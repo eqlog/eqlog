@@ -223,8 +223,9 @@ impl<'a> Checker<'a> {
         match *self.ast.term(term) {
             Term::Ident(_) | Term::Wildcard => {}
             Term::App(id) => {
-                let AppTerm { func, args } = *self.ast.app_term(id);
-                self.check_func_expr(func, ctx, &[LookupKind::Func, LookupKind::Ctor]);
+                let AppTerm { head, args } = *self.ast.app_term(id);
+                let arity = self.ast.term_list(args).terms.len();
+                self.check_app_head(head, arity, ctx);
                 for arg in self.ast.term_list(args).terms.clone() {
                     self.walk_term(arg, ctx);
                 }
@@ -239,11 +240,6 @@ impl<'a> Checker<'a> {
             }
             Term::Dom(id) => self.walk_term(self.ast.dom_term(id).arg, ctx),
             Term::Cod(id) => self.walk_term(self.ast.cod_term(id).arg, ctx),
-            Term::MorApp(id) => {
-                let MorAppTerm { mor, arg } = *self.ast.mor_app_term(id);
-                self.walk_term(mor, ctx);
-                self.walk_term(arg, ctx);
-            }
         }
     }
 
@@ -253,9 +249,9 @@ impl<'a> Checker<'a> {
             return;
         };
 
-        let func = self.ast.app_term(app).func;
-        if let FuncExpr::Ambient(id) = *self.ast.func_expr(func) {
-            let name = self.ast.ambient_func_expr(id).name.clone();
+        let head = self.ast.app_term(app).head;
+        if let Term::Ident(id) = *self.ast.term(head) {
+            let name = self.ast.ident_term(id).name.clone();
             self.check_lookup(
                 self.scopes.entry(id),
                 name,
@@ -330,30 +326,91 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn check_func_expr(&mut self, func: FuncExprId, ctx: RuleCtx<'a>, ambient: &[LookupKind]) {
-        match *self.ast.func_expr(func) {
-            FuncExpr::Ambient(id) => {
-                let name = self.ast.ambient_func_expr(id).name.clone();
-                self.check_func_call_lookup(
-                    self.scopes.entry(id),
-                    name,
-                    ambient,
-                    self.ast.loc(func),
-                );
+    /// Checks the head of an application. Identifier heads that are already
+    /// bound as vars/consts are morphism callees and need no function lookup.
+    /// Unbound identifier heads must resolve to a function or constructor.
+    fn check_app_head(&mut self, head: TermId, arity: usize, ctx: RuleCtx<'a>) {
+        match *self.ast.term(head) {
+            Term::Ident(id) => {
+                let name = self.ast.ident_term(id).name.clone();
+                let scope = self.scopes.entry(id);
+                match self.scopes.lookup(scope, &name) {
+                    Some(Symbol::Var(_)) => {}
+                    Some(Symbol::Const(_)) => {
+                        // Nullary/multi-arg application of a const cannot be a
+                        // morphism app (those are unary).
+                        if arity != 1 {
+                            self.errors.push(CompileError::ConstCalledAsFunction {
+                                name,
+                                location: self.ast.loc(head),
+                            });
+                        }
+                    }
+                    Some(Symbol::Func(_)) | Some(Symbol::Ctor(_)) => {}
+                    Some(other) => {
+                        let found_kind = other
+                            .lookup_kind()
+                            .expect("non-var symbol has a lookup kind");
+                        self.errors.push(CompileError::BadSymbolKind {
+                            name,
+                            expected: SymbolKind::Func,
+                            found: found_kind.symbol_kind(),
+                            used_at: self.ast.loc(head),
+                            declared_at: other.location(self.ast),
+                        });
+                    }
+                    None => {
+                        self.errors.push(CompileError::UndeclaredSymbol {
+                            name,
+                            used_at: self.ast.loc(head),
+                        });
+                    }
+                }
             }
-            FuncExpr::Member(id) => {
-                let MemberFuncExpr { term, name } = self.ast.member_func_expr(id).clone();
-                self.walk_term(term, ctx);
-                for scope in self.member_receiver_scopes(term, ctx) {
-                    self.check_member_func_call_lookup(
+            Term::MemberConst(id) => {
+                let MemberConstTerm { receiver, name } = *self.ast.member_const_term(id);
+                self.walk_term(receiver, ctx);
+                let name = self.ast.ident_term(name).name.clone();
+                for scope in self.member_receiver_scopes(receiver, ctx) {
+                    self.check_member_app_head_lookup(
                         scope,
                         name.clone(),
-                        &[LookupKind::Func, LookupKind::Ctor],
-                        self.ast.loc(func),
+                        arity,
+                        self.ast.loc(head),
                     );
                 }
             }
+            // Compound heads are morphism applications; walk nested terms.
+            Term::App(_) | Term::Dom(_) | Term::Cod(_) | Term::Wildcard => {
+                self.walk_term(head, ctx);
+            }
         }
+    }
+
+    fn check_member_app_head_lookup(
+        &mut self,
+        scope: ScopeId,
+        name: String,
+        arity: usize,
+        used_at: Location,
+    ) {
+        let decls = lookup_direct_decl_symbols(self.scopes, scope, &name);
+        if decls
+            .iter()
+            .any(|sym| matches!(sym, Symbol::Func(_) | Symbol::Ctor(_)))
+        {
+            return;
+        }
+        if decls.iter().any(|sym| matches!(sym, Symbol::Const(_))) {
+            if arity != 1 {
+                self.errors.push(CompileError::ConstCalledAsFunction {
+                    name,
+                    location: used_at,
+                });
+            }
+            return;
+        }
+        self.check_decl_symbols(name, &[LookupKind::Func, LookupKind::Ctor], used_at, decls);
     }
 
     fn member_receiver_scopes(&self, term: TermId, ctx: RuleCtx<'a>) -> Vec<ScopeId> {
@@ -394,24 +451,6 @@ impl<'a> Checker<'a> {
         self.check_decl_symbols(name, expected, used_at, decls);
     }
 
-    fn check_func_call_lookup(
-        &mut self,
-        scope: ScopeId,
-        name: String,
-        expected: &[LookupKind],
-        used_at: Location,
-    ) {
-        let decls = lookup_decl_symbols(self.scopes, scope, &name);
-        if decls.iter().any(|sym| matches!(sym, Symbol::Const(_))) {
-            self.errors.push(CompileError::ConstCalledAsFunction {
-                name,
-                location: used_at,
-            });
-            return;
-        }
-        self.check_decl_symbols(name, expected, used_at, decls);
-    }
-
     fn check_member_lookup(
         &mut self,
         scope: ScopeId,
@@ -420,24 +459,6 @@ impl<'a> Checker<'a> {
         used_at: Location,
     ) {
         let decls = lookup_direct_decl_symbols(self.scopes, scope, &name);
-        self.check_decl_symbols(name, expected, used_at, decls);
-    }
-
-    fn check_member_func_call_lookup(
-        &mut self,
-        scope: ScopeId,
-        name: String,
-        expected: &[LookupKind],
-        used_at: Location,
-    ) {
-        let decls = lookup_direct_decl_symbols(self.scopes, scope, &name);
-        if decls.iter().any(|sym| matches!(sym, Symbol::Const(_))) {
-            self.errors.push(CompileError::ConstCalledAsFunction {
-                name,
-                location: used_at,
-            });
-            return;
-        }
         self.check_decl_symbols(name, expected, used_at, decls);
     }
 

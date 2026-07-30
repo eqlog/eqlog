@@ -75,5 +75,5 @@ rule morphisms_total {
     if x: grp.El;
     if dom(f) = grp;
     if cod(f)!;
-    then f@(x)!;
+    then f(x)!;
 }
