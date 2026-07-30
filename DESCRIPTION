@@ -1,9 +1,4 @@
-Fix match patterns and morphism-app diagnostics
+Shorten match-pattern constructor error
 
-Make match-pattern classification resolution-aware so a bound morphism
-variable head is matched by unification rather than treated as an
-undeclared constructor. Report MorphismArgumentNumber for wrong-arity
-morphism applications (including Mor-typed consts) instead of
-undetermined type or const-called-as-function. Add compile-error
-fixtures and an eval test covering const, member-const, and application
-morphism heads.
+Say only constructors may be used in patterns, without the ambient
+functions aside.

@@ -4,4 +4,4 @@ Error: Member function expressions not allowed in match patterns
 10 |         c.wrap(x) => {}
    |         ^^^^^^^^^      
    | 
-Only constructors (ambient functions) may be used in patterns
+Only constructors may be used in patterns

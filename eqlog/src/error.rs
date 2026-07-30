@@ -761,7 +761,7 @@ impl Display for CompileErrorWithContext {
                 write_loc(f, *location)?;
                 write!(
                     f,
-                    "Only constructors (ambient functions) may be used in patterns\n"
+                    "Only constructors may be used in patterns\n"
                 )?;
             }
             NonMorphismAppliedAsMorphism { location } => {
