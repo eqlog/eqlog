@@ -1,0 +1,12 @@
+model Container {
+    type Elem;
+    func wrap(Elem) -> Elem;
+}
+
+rule {
+    if c: Container;
+    if x: c.Elem;
+    match x {
+        c.wrap(x) => {}
+    }
+}

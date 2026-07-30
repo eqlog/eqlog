@@ -205,42 +205,16 @@ impl<'a> SyntacticChecker<'a> {
         }
     }
 
+    /// Rejects patterns that cannot be valid by shape alone: bare variables
+    /// and wildcards. Application patterns are validated by the symbol-lookup
+    /// pass, which knows what their head resolves to (ctor vs morphism).
     fn check_match_case(&self, case: MatchCaseId) -> Check {
         let pattern = self.ast.match_case(case).pattern;
         let location = self.ast.loc(pattern);
         match *self.ast.term(pattern) {
             Term::Ident(_) => Err(CompileError::MatchPatternIsVariable { location }),
             Term::Wildcard => Err(CompileError::MatchPatternIsWildcard { location }),
-            Term::App(id) => {
-                let AppTerm { head, args } = *self.ast.app_term(id);
-                // Match patterns must be ambient ctor applications, not
-                // member projections or other compound heads.
-                match *self.ast.term(head) {
-                    Term::Ident(_) => {}
-                    Term::MemberConst(_) => {
-                        return Err(CompileError::MatchPatternIsMemberFunc { location });
-                    }
-                    Term::App(_) | Term::Wildcard | Term::Dom(_) | Term::Cod(_) => {
-                        return Err(CompileError::MatchPatternIsMemberFunc { location });
-                    }
-                }
-                for arg in self.ast.term_list(args).terms.clone() {
-                    match *self.ast.term(arg) {
-                        Term::App(_) => {
-                            return Err(CompileError::MatchPatternCtorArgIsApp {
-                                location: self.ast.loc(arg),
-                            });
-                        }
-                        Term::Ident(_)
-                        | Term::Wildcard
-                        | Term::MemberConst(_)
-                        | Term::Dom(_)
-                        | Term::Cod(_) => {}
-                    }
-                }
-                Ok(())
-            }
-            Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) => Ok(()),
+            Term::App(_) | Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) => Ok(()),
         }
     }
 }

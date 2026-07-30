@@ -317,6 +317,26 @@ fn mor_applied_to_false_member() {
 }
 
 #[test]
+fn morphism_argument_number() {
+    test_case(Path::new("morphism-argument-number"));
+}
+
+#[test]
+fn mor_const_argument_number() {
+    test_case(Path::new("mor-const-argument-number"));
+}
+
+#[test]
+fn match_pattern_member_func() {
+    test_case(Path::new("match-pattern-member-func"));
+}
+
+#[test]
+fn dom_applied_as_mor() {
+    test_case(Path::new("dom-applied-as-mor"));
+}
+
+#[test]
 fn bad_dep_pred_arg_type() {
     test_case(Path::new("bad-dep-pred-arg-type"));
 }

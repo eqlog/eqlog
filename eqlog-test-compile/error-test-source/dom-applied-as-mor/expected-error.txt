@@ -1,0 +1,6 @@
+Error: Expression is not a morphism
+ --> error-test-source/dom-applied-as-mor/theory.eql:9
+  | 
+9 |     if y = dom(f)(x);
+  |            ^^^^^^    
+  | 

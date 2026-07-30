@@ -1,0 +1,6 @@
+Error: morphism takes 1 argument but 2 were supplied
+ --> error-test-source/morphism-argument-number/theory.eql:9
+  | 
+9 |     if f(x, x)!;
+  |        ^^^^^^^  
+  | 

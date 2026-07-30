@@ -85,7 +85,7 @@ pub fn build_structures(
             .map(|(sid, conflict)| conflict_to_error(ast, signature, &rule, sid, conflict))
             .collect();
         errors.extend(last_arg_num_errors);
-        errors.extend(morphism_application_errors(ast, signature, &rule));
+        errors.extend(morphism_application_errors(ast, scopes, signature, &rule));
         errors.extend(undetermined_type_errors(ast, &rule));
         // Only run lower-priority surjectivity checks when the structures are
         // at a settled state without higher-priority structure errors.
@@ -108,6 +108,7 @@ pub fn build_structures(
 
 fn morphism_application_errors(
     ast: &Ast,
+    scopes: &Scopes,
     signature: &Signature,
     rule: &RuleStructures,
 ) -> Vec<CompileError> {
@@ -122,14 +123,13 @@ fn morphism_application_errors(
                 continue;
             };
             let AppTerm { head, args } = *ast.app_term(app);
-            let arg_terms = &ast.term_list(args).terms;
-            // Morphism apps are unary and walk the head as a value term, so
-            // the head appears in this structure's semantic_els. Function
-            // apps with a bare identifier head do not.
-            if arg_terms.len() != 1 || !semantic_els.contains_key(&head) {
+            if !app_head_is_mor(ast, scopes, signature, rule, sid, head) {
                 continue;
             }
-            let arg = arg_terms[0];
+            // Argument-count mismatches are reported by the populate pass.
+            let [arg] = ast.term_list(args).terms[..] else {
+                continue;
+            };
 
             check_morphism_application(
                 ast,
@@ -146,6 +146,45 @@ fn morphism_application_errors(
     }
 
     errors
+}
+
+/// Decides whether an application with the given head is a morphism
+/// application: identifier heads by scope resolution, member heads by the
+/// receiver's settled model scopes, and app/dom/cod heads are terms
+/// unconditionally.
+fn app_head_is_mor(
+    ast: &Ast,
+    scopes: &Scopes,
+    signature: &Signature,
+    rule: &RuleStructures,
+    sid: StructureId,
+    head: TermId,
+) -> bool {
+    match *ast.term(head) {
+        Term::Ident(id) => {
+            let name = &ast.ident_term(id).name;
+            matches!(
+                scopes.lookup(scopes.exit(head), name),
+                Some(Symbol::Var(_) | Symbol::Const(_))
+            )
+        }
+        Term::MemberConst(mid) => {
+            let MemberConstTerm { receiver, name } = *ast.member_const_term(mid);
+            let name = &ast.ident_term(name).name;
+            let Some(receiver_types) = concrete_types_of_term(rule, sid, receiver) else {
+                return false;
+            };
+            receiver_types.iter().any(|ct| {
+                let Some(model_decl) = signature.model_decl_for_type(ct.typ) else {
+                    return false;
+                };
+                let body = scopes.scope(scopes.unordered(model_decl));
+                matches!(body.symbols.get(name), Some(Symbol::Const(_)))
+            })
+        }
+        Term::App(_) | Term::Dom(_) | Term::Cod(_) => true,
+        Term::Wildcard => false,
+    }
 }
 
 fn check_morphism_application(

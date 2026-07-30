@@ -71,9 +71,8 @@ fn pattern_ctor(pattern: TermId, ast: &Ast, scopes: &Scopes) -> Option<CtorDeclI
     let Term::Ident(id) = *ast.term(head) else {
         return None;
     };
-    let scope = scopes.entry(id);
     let name = &ast.ident_term(id).name;
-    match scopes.lookup(scope, name)? {
+    match scopes.lookup(scopes.exit(head), name)? {
         Symbol::Ctor(cid) => Some(cid),
         _ => None,
     }

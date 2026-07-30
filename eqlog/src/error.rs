@@ -79,6 +79,10 @@ pub enum CompileError {
         got: usize,
         location: Location,
     },
+    MorphismArgumentNumber {
+        got: usize,
+        location: Location,
+    },
     UndeclaredSymbol {
         name: String,
         used_at: Location,
@@ -225,6 +229,7 @@ impl CompileError {
             CompileError::VariableOccursOnlyOnce { location, .. } => *location,
             CompileError::FunctionArgumentNumber { location, .. } => *location,
             CompileError::PredicateArgumentNumber { location, .. } => *location,
+            CompileError::MorphismArgumentNumber { location, .. } => *location,
             CompileError::UndeclaredSymbol { used_at, .. } => *used_at,
             CompileError::BadSymbolKind { used_at, .. } => *used_at,
             CompileError::SymbolDeclaredTwice {
@@ -274,6 +279,7 @@ pub enum CompileErrorKind {
     VariableOccursOnlyOnce,
     FunctionArgumentNumber,
     PredicateArgumentNumber,
+    MorphismArgumentNumber,
     UndeclaredSymbol,
     BadSymbolKind,
     SymbolDeclaredTwice,
@@ -314,6 +320,7 @@ impl From<&CompileError> for CompileErrorKind {
             VariableOccursOnlyOnce { .. } => CompileErrorKind::VariableOccursOnlyOnce,
             FunctionArgumentNumber { .. } => CompileErrorKind::FunctionArgumentNumber,
             PredicateArgumentNumber { .. } => CompileErrorKind::PredicateArgumentNumber,
+            MorphismArgumentNumber { .. } => CompileErrorKind::MorphismArgumentNumber,
             UndeclaredSymbol { .. } => CompileErrorKind::UndeclaredSymbol,
             BadSymbolKind { .. } => CompileErrorKind::BadSymbolKind,
             SymbolDeclaredTwice { .. } => CompileErrorKind::SymbolDeclaredTwice,
@@ -432,6 +439,9 @@ static COMPILE_ERROR_KIND_ORDER: LazyLock<HashSet<[CompileErrorKind; 2]>> = Lazy
         }
         if !relation.contains(&[k, PredicateArgumentNumber]) {
             relation.insert([PredicateArgumentNumber, k]);
+        }
+        if !relation.contains(&[k, MorphismArgumentNumber]) {
+            relation.insert([MorphismArgumentNumber, k]);
         }
     }
     transitive_closure(&mut relation);
@@ -597,6 +607,10 @@ impl Display for CompileErrorWithContext {
                     f,
                     "predicate takes {expected} arguments but {got} were supplied\n"
                 )?;
+                write_loc(f, *location)?;
+            }
+            MorphismArgumentNumber { got, location } => {
+                write!(f, "morphism takes 1 argument but {got} were supplied\n")?;
                 write_loc(f, *location)?;
             }
             UndeclaredSymbol { name, used_at } => {

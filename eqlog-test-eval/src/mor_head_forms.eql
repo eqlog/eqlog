@@ -1,0 +1,53 @@
+// Coverage for the unified application syntax: morphism applications whose
+// head is an ambient const, a member const, or itself an application.
+
+model Set {
+    type S;
+}
+
+const c: Mor(Set);
+
+rule const_mor_total {
+    if s = dom(c);
+    if x: s.S;
+    if cod(c)!;
+    then c(x)!;
+}
+
+func pick(s: Set) -> Mor(Set);
+
+rule picked_mor_total {
+    if f = pick(s);
+    if t = dom(f);
+    if x: t.S;
+    if cod(f)!;
+    then pick(s)(x)!;
+}
+
+pred reached(s: Set);
+
+rule mor_app_pattern {
+    if f = pick(s);
+    if t = dom(f);
+    if x: t.S;
+    if cod(f)!;
+    if y = f(x);
+    match y {
+        f(x) => {
+            then reached(s);
+        }
+    }
+}
+
+model Bundle {
+    type Elem;
+    const mor: Mor(Bundle);
+}
+
+rule bundle_mor_total {
+    if b: Bundle;
+    if s = dom(b.mor);
+    if x: s.Elem;
+    if cod(b.mor)!;
+    then b.mor(x)!;
+}

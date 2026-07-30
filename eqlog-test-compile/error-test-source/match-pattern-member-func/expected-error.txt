@@ -1,0 +1,7 @@
+Error: Member function expressions not allowed in match patterns
+  --> error-test-source/match-pattern-member-func/theory.eql:10
+   | 
+10 |         c.wrap(x) => {}
+   |         ^^^^^^^^^      
+   | 
+Only constructors (ambient functions) may be used in patterns

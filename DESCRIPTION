@@ -1,8 +1,9 @@
-Unify morphism and function application as h(x)
+Fix match patterns and morphism-app diagnostics
 
-Drop the f@(x) form and FuncExpr AST nodes in favor of a single App
-term with a general head. Classify callees during algebraization:
-bound vars/consts and compound heads are morphism apps; function and
-constructor names are ordinary apps. Identifier heads never introduce
-variables, so adding a function declaration cannot silently change
-rule meaning.
+Make match-pattern classification resolution-aware so a bound morphism
+variable head is matched by unification rather than treated as an
+undeclared constructor. Report MorphismArgumentNumber for wrong-arity
+morphism applications (including Mor-typed consts) instead of
+undetermined type or const-called-as-function. Add compile-error
+fixtures and an eval test covering const, member-const, and application
+morphism heads.
