@@ -1,4 +1,3 @@
-Shorten match-pattern constructor error
+Remove AppTerm head doc comment
 
-Say only constructors may be used in patterns, without the ambient
-functions aside.
+Drop the explanatory comment on AppTerm::head.

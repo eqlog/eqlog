@@ -156,8 +156,6 @@ pub struct IdentTerm {
 
 #[derive(Copy, Clone, Debug)]
 pub struct AppTerm {
-    /// Callee term. Classification (function/ctor vs morphism application) is
-    /// deferred to algebraization; an identifier head never introduces a var.
     pub head: TermId,
     pub args: TermListId,
 }
