@@ -1,3 +1,21 @@
-Remove check_match_case doc comment
+Unify morphism and function application as h(x)
 
-Drop the explanatory comment on the syntactic match-case check.
+Morphism application is now written h(x) instead of h@(x), using the
+same syntax as function application. The AST drops MorApp and FuncExpr
+in favor of a single App node whose head is a term. The grammar builds
+calls via ApplicationTerm (ident, member, chained app, dom/cod, or
+parenthesized head) because general Term + ArgList is not LR(1).
+
+Whether a call is a function/ctor app or a morphism app is decided
+during algebraization from the head: bound vars/consts (and member
+consts) are morphism heads; func/ctor names are ordinary apps; app,
+dom, and cod heads are always terms. Identifier heads never introduce
+variables, so a later function declaration cannot silently change a
+rule, and typos stay undeclared-symbol errors.
+
+Morphism heads use the existing mor_app machinery for typing. Mor-typed
+consts may be applied as c(x); other consts keep const-called-as-
+function. Wrong morphism arity is MorphismArgumentNumber. Match
+patterns classify by resolution so ctor patterns and morphism-app
+patterns (unification) both work; member-func pattern checks move to
+the symbol-lookup pass.
