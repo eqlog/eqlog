@@ -67,13 +67,12 @@ fn pattern_ctor(pattern: TermId, ast: &Ast, scopes: &Scopes) -> Option<CtorDeclI
     let Term::App(aid) = *ast.term(pattern) else {
         return None;
     };
-    let func = ast.app_term(aid).func;
-    let FuncExpr::Ambient(id) = *ast.func_expr(func) else {
+    let head = ast.app_term(aid).head;
+    let Term::Ident(id) = *ast.term(head) else {
         return None;
     };
-    let scope = scopes.entry(id);
-    let name = &ast.ambient_func_expr(id).name;
-    match scopes.lookup(scope, name)? {
+    let name = &ast.ident_term(id).name;
+    match scopes.lookup(scopes.exit(head), name)? {
         Symbol::Ctor(cid) => Some(cid),
         _ => None,
     }

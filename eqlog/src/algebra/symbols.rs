@@ -223,8 +223,8 @@ impl<'a> Checker<'a> {
         match *self.ast.term(term) {
             Term::Ident(_) | Term::Wildcard => {}
             Term::App(id) => {
-                let AppTerm { func, args } = *self.ast.app_term(id);
-                self.check_func_expr(func, ctx, &[LookupKind::Func, LookupKind::Ctor]);
+                let AppTerm { head, args } = *self.ast.app_term(id);
+                self.check_app_head(head, ctx);
                 for arg in self.ast.term_list(args).terms.clone() {
                     self.walk_term(arg, ctx);
                 }
@@ -239,11 +239,90 @@ impl<'a> Checker<'a> {
             }
             Term::Dom(id) => self.walk_term(self.ast.dom_term(id).arg, ctx),
             Term::Cod(id) => self.walk_term(self.ast.cod_term(id).arg, ctx),
-            Term::MorApp(id) => {
-                let MorAppTerm { mor, arg } = *self.ast.mor_app_term(id);
-                self.walk_term(mor, ctx);
-                self.walk_term(arg, ctx);
+        }
+    }
+
+    /// Checks the head of an application. Var heads and heads of term shape
+    /// are morphism heads and need no symbol diagnostics of their own; a
+    /// const head must have a morphism type. Everything else must be a
+    /// func or ctor.
+    fn check_app_head(&mut self, head: TermId, ctx: RuleCtx<'a>) {
+        match *self.ast.term(head) {
+            Term::Ident(id) => {
+                let name = self.ast.ident_term(id).name.clone();
+                self.check_head_lookup(
+                    self.scopes.lookup(self.scopes.exit(head), &name),
+                    name,
+                    self.ast.loc(head),
+                );
             }
+            Term::MemberConst(mid) => {
+                let MemberConstTerm { receiver, name } = *self.ast.member_const_term(mid);
+                self.walk_term(receiver, ctx);
+                let name = self.ast.ident_term(name).name.clone();
+                for scope in self.member_receiver_scopes(receiver, ctx) {
+                    self.check_head_lookup(
+                        self.scopes.scope(scope).symbols.get(&name).copied(),
+                        name.clone(),
+                        self.ast.loc(head),
+                    );
+                }
+            }
+            _ => self.walk_term(head, ctx),
+        }
+    }
+
+    fn check_head_lookup(&mut self, symbol: Option<Symbol>, name: String, used_at: Location) {
+        match symbol {
+            Some(Symbol::Func(_) | Symbol::Ctor(_) | Symbol::Var(_)) => {}
+            Some(Symbol::Const(cd)) => {
+                let result = self.ast.const_decl(cd).result;
+                if !matches!(*self.ast.type_expr(result), TypeExpr::Mor(_)) {
+                    self.errors.push(CompileError::ConstCalledAsFunction {
+                        name,
+                        location: used_at,
+                    });
+                }
+            }
+            Some(Symbol::Arg(_)) | None => self
+                .errors
+                .push(CompileError::UndeclaredSymbol { name, used_at }),
+            Some(sym) => self.check_decl_symbols(
+                name,
+                &[LookupKind::Func, LookupKind::Ctor],
+                used_at,
+                vec![sym],
+            ),
+        }
+    }
+
+    /// Mirrors the morphism-application classification of the populate
+    /// pass: identifier heads by scope resolution, member heads by the
+    /// receiver's settled model scopes, and the remaining head shapes are
+    /// terms unconditionally.
+    fn app_head_is_mor(&self, head: TermId, ctx: RuleCtx<'a>) -> bool {
+        match *self.ast.term(head) {
+            Term::Ident(id) => {
+                let name = &self.ast.ident_term(id).name;
+                matches!(
+                    self.scopes.lookup(self.scopes.exit(head), name),
+                    Some(Symbol::Var(_) | Symbol::Const(_))
+                )
+            }
+            Term::MemberConst(mid) => {
+                let MemberConstTerm { receiver, name } = *self.ast.member_const_term(mid);
+                let name = self.ast.ident_term(name).name.clone();
+                self.member_receiver_scopes(receiver, ctx)
+                    .into_iter()
+                    .any(|scope| {
+                        matches!(
+                            self.scopes.scope(scope).symbols.get(&name),
+                            Some(Symbol::Const(_))
+                        )
+                    })
+            }
+            Term::App(_) | Term::Dom(_) | Term::Cod(_) => true,
+            Term::Wildcard => false,
         }
     }
 
@@ -252,24 +331,56 @@ impl<'a> Checker<'a> {
             self.walk_term(pattern, ctx);
             return;
         };
+        let AppTerm { head, args } = *self.ast.app_term(app);
 
-        let func = self.ast.app_term(app).func;
-        if let FuncExpr::Ambient(id) = *self.ast.func_expr(func) {
-            let name = self.ast.ambient_func_expr(id).name.clone();
-            self.check_lookup(
-                self.scopes.entry(id),
-                name,
-                &[LookupKind::Ctor],
-                self.ast.loc(pattern),
-            );
+        // A morphism-application pattern is an ordinary term, matched by
+        // unification rather than by case split.
+        if self.app_head_is_mor(head, ctx) {
+            self.walk_term(pattern, ctx);
+            return;
         }
 
-        for arg in self
-            .ast
-            .term_list(self.ast.app_term(app).args)
-            .terms
-            .clone()
-        {
+        match *self.ast.term(head) {
+            Term::Ident(id) => {
+                let name = self.ast.ident_term(id).name.clone();
+                self.check_lookup(
+                    self.scopes.exit(head),
+                    name,
+                    &[LookupKind::Ctor],
+                    self.ast.loc(pattern),
+                );
+            }
+            Term::MemberConst(mid) => {
+                let MemberConstTerm { receiver, name } = *self.ast.member_const_term(mid);
+                self.walk_term(receiver, ctx);
+                let name = self.ast.ident_term(name).name.clone();
+                for scope in self.member_receiver_scopes(receiver, ctx) {
+                    match self.scopes.scope(scope).symbols.get(&name).copied() {
+                        Some(Symbol::Func(_) | Symbol::Ctor(_)) => {
+                            self.errors.push(CompileError::MatchPatternIsMemberFunc {
+                                location: self.ast.loc(pattern),
+                            });
+                        }
+                        sym => self.check_head_lookup(sym, name.clone(), self.ast.loc(head)),
+                    }
+                }
+            }
+            Term::Wildcard | Term::App(_) | Term::Dom(_) | Term::Cod(_) => {
+                // App/dom/cod heads are morphism patterns (handled above).
+                // The grammar does not produce wildcard heads.
+            }
+        }
+
+        for arg in self.ast.term_list(args).terms.clone() {
+            if let Term::App(arg_app) = *self.ast.term(arg) {
+                let arg_head = self.ast.app_term(arg_app).head;
+                if !self.app_head_is_mor(arg_head, ctx) {
+                    self.errors.push(CompileError::MatchPatternCtorArgIsApp {
+                        location: self.ast.loc(arg),
+                    });
+                    continue;
+                }
+            }
             self.walk_term(arg, ctx);
         }
     }
@@ -330,32 +441,6 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn check_func_expr(&mut self, func: FuncExprId, ctx: RuleCtx<'a>, ambient: &[LookupKind]) {
-        match *self.ast.func_expr(func) {
-            FuncExpr::Ambient(id) => {
-                let name = self.ast.ambient_func_expr(id).name.clone();
-                self.check_func_call_lookup(
-                    self.scopes.entry(id),
-                    name,
-                    ambient,
-                    self.ast.loc(func),
-                );
-            }
-            FuncExpr::Member(id) => {
-                let MemberFuncExpr { term, name } = self.ast.member_func_expr(id).clone();
-                self.walk_term(term, ctx);
-                for scope in self.member_receiver_scopes(term, ctx) {
-                    self.check_member_func_call_lookup(
-                        scope,
-                        name.clone(),
-                        &[LookupKind::Func, LookupKind::Ctor],
-                        self.ast.loc(func),
-                    );
-                }
-            }
-        }
-    }
-
     fn member_receiver_scopes(&self, term: TermId, ctx: RuleCtx<'a>) -> Vec<ScopeId> {
         let Some(rule) = ctx.rule else {
             return Vec::new();
@@ -394,24 +479,6 @@ impl<'a> Checker<'a> {
         self.check_decl_symbols(name, expected, used_at, decls);
     }
 
-    fn check_func_call_lookup(
-        &mut self,
-        scope: ScopeId,
-        name: String,
-        expected: &[LookupKind],
-        used_at: Location,
-    ) {
-        let decls = lookup_decl_symbols(self.scopes, scope, &name);
-        if decls.iter().any(|sym| matches!(sym, Symbol::Const(_))) {
-            self.errors.push(CompileError::ConstCalledAsFunction {
-                name,
-                location: used_at,
-            });
-            return;
-        }
-        self.check_decl_symbols(name, expected, used_at, decls);
-    }
-
     fn check_member_lookup(
         &mut self,
         scope: ScopeId,
@@ -420,24 +487,6 @@ impl<'a> Checker<'a> {
         used_at: Location,
     ) {
         let decls = lookup_direct_decl_symbols(self.scopes, scope, &name);
-        self.check_decl_symbols(name, expected, used_at, decls);
-    }
-
-    fn check_member_func_call_lookup(
-        &mut self,
-        scope: ScopeId,
-        name: String,
-        expected: &[LookupKind],
-        used_at: Location,
-    ) {
-        let decls = lookup_direct_decl_symbols(self.scopes, scope, &name);
-        if decls.iter().any(|sym| matches!(sym, Symbol::Const(_))) {
-            self.errors.push(CompileError::ConstCalledAsFunction {
-                name,
-                location: used_at,
-            });
-            return;
-        }
         self.check_decl_symbols(name, expected, used_at, decls);
     }
 

@@ -129,7 +129,7 @@ impl<'a> SyntacticChecker<'a> {
     fn check_if_var_lhs(&self, term: TermId) -> Check {
         match *self.ast.term(term) {
             Term::Ident(_) | Term::Wildcard => Ok(()),
-            Term::App(_) | Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => {
+            Term::App(_) | Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) => {
                 Err(CompileError::IfVarLhsNotVarOrWildcard {
                     location: self.ast.loc(term),
                 })
@@ -171,8 +171,8 @@ impl<'a> SyntacticChecker<'a> {
             }),
             Term::Ident(_) => Ok(()),
             Term::App(id) => {
-                let AppTerm { func, args } = *self.ast.app_term(id);
-                self.check_then_func_expr(func)?;
+                let AppTerm { head, args } = *self.ast.app_term(id);
+                self.check_then_term(head)?;
                 for arg in self.ast.term_list(args).terms.clone() {
                     self.check_then_term(arg)?;
                 }
@@ -184,11 +184,6 @@ impl<'a> SyntacticChecker<'a> {
             }
             Term::Dom(id) => self.check_then_term(self.ast.dom_term(id).arg),
             Term::Cod(id) => self.check_then_term(self.ast.cod_term(id).arg),
-            Term::MorApp(id) => {
-                let MorAppTerm { mor, arg } = *self.ast.mor_app_term(id);
-                self.check_then_term(mor)?;
-                self.check_then_term(arg)
-            }
         }
     }
 
@@ -199,17 +194,10 @@ impl<'a> SyntacticChecker<'a> {
         }
     }
 
-    fn check_then_func_expr(&self, func_expr: FuncExprId) -> Check {
-        match *self.ast.func_expr(func_expr) {
-            FuncExpr::Ambient(_) => Ok(()),
-            FuncExpr::Member(id) => self.check_then_term(self.ast.member_func_expr(id).term),
-        }
-    }
-
     fn check_defined_then_var(&self, term: TermId) -> Check {
         match *self.ast.term(term) {
             Term::Ident(_) | Term::Wildcard => Ok(()),
-            Term::App(_) | Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => {
+            Term::App(_) | Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) => {
                 Err(CompileError::ThenDefinedNotVar {
                     location: self.ast.loc(term),
                 })
@@ -223,32 +211,7 @@ impl<'a> SyntacticChecker<'a> {
         match *self.ast.term(pattern) {
             Term::Ident(_) => Err(CompileError::MatchPatternIsVariable { location }),
             Term::Wildcard => Err(CompileError::MatchPatternIsWildcard { location }),
-            Term::App(id) => {
-                let AppTerm { func, args } = *self.ast.app_term(id);
-                match *self.ast.func_expr(func) {
-                    FuncExpr::Member(_) => {
-                        return Err(CompileError::MatchPatternIsMemberFunc { location });
-                    }
-                    FuncExpr::Ambient(_) => {}
-                }
-                for arg in self.ast.term_list(args).terms.clone() {
-                    match *self.ast.term(arg) {
-                        Term::App(_) => {
-                            return Err(CompileError::MatchPatternCtorArgIsApp {
-                                location: self.ast.loc(arg),
-                            });
-                        }
-                        Term::Ident(_)
-                        | Term::Wildcard
-                        | Term::MemberConst(_)
-                        | Term::Dom(_)
-                        | Term::Cod(_)
-                        | Term::MorApp(_) => {}
-                    }
-                }
-                Ok(())
-            }
-            Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => Ok(()),
+            Term::App(_) | Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) => Ok(()),
         }
     }
 }

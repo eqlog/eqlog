@@ -28,6 +28,7 @@ eqlog_mod!(empty);
 eqlog_mod!(subset);
 eqlog_mod!(subset_rules);
 eqlog_mod!(consts);
+eqlog_mod!(mor_head_forms);
 
 mod category_mod;
 #[cfg(test)]
@@ -62,6 +63,8 @@ mod int_test;
 mod matches_rel_test;
 #[cfg(test)]
 mod matches_test;
+#[cfg(test)]
+mod mor_head_forms_test;
 #[cfg(test)]
 mod nat_test;
 mod pointed_test;

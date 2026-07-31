@@ -39,10 +39,56 @@ Wildcard: TermId = {
     <l: @L> "_" <r: @R> => ast.push_term(Location(l, r), Term::Wildcard),
 }
 
+// Application is not "any Term + ArgList" (that is not LR(1) against equality
+// atoms and argument lists). Instead every call form ends in ArgList, and
+// chaining `f(x)(y)` is left-recursive on ApplicationTerm itself.
+// Compound value heads use an explicit production (dom/cod) or parentheses.
 ApplicationTerm: TermId = {
-    <l: @L> <func: FuncExpr> <args: ArgList> <r: @R> => {
+    <l: @L> <nl: @L> <name: Id> <nr: @R> <args: ArgList> <r: @R> => {
         let loc = Location(l, r);
-        let a = ast.push_app_term(loc, AppTerm { func, args });
+        let name_loc = Location(nl, nr);
+        let ident = ast.push_ident_term(name_loc, IdentTerm { name });
+        let head = ast.push_term(name_loc, Term::Ident(ident));
+        let a = ast.push_app_term(loc, AppTerm { head, args });
+        ast.push_term(loc, Term::App(a))
+    },
+    <l: @L> <receiver: Term> "." <nl: @L> <name: Id> <nr: @R> <args: ArgList> <r: @R> => {
+        let loc = Location(l, r);
+        let name_loc = Location(nl, nr);
+        let name = ast.push_ident_term(name_loc, IdentTerm { name });
+        let member_loc = Location(ast.loc(receiver).0, nr);
+        let m = ast.push_member_const_term(
+            member_loc,
+            MemberConstTerm { receiver, name },
+        );
+        let head = ast.push_term(member_loc, Term::MemberConst(m));
+        let a = ast.push_app_term(loc, AppTerm { head, args });
+        ast.push_term(loc, Term::App(a))
+    },
+    <l: @L> <head: ApplicationTerm> <args: ArgList> <r: @R> => {
+        let loc = Location(l, r);
+        let a = ast.push_app_term(loc, AppTerm { head, args });
+        ast.push_term(loc, Term::App(a))
+    },
+    <l: @L> <dl: @L> "dom" "(" <arg: Term> ")" <dr: @R> <args: ArgList> <r: @R> => {
+        let loc = Location(l, r);
+        let dom_loc = Location(dl, dr);
+        let d = ast.push_dom_term(dom_loc, DomTerm { arg });
+        let head = ast.push_term(dom_loc, Term::Dom(d));
+        let a = ast.push_app_term(loc, AppTerm { head, args });
+        ast.push_term(loc, Term::App(a))
+    },
+    <l: @L> <cl: @L> "cod" "(" <arg: Term> ")" <cr: @R> <args: ArgList> <r: @R> => {
+        let loc = Location(l, r);
+        let cod_loc = Location(cl, cr);
+        let c = ast.push_cod_term(cod_loc, CodTerm { arg });
+        let head = ast.push_term(cod_loc, Term::Cod(c));
+        let a = ast.push_app_term(loc, AppTerm { head, args });
+        ast.push_term(loc, Term::App(a))
+    },
+    <l: @L> "(" <head: Term> ")" <args: ArgList> <r: @R> => {
+        let loc = Location(l, r);
+        let a = ast.push_app_term(loc, AppTerm { head, args });
         ast.push_term(loc, Term::App(a))
     },
 }
@@ -72,14 +118,6 @@ CodTerm: TermId = {
     },
 }
 
-MorAppTerm: TermId = {
-    <l: @L> <mor: Term> "@" "(" <arg: Term> ")" <r: @R> => {
-        let loc = Location(l, r);
-        let m = ast.push_mor_app_term(loc, MorAppTerm { mor, arg });
-        ast.push_term(loc, Term::MorApp(m))
-    },
-}
-
 Term: TermId = {
     <application: ApplicationTerm> => application,
     <member_const: MemberConstTerm> => member_const,
@@ -87,7 +125,6 @@ Term: TermId = {
     <wildcard: Wildcard> => wildcard,
     <dom_term: DomTerm> => dom_term,
     <cod_term: CodTerm> => cod_term,
-    <app_term: MorAppTerm> => app_term,
 }
 
 TypeExpr: TypeExprId = {
@@ -119,20 +156,6 @@ PredExpr: PredExprId = {
         let loc = Location(l, r);
         let m = ast.push_member_pred_expr(loc, MemberPredExpr { term: tm, name });
         ast.push_pred_expr(loc, PredExpr::Member(m))
-    },
-}
-
-#[inline]
-FuncExpr: FuncExprId = {
-    <l: @L> <name: Id> <r: @R> => {
-        let loc = Location(l, r);
-        let a = ast.push_ambient_func_expr(loc, AmbientFuncExpr { name });
-        ast.push_func_expr(loc, FuncExpr::Ambient(a))
-    },
-    <l: @L> <tm: Term> "." <name: Id> <r: @R> => {
-        let loc = Location(l, r);
-        let m = ast.push_member_func_expr(loc, MemberFuncExpr { term: tm, name });
-        ast.push_func_expr(loc, FuncExpr::Member(m))
     },
 }
 

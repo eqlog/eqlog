@@ -6,5 +6,5 @@ rule bad_rule {
     if m: M;
     if x: m.T;
     if f: Mor(M);
-    then f@(x)!;
+    then f(x)!;
 }

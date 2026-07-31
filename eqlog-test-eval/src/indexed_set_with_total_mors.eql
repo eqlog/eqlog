@@ -7,5 +7,5 @@ rule set_mors_are_total {
     if s_0 = dom(f);
     if x: s_0.S;
     if cod(f)!;
-    then f@(x)!;
+    then f(x)!;
 }

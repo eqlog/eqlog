@@ -100,7 +100,6 @@ ordered_from!(AppTermId);
 ordered_from!(MemberConstTermId);
 ordered_from!(DomTermId);
 ordered_from!(CodTermId);
-ordered_from!(MorAppTermId);
 ordered_from!(TermListId);
 ordered_from!(TypeExprId);
 ordered_from!(AmbientTypeExprId);
@@ -109,9 +108,6 @@ ordered_from!(MorTypeExprId);
 ordered_from!(PredExprId);
 ordered_from!(AmbientPredExprId);
 ordered_from!(MemberPredExprId);
-ordered_from!(FuncExprId);
-ordered_from!(AmbientFuncExprId);
-ordered_from!(MemberFuncExprId);
 
 /// A graph of [`Scope`]s keyed by AST node, with `parent` pointers for
 /// ancestor lookup.
@@ -569,9 +565,11 @@ impl<'a> ScopeBuilder<'a> {
             Term::Ident(id) => self.walk_ident_term(current, id),
             Term::Wildcard => current,
             Term::App(id) => {
-                let AppTerm { func, args } = *self.ast.app_term(id);
-                let after_func = self.walk_func_expr(current, func);
-                let after_args = self.walk_term_list(after_func, args);
+                let AppTerm { head, args } = *self.ast.app_term(id);
+                // App heads never introduce variables: an identifier callee is
+                // classified later (function vs already-bound morphism value).
+                let after_head = self.walk_app_head(current, head);
+                let after_args = self.walk_term_list(after_head, args);
                 self.insert_ordered(id, current, after_args);
                 after_args
             }
@@ -594,16 +592,22 @@ impl<'a> ScopeBuilder<'a> {
                 self.insert_ordered(id, current, after);
                 after
             }
-            Term::MorApp(id) => {
-                let MorAppTerm { mor, arg } = *self.ast.mor_app_term(id);
-                let after_mor = self.walk_term(current, mor);
-                let after_arg = self.walk_term(after_mor, arg);
-                self.insert_ordered(id, current, after_arg);
-                after_arg
-            }
         };
         self.insert_ordered(term, current, exit);
         exit
+    }
+
+    /// Walks the head of an application without introducing variables for a
+    /// bare identifier head. Compound heads use normal term walking.
+    fn walk_app_head(&mut self, current: ScopeId, head: TermId) -> ScopeId {
+        match *self.ast.term(head) {
+            Term::Ident(id) => {
+                self.insert_ordered(id, current, current);
+                self.insert_ordered(head, current, current);
+                current
+            }
+            _ => self.walk_term(current, head),
+        }
     }
 
     fn walk_ident_term(&mut self, current: ScopeId, ident: IdentTermId) -> ScopeId {
@@ -639,7 +643,7 @@ impl<'a> ScopeBuilder<'a> {
                 exit
             }
             Term::Wildcard => current,
-            Term::App(_) | Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => {
+            Term::App(_) | Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) => {
                 unreachable!("if-var terms are checked by syntactic.rs")
             }
         };
@@ -665,7 +669,7 @@ impl<'a> ScopeBuilder<'a> {
                 exit
             }
             Term::Wildcard => after_term,
-            Term::App(_) | Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => {
+            Term::App(_) | Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) => {
                 unreachable!("defined-then variable terms are checked by syntactic.rs")
             }
         };
@@ -723,25 +727,6 @@ impl<'a> ScopeBuilder<'a> {
             }
         };
         self.insert_ordered(pred_expr, current, exit);
-        exit
-    }
-
-    /// Ordered scope, depth-first.
-    fn walk_func_expr(&mut self, current: ScopeId, func_expr: FuncExprId) -> ScopeId {
-        let exit = match *self.ast.func_expr(func_expr) {
-            FuncExpr::Ambient(id) => {
-                self.insert_ordered(id, current, current);
-                current
-            }
-            FuncExpr::Member(id) => {
-                let MemberFuncExpr { term, .. } = self.ast.member_func_expr(id);
-                let term = *term;
-                let after = self.walk_term(current, term);
-                self.insert_ordered(id, current, after);
-                after
-            }
-        };
-        self.insert_ordered(func_expr, current, exit);
         exit
     }
 }

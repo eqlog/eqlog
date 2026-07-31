@@ -85,7 +85,7 @@ pub fn build_structures(
             .map(|(sid, conflict)| conflict_to_error(ast, signature, &rule, sid, conflict))
             .collect();
         errors.extend(last_arg_num_errors);
-        errors.extend(morphism_application_errors(ast, signature, &rule));
+        errors.extend(morphism_application_errors(ast, scopes, signature, &rule));
         errors.extend(undetermined_type_errors(ast, &rule));
         // Only run lower-priority surjectivity checks when the structures are
         // at a settled state without higher-priority structure errors.
@@ -108,6 +108,7 @@ pub fn build_structures(
 
 fn morphism_application_errors(
     ast: &Ast,
+    scopes: &Scopes,
     signature: &Signature,
     rule: &RuleStructures,
 ) -> Vec<CompileError> {
@@ -118,17 +119,24 @@ fn morphism_application_errors(
     for (sid, semantic_els) in rule.semantic_els.iter().enumerate() {
         let sid = StructureId(sid);
         for &term in semantic_els.keys() {
-            let Term::MorApp(mor_app) = *ast.term(term) else {
+            let Term::App(app) = *ast.term(term) else {
                 continue;
             };
-            let MorAppTerm { mor, arg } = *ast.mor_app_term(mor_app);
+            let AppTerm { head, args } = *ast.app_term(app);
+            if !app_head_is_mor(ast, scopes, signature, rule, sid, head) {
+                continue;
+            }
+            // Argument-count mismatches are reported by the populate pass.
+            let [arg] = ast.term_list(args).terms[..] else {
+                continue;
+            };
 
             check_morphism_application(
                 ast,
                 signature,
                 rule,
                 sid,
-                mor,
+                head,
                 arg,
                 &mut reported_non_mors,
                 &mut reported_non_members,
@@ -138,6 +146,45 @@ fn morphism_application_errors(
     }
 
     errors
+}
+
+/// Decides whether an application with the given head is a morphism
+/// application: identifier heads by scope resolution, member heads by the
+/// receiver's settled model scopes, and app/dom/cod heads are terms
+/// unconditionally.
+fn app_head_is_mor(
+    ast: &Ast,
+    scopes: &Scopes,
+    signature: &Signature,
+    rule: &RuleStructures,
+    sid: StructureId,
+    head: TermId,
+) -> bool {
+    match *ast.term(head) {
+        Term::Ident(id) => {
+            let name = &ast.ident_term(id).name;
+            matches!(
+                scopes.lookup(scopes.exit(head), name),
+                Some(Symbol::Var(_) | Symbol::Const(_))
+            )
+        }
+        Term::MemberConst(mid) => {
+            let MemberConstTerm { receiver, name } = *ast.member_const_term(mid);
+            let name = &ast.ident_term(name).name;
+            let Some(receiver_types) = concrete_types_of_term(rule, sid, receiver) else {
+                return false;
+            };
+            receiver_types.iter().any(|ct| {
+                let Some(model_decl) = signature.model_decl_for_type(ct.typ) else {
+                    return false;
+                };
+                let body = scopes.scope(scopes.unordered(model_decl));
+                matches!(body.symbols.get(name), Some(Symbol::Const(_)))
+            })
+        }
+        Term::App(_) | Term::Dom(_) | Term::Cod(_) => true,
+        Term::Wildcard => false,
+    }
 }
 
 fn check_morphism_application(
@@ -296,17 +343,18 @@ fn is_ctor_app_for_enum(
     let Term::App(app_id) = *ast.term(term) else {
         return false;
     };
-    let func = ast.app_term(app_id).func;
-    match *ast.func_expr(func) {
-        FuncExpr::Ambient(ambient_id) => {
-            let scope = scopes.entry(ambient_id);
-            let name = &ast.ambient_func_expr(ambient_id).name;
+    let head = ast.app_term(app_id).head;
+    match *ast.term(head) {
+        Term::Ident(ident_id) => {
+            let scope = scopes.entry(ident_id);
+            let name = &ast.ident_term(ident_id).name;
             let symbol = scopes.lookup(scope, name);
             ctor_symbol_has_codomain(symbol, enum_type, signature)
         }
-        FuncExpr::Member(member_id) => {
-            let MemberFuncExpr { term, name } = ast.member_func_expr(member_id).clone();
-            let Some(parent_types) = concrete_types_of_term(rule, sid, term) else {
+        Term::MemberConst(member_id) => {
+            let MemberConstTerm { receiver, name } = *ast.member_const_term(member_id);
+            let name = ast.ident_term(name).name.clone();
+            let Some(parent_types) = concrete_types_of_term(rule, sid, receiver) else {
                 return false;
             };
             parent_types.into_iter().any(|ct| {
@@ -318,6 +366,7 @@ fn is_ctor_app_for_enum(
                 ctor_symbol_has_codomain(sym, enum_type, signature)
             })
         }
+        Term::App(_) | Term::Wildcard | Term::Dom(_) | Term::Cod(_) => false,
     }
 }
 

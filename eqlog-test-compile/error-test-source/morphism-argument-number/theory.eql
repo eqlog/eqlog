@@ -1,0 +1,10 @@
+model Set {
+    type S;
+}
+
+rule {
+    if f: Mor(Set);
+    if s = dom(f);
+    if x: s.S;
+    if f(x, x)!;
+}

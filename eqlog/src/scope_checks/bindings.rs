@@ -134,12 +134,13 @@ impl<'a> BindingsChecker<'a> {
             }
             Term::Wildcard => {}
             Term::App(id) => {
-                let args = self.ast.app_term(id).args;
+                let AppTerm { head, args } = *self.ast.app_term(id);
+                self.check_epic_term(head);
                 for arg in self.ast.term_list(args).terms.clone() {
                     self.check_epic_term(arg);
                 }
             }
-            Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => {}
+            Term::Dom(_) | Term::Cod(_) => {}
         }
     }
 
@@ -153,7 +154,7 @@ impl<'a> BindingsChecker<'a> {
         let name = match *self.ast.term(var) {
             Term::Ident(id) => &self.ast.ident_term(id).name,
             Term::Wildcard => return,
-            Term::App(_) | Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) | Term::MorApp(_) => {
+            Term::App(_) | Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) => {
                 unreachable!("defined-then variable terms are checked by syntactic.rs")
             }
         };
@@ -169,13 +170,27 @@ impl<'a> BindingsChecker<'a> {
 
     /// Variables used as direct constructor arguments in a match pattern must
     /// be fresh in the enclosing scope. Non-var args (wildcards, Dom/Cod/etc.)
-    /// are handled by other passes.
+    /// are handled by other passes. Only constructor patterns bind their
+    /// argument variables; a morphism-application pattern is an ordinary
+    /// term, so patterns whose head does not name a ctor are skipped.
     fn check_match_case_pattern(&mut self, case: MatchCaseId) {
         let pattern = self.ast.match_case(case).pattern;
         let app = match *self.ast.term(pattern) {
             Term::App(id) => id,
             _ => return,
         };
+        let head = self.ast.app_term(app).head;
+        let ctor_head = match *self.ast.term(head) {
+            Term::Ident(id) => matches!(
+                self.scopes
+                    .lookup(self.scopes.exit(head), &self.ast.ident_term(id).name),
+                Some(Symbol::Ctor(_))
+            ),
+            _ => false,
+        };
+        if !ctor_head {
+            return;
+        }
         let args = self.ast.app_term(app).args;
         for arg in self.ast.term_list(args).terms.clone() {
             if let Term::Ident(id) = *self.ast.term(arg) {
