@@ -205,9 +205,6 @@ impl<'a> SyntacticChecker<'a> {
         }
     }
 
-    /// Rejects patterns that cannot be valid by shape alone: bare variables
-    /// and wildcards. Application patterns are validated by the symbol-lookup
-    /// pass, which knows what their head resolves to (ctor vs morphism).
     fn check_match_case(&self, case: MatchCaseId) -> Check {
         let pattern = self.ast.match_case(case).pattern;
         let location = self.ast.loc(pattern);
