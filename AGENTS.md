@@ -1,13 +1,27 @@
-Verify your commits.
-This includes:
-- tests
-- cargo fmt --check
-- Review your changes relative to the merge base of your upstream.
+- Comments and commit messages should explain "why", not "what".
+  Don't paraphrase code next to the comment.
+- If you write code, you should commit your changes.
+- No unicode (e.g. emojis, em dashes) in comments, code, commit messages etc.
+  Only if needed to test unicode support etc.
+- Most features should have tests.
+  Prefer integration tests via eqlog-test-eval/ and eqlot-test-compile/ over unit tests.
+- Never fall through to a "default" when matching enum values.
+  Be explicit about every case and fail hard on unknown values rather than silently continuing in a potentially invalid state.
+- You should almost never ignore errors:
+  Prefer failing over continuing in degraded state in most cases.
+  When an error is expected in normal operation, be as specific about the error as possible.
+  E.g. when reading a file that is not expected to exist, ignore only not found errors but not others.
+- No local imports (use inside function bodies).
+  Place all imports at module level.
+- Multiline strings: Use indoc, formatdoc, printdoc etc.
+- Format strings: Prefer the format!("{var}") variant over format!("{}", v).
+  Introduce variables if necessary, e.g. let var = var.display(); for paths.
+- Prefer explicit control flow over anyhow macros like bail! and ensure!.
+- Review your patch sets.
   You usually want to spawn a subagent for this.
   Check which files you touched, then invoke git diff once per file.
   Things to look out for:
   Is the latest version internally consistent?
   Clean up left-overs from earlier iterations.
   Comments should describe the code as it exists in the current version, not a change.
-  Doc comments should describe the contract the function promises to its callers, not its implementation details.
-  Comments are typically needed to add context to a code snippet, but are not needed when they just paraphrase code they appear next to.
+  Lean towards writing too few comments rather than too many.
