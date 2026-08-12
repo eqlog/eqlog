@@ -42,6 +42,6 @@ rule lookup_flagged_image_by_member {
     if f: Mor(Set);
     if set_0 = dom(f);
     if x: set_0.S;
-    if set.flagged(f(x));
+    if set.flagged(f.S(x));
     then reached_flagged_image(set);
 }

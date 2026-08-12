@@ -1,0 +1,6 @@
+Error: function "T" must be called with parentheses
+ --> error-test-source/sort-component-used-as-term/theory.eql:7
+  | 
+7 |     if f.T!;
+  |        ^^^  
+  | 

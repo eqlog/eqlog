@@ -170,6 +170,12 @@ pub enum CompileError {
     MorphismAppliedToNonMember {
         location: Location,
     },
+    MorphismApplicationMustNameSort {
+        location: Location,
+    },
+    NestedMorphismApplication {
+        location: Location,
+    },
 }
 
 impl<'a> From<ParseError<usize, Token<'a>, CompileError>> for CompileError {
@@ -263,6 +269,8 @@ impl CompileError {
             CompileError::MatchPatternIsMemberFunc { location } => *location,
             CompileError::NonMorphismAppliedAsMorphism { location } => *location,
             CompileError::MorphismAppliedToNonMember { location } => *location,
+            CompileError::MorphismApplicationMustNameSort { location } => *location,
+            CompileError::NestedMorphismApplication { location } => *location,
         }
     }
 }
@@ -304,6 +312,8 @@ pub enum CompileErrorKind {
     MatchPatternIsMemberFunc,
     NonMorphismAppliedAsMorphism,
     MorphismAppliedToNonMember,
+    MorphismApplicationMustNameSort,
+    NestedMorphismApplication,
 }
 
 impl From<&CompileError> for CompileErrorKind {
@@ -347,6 +357,10 @@ impl From<&CompileError> for CompileErrorKind {
             MatchPatternIsMemberFunc { .. } => CompileErrorKind::MatchPatternIsMemberFunc,
             NonMorphismAppliedAsMorphism { .. } => CompileErrorKind::NonMorphismAppliedAsMorphism,
             MorphismAppliedToNonMember { .. } => CompileErrorKind::MorphismAppliedToNonMember,
+            MorphismApplicationMustNameSort { .. } => {
+                CompileErrorKind::MorphismApplicationMustNameSort
+            }
+            NestedMorphismApplication { .. } => CompileErrorKind::NestedMorphismApplication,
         }
     }
 }
@@ -413,6 +427,12 @@ static COMPILE_ERROR_KIND_ORDER: LazyLock<HashSet<[CompileErrorKind; 2]>> = Lazy
         }
         if !relation.contains(&[k, FunctionUsedWithoutCall]) {
             relation.insert([FunctionUsedWithoutCall, k]);
+        }
+        if !relation.contains(&[k, MorphismApplicationMustNameSort]) {
+            relation.insert([MorphismApplicationMustNameSort, k]);
+        }
+        if !relation.contains(&[k, NestedMorphismApplication]) {
+            relation.insert([NestedMorphismApplication, k]);
         }
     }
     transitive_closure(&mut relation);
@@ -759,10 +779,7 @@ impl Display for CompileErrorWithContext {
                     "Member function expressions not allowed in match patterns\n"
                 )?;
                 write_loc(f, *location)?;
-                write!(
-                    f,
-                    "Only constructors may be used in patterns\n"
-                )?;
+                write!(f, "Only constructors may be used in patterns\n")?;
             }
             NonMorphismAppliedAsMorphism { location } => {
                 write!(f, "Expression is not a morphism\n")?;
@@ -770,6 +787,14 @@ impl Display for CompileErrorWithContext {
             }
             MorphismAppliedToNonMember { location } => {
                 write!(f, "Morphisms can only be applied to member elements\n")?;
+                write_loc(f, *location)?;
+            }
+            MorphismApplicationMustNameSort { location } => {
+                write!(f, "morphism application must name a member type\n")?;
+                write_loc(f, *location)?;
+            }
+            NestedMorphismApplication { location } => {
+                write!(f, "nested morphism application is not supported yet\n")?;
                 write_loc(f, *location)?;
             }
         }

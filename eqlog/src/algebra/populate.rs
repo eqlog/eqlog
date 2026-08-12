@@ -767,65 +767,34 @@ fn resolve_mor_projection_apps(
     apps.into_iter().collect()
 }
 
-/// Resolves every generated morphism-application function currently implied
-/// by the argument or result element's member types, provided the morphism
-/// element is untyped or has a compatible `Mor<M>` type.
-fn resolve_mor_app_apps(
-    mor_el: ElId,
-    arg_el: ElId,
-    result_el: Option<ElId>,
-    current: StructureId,
-    rule: &RuleStructures,
+/// If `receiver_typ` is `Mor(M)` and `name` is a type, enum or model in
+/// `M`'s body, the corresponding [`TypeId`].
+///
+/// The name is resolved in `M`, not on the receiver type. `Mor(M)` has no
+/// body; looking it up as a member of the receiver would always fail.
+pub(crate) fn mor_sort_type(
+    scopes: &Scopes,
     signature: &Signature,
-) -> Vec<(FuncId, Vec<ElId>)> {
-    let mor_types = concrete_types_of_el(rule, current, mor_el);
-    let mor_models: BTreeSet<TypeId> = mor_types
-        .iter()
-        .filter_map(|ct| match signature.type_(ct.typ).kind {
-            TypeKind::Mor(model_tid) => Some(model_tid),
-            _ => None,
-        })
-        .collect();
-    if !mor_types.is_empty() && mor_models.is_empty() {
-        return Vec::new();
-    }
-
-    let mut apps = BTreeSet::new();
-    for ct in concrete_types_of_el(rule, current, arg_el) {
-        insert_mor_app_candidate(signature, &mor_models, &mut apps, ct);
-    }
-
-    if let Some(result_el) = result_el {
-        for ct in concrete_types_of_el(rule, current, result_el) {
-            insert_mor_app_candidate(signature, &mor_models, &mut apps, ct);
-        }
-    }
-
-    apps.into_iter().collect()
-}
-
-fn member_model_type(signature: &Signature, ct: &ConcreteType) -> Option<TypeId> {
-    signature.type_(ct.typ).parents.last().copied()
-}
-
-fn insert_mor_app_candidate(
-    signature: &Signature,
-    mor_models: &BTreeSet<TypeId>,
-    apps: &mut BTreeSet<(FuncId, Vec<ElId>)>,
-    ct: ConcreteType,
-) {
-    let Some(fid) = signature.mor_app_func_for_type(ct.typ) else {
-        return;
+    receiver_typ: TypeId,
+    name: &str,
+) -> Option<TypeId> {
+    let TypeKind::Mor(model_tid) = signature.type_(receiver_typ).kind else {
+        return None;
     };
-    if !mor_models.is_empty()
-        && !member_model_type(signature, &ct).is_some_and(|m| mor_models.contains(&m))
-    {
-        return;
+    let model_decl = signature.model_decl_for_type(model_tid)?;
+    let body = scopes.scope(scopes.unordered(model_decl));
+    match body.symbols.get(name).copied()? {
+        Symbol::Type(td) => Some(signature.type_for_type_decl(td)),
+        Symbol::Enum(ed) => Some(signature.type_for_enum_decl(ed)),
+        Symbol::Model(md) => Some(signature.ids_for_model_decl(md).type_),
+        Symbol::Pred(_)
+        | Symbol::Func(_)
+        | Symbol::Const(_)
+        | Symbol::Ctor(_)
+        | Symbol::Rule(_)
+        | Symbol::Arg(_)
+        | Symbol::Var(_) => None,
     }
-    let Some((_model_parent, outer_parents)) = ct.parents.split_last() else {
-        return;
-    };
-    apps.insert((fid, outer_parents.to_vec()));
 }
 
 fn concrete_types_of_el(
@@ -918,15 +887,16 @@ fn emit_known_apps(
 /// [`FuncApp`]s.
 ///
 /// Classification of `head`:
-/// - bare [`Term::Ident`]: function/ctor if that symbol is in scope; morphism
-///   application if the name is already a bound var/const; otherwise neither
-///   (no fresh var is introduced at the head);
-/// - [`Term::MemberConst`]: member function/ctor and/or member const used as
-///   a morphism, depending on the member symbol kind;
-/// - app/dom/cod heads: morphism application only.
+/// - bare [`Term::Ident`]: function/ctor if that symbol is in scope;
+/// - [`Term::MemberConst`]: member function/ctor if the receiver is a model
+///   instance, or morphism application at a named sort if the receiver is a
+///   morphism and the name is a member type of that morphism's model;
+/// - app/dom/cod heads and other idents: not callees. Walked as terms so
+///   inner structure is populated, but they do not emit `mor_app`.
 ///
-/// Morphism heads require exactly one argument; other arities produce
-/// [`CompileError::MorphismArgumentNumber`].
+/// Sort-component heads require exactly one argument; other arities produce
+/// [`CompileError::MorphismArgumentNumber`]. The member type is the name
+/// written in the source, not inferred from the argument.
 ///
 /// `expected` is the result el previously committed for this term, if any.
 /// Returns `(result_el, changed)`.
@@ -944,7 +914,8 @@ fn emit_app(
 ) -> (ElId, bool) {
     let mut changed = false;
     let mut func_candidates: Vec<(FuncId, Vec<ElId>)> = Vec::new();
-    let mut head_is_mor = false;
+    let mut mor_candidates: BTreeSet<(FuncId, Vec<ElId>)> = BTreeSet::new();
+    let mut mor_el: Option<ElId> = None;
 
     match *ast.term(head) {
         Term::Ident(id) => {
@@ -955,12 +926,9 @@ fn emit_app(
             let func_id = match scopes.lookup(scopes.exit(head), name) {
                 Some(Symbol::Func(fd)) => signature.func_for_func_decl(fd),
                 Some(Symbol::Ctor(cd)) => signature.func_for_ctor_decl(cd),
-                Some(Symbol::Var(_) | Symbol::Const(_)) => {
-                    head_is_mor = true;
-                    None
-                }
-                // Args and undeclared names are not callees; leave unresolved.
-                Some(Symbol::Arg(_))
+                Some(Symbol::Var(_))
+                | Some(Symbol::Const(_))
+                | Some(Symbol::Arg(_))
                 | Some(Symbol::Type(_))
                 | Some(Symbol::Pred(_))
                 | Some(Symbol::Enum(_))
@@ -972,6 +940,9 @@ fn emit_app(
                 let parents =
                     rule.cat.structures[current.0].ambient_parents(&signature.func(fid).parents);
                 func_candidates.push((fid, parents));
+            } else {
+                let (_, c) = walk_term(head, current, rule, ast, scopes, signature, errors);
+                changed |= c;
             }
         }
         Term::MemberConst(mid) => {
@@ -986,18 +957,35 @@ fn emit_app(
                 let func_id = match body.symbols.get(name).copied() {
                     Some(Symbol::Func(fd)) => signature.func_for_func_decl(fd),
                     Some(Symbol::Ctor(cd)) => signature.func_for_ctor_decl(cd),
-                    Some(Symbol::Const(_)) => {
-                        head_is_mor = true;
-                        None
-                    }
-                    _ => None,
+                    Some(Symbol::Const(_))
+                    | Some(Symbol::Type(_))
+                    | Some(Symbol::Pred(_))
+                    | Some(Symbol::Enum(_))
+                    | Some(Symbol::Model(_))
+                    | Some(Symbol::Rule(_))
+                    | Some(Symbol::Arg(_))
+                    | Some(Symbol::Var(_))
+                    | None => None,
                 };
                 if let Some(fid) = func_id {
                     func_candidates.push((fid, parents));
                 }
             }
+            for ct in concrete_types_of_el(rule, current, receiver_el) {
+                let Some(sort_tid) = mor_sort_type(scopes, signature, ct.typ, name) else {
+                    continue;
+                };
+                let Some(fid) = signature.mor_app_func_for_type(sort_tid) else {
+                    continue;
+                };
+                mor_candidates.insert((fid, ct.parents));
+                mor_el = Some(receiver_el);
+            }
         }
-        Term::App(_) | Term::Dom(_) | Term::Cod(_) => head_is_mor = true,
+        Term::App(_) | Term::Dom(_) | Term::Cod(_) => {
+            let (_, c) = walk_term(head, current, rule, ast, scopes, signature, errors);
+            changed |= c;
+        }
         Term::Wildcard => {}
     }
 
@@ -1020,20 +1008,20 @@ fn emit_app(
         }
     }
 
-    if head_is_mor {
-        let (mor_el, c) = walk_term(head, current, rule, ast, scopes, signature, errors);
-        changed |= c;
+    if !mor_candidates.is_empty() {
         if arg_els.len() != 1 {
             errors.push(CompileError::MorphismArgumentNumber {
                 got: arg_els.len(),
                 location: ast.loc(app),
             });
-        } else {
-            let candidates =
-                resolve_mor_app_apps(mor_el, arg_els[0], result, current, rule, signature);
-            if let Some((el, c)) =
-                emit_known_apps(candidates, vec![mor_el, arg_els[0]], result, current, rule)
-            {
+        } else if let Some(mor_el) = mor_el {
+            if let Some((el, c)) = emit_known_apps(
+                mor_candidates.into_iter().collect(),
+                vec![mor_el, arg_els[0]],
+                result,
+                current,
+                rule,
+            ) {
                 changed |= c;
                 if result.is_none() {
                     result = Some(el);

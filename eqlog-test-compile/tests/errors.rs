@@ -337,6 +337,31 @@ fn dom_applied_as_mor() {
 }
 
 #[test]
+fn mor_app_must_name_sort() {
+    test_case(Path::new("mor-app-must-name-sort"));
+}
+
+#[test]
+fn sort_component_used_as_term() {
+    test_case(Path::new("sort-component-used-as-term"));
+}
+
+#[test]
+fn nested_mor_app_not_supported() {
+    test_case(Path::new("nested-mor-app-not-supported"));
+}
+
+#[test]
+fn mor_sort_not_a_type() {
+    test_case(Path::new("mor-sort-not-a-type"));
+}
+
+#[test]
+fn member_type_used_as_function() {
+    test_case(Path::new("member-type-used-as-function"));
+}
+
+#[test]
 fn bad_dep_pred_arg_type() {
     test_case(Path::new("bad-dep-pred-arg-type"));
 }

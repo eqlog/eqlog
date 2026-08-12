@@ -1,4 +1,4 @@
-Error: Expression is not a morphism
+Error: morphism application must name a member type
  --> error-test-source/dom-applied-as-mor/theory.eql:9
   | 
 9 |     if y = dom(f)(x);

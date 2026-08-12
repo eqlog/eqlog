@@ -1,6 +1,6 @@
 Error: Expression is not a morphism
-  --> error-test-source/non-mor-applied-as-mor/theory.eql:10
+  --> error-test-source/non-mor-applied-as-mor/theory.eql:11
    | 
-10 |     then f(x) = f(x);
-   |          ^           
+11 |     then f.T(x) = f.T(x);
+   |          ^               
    | 

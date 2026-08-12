@@ -1,0 +1,12 @@
+Error: expected function, found type "T"
+ --> error-test-source/member-type-used-as-function/theory.eql:8
+  | 
+8 |     then m.T(x) = m.T(x);
+  |          ^^^             
+  | 
+"T" declared as type here:
+ --> error-test-source/member-type-used-as-function/theory.eql:2
+  | 
+2 |     type T;
+  |     ^^^^^^^
+  | 

@@ -1,0 +1,13 @@
+model M {
+    model N {
+        type T;
+    }
+}
+
+rule {
+    if m: M;
+    if n: m.N;
+    if f: Mor(M);
+    if x: n.T;
+    then f.N.T(x)!;
+}

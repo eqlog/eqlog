@@ -2,9 +2,9 @@ model M {
     type T;
 }
 
-rule bad_rule {
+rule {
     if m: M;
-    if x: m.T;
     if f: Mor(M);
-    then f.T(x)!;
+    if x: m.T;
+    then f.foo(x)!;
 }

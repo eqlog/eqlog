@@ -1,0 +1,8 @@
+Apply morphisms as f.T(x), not f(x).
+
+A morphism is a record of functions, one per member sort. Bare f(x)
+does not say which sort is mapped, and overloads function application
+with morphism application. The sort-component spelling f.T(x) is
+already in the grammar; T is looked up in the body of the model f is
+a morphism of, not on type Mor(M). Nested paths such as f.N.T(x) are
+rejected until nested models exist.

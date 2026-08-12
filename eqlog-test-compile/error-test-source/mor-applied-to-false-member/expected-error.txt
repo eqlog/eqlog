@@ -1,6 +1,6 @@
 Error: Morphisms can only be applied to member elements
-  --> error-test-source/mor-applied-to-false-member/theory.eql:12
+  --> error-test-source/mor-applied-to-false-member/theory.eql:13
    | 
-12 |     then f(x) = f(x);
-   |            ^         
+13 |     then f.T(x) = f.T(x);
+   |              ^           
    | 
