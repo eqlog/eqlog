@@ -17,7 +17,7 @@ pub mod symbols;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::algebra::match_check::check_rule_matches;
-use crate::algebra::populate::{mor_sort_type, walk_rule, MorphismKind, RuleStructures};
+use crate::algebra::populate::{mor_type_component, walk_rule, MorphismKind, RuleStructures};
 use crate::algebra::signature::{Signature, TypeId, TypeKind};
 use crate::algebra::structure::{ConcreteType, ElId, Structure, StructureId, TypeConflict};
 use crate::ast::*;
@@ -122,7 +122,7 @@ fn morphism_application_errors(
                 continue;
             };
             let AppTerm { head, args } = *ast.app_term(app);
-            if !is_sort_component(ast, scopes, signature, rule, sid, head) {
+            if !is_mor_type_component(ast, scopes, signature, rule, sid, head) {
                 continue;
             }
             // Argument-count mismatches are reported by the populate pass.
@@ -147,7 +147,7 @@ fn morphism_application_errors(
     errors
 }
 
-fn is_sort_component(
+fn is_mor_type_component(
     ast: &Ast,
     scopes: &Scopes,
     signature: &Signature,
@@ -167,7 +167,7 @@ fn is_sort_component(
             };
             receiver_types
                 .iter()
-                .any(|ct| mor_sort_type(scopes, signature, ct.typ, name).is_some())
+                .any(|ct| mor_type_component(scopes, signature, ct.typ, name).is_some())
         }
         Term::Ident(_) | Term::App(_) | Term::Dom(_) | Term::Cod(_) | Term::Wildcard => false,
     }
@@ -197,26 +197,26 @@ fn check_morphism_application(
         return;
     };
 
-    let mut sorts: Vec<(TypeId, TypeId)> = Vec::new();
+    let mut types: Vec<(TypeId, TypeId)> = Vec::new();
     for ct in &receiver_types {
         if let TypeKind::Mor(model_tid) = signature.type_(ct.typ).kind {
-            if let Some(sort_tid) = mor_sort_type(scopes, signature, ct.typ, name) {
-                sorts.push((model_tid, sort_tid));
+            if let Some(type_tid) = mor_type_component(scopes, signature, ct.typ, name) {
+                types.push((model_tid, type_tid));
             }
         }
     }
 
-    if sorts.is_empty() {
+    if types.is_empty() {
         return;
     }
 
     let Some(arg_types) = concrete_types_of_term(rule, sid, arg) else {
         return;
     };
-    for (model_tid, sort_tid) in sorts {
+    for (model_tid, type_tid) in types {
         let arg_is_member = arg_types
             .iter()
-            .any(|ct| ct.typ == sort_tid && member_model_type(signature, ct) == Some(model_tid));
+            .any(|ct| ct.typ == type_tid && member_model_type(signature, ct) == Some(model_tid));
         if !arg_is_member {
             if reported_non_members.insert(arg) {
                 errors.push(CompileError::MorphismAppliedToNonMember {

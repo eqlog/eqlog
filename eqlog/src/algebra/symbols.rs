@@ -9,7 +9,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::algebra::populate::{mor_sort_type, RuleStructures};
+use crate::algebra::populate::{mor_type_component, RuleStructures};
 use crate::algebra::signature::{Signature, TypeKind};
 use crate::algebra::structure::{ConcreteType, StructureId};
 use crate::ast::*;
@@ -235,7 +235,7 @@ impl<'a> Checker<'a> {
                     name,
                 } = *self.ast.term_member(id);
                 let name = self.ast.ident_term(name).name.clone();
-                if self.is_sort_component(term, ctx) {
+                if self.is_mor_type_component(term, ctx) {
                     self.walk_term(receiver, ctx);
                     self.errors.push(CompileError::FunctionUsedWithoutCall {
                         name,
@@ -243,7 +243,7 @@ impl<'a> Checker<'a> {
                     });
                     return;
                 }
-                if self.is_sort_component(receiver, ctx) {
+                if self.is_mor_type_component(receiver, ctx) {
                     self.walk_mor_path_root(receiver, ctx);
                     self.errors.push(CompileError::FunctionUsedWithoutCall {
                         name,
@@ -280,7 +280,7 @@ impl<'a> Checker<'a> {
                     name,
                 } = *self.ast.term_member(mid);
                 let name = self.ast.ident_term(name).name.clone();
-                if self.is_sort_component(receiver, ctx) {
+                if self.is_mor_type_component(receiver, ctx) {
                     self.errors.push(CompileError::NestedMorphismApplication {
                         location: self.ast.loc(head),
                     });
@@ -310,7 +310,7 @@ impl<'a> Checker<'a> {
             Term::App(_) | Term::Dom(_) | Term::Cod(_) => {
                 self.walk_term(head, ctx);
                 self.errors
-                    .push(CompileError::MorphismApplicationMustNameSort {
+                    .push(CompileError::MorphismApplicationMustNameType {
                         location: self.ast.loc(head),
                     });
             }
@@ -323,13 +323,13 @@ impl<'a> Checker<'a> {
             Some(Symbol::Func(_) | Symbol::Ctor(_)) => {}
             Some(Symbol::Var(_)) => {
                 self.errors
-                    .push(CompileError::MorphismApplicationMustNameSort { location: used_at });
+                    .push(CompileError::MorphismApplicationMustNameType { location: used_at });
             }
             Some(Symbol::Const(cd)) => {
                 let result = self.ast.const_decl(cd).result;
                 if matches!(*self.ast.type_expr(result), TypeExpr::Mor(_)) {
                     self.errors
-                        .push(CompileError::MorphismApplicationMustNameSort { location: used_at });
+                        .push(CompileError::MorphismApplicationMustNameType { location: used_at });
                 } else {
                     self.errors.push(CompileError::ConstCalledAsFunction {
                         name,
@@ -358,7 +358,7 @@ impl<'a> Checker<'a> {
 
         // A morphism-application pattern is an ordinary term, matched by
         // unification rather than by case split.
-        if self.is_sort_component(head, ctx) {
+        if self.is_mor_type_component(head, ctx) {
             self.walk_term(pattern, ctx);
             return;
         }
@@ -400,7 +400,7 @@ impl<'a> Checker<'a> {
         for arg in self.ast.term_list(args).terms.clone() {
             if let Term::App(arg_app) = *self.ast.term(arg) {
                 let arg_head = self.ast.app_term(arg_app).head;
-                if !self.is_sort_component(arg_head, ctx) {
+                if !self.is_mor_type_component(arg_head, ctx) {
                     self.errors.push(CompileError::MatchPatternCtorArgIsApp {
                         location: self.ast.loc(arg),
                     });
@@ -489,7 +489,7 @@ impl<'a> Checker<'a> {
         structure.concrete_types_of(*el)
     }
 
-    fn is_sort_component(&self, term: TermId, ctx: RuleCtx<'a>) -> bool {
+    fn is_mor_type_component(&self, term: TermId, ctx: RuleCtx<'a>) -> bool {
         let Term::Member(mid) = *self.ast.term(term) else {
             return false;
         };
@@ -500,7 +500,7 @@ impl<'a> Checker<'a> {
         let name = self.ast.ident_term(name).name.clone();
         self.receiver_types(receiver, ctx)
             .into_iter()
-            .any(|ct| mor_sort_type(self.scopes, self.signature, ct.typ, &name).is_some())
+            .any(|ct| mor_type_component(self.scopes, self.signature, ct.typ, &name).is_some())
     }
 
     fn walk_mor_path_root(&mut self, term: TermId, ctx: RuleCtx<'a>) {
@@ -525,7 +525,7 @@ impl<'a> Checker<'a> {
                 continue;
             };
             saw_mor = true;
-            if mor_sort_type(self.scopes, self.signature, ct.typ, name).is_some() {
+            if mor_type_component(self.scopes, self.signature, ct.typ, name).is_some() {
                 continue;
             }
             let Some(model_decl) = self.signature.model_decl_for_type(model_tid) else {

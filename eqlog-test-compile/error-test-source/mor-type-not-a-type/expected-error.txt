@@ -1,5 +1,5 @@
 Error: undeclared symbol "foo"
- --> error-test-source/mor-sort-not-a-type/theory.eql:9
+ --> error-test-source/mor-type-not-a-type/theory.eql:9
   | 
 9 |     then f.foo(x)!;
   |          ^^^^^     

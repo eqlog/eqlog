@@ -337,13 +337,13 @@ fn dom_applied_as_mor() {
 }
 
 #[test]
-fn mor_app_must_name_sort() {
-    test_case(Path::new("mor-app-must-name-sort"));
+fn mor_app_must_name_type() {
+    test_case(Path::new("mor-app-must-name-type"));
 }
 
 #[test]
-fn sort_component_used_as_term() {
-    test_case(Path::new("sort-component-used-as-term"));
+fn mor_type_component_used_as_term() {
+    test_case(Path::new("mor-type-component-used-as-term"));
 }
 
 #[test]
@@ -352,8 +352,8 @@ fn nested_mor_app_not_supported() {
 }
 
 #[test]
-fn mor_sort_not_a_type() {
-    test_case(Path::new("mor-sort-not-a-type"));
+fn mor_type_not_a_type() {
+    test_case(Path::new("mor-type-not-a-type"));
 }
 
 #[test]

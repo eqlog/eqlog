@@ -771,8 +771,8 @@ fn resolve_mor_projection_apps(
     apps.into_iter().collect()
 }
 
-/// `Mor(M)` has no body, so the sort name is looked up in `M` instead.
-pub(crate) fn mor_sort_type(
+/// `Mor(M)` has no body, so the type name is looked up in `M` instead.
+pub(crate) fn mor_type_component(
     scopes: &Scopes,
     signature: &Signature,
     receiver_typ: TypeId,
@@ -886,7 +886,7 @@ fn emit_known_apps(
 /// Resolves the application of `head` to `arg_els` and emits the corresponding
 /// [`FuncApp`]s.
 ///
-/// The mor_app sort is the name written on the head, not inferred from the
+/// The mor_app type is the name written on the head, not inferred from the
 /// argument. Non-callee heads are still walked so nested terms are populated.
 ///
 /// `expected` is the result el previously committed for this term, if any.
@@ -966,10 +966,10 @@ fn emit_app(
                 }
             }
             for ct in concrete_types_of_el(rule, current, receiver_el) {
-                let Some(sort_tid) = mor_sort_type(scopes, signature, ct.typ, name) else {
+                let Some(type_tid) = mor_type_component(scopes, signature, ct.typ, name) else {
                     continue;
                 };
-                let Some(fid) = signature.mor_app_func_for_type(sort_tid) else {
+                let Some(fid) = signature.mor_app_func_for_type(type_tid) else {
                     continue;
                 };
                 mor_candidates.insert((fid, ct.parents));
