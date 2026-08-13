@@ -1,11 +1,10 @@
-type X;
-
 model M {
     type T;
 }
 
 rule {
+    if m: M;
     if f: Mor(M);
-    if x: X;
-    then f.T(x) = f.T(x);
+    if x: m.T;
+    then f(x)!;
 }

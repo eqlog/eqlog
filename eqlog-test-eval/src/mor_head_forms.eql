@@ -1,5 +1,4 @@
-// Coverage for the unified application syntax: morphism applications whose
-// head is an ambient const, a member const, or itself an application.
+// Morphism application whose morphism is a const, an application, or a member const.
 
 model Set {
     type S;
@@ -11,7 +10,7 @@ rule const_mor_total {
     if s = dom(c);
     if x: s.S;
     if cod(c)!;
-    then c(x)!;
+    then c.S(x)!;
 }
 
 func pick(s: Set) -> Mor(Set);
@@ -21,7 +20,7 @@ rule picked_mor_total {
     if t = dom(f);
     if x: t.S;
     if cod(f)!;
-    then pick(s)(x)!;
+    then pick(s).S(x)!;
 }
 
 pred reached(s: Set);
@@ -31,9 +30,9 @@ rule mor_app_pattern {
     if t = dom(f);
     if x: t.S;
     if cod(f)!;
-    if y = f(x);
+    if y = f.S(x);
     match y {
-        f(x) => {
+        f.S(x) => {
             then reached(s);
         }
     }
@@ -49,5 +48,5 @@ rule bundle_mor_total {
     if s = dom(b.mor);
     if x: s.Elem;
     if cod(b.mor)!;
-    then b.mor(x)!;
+    then b.mor.Elem(x)!;
 }

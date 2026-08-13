@@ -17,7 +17,7 @@ pub mod symbols;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::algebra::match_check::check_rule_matches;
-use crate::algebra::populate::{walk_rule, MorphismKind, RuleStructures};
+use crate::algebra::populate::{mor_type_component, walk_rule, MorphismKind, RuleStructures};
 use crate::algebra::signature::{Signature, TypeId, TypeKind};
 use crate::algebra::structure::{ConcreteType, ElId, Structure, StructureId, TypeConflict};
 use crate::ast::*;
@@ -113,7 +113,6 @@ fn morphism_application_errors(
     rule: &RuleStructures,
 ) -> Vec<CompileError> {
     let mut errors = Vec::new();
-    let mut reported_non_mors = BTreeSet::new();
     let mut reported_non_members = BTreeSet::new();
 
     for (sid, semantic_els) in rule.semantic_els.iter().enumerate() {
@@ -123,7 +122,7 @@ fn morphism_application_errors(
                 continue;
             };
             let AppTerm { head, args } = *ast.app_term(app);
-            if !app_head_is_mor(ast, scopes, signature, rule, sid, head) {
+            if !is_mor_type_component(ast, scopes, signature, rule, sid, head) {
                 continue;
             }
             // Argument-count mismatches are reported by the populate pass.
@@ -133,12 +132,12 @@ fn morphism_application_errors(
 
             check_morphism_application(
                 ast,
+                scopes,
                 signature,
                 rule,
                 sid,
                 head,
                 arg,
-                &mut reported_non_mors,
                 &mut reported_non_members,
                 &mut errors,
             );
@@ -148,11 +147,7 @@ fn morphism_application_errors(
     errors
 }
 
-/// Decides whether an application with the given head is a morphism
-/// application: identifier heads by scope resolution, member heads by the
-/// receiver's settled model scopes, and app/dom/cod heads are terms
-/// unconditionally.
-fn app_head_is_mor(
+fn is_mor_type_component(
     ast: &Ast,
     scopes: &Scopes,
     signature: &Signature,
@@ -161,71 +156,67 @@ fn app_head_is_mor(
     head: TermId,
 ) -> bool {
     match *ast.term(head) {
-        Term::Ident(id) => {
-            let name = &ast.ident_term(id).name;
-            matches!(
-                scopes.lookup(scopes.exit(head), name),
-                Some(Symbol::Var(_) | Symbol::Const(_))
-            )
-        }
-        Term::MemberConst(mid) => {
-            let MemberConstTerm { receiver, name } = *ast.member_const_term(mid);
+        Term::Member(mid) => {
+            let TermMember {
+                term: receiver,
+                name,
+            } = *ast.term_member(mid);
             let name = &ast.ident_term(name).name;
             let Some(receiver_types) = concrete_types_of_term(rule, sid, receiver) else {
                 return false;
             };
-            receiver_types.iter().any(|ct| {
-                let Some(model_decl) = signature.model_decl_for_type(ct.typ) else {
-                    return false;
-                };
-                let body = scopes.scope(scopes.unordered(model_decl));
-                matches!(body.symbols.get(name), Some(Symbol::Const(_)))
-            })
+            receiver_types
+                .iter()
+                .any(|ct| mor_type_component(scopes, signature, ct.typ, name).is_some())
         }
-        Term::App(_) | Term::Dom(_) | Term::Cod(_) => true,
-        Term::Wildcard => false,
+        Term::Ident(_) | Term::App(_) | Term::Dom(_) | Term::Cod(_) | Term::Wildcard => false,
     }
 }
 
 fn check_morphism_application(
     ast: &Ast,
+    scopes: &Scopes,
     signature: &Signature,
     rule: &RuleStructures,
     sid: StructureId,
-    mor: TermId,
+    head: TermId,
     arg: TermId,
-    reported_non_mors: &mut BTreeSet<TermId>,
     reported_non_members: &mut BTreeSet<TermId>,
     errors: &mut Vec<CompileError>,
 ) {
-    let Some(mor_types) = concrete_types_of_term(rule, sid, mor) else {
+    let Term::Member(mid) = *ast.term(head) else {
+        return;
+    };
+    let TermMember {
+        term: receiver,
+        name,
+    } = *ast.term_member(mid);
+    let name = &ast.ident_term(name).name;
+
+    let Some(receiver_types) = concrete_types_of_term(rule, sid, receiver) else {
         return;
     };
 
-    let mor_models: BTreeSet<TypeId> = mor_types
-        .iter()
-        .filter_map(|ct| match signature.type_(ct.typ).kind {
-            TypeKind::Mor(model_tid) => Some(model_tid),
-            _ => None,
-        })
-        .collect();
-
-    if mor_models.is_empty() {
-        if reported_non_mors.insert(mor) {
-            errors.push(CompileError::NonMorphismAppliedAsMorphism {
-                location: ast.loc(mor),
-            });
+    let mut types: Vec<(TypeId, TypeId)> = Vec::new();
+    for ct in &receiver_types {
+        if let TypeKind::Mor(model_tid) = signature.type_(ct.typ).kind {
+            if let Some(type_tid) = mor_type_component(scopes, signature, ct.typ, name) {
+                types.push((model_tid, type_tid));
+            }
         }
+    }
+
+    if types.is_empty() {
         return;
     }
 
     let Some(arg_types) = concrete_types_of_term(rule, sid, arg) else {
         return;
     };
-    for model_tid in mor_models {
+    for (model_tid, type_tid) in types {
         let arg_is_member = arg_types
             .iter()
-            .any(|ct| member_model_type(signature, ct) == Some(model_tid));
+            .any(|ct| ct.typ == type_tid && member_model_type(signature, ct) == Some(model_tid));
         if !arg_is_member {
             if reported_non_members.insert(arg) {
                 errors.push(CompileError::MorphismAppliedToNonMember {
@@ -351,8 +342,11 @@ fn is_ctor_app_for_enum(
             let symbol = scopes.lookup(scope, name);
             ctor_symbol_has_codomain(symbol, enum_type, signature)
         }
-        Term::MemberConst(member_id) => {
-            let MemberConstTerm { receiver, name } = *ast.member_const_term(member_id);
+        Term::Member(member_id) => {
+            let TermMember {
+                term: receiver,
+                name,
+            } = *ast.term_member(member_id);
             let name = ast.ident_term(name).name.clone();
             let Some(parent_types) = concrete_types_of_term(rule, sid, receiver) else {
                 return false;

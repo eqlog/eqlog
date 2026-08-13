@@ -1,0 +1,6 @@
+Error: undeclared symbol "T"
+ --> error-test-source/member-pred-on-morphism/theory.eql:9
+  | 
+9 |     then f.T(x);
+  |          ^^^    
+  | 

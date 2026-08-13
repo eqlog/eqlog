@@ -6,5 +6,5 @@ rule {
     if f: Mor(Set);
     if s = dom(f);
     if x: s.S;
-    if f(x, x)!;
+    if f.S(x, x)!;
 }

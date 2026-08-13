@@ -2,10 +2,11 @@ type F;
 type X;
 
 model M {
+    type T;
 }
 
 rule {
     if f: F;
     if x: X;
-    then f(x) = f(x);
+    then f.T(x) = f.T(x);
 }

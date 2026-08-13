@@ -1,14 +1,11 @@
 model M {
     type T;
-}
-
-model N {
-    type X;
+    type S;
 }
 
 rule {
+    if m: M;
     if f: Mor(M);
-    if n: N;
-    if x: n.X;
+    if x: m.S;
     then f.T(x) = f.T(x);
 }

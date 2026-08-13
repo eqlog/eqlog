@@ -1,0 +1,6 @@
+Error: type of term undetermined
+ --> error-test-source/undetermined-mor-app-type/theory.eql:9
+  | 
+9 |     then f.T(x)!;
+  |          ^^^^^^  
+  | 

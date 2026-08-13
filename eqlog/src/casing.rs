@@ -195,10 +195,7 @@ impl<'a> CasingChecker<'a> {
                 self.walk_term(head)?;
                 self.walk_term_list(args)
             }
-            Term::MemberConst(id) => {
-                let MemberConstTerm { receiver, .. } = *self.ast.member_const_term(id);
-                self.walk_term(receiver)
-            }
+            Term::Member(id) => self.walk_term(self.ast.term_member(id).term),
             Term::Dom(id) => self.walk_term(self.ast.dom_term(id).arg),
             Term::Cod(id) => self.walk_term(self.ast.cod_term(id).arg),
         }
@@ -229,14 +226,14 @@ impl<'a> CasingChecker<'a> {
     fn walk_type_expr(&self, type_expr: TypeExprId) -> Check {
         match *self.ast.type_expr(type_expr) {
             TypeExpr::Ambient(_) | TypeExpr::Mor(_) => Ok(()),
-            TypeExpr::Member(id) => self.walk_term(self.ast.member_type_expr(id).term),
+            TypeExpr::Member(id) => self.walk_term(self.ast.term_member(id).term),
         }
     }
 
     fn walk_pred_expr(&self, pred_expr: PredExprId) -> Check {
         match *self.ast.pred_expr(pred_expr) {
             PredExpr::Ambient(_) => Ok(()),
-            PredExpr::Member(id) => self.walk_term(self.ast.member_pred_expr(id).term),
+            PredExpr::Member(id) => self.walk_term(self.ast.term_member(id).term),
         }
     }
 }

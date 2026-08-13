@@ -43,7 +43,7 @@ typed_id!(ArgDeclListId);
 typed_id!(TermId);
 typed_id!(IdentTermId);
 typed_id!(AppTermId);
-typed_id!(MemberConstTermId);
+typed_id!(TermMemberId);
 typed_id!(DomTermId);
 typed_id!(CodTermId);
 
@@ -51,12 +51,10 @@ typed_id!(TermListId);
 
 typed_id!(TypeExprId);
 typed_id!(AmbientTypeExprId);
-typed_id!(MemberTypeExprId);
 typed_id!(MorTypeExprId);
 
 typed_id!(PredExprId);
 typed_id!(AmbientPredExprId);
-typed_id!(MemberPredExprId);
 
 typed_id!(IfAtomId);
 typed_id!(ThenAtomId);
@@ -161,8 +159,8 @@ pub struct AppTerm {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct MemberConstTerm {
-    pub receiver: TermId,
+pub struct TermMember {
+    pub term: TermId,
     pub name: IdentTermId,
 }
 
@@ -181,7 +179,7 @@ pub enum Term {
     Ident(IdentTermId),
     Wildcard,
     App(AppTermId),
-    MemberConst(MemberConstTermId),
+    Member(TermMemberId),
     Dom(DomTermId),
     Cod(CodTermId),
 }
@@ -197,12 +195,6 @@ pub struct AmbientTypeExpr {
 }
 
 #[derive(Clone, Debug)]
-pub struct MemberTypeExpr {
-    pub term: TermId,
-    pub name: String,
-}
-
-#[derive(Clone, Debug)]
 pub struct MorTypeExpr {
     pub name: String,
 }
@@ -210,7 +202,7 @@ pub struct MorTypeExpr {
 #[derive(Copy, Clone, Debug)]
 pub enum TypeExpr {
     Ambient(AmbientTypeExprId),
-    Member(MemberTypeExprId),
+    Member(TermMemberId),
     Mor(MorTypeExprId),
 }
 
@@ -219,16 +211,10 @@ pub struct AmbientPredExpr {
     pub name: String,
 }
 
-#[derive(Clone, Debug)]
-pub struct MemberPredExpr {
-    pub term: TermId,
-    pub name: String,
-}
-
 #[derive(Copy, Clone, Debug)]
 pub enum PredExpr {
     Ambient(AmbientPredExprId),
-    Member(MemberPredExprId),
+    Member(TermMemberId),
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -327,17 +313,15 @@ pub enum Node {
     Term(Term),
     IdentTerm(IdentTerm),
     AppTerm(AppTerm),
-    MemberConstTerm(MemberConstTerm),
+    TermMember(TermMember),
     DomTerm(DomTerm),
     CodTerm(CodTerm),
     TermList(TermList),
     TypeExpr(TypeExpr),
     AmbientTypeExpr(AmbientTypeExpr),
-    MemberTypeExpr(MemberTypeExpr),
     MorTypeExpr(MorTypeExpr),
     PredExpr(PredExpr),
     AmbientPredExpr(AmbientPredExpr),
-    MemberPredExpr(MemberPredExpr),
     IfAtom(IfAtom),
     ThenAtom(ThenAtom),
     EqualAtom(EqualAtom),
@@ -412,12 +396,7 @@ accessor!(
 accessor!(term, push_term, TermId, Term);
 accessor!(ident_term, push_ident_term, IdentTermId, IdentTerm);
 accessor!(app_term, push_app_term, AppTermId, AppTerm);
-accessor!(
-    member_const_term,
-    push_member_const_term,
-    MemberConstTermId,
-    MemberConstTerm
-);
+accessor!(term_member, push_term_member, TermMemberId, TermMember);
 accessor!(dom_term, push_dom_term, DomTermId, DomTerm);
 accessor!(cod_term, push_cod_term, CodTermId, CodTerm);
 accessor!(term_list, push_term_list, TermListId, TermList);
@@ -427,12 +406,6 @@ accessor!(
     push_ambient_type_expr,
     AmbientTypeExprId,
     AmbientTypeExpr
-);
-accessor!(
-    member_type_expr,
-    push_member_type_expr,
-    MemberTypeExprId,
-    MemberTypeExpr
 );
 accessor!(
     mor_type_expr,
@@ -446,12 +419,6 @@ accessor!(
     push_ambient_pred_expr,
     AmbientPredExprId,
     AmbientPredExpr
-);
-accessor!(
-    member_pred_expr,
-    push_member_pred_expr,
-    MemberPredExprId,
-    MemberPredExpr
 );
 accessor!(if_atom, push_if_atom, IfAtomId, IfAtom);
 accessor!(then_atom, push_then_atom, ThenAtomId, ThenAtom);

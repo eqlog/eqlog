@@ -1,9 +1,0 @@
-model Set {
-    type S;
-}
-
-const c: Mor(Set);
-
-rule {
-    if c()!;
-}

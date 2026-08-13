@@ -1,0 +1,6 @@
+Error: nested morphism application is not supported yet
+  --> error-test-source/nested-mor-app-not-supported/theory.eql:12
+   | 
+12 |     then f.N.T(x)!;
+   |          ^^^^^     
+   | 

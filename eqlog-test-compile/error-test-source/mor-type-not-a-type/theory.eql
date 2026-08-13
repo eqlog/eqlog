@@ -1,0 +1,11 @@
+model M {
+    type T;
+    func foo(T) -> T;
+}
+
+rule {
+    if m: M;
+    if f: Mor(M);
+    if x: m.T;
+    then f.foo(x)!;
+}

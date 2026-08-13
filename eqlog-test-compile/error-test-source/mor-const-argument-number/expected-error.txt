@@ -1,6 +1,0 @@
-Error: morphism takes 1 argument but 0 were supplied
- --> error-test-source/mor-const-argument-number/theory.eql:8
-  | 
-8 |     if c()!;
-  |        ^^^  
-  | 

@@ -316,9 +316,9 @@ impl Signature {
 /// any pred/func/ctor whose arg types or result type fail to resolve, but
 /// records the failure as a [`CompileError`].
 ///
-/// `MemberTypeExpr`s in arg-decl positions are silently skipped here because
-/// [`crate::syntactic::check_syntactic`] already emits a higher-priority
-/// [`CompileError::IllegalMemberTypeExprInArgDecl`] for them.
+/// Member type expressions in arg-decl positions are silently skipped here
+/// because [`crate::syntactic::check_syntactic`] already emits a
+/// higher-priority [`CompileError::IllegalMemberTypeExprInArgDecl`] for them.
 pub fn build_signature(
     ast: &Ast,
     scopes: &Scopes,

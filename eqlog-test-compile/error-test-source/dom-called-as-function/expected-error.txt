@@ -1,0 +1,6 @@
+Error: type of term undetermined
+ --> error-test-source/dom-called-as-function/theory.eql:9
+  | 
+9 |     if y = dom(f)(x);
+  |        ^             
+  | 

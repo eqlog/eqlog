@@ -166,10 +166,7 @@ impl<'a> OccurrencesChecker<'a> {
                 self.collect_term(head, occ);
                 self.collect_term_list(args, occ);
             }
-            Term::MemberConst(id) => {
-                let receiver = self.ast.member_const_term(id).receiver;
-                self.collect_term(receiver, occ);
-            }
+            Term::Member(id) => self.collect_term(self.ast.term_member(id).term, occ),
             Term::Dom(id) => self.collect_term(self.ast.dom_term(id).arg, occ),
             Term::Cod(id) => self.collect_term(self.ast.cod_term(id).arg, occ),
         }
@@ -184,14 +181,14 @@ impl<'a> OccurrencesChecker<'a> {
     fn collect_type_expr(&self, type_expr: TypeExprId, occ: &mut Vec<VarOccurrence>) {
         match *self.ast.type_expr(type_expr) {
             TypeExpr::Ambient(_) | TypeExpr::Mor(_) => {}
-            TypeExpr::Member(id) => self.collect_term(self.ast.member_type_expr(id).term, occ),
+            TypeExpr::Member(id) => self.collect_term(self.ast.term_member(id).term, occ),
         }
     }
 
     fn collect_pred_expr(&self, pred_expr: PredExprId, occ: &mut Vec<VarOccurrence>) {
         match *self.ast.pred_expr(pred_expr) {
             PredExpr::Ambient(_) => {}
-            PredExpr::Member(id) => self.collect_term(self.ast.member_pred_expr(id).term, occ),
+            PredExpr::Member(id) => self.collect_term(self.ast.term_member(id).term, occ),
         }
     }
 }

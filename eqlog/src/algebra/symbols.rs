@@ -9,9 +9,9 @@
 
 use std::collections::BTreeMap;
 
-use crate::algebra::populate::RuleStructures;
-use crate::algebra::signature::Signature;
-use crate::algebra::structure::StructureId;
+use crate::algebra::populate::{mor_type_component, RuleStructures};
+use crate::algebra::signature::{Signature, TypeKind};
+use crate::algebra::structure::{ConcreteType, StructureId};
 use crate::ast::*;
 use crate::error::{CompileError, SymbolKind};
 use crate::grammar_util::Location;
@@ -229,12 +229,42 @@ impl<'a> Checker<'a> {
                     self.walk_term(arg, ctx);
                 }
             }
-            Term::MemberConst(id) => {
-                let MemberConstTerm { receiver, name } = *self.ast.member_const_term(id);
-                self.walk_term(receiver, ctx);
+            Term::Member(id) => {
+                let TermMember {
+                    term: receiver,
+                    name,
+                } = *self.ast.term_member(id);
                 let name = self.ast.ident_term(name).name.clone();
+                if self.is_mor_type_component(term, ctx) {
+                    self.walk_term(receiver, ctx);
+                    self.errors.push(CompileError::FunctionUsedWithoutCall {
+                        name,
+                        location: self.ast.loc(term),
+                    });
+                    return;
+                }
+                if self.is_mor_type_component(receiver, ctx) {
+                    self.walk_mor_path_root(receiver, ctx);
+                    self.errors.push(CompileError::FunctionUsedWithoutCall {
+                        name,
+                        location: self.ast.loc(term),
+                    });
+                    return;
+                }
+                self.walk_term(receiver, ctx);
+                if self.check_mor_name(receiver, &name, self.ast.loc(term), ctx) {
+                    return;
+                }
+                let mut saw_model = false;
                 for scope in self.member_receiver_scopes(receiver, ctx) {
+                    saw_model = true;
                     self.check_member_const_lookup(scope, name.clone(), self.ast.loc(term));
+                }
+                if !saw_model && self.receiver_has_known_non_model_type(receiver, ctx) {
+                    self.errors.push(CompileError::UndeclaredSymbol {
+                        name,
+                        used_at: self.ast.loc(term),
+                    });
                 }
             }
             Term::Dom(id) => self.walk_term(self.ast.dom_term(id).arg, ctx),
@@ -242,10 +272,6 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// Checks the head of an application. Var heads and heads of term shape
-    /// are morphism heads and need no symbol diagnostics of their own; a
-    /// const head must have a morphism type. Everything else must be a
-    /// func or ctor.
     fn check_app_head(&mut self, head: TermId, ctx: RuleCtx<'a>) {
         match *self.ast.term(head) {
             Term::Ident(id) => {
@@ -256,35 +282,56 @@ impl<'a> Checker<'a> {
                     self.ast.loc(head),
                 );
             }
-            Term::MemberConst(mid) => {
-                let MemberConstTerm { receiver, name } = *self.ast.member_const_term(mid);
-                self.walk_term(receiver, ctx);
+            Term::Member(mid) => {
+                let TermMember {
+                    term: receiver,
+                    name,
+                } = *self.ast.term_member(mid);
                 let name = self.ast.ident_term(name).name.clone();
+                if self.is_mor_type_component(receiver, ctx) {
+                    self.errors.push(CompileError::NestedMorphismApplication {
+                        location: self.ast.loc(head),
+                    });
+                    self.walk_mor_path_root(receiver, ctx);
+                    return;
+                }
+                self.walk_term(receiver, ctx);
+                if self.check_mor_name(receiver, &name, self.ast.loc(head), ctx) {
+                    return;
+                }
+                let mut saw_model = false;
                 for scope in self.member_receiver_scopes(receiver, ctx) {
+                    saw_model = true;
                     self.check_head_lookup(
                         self.scopes.scope(scope).symbols.get(&name).copied(),
                         name.clone(),
                         self.ast.loc(head),
                     );
                 }
+                if !saw_model && self.receiver_has_known_non_model_type(receiver, ctx) {
+                    self.errors.push(CompileError::UndeclaredSymbol {
+                        name,
+                        used_at: self.ast.loc(head),
+                    });
+                }
             }
-            _ => self.walk_term(head, ctx),
+            Term::App(_) | Term::Dom(_) | Term::Cod(_) => {
+                self.walk_term(head, ctx);
+            }
+            Term::Wildcard => {}
         }
     }
 
     fn check_head_lookup(&mut self, symbol: Option<Symbol>, name: String, used_at: Location) {
         match symbol {
-            Some(Symbol::Func(_) | Symbol::Ctor(_) | Symbol::Var(_)) => {}
-            Some(Symbol::Const(cd)) => {
-                let result = self.ast.const_decl(cd).result;
-                if !matches!(*self.ast.type_expr(result), TypeExpr::Mor(_)) {
-                    self.errors.push(CompileError::ConstCalledAsFunction {
-                        name,
-                        location: used_at,
-                    });
-                }
+            Some(Symbol::Func(_) | Symbol::Ctor(_)) => {}
+            Some(Symbol::Const(_)) => {
+                self.errors.push(CompileError::ConstCalledAsFunction {
+                    name,
+                    location: used_at,
+                });
             }
-            Some(Symbol::Arg(_)) | None => self
+            Some(Symbol::Arg(_)) | Some(Symbol::Var(_)) | None => self
                 .errors
                 .push(CompileError::UndeclaredSymbol { name, used_at }),
             Some(sym) => self.check_decl_symbols(
@@ -293,36 +340,6 @@ impl<'a> Checker<'a> {
                 used_at,
                 vec![sym],
             ),
-        }
-    }
-
-    /// Mirrors the morphism-application classification of the populate
-    /// pass: identifier heads by scope resolution, member heads by the
-    /// receiver's settled model scopes, and the remaining head shapes are
-    /// terms unconditionally.
-    fn app_head_is_mor(&self, head: TermId, ctx: RuleCtx<'a>) -> bool {
-        match *self.ast.term(head) {
-            Term::Ident(id) => {
-                let name = &self.ast.ident_term(id).name;
-                matches!(
-                    self.scopes.lookup(self.scopes.exit(head), name),
-                    Some(Symbol::Var(_) | Symbol::Const(_))
-                )
-            }
-            Term::MemberConst(mid) => {
-                let MemberConstTerm { receiver, name } = *self.ast.member_const_term(mid);
-                let name = self.ast.ident_term(name).name.clone();
-                self.member_receiver_scopes(receiver, ctx)
-                    .into_iter()
-                    .any(|scope| {
-                        matches!(
-                            self.scopes.scope(scope).symbols.get(&name),
-                            Some(Symbol::Const(_))
-                        )
-                    })
-            }
-            Term::App(_) | Term::Dom(_) | Term::Cod(_) => true,
-            Term::Wildcard => false,
         }
     }
 
@@ -335,7 +352,7 @@ impl<'a> Checker<'a> {
 
         // A morphism-application pattern is an ordinary term, matched by
         // unification rather than by case split.
-        if self.app_head_is_mor(head, ctx) {
+        if self.is_mor_type_component(head, ctx) {
             self.walk_term(pattern, ctx);
             return;
         }
@@ -350,8 +367,11 @@ impl<'a> Checker<'a> {
                     self.ast.loc(pattern),
                 );
             }
-            Term::MemberConst(mid) => {
-                let MemberConstTerm { receiver, name } = *self.ast.member_const_term(mid);
+            Term::Member(mid) => {
+                let TermMember {
+                    term: receiver,
+                    name,
+                } = *self.ast.term_member(mid);
                 self.walk_term(receiver, ctx);
                 let name = self.ast.ident_term(name).name.clone();
                 for scope in self.member_receiver_scopes(receiver, ctx) {
@@ -365,16 +385,16 @@ impl<'a> Checker<'a> {
                     }
                 }
             }
-            Term::Wildcard | Term::App(_) | Term::Dom(_) | Term::Cod(_) => {
-                // App/dom/cod heads are morphism patterns (handled above).
-                // The grammar does not produce wildcard heads.
+            Term::App(_) | Term::Dom(_) | Term::Cod(_) => {
+                self.check_app_head(head, ctx);
             }
+            Term::Wildcard => {}
         }
 
         for arg in self.ast.term_list(args).terms.clone() {
             if let Term::App(arg_app) = *self.ast.term(arg) {
                 let arg_head = self.ast.app_term(arg_app).head;
-                if !self.app_head_is_mor(arg_head, ctx) {
+                if !self.is_mor_type_component(arg_head, ctx) {
                     self.errors.push(CompileError::MatchPatternCtorArgIsApp {
                         location: self.ast.loc(arg),
                     });
@@ -401,15 +421,22 @@ impl<'a> Checker<'a> {
                 self.check_lookup(self.scopes.entry(id), name, &[LookupKind::Model], used_at);
             }
             TypeExpr::Member(id) => {
-                let MemberTypeExpr { term, name } = self.ast.member_type_expr(id).clone();
+                let TermMember { term, name } = *self.ast.term_member(id);
+                let name = self.ast.ident_term(name).name.clone();
                 self.walk_term(term, ctx);
+                let mut saw_model = false;
                 for scope in self.member_receiver_scopes(term, ctx) {
+                    saw_model = true;
                     self.check_member_lookup(
                         scope,
                         name.clone(),
                         &[LookupKind::Type, LookupKind::Enum, LookupKind::Model],
                         used_at,
                     );
+                }
+                if !saw_model && self.receiver_has_known_non_model_type(term, ctx) {
+                    self.errors
+                        .push(CompileError::UndeclaredSymbol { name, used_at });
                 }
             }
         }
@@ -427,9 +454,12 @@ impl<'a> Checker<'a> {
                 );
             }
             PredExpr::Member(id) => {
-                let MemberPredExpr { term, name } = self.ast.member_pred_expr(id).clone();
+                let TermMember { term, name } = *self.ast.term_member(id);
+                let name = self.ast.ident_term(name).name.clone();
                 self.walk_term(term, ctx);
+                let mut saw_model = false;
                 for scope in self.member_receiver_scopes(term, ctx) {
+                    saw_model = true;
                     self.check_member_lookup(
                         scope,
                         name.clone(),
@@ -437,8 +467,92 @@ impl<'a> Checker<'a> {
                         self.ast.loc(pred),
                     );
                 }
+                if !saw_model && self.receiver_has_known_non_model_type(term, ctx) {
+                    self.errors.push(CompileError::UndeclaredSymbol {
+                        name,
+                        used_at: self.ast.loc(pred),
+                    });
+                }
             }
         }
+    }
+
+    fn receiver_types(&self, term: TermId, ctx: RuleCtx<'a>) -> Vec<ConcreteType> {
+        let Some(rule) = ctx.rule else {
+            return Vec::new();
+        };
+        let Some(current) = ctx.current else {
+            return Vec::new();
+        };
+        let Some(el) = rule
+            .semantic_els
+            .get(current.0)
+            .and_then(|els| els.get(&term))
+        else {
+            return Vec::new();
+        };
+        let Some(structure) = rule.cat.structures.get(current.0) else {
+            return Vec::new();
+        };
+        structure.concrete_types_of(*el)
+    }
+
+    fn is_mor_type_component(&self, term: TermId, ctx: RuleCtx<'a>) -> bool {
+        let Term::Member(mid) = *self.ast.term(term) else {
+            return false;
+        };
+        let TermMember {
+            term: receiver,
+            name,
+        } = *self.ast.term_member(mid);
+        let name = self.ast.ident_term(name).name.clone();
+        self.receiver_types(receiver, ctx)
+            .into_iter()
+            .any(|ct| mor_type_component(self.scopes, self.signature, ct.typ, &name).is_some())
+    }
+
+    fn walk_mor_path_root(&mut self, term: TermId, ctx: RuleCtx<'a>) {
+        let Term::Member(mid) = *self.ast.term(term) else {
+            unreachable!();
+        };
+        self.walk_term(self.ast.term_member(mid).term, ctx);
+    }
+
+    /// True when `receiver` is a morphism, so the caller must not also look
+    /// the name up as a member of a model instance.
+    fn check_mor_name(
+        &mut self,
+        receiver: TermId,
+        name: &str,
+        used_at: Location,
+        ctx: RuleCtx<'a>,
+    ) -> bool {
+        let mut saw_mor = false;
+        for ct in self.receiver_types(receiver, ctx) {
+            let TypeKind::Mor(model_tid) = self.signature.type_(ct.typ).kind else {
+                continue;
+            };
+            saw_mor = true;
+            if mor_type_component(self.scopes, self.signature, ct.typ, name).is_some() {
+                continue;
+            }
+            let Some(model_decl) = self.signature.model_decl_for_type(model_tid) else {
+                continue;
+            };
+            self.check_member_lookup(
+                self.scopes.unordered(model_decl),
+                name.to_string(),
+                &[LookupKind::Type, LookupKind::Enum, LookupKind::Model],
+                used_at,
+            );
+        }
+        saw_mor
+    }
+
+    fn receiver_has_known_non_model_type(&self, term: TermId, ctx: RuleCtx<'a>) -> bool {
+        self.receiver_types(term, ctx)
+            .iter()
+            .any(|ct| !matches!(self.signature.type_(ct.typ).kind, TypeKind::Model))
     }
 
     fn member_receiver_scopes(&self, term: TermId, ctx: RuleCtx<'a>) -> Vec<ScopeId> {

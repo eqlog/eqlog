@@ -17,7 +17,7 @@ fn const_and_app_and_member_mor_heads() {
     model.insert_set_mor_cod(c, s1);
     model.insert_s_mor_app(c, x, y);
 
-    // pick(s0) is the same morphism; close should make pick(s0)(x) total.
+    // pick(s0) is the same morphism; close should make pick(s0).S(x) total.
     model.insert_pick(s0, c);
 
     // Member const bundle.mor: Bundle -> Bundle.
@@ -36,7 +36,7 @@ fn const_and_app_and_member_mor_heads() {
     assert!(model.s_mor_app(c, x).is_some());
     assert!(model.are_equal_s(model.s_mor_app(c, x).unwrap(), y));
 
-    // mor_app_pattern: match y { f(x) => then reached(s) } with f = pick(s0).
+    // mor_app_pattern: match y { f.S(x) => then reached(s) } with f = pick(s0).
     assert!(model.reached(s0));
 
     // bundle_mor_total
