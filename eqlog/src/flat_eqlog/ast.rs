@@ -22,13 +22,14 @@ impl FlatRel {
                 arity
             }
             FlatRel::ModelMember(typ) => {
-                let parent = signature
-                    .type_(*typ)
-                    .parents
-                    .last()
-                    .copied()
-                    .expect("model-member relation requires a member type");
-                vec![parent, *typ]
+                let parents = &signature.type_(*typ).parents;
+                assert!(
+                    !parents.is_empty(),
+                    "model-member relation requires a member type"
+                );
+                let mut arity = parents.clone();
+                arity.push(*typ);
+                arity
             }
         }
     }
@@ -54,10 +55,8 @@ pub fn flat_domain(func: FuncId, signature: &Signature) -> Vec<TypeId> {
 }
 
 fn flat_args(parents: &[TypeId], args: &[TypeId]) -> Vec<TypeId> {
-    let mut flat_args = Vec::with_capacity(args.len() + usize::from(!parents.is_empty()));
-    if let Some(&parent) = parents.last() {
-        flat_args.push(parent);
-    }
+    let mut flat_args = Vec::with_capacity(parents.len() + args.len());
+    flat_args.extend(parents.iter().copied());
     flat_args.extend(args.iter().copied());
     flat_args
 }

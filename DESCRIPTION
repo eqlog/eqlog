@@ -1,6 +1,6 @@
 Compile nested model declarations.
 
-Codegen assumed every model's dom and cod were 2-ary Mor -> Model
-relations. Nested models prepend the enclosing instance, so those
-relations are 3-ary and toposort plus mor_app generation panicked.
+Every nested relation prepends its full enclosing-model chain, not
+just the innermost parent, so prefix trees can restrict from the
+outside in. Membership predicates carry one column per ancestor.
 Nested morphism application such as f.N.T(x) is still rejected.

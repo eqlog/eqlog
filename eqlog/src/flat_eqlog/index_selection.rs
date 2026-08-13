@@ -227,13 +227,12 @@ pub fn select_indices<'a>(
         let mor_type = FlatInRel::TypeSet(ids.mor);
         let dom = FlatInRel::Rel(FlatRel::Func(ids.dom));
         let cod = FlatInRel::Rel(FlatRel::Func(ids.cod));
-        // Nested `dom`/`cod` flatten with the enclosing model first, so the
-        // object/morphism columns sit one to the right of the top-level case.
-        let (dom_projections, cod_projections) = if signature.func(ids.dom).parents.is_empty() {
-            (btreeset! {1}, btreeset! {0})
-        } else {
-            (btreeset! {0, 2}, btreeset! {0, 1})
-        };
+        // `dom`/`cod` flatten as (parents..., mor, obj). Toposort needs
+        // "given parents+object, outgoing mors" and "given parents+mor, obj".
+        let parent_len = signature.func(ids.dom).parents.len();
+        let mut dom_projections = (0..parent_len).collect::<BTreeSet<_>>();
+        dom_projections.insert(parent_len + 1);
+        let cod_projections = (0..=parent_len).collect::<BTreeSet<_>>();
 
         [
             // Given an object (and parent, when nested), look up outgoing morphisms.

@@ -33,9 +33,8 @@ rule bundle_fiber_mors_total {
     then h.Fiber(f)!;
 }
 
-// Flattening only prepends the innermost parent, so a model at any
-// depth still has 3-ary dom/cod. Rules and morphisms at each level
-// check that this is enough for arbitrary nesting.
+// Relations at every depth prepend the full ancestor chain so prefix
+// trees can restrict from the outermost model inward.
 model A {
     model B {
         model C {

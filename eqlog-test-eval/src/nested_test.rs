@@ -11,19 +11,19 @@ fn create_nested_elements() {
     let mut model = Nested::new();
     let bundle = model.new_bundle();
     let fiber = model.new_fiber(bundle);
-    let x = model.new_el(fiber);
+    let x = model.new_el(bundle, fiber);
 
     assert!(model.bundle_member_fiber(bundle, fiber));
-    assert!(model.fiber_member_el(fiber, x));
+    assert!(model.fiber_member_el(bundle, fiber, x));
     model.close();
     assert!(model.bundle_member_fiber(bundle, fiber));
-    assert!(model.fiber_member_el(fiber, x));
+    assert!(model.fiber_member_el(bundle, fiber, x));
 
     assert_eq!(model.iter_bundle().count(), 1);
     assert_eq!(model.iter_fiber().count(), 1);
     // The inner tip() rule adjoins one more El.
     assert_eq!(model.iter_el().count(), 2);
-    assert!(model.tip(fiber).is_some());
+    assert!(model.tip(bundle, fiber).is_some());
 }
 
 #[test]
@@ -33,8 +33,8 @@ fn inner_tip_is_a_member() {
     let fiber = model.new_fiber(bundle);
     model.close();
 
-    let tip = model.tip(fiber).unwrap();
-    assert!(model.fiber_member_el(fiber, tip));
+    let tip = model.tip(bundle, fiber).unwrap();
+    assert!(model.fiber_member_el(bundle, fiber, tip));
 }
 
 #[test]
@@ -44,9 +44,9 @@ fn member_predicate_insert_rejects_wrong_fiber() {
     let bundle = model.new_bundle();
     let fiber0 = model.new_fiber(bundle);
     let fiber1 = model.new_fiber(bundle);
-    let x = model.new_el(fiber0);
+    let x = model.new_el(bundle, fiber0);
 
-    model.insert_marked(fiber1, x);
+    model.insert_marked(bundle, fiber1, x);
 }
 
 #[test]
@@ -90,18 +90,18 @@ fn fiber_morphism_maps_marked() {
     let bundle = model.new_bundle();
     let fiber0 = model.new_fiber(bundle);
     let fiber1 = model.new_fiber(bundle);
-    let x = model.new_el(fiber0);
+    let x = model.new_el(bundle, fiber0);
 
     let g = model.new_fiber_mor(bundle);
     model.insert_fiber_mor_dom(bundle, g, fiber0);
     model.insert_fiber_mor_cod(bundle, g, fiber1);
-    model.insert_marked(fiber0, x);
+    model.insert_marked(bundle, fiber0, x);
 
     model.close();
 
     let y = model.el_mor_app(bundle, g, x).unwrap();
-    assert!(model.fiber_member_el(fiber1, y));
-    assert!(model.marked(fiber1, y));
+    assert!(model.fiber_member_el(bundle, fiber1, y));
+    assert!(model.marked(bundle, fiber1, y));
 }
 
 #[test]
@@ -109,18 +109,18 @@ fn three_level_nesting() {
     let mut model = Nested::new();
     let a = model.new_a();
     let b = model.new_b(a);
-    let c = model.new_c(b);
-    let t = model.new_t(c);
+    let c = model.new_c(a, b);
+    let t = model.new_t(a, b, c);
 
     assert!(model.a_member_b(a, b));
-    assert!(model.b_member_c(b, c));
-    assert!(model.c_member_t(c, t));
+    assert!(model.b_member_c(a, b, c));
+    assert!(model.c_member_t(a, b, c, t));
     model.close();
     assert!(model.a_member_b(a, b));
-    assert!(model.b_member_c(b, c));
-    assert!(model.c_member_t(c, t));
-    assert!(model.apex(c).is_some());
-    assert!(model.c_member_t(c, model.apex(c).unwrap()));
+    assert!(model.b_member_c(a, b, c));
+    assert!(model.c_member_t(a, b, c, t));
+    assert!(model.apex(a, b, c).is_some());
+    assert!(model.c_member_t(a, b, c, model.apex(a, b, c).unwrap()));
 }
 
 #[test]
@@ -128,16 +128,16 @@ fn four_level_nesting() {
     let mut model = Nested::new();
     let w = model.new_w();
     let x = model.new_x(w);
-    let y = model.new_y(x);
-    let z = model.new_z(y);
-    let u = model.new_u(z);
+    let y = model.new_y(w, x);
+    let z = model.new_z(w, x, y);
+    let u = model.new_u(w, x, y, z);
 
     assert!(model.w_member_x(w, x));
-    assert!(model.x_member_y(x, y));
-    assert!(model.y_member_z(y, z));
-    assert!(model.z_member_u(z, u));
+    assert!(model.x_member_y(w, x, y));
+    assert!(model.y_member_z(w, x, y, z));
+    assert!(model.z_member_u(w, x, y, z, u));
     model.close();
-    assert!(model.z_member_u(z, u));
+    assert!(model.z_member_u(w, x, y, z, u));
 }
 
 #[test]
@@ -145,20 +145,20 @@ fn deep_c_morphism_maps_marked() {
     let mut model = Nested::new();
     let a = model.new_a();
     let b = model.new_b(a);
-    let c0 = model.new_c(b);
-    let c1 = model.new_c(b);
-    let x = model.new_t(c0);
+    let c0 = model.new_c(a, b);
+    let c1 = model.new_c(a, b);
+    let x = model.new_t(a, b, c0);
 
-    let g = model.new_c_mor(b);
-    model.insert_c_mor_dom(b, g, c0);
-    model.insert_c_mor_cod(b, g, c1);
-    model.insert_tagged(c0, x);
+    let g = model.new_c_mor(a, b);
+    model.insert_c_mor_dom(a, b, g, c0);
+    model.insert_c_mor_cod(a, b, g, c1);
+    model.insert_tagged(a, b, c0, x);
 
     model.close();
 
-    let y = model.t_mor_app(b, g, x).unwrap();
-    assert!(model.c_member_t(c1, y));
-    assert!(model.tagged(c1, y));
+    let y = model.t_mor_app(a, b, g, x).unwrap();
+    assert!(model.c_member_t(a, b, c1, y));
+    assert!(model.tagged(a, b, c1, y));
 }
 
 #[test]
@@ -167,7 +167,7 @@ fn deep_b_morphism_maps_c() {
     let a = model.new_a();
     let b0 = model.new_b(a);
     let b1 = model.new_b(a);
-    let c = model.new_c(b0);
+    let c = model.new_c(a, b0);
 
     let f = model.new_b_mor(a);
     model.insert_b_mor_dom(a, f, b0);
@@ -176,7 +176,7 @@ fn deep_b_morphism_maps_c() {
     model.close();
 
     let image = model.c_mor_app(a, f, c).unwrap();
-    assert!(model.b_member_c(b1, image));
+    assert!(model.b_member_c(a, b1, image));
     assert!(!model.are_equal_c(c, image));
 }
 
