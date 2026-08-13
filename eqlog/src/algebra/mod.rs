@@ -122,7 +122,7 @@ fn morphism_application_errors(
                 continue;
             };
             let AppTerm { head, args } = *ast.app_term(app);
-            if !app_head_is_mor(ast, scopes, signature, rule, sid, head) {
+            if !is_sort_component(ast, scopes, signature, rule, sid, head) {
                 continue;
             }
             // Argument-count mismatches are reported by the populate pass.
@@ -147,7 +147,7 @@ fn morphism_application_errors(
     errors
 }
 
-fn app_head_is_mor(
+fn is_sort_component(
     ast: &Ast,
     scopes: &Scopes,
     signature: &Signature,

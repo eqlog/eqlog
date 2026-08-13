@@ -349,22 +349,6 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn app_head_is_mor(&self, head: TermId, ctx: RuleCtx<'a>) -> bool {
-        match *self.ast.term(head) {
-            Term::Member(mid) => {
-                let TermMember {
-                    term: receiver,
-                    name,
-                } = *self.ast.term_member(mid);
-                let name = self.ast.ident_term(name).name.clone();
-                self.receiver_types(receiver, ctx)
-                    .into_iter()
-                    .any(|ct| mor_sort_type(self.scopes, self.signature, ct.typ, &name).is_some())
-            }
-            Term::Ident(_) | Term::App(_) | Term::Dom(_) | Term::Cod(_) | Term::Wildcard => false,
-        }
-    }
-
     fn walk_match_case_pattern(&mut self, pattern: TermId, ctx: RuleCtx<'a>) {
         let Term::App(app) = *self.ast.term(pattern) else {
             self.walk_term(pattern, ctx);
@@ -374,7 +358,7 @@ impl<'a> Checker<'a> {
 
         // A morphism-application pattern is an ordinary term, matched by
         // unification rather than by case split.
-        if self.app_head_is_mor(head, ctx) {
+        if self.is_sort_component(head, ctx) {
             self.walk_term(pattern, ctx);
             return;
         }
@@ -416,7 +400,7 @@ impl<'a> Checker<'a> {
         for arg in self.ast.term_list(args).terms.clone() {
             if let Term::App(arg_app) = *self.ast.term(arg) {
                 let arg_head = self.ast.app_term(arg_app).head;
-                if !self.app_head_is_mor(arg_head, ctx) {
+                if !self.is_sort_component(arg_head, ctx) {
                     self.errors.push(CompileError::MatchPatternCtorArgIsApp {
                         location: self.ast.loc(arg),
                     });
