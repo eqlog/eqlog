@@ -16,6 +16,15 @@ model Bundle {
         if cod(g)!;
         then g.El(x)!;
     }
+
+    pred reached_marked_image(fiber: Fiber);
+    rule lookup_marked_image {
+        if g: Mor(Fiber);
+        if fiber_dom = dom(g);
+        if x: fiber_dom.El;
+        if fiber.marked(g.El(x));
+        then reached_marked_image(fiber);
+    }
 }
 
 rule use_tip {
@@ -53,6 +62,15 @@ model A {
             if x: c_dom.T;
             if cod(g)!;
             then g.T(x)!;
+        }
+
+        pred reached_tagged_image(c: C);
+        rule lookup_tagged_image {
+            if g: Mor(C);
+            if c_dom = dom(g);
+            if x: c_dom.T;
+            if c.tagged(g.T(x));
+            then reached_tagged_image(c);
         }
     }
 

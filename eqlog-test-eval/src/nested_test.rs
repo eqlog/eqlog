@@ -85,6 +85,63 @@ fn merge_bundles_does_not_merge_fibers() {
 }
 
 #[test]
+fn fiber_morphism_applies_to_tip() {
+    let mut model = Nested::new();
+    let bundle = model.new_bundle();
+    let fiber0 = model.new_fiber(bundle);
+    let fiber1 = model.new_fiber(bundle);
+
+    let g = model.new_fiber_mor(bundle);
+    model.insert_fiber_mor_dom(bundle, g, fiber0);
+    model.insert_fiber_mor_cod(bundle, g, fiber1);
+
+    model.close();
+
+    let tip0 = model.tip(bundle, fiber0).unwrap();
+    let image = model.el_mor_app(bundle, g, tip0).unwrap();
+    assert!(model.fiber_member_el(bundle, fiber1, image));
+}
+
+#[test]
+fn fiber_morphism_image_found_by_rule() {
+    let mut model = Nested::new();
+    let bundle = model.new_bundle();
+    let fiber0 = model.new_fiber(bundle);
+    let fiber1 = model.new_fiber(bundle);
+    let x = model.new_el(bundle, fiber0);
+    let y = model.new_el(bundle, fiber1);
+
+    let g = model.new_fiber_mor(bundle);
+    model.insert_fiber_mor_dom(bundle, g, fiber0);
+    model.insert_fiber_mor_cod(bundle, g, fiber1);
+    model.insert_el_mor_app(bundle, g, x, y);
+    model.insert_marked(bundle, fiber1, y);
+
+    model.close();
+
+    assert!(model.reached_marked_image(bundle, fiber1));
+    assert!(!model.reached_marked_image(bundle, fiber0));
+}
+
+#[test]
+#[should_panic(expected = "invalid dependent argument")]
+fn fiber_mor_app_rejects_el_from_other_bundle() {
+    let mut model = Nested::new();
+    let bundle0 = model.new_bundle();
+    let bundle1 = model.new_bundle();
+    let fiber0 = model.new_fiber(bundle0);
+    let fiber1 = model.new_fiber(bundle0);
+    let foreign = model.new_fiber(bundle1);
+    let x = model.new_el(bundle1, foreign);
+
+    let g = model.new_fiber_mor(bundle0);
+    model.insert_fiber_mor_dom(bundle0, g, fiber0);
+    model.insert_fiber_mor_cod(bundle0, g, fiber1);
+
+    let _ = model.el_mor_app(bundle0, g, x);
+}
+
+#[test]
 fn fiber_morphism_maps_marked() {
     let mut model = Nested::new();
     let bundle = model.new_bundle();
@@ -138,6 +195,47 @@ fn four_level_nesting() {
     assert!(model.z_member_u(w, x, y, z, u));
     model.close();
     assert!(model.z_member_u(w, x, y, z, u));
+}
+
+#[test]
+fn c_morphism_image_found_by_rule() {
+    let mut model = Nested::new();
+    let a = model.new_a();
+    let b = model.new_b(a);
+    let c0 = model.new_c(a, b);
+    let c1 = model.new_c(a, b);
+    let x = model.new_t(a, b, c0);
+    let y = model.new_t(a, b, c1);
+
+    let g = model.new_c_mor(a, b);
+    model.insert_c_mor_dom(a, b, g, c0);
+    model.insert_c_mor_cod(a, b, g, c1);
+    model.insert_t_mor_app(a, b, g, x, y);
+    model.insert_tagged(a, b, c1, y);
+
+    model.close();
+
+    assert!(model.reached_tagged_image(a, b, c1));
+    assert!(!model.reached_tagged_image(a, b, c0));
+}
+
+#[test]
+fn c_morphism_applies_to_apex() {
+    let mut model = Nested::new();
+    let a = model.new_a();
+    let b = model.new_b(a);
+    let c0 = model.new_c(a, b);
+    let c1 = model.new_c(a, b);
+
+    let g = model.new_c_mor(a, b);
+    model.insert_c_mor_dom(a, b, g, c0);
+    model.insert_c_mor_cod(a, b, g, c1);
+
+    model.close();
+
+    let apex0 = model.apex(a, b, c0).unwrap();
+    let image = model.t_mor_app(a, b, g, apex0).unwrap();
+    assert!(model.c_member_t(a, b, c1, image));
 }
 
 #[test]
