@@ -15,6 +15,7 @@ use crate::ram::*;
 use convert_case::{Case, Casing};
 use indoc::{formatdoc, writedoc};
 use itertools::Itertools;
+use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter, Result};
 use std::iter::once;
@@ -2389,122 +2390,143 @@ fn display_ordered_morphisms<'a>(
     })
 }
 
+fn model_types_inner_first(ctx: &RustGenCtx<'_>) -> Vec<TypeId> {
+    let mut models: Vec<TypeId> = ctx
+        .signature()
+        .iter_types()
+        .filter(|&typ| matches!(ctx.signature().type_(typ).kind, TypeKind::Model))
+        .collect();
+    models.sort_by_key(|&typ| (Reverse(ctx.signature().type_(typ).parents.len()), typ));
+    models
+}
+
+fn display_remap_parented_index<'a>(
+    flat_in_rel: FlatInRel,
+    index_spec: IndexSpec,
+    parent_model_type: TypeId,
+    ctx: &'a RustGenCtx<'a>,
+    index_selection: &'a IndexSelection,
+) -> impl Display + 'a {
+    FmtFn(move |f| {
+        let flat_arity = flat_in_rel.arity(ctx.signature());
+        let arity: Vec<_> = index_spec
+            .order
+            .iter()
+            .copied()
+            .map(|i| flat_arity[i])
+            .collect();
+        let arity = arity.as_slice();
+
+        let index_field_name = display_index_field_name(&flat_in_rel, &index_spec, ctx).to_string();
+        let index_field_name = index_field_name.as_str();
+
+        let parent_cols = parent_prefix_len(&flat_in_rel, ctx);
+        let columns: Vec<_> = index_spec
+            .order
+            .iter()
+            .copied()
+            .map(|column_index| {
+                morphism_index_column_kind(
+                    parent_model_type,
+                    column_index,
+                    parent_cols,
+                    flat_arity[column_index],
+                    ctx,
+                )
+            })
+            .collect();
+        let prefix_len = columns
+            .iter()
+            .rposition(|column| column.needs_mapping())
+            .expect("index over a parented relation should contain the parent")
+            + 1;
+        let suffix_len = arity.len() - prefix_len;
+        let prefix_columns = &columns[..prefix_len];
+
+        let parent_model_type_snake = display_type(parent_model_type, ctx)
+            .to_string()
+            .to_case(Snake);
+
+        let member_maps = prefix_columns
+            .iter()
+            .copied()
+            .enumerate()
+            .filter_map(|(i, column)| match column {
+                MorphismIndexColumnKind::Member(typ) => Some(FmtFn(move |f| {
+                    let map = display_mor_app_map_expr(typ, ctx, index_selection);
+                    writedoc! {f, "
+                        let map_el{i} = {map};
+                    "}
+                })),
+                MorphismIndexColumnKind::Parent | MorphismIndexColumnKind::Copy => None,
+            })
+            .format("\n");
+
+        let collect_propagated = display_morphism_index_prefix_walk(
+            prefix_columns,
+            arity.len(),
+            format!("{index_field_name}_all"),
+            true,
+        );
+        let apply_propagated = display_apply_morphism_index_propagated(
+            index_field_name,
+            arity.len(),
+            prefix_len,
+            suffix_len,
+        );
+        let suffix_type = display_prefix_tree_type(suffix_len);
+        let mor_pat = morphism_iter_pattern(parent_model_type, ctx);
+
+        writedoc! {f, r#"
+            let mut {index_field_name}_all = self.{index_field_name}_own.clone();
+            let {index_field_name}_own = &mut self.{index_field_name}_own;
+            #[allow(unused)]
+            for {mor_pat} in ordered_{parent_model_type_snake}_mor.iter() {{
+            {member_maps}
+            let mut propagated: Vec<([u32; {prefix_len}], {suffix_type})> = Vec::new();
+            {collect_propagated}
+            {apply_propagated}
+            }}
+            self.{index_field_name}_all = {index_field_name}_all;
+        "#}
+    })
+}
+
 fn display_recompute_model_indices_fn<'a>(
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let compute_ordered_mor_vars = ctx
-            .signature()
-            .iter_types()
-            .filter(|typ| matches!(ctx.signature().type_(*typ).kind, TypeKind::Model))
-            .map(|typ| display_ordered_morphisms(typ, ctx, index_selection))
-            .format("\n");
-
-        let compute_rel_sets = index_selection
-            .indices
-            .iter()
-            .flat_map(|(rel, indices)| {
-                indices
-                    .iter()
-                    .map(move |index| (rel.clone(), index.clone()))
-            })
-            .filter_map(|(flat_in_rel, index_spec)| {
-                let parent_model_type = flat_in_rel.parent_model_type(ctx.signature())?;
-                Some((flat_in_rel, index_spec, parent_model_type))
-            })
-            .map(|(flat_in_rel, index_spec, parent_model_type)| {
+        // Inner models first so their member indices are saturated before an
+        // enclosing model remaps those members along its own morphisms.
+        let body = model_types_inner_first(ctx)
+            .into_iter()
+            .map(|typ| {
                 FmtFn(move |f| {
-                    let flat_in_rel = &flat_in_rel;
-                    let flat_arity = flat_in_rel.arity(ctx.signature());
-                    let arity: Vec<_> = index_spec
-                        .order
+                    let ordered = display_ordered_morphisms(typ, ctx, index_selection);
+                    let remaps = index_selection
+                        .indices
                         .iter()
-                        .copied()
-                        .map(|i| flat_arity[i])
-                        .collect();
-                    let arity = arity.as_slice();
-
-                    let index_field_name =
-                        display_index_field_name(&flat_in_rel, &index_spec, ctx).to_string();
-                    let index_field_name = index_field_name.as_str();
-
-                    let parent_cols = parent_prefix_len(flat_in_rel, ctx);
-                    let columns: Vec<_> = index_spec
-                        .order
-                        .iter()
-                        .copied()
-                        .map(|column_index| {
-                            morphism_index_column_kind(
-                                parent_model_type,
-                                column_index,
-                                parent_cols,
-                                flat_arity[column_index],
-                                ctx,
-                            )
+                        .flat_map(|(rel, indices)| {
+                            indices
+                                .iter()
+                                .map(move |index| (rel.clone(), index.clone()))
                         })
-                        .collect();
-                    let prefix_len = columns
-                        .iter()
-                        .rposition(|column| column.needs_mapping())
-                        .expect("index over a parented relation should contain the parent")
-                        + 1;
-                    let suffix_len = arity.len() - prefix_len;
-                    let prefix_columns = &columns[..prefix_len];
-
-                    let parent_model_type_snake = display_type(parent_model_type, ctx)
-                        .to_string()
-                        .to_case(Snake);
-
-                    let member_maps = prefix_columns
-                        .iter()
-                        .copied()
-                        .enumerate()
-                        .filter_map(|(i, column)| match column {
-                            MorphismIndexColumnKind::Member(typ) => Some(FmtFn(move |f| {
-                                let map = display_mor_app_map_expr(typ, ctx, index_selection);
-                                writedoc! {f, "
-                                    let map_el{i} = {map};
-                                "}
-                            })),
-                            MorphismIndexColumnKind::Parent | MorphismIndexColumnKind::Copy => None,
+                        .filter(|(rel, _)| rel.parent_model_type(ctx.signature()) == Some(typ))
+                        .map(|(rel, index)| {
+                            display_remap_parented_index(rel, index, typ, ctx, index_selection)
                         })
                         .format("\n");
-
-                    let collect_propagated = display_morphism_index_prefix_walk(
-                        prefix_columns,
-                        arity.len(),
-                        format!("{index_field_name}_all"),
-                        true,
-                    );
-                    let apply_propagated = display_apply_morphism_index_propagated(
-                        index_field_name,
-                        arity.len(),
-                        prefix_len,
-                        suffix_len,
-                    );
-                    let suffix_type = display_prefix_tree_type(suffix_len);
-                    let mor_pat = morphism_iter_pattern(parent_model_type, ctx);
-
-                    writedoc! {f, r#"
-                        let mut {index_field_name}_all = self.{index_field_name}_own.clone();
-                        let {index_field_name}_own = &mut self.{index_field_name}_own;
-                        #[allow(unused)]
-                        for {mor_pat} in ordered_{parent_model_type_snake}_mor.iter() {{
-                        {member_maps}
-                        let mut propagated: Vec<([u32; {prefix_len}], {suffix_type})> = Vec::new();
-                        {collect_propagated}
-                        {apply_propagated}
-                        }}
-                        self.{index_field_name}_all = {index_field_name}_all;
-                    "#}
+                    writedoc! {f, "
+                        {ordered}
+                        {remaps}
+                    "}
                 })
             })
             .format("\n");
         writedoc! {f, "
             fn recompute_model_indices(&mut self) {{
-            {compute_ordered_mor_vars}
-            {compute_rel_sets}
+            {body}
             }}
         "}
     })
