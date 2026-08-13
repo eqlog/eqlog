@@ -97,17 +97,15 @@ ordered_from!(DefinedThenAtomId);
 ordered_from!(TermId);
 ordered_from!(IdentTermId);
 ordered_from!(AppTermId);
-ordered_from!(MemberConstTermId);
+ordered_from!(TermMemberId);
 ordered_from!(DomTermId);
 ordered_from!(CodTermId);
 ordered_from!(TermListId);
 ordered_from!(TypeExprId);
 ordered_from!(AmbientTypeExprId);
-ordered_from!(MemberTypeExprId);
 ordered_from!(MorTypeExprId);
 ordered_from!(PredExprId);
 ordered_from!(AmbientPredExprId);
-ordered_from!(MemberPredExprId);
 
 /// A graph of [`Scope`]s keyed by AST node, with `parent` pointers for
 /// ancestor lookup.
@@ -572,13 +570,7 @@ impl<'a> ScopeBuilder<'a> {
                 self.insert_ordered(id, current, after_args);
                 after_args
             }
-            Term::MemberConst(id) => {
-                let MemberConstTerm { receiver, name } = *self.ast.member_const_term(id);
-                let after_receiver = self.walk_term(current, receiver);
-                self.insert_ordered(name, after_receiver, after_receiver);
-                self.insert_ordered(id, current, after_receiver);
-                after_receiver
-            }
+            Term::Member(id) => self.walk_term_member(current, id),
             Term::Dom(id) => {
                 let DomTerm { arg } = *self.ast.dom_term(id);
                 let after = self.walk_term(current, arg);
@@ -642,7 +634,7 @@ impl<'a> ScopeBuilder<'a> {
                 exit
             }
             Term::Wildcard => current,
-            Term::App(_) | Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) => {
+            Term::App(_) | Term::Member(_) | Term::Dom(_) | Term::Cod(_) => {
                 unreachable!("if-var terms are checked by syntactic.rs")
             }
         };
@@ -668,12 +660,20 @@ impl<'a> ScopeBuilder<'a> {
                 exit
             }
             Term::Wildcard => after_term,
-            Term::App(_) | Term::MemberConst(_) | Term::Dom(_) | Term::Cod(_) => {
+            Term::App(_) | Term::Member(_) | Term::Dom(_) | Term::Cod(_) => {
                 unreachable!("defined-then variable terms are checked by syntactic.rs")
             }
         };
         self.insert_ordered(term, after_term, exit);
         exit
+    }
+
+    fn walk_term_member(&mut self, current: ScopeId, id: TermMemberId) -> ScopeId {
+        let TermMember { term, name } = *self.ast.term_member(id);
+        let after = self.walk_term(current, term);
+        self.insert_ordered(name, after, after);
+        self.insert_ordered(id, current, after);
+        after
     }
 
     /// Ordered scope, depth-first.
@@ -694,13 +694,7 @@ impl<'a> ScopeBuilder<'a> {
                 self.insert_ordered(id, current, current);
                 current
             }
-            TypeExpr::Member(id) => {
-                let MemberTypeExpr { term, .. } = self.ast.member_type_expr(id);
-                let term = *term;
-                let after = self.walk_term(current, term);
-                self.insert_ordered(id, current, after);
-                after
-            }
+            TypeExpr::Member(id) => self.walk_term_member(current, id),
             TypeExpr::Mor(id) => {
                 self.insert_ordered(id, current, current);
                 current
@@ -717,13 +711,7 @@ impl<'a> ScopeBuilder<'a> {
                 self.insert_ordered(id, current, current);
                 current
             }
-            PredExpr::Member(id) => {
-                let MemberPredExpr { term, .. } = self.ast.member_pred_expr(id);
-                let term = *term;
-                let after = self.walk_term(current, term);
-                self.insert_ordered(id, current, after);
-                after
-            }
+            PredExpr::Member(id) => self.walk_term_member(current, id),
         };
         self.insert_ordered(pred_expr, current, exit);
         exit

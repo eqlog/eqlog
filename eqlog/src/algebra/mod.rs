@@ -156,8 +156,11 @@ fn app_head_is_mor(
     head: TermId,
 ) -> bool {
     match *ast.term(head) {
-        Term::MemberConst(mid) => {
-            let MemberConstTerm { receiver, name } = *ast.member_const_term(mid);
+        Term::Member(mid) => {
+            let TermMember {
+                term: receiver,
+                name,
+            } = *ast.term_member(mid);
             let name = &ast.ident_term(name).name;
             let Some(receiver_types) = concrete_types_of_term(rule, sid, receiver) else {
                 return false;
@@ -181,10 +184,13 @@ fn check_morphism_application(
     reported_non_members: &mut BTreeSet<TermId>,
     errors: &mut Vec<CompileError>,
 ) {
-    let Term::MemberConst(mid) = *ast.term(head) else {
+    let Term::Member(mid) = *ast.term(head) else {
         return;
     };
-    let MemberConstTerm { receiver, name } = *ast.member_const_term(mid);
+    let TermMember {
+        term: receiver,
+        name,
+    } = *ast.term_member(mid);
     let name = &ast.ident_term(name).name;
 
     let Some(receiver_types) = concrete_types_of_term(rule, sid, receiver) else {
@@ -336,8 +342,11 @@ fn is_ctor_app_for_enum(
             let symbol = scopes.lookup(scope, name);
             ctor_symbol_has_codomain(symbol, enum_type, signature)
         }
-        Term::MemberConst(member_id) => {
-            let MemberConstTerm { receiver, name } = *ast.member_const_term(member_id);
+        Term::Member(member_id) => {
+            let TermMember {
+                term: receiver,
+                name,
+            } = *ast.term_member(member_id);
             let name = ast.ident_term(name).name.clone();
             let Some(parent_types) = concrete_types_of_term(rule, sid, receiver) else {
                 return false;

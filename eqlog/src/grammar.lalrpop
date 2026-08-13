@@ -52,16 +52,9 @@ ApplicationTerm: TermId = {
         let a = ast.push_app_term(loc, AppTerm { head, args });
         ast.push_term(loc, Term::App(a))
     },
-    <l: @L> <receiver: Term> "." <nl: @L> <name: Id> <nr: @R> <args: ArgList> <r: @R> => {
+    <l: @L> <m: TermMember> <args: ArgList> <r: @R> => {
         let loc = Location(l, r);
-        let name_loc = Location(nl, nr);
-        let name = ast.push_ident_term(name_loc, IdentTerm { name });
-        let member_loc = Location(ast.loc(receiver).0, nr);
-        let m = ast.push_member_const_term(
-            member_loc,
-            MemberConstTerm { receiver, name },
-        );
-        let head = ast.push_term(member_loc, Term::MemberConst(m));
+        let head = ast.push_term(ast.loc(m), Term::Member(m));
         let a = ast.push_app_term(loc, AppTerm { head, args });
         ast.push_term(loc, Term::App(a))
     },
@@ -93,12 +86,11 @@ ApplicationTerm: TermId = {
     },
 }
 
-MemberConstTerm: TermId = {
-    <l: @L> <receiver: Term> "." <name: Id> <r: @R> => {
+TermMember: TermMemberId = {
+    <l: @L> <term: Term> "." <nl: @L> <name: Id> <nr: @R> <r: @R> => {
         let loc = Location(l, r);
-        let name = ast.push_ident_term(Location(l, r), IdentTerm { name });
-        let m = ast.push_member_const_term(loc, MemberConstTerm { receiver, name });
-        ast.push_term(loc, Term::MemberConst(m))
+        let name = ast.push_ident_term(Location(nl, nr), IdentTerm { name });
+        ast.push_term_member(loc, TermMember { term, name })
     },
 }
 
@@ -120,7 +112,7 @@ CodTerm: TermId = {
 
 Term: TermId = {
     <application: ApplicationTerm> => application,
-    <member_const: MemberConstTerm> => member_const,
+    <m: TermMember> => ast.push_term(ast.loc(m), Term::Member(m)),
     <ident: IdentTerm> => ident,
     <wildcard: Wildcard> => wildcard,
     <dom_term: DomTerm> => dom_term,
@@ -133,10 +125,8 @@ TypeExpr: TypeExprId = {
         let a = ast.push_ambient_type_expr(loc, AmbientTypeExpr { name });
         ast.push_type_expr(loc, TypeExpr::Ambient(a))
     },
-    <l: @L> <tm: Term> "." <name: Id> <r: @R> => {
-        let loc = Location(l, r);
-        let m = ast.push_member_type_expr(loc, MemberTypeExpr { term: tm, name });
-        ast.push_type_expr(loc, TypeExpr::Member(m))
+    <l: @L> <m: TermMember> <r: @R> => {
+        ast.push_type_expr(Location(l, r), TypeExpr::Member(m))
     },
     <l: @L> "Mor" "(" <name: Id> ")" <r: @R> => {
         let loc = Location(l, r);
@@ -152,10 +142,8 @@ PredExpr: PredExprId = {
         let a = ast.push_ambient_pred_expr(loc, AmbientPredExpr { name });
         ast.push_pred_expr(loc, PredExpr::Ambient(a))
     },
-    <l: @L> <tm: Term> "." <name: Id> <r: @R> => {
-        let loc = Location(l, r);
-        let m = ast.push_member_pred_expr(loc, MemberPredExpr { term: tm, name });
-        ast.push_pred_expr(loc, PredExpr::Member(m))
+    <l: @L> <m: TermMember> <r: @R> => {
+        ast.push_pred_expr(Location(l, r), PredExpr::Member(m))
     },
 }
 

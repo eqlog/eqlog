@@ -520,10 +520,11 @@ fn resolve_pred_expr(
             (resolved, false)
         }
         PredExpr::Member(mid) => {
-            let MemberPredExpr {
+            let TermMember {
                 term: parent_term,
                 name,
-            } = ast.member_pred_expr(mid).clone();
+            } = *ast.term_member(mid);
+            let name = ast.ident_term(name).name.clone();
             let (parent_el, changed) =
                 walk_term(parent_term, current, rule, ast, scopes, signature, errors);
             let resolved = member_scopes_and_parents(rule, current, parent_el, scopes, signature)
@@ -617,8 +618,11 @@ fn walk_term(
             changed |= c;
             e
         }
-        Term::MemberConst(mid) => {
-            let MemberConstTerm { receiver, name } = *ast.member_const_term(mid);
+        Term::Member(mid) => {
+            let TermMember {
+                term: receiver,
+                name,
+            } = *ast.term_member(mid);
             let (receiver_el, c) =
                 walk_term(receiver, current, rule, ast, scopes, signature, errors);
             changed |= c;
@@ -932,8 +936,11 @@ fn emit_app(
                 changed |= c;
             }
         }
-        Term::MemberConst(mid) => {
-            let MemberConstTerm { receiver, name } = *ast.member_const_term(mid);
+        Term::Member(mid) => {
+            let TermMember {
+                term: receiver,
+                name,
+            } = *ast.term_member(mid);
             let (receiver_el, c) =
                 walk_term(receiver, current, rule, ast, scopes, signature, errors);
             changed |= c;
@@ -1100,10 +1107,11 @@ fn walk_var_type_expr(
             )
         }
         TypeExpr::Member(mid) => {
-            let MemberTypeExpr {
+            let TermMember {
                 term: parent_term,
                 name,
-            } = ast.member_type_expr(mid).clone();
+            } = *ast.term_member(mid);
+            let name = ast.ident_term(name).name.clone();
             let (parent_el, changed) =
                 walk_term(parent_term, current, rule, ast, scopes, signature, errors);
             let resolved = member_scopes_and_parents(rule, current, parent_el, scopes, signature)

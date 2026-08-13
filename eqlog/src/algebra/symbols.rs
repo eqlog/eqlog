@@ -229,8 +229,11 @@ impl<'a> Checker<'a> {
                     self.walk_term(arg, ctx);
                 }
             }
-            Term::MemberConst(id) => {
-                let MemberConstTerm { receiver, name } = *self.ast.member_const_term(id);
+            Term::Member(id) => {
+                let TermMember {
+                    term: receiver,
+                    name,
+                } = *self.ast.term_member(id);
                 let name = self.ast.ident_term(name).name.clone();
                 if self.is_sort_component(term, ctx) {
                     self.walk_term(receiver, ctx);
@@ -271,8 +274,11 @@ impl<'a> Checker<'a> {
                     self.ast.loc(head),
                 );
             }
-            Term::MemberConst(mid) => {
-                let MemberConstTerm { receiver, name } = *self.ast.member_const_term(mid);
+            Term::Member(mid) => {
+                let TermMember {
+                    term: receiver,
+                    name,
+                } = *self.ast.term_member(mid);
                 let name = self.ast.ident_term(name).name.clone();
                 if self.is_sort_component(receiver, ctx) {
                     self.errors.push(CompileError::NestedMorphismApplication {
@@ -345,8 +351,11 @@ impl<'a> Checker<'a> {
 
     fn app_head_is_mor(&self, head: TermId, ctx: RuleCtx<'a>) -> bool {
         match *self.ast.term(head) {
-            Term::MemberConst(mid) => {
-                let MemberConstTerm { receiver, name } = *self.ast.member_const_term(mid);
+            Term::Member(mid) => {
+                let TermMember {
+                    term: receiver,
+                    name,
+                } = *self.ast.term_member(mid);
                 let name = self.ast.ident_term(name).name.clone();
                 self.receiver_types(receiver, ctx)
                     .into_iter()
@@ -380,8 +389,11 @@ impl<'a> Checker<'a> {
                     self.ast.loc(pattern),
                 );
             }
-            Term::MemberConst(mid) => {
-                let MemberConstTerm { receiver, name } = *self.ast.member_const_term(mid);
+            Term::Member(mid) => {
+                let TermMember {
+                    term: receiver,
+                    name,
+                } = *self.ast.term_member(mid);
                 self.walk_term(receiver, ctx);
                 let name = self.ast.ident_term(name).name.clone();
                 for scope in self.member_receiver_scopes(receiver, ctx) {
@@ -431,7 +443,8 @@ impl<'a> Checker<'a> {
                 self.check_lookup(self.scopes.entry(id), name, &[LookupKind::Model], used_at);
             }
             TypeExpr::Member(id) => {
-                let MemberTypeExpr { term, name } = self.ast.member_type_expr(id).clone();
+                let TermMember { term, name } = *self.ast.term_member(id);
+                let name = self.ast.ident_term(name).name.clone();
                 self.walk_term(term, ctx);
                 for scope in self.member_receiver_scopes(term, ctx) {
                     self.check_member_lookup(
@@ -457,7 +470,8 @@ impl<'a> Checker<'a> {
                 );
             }
             PredExpr::Member(id) => {
-                let MemberPredExpr { term, name } = self.ast.member_pred_expr(id).clone();
+                let TermMember { term, name } = *self.ast.term_member(id);
+                let name = self.ast.ident_term(name).name.clone();
                 self.walk_term(term, ctx);
                 for scope in self.member_receiver_scopes(term, ctx) {
                     self.check_member_lookup(
@@ -492,10 +506,13 @@ impl<'a> Checker<'a> {
     }
 
     fn is_sort_component(&self, term: TermId, ctx: RuleCtx<'a>) -> bool {
-        let Term::MemberConst(mid) = *self.ast.term(term) else {
+        let Term::Member(mid) = *self.ast.term(term) else {
             return false;
         };
-        let MemberConstTerm { receiver, name } = *self.ast.member_const_term(mid);
+        let TermMember {
+            term: receiver,
+            name,
+        } = *self.ast.term_member(mid);
         let name = self.ast.ident_term(name).name.clone();
         self.receiver_types(receiver, ctx)
             .into_iter()
@@ -503,10 +520,10 @@ impl<'a> Checker<'a> {
     }
 
     fn walk_mor_path_root(&mut self, term: TermId, ctx: RuleCtx<'a>) {
-        let Term::MemberConst(mid) = *self.ast.term(term) else {
+        let Term::Member(mid) = *self.ast.term(term) else {
             unreachable!();
         };
-        self.walk_term(self.ast.member_const_term(mid).receiver, ctx);
+        self.walk_term(self.ast.term_member(mid).term, ctx);
     }
 
     /// True when `receiver` is a morphism, so the caller must not also look

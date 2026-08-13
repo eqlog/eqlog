@@ -164,11 +164,9 @@ fn el_base_name(
             }
             match *ctx.ast.term(term) {
                 Term::Ident(ident) => Some(ctx.ast.ident_term(ident).name.clone()),
-                Term::Wildcard
-                | Term::App(_)
-                | Term::MemberConst(_)
-                | Term::Dom(_)
-                | Term::Cod(_) => None,
+                Term::Wildcard | Term::App(_) | Term::Member(_) | Term::Dom(_) | Term::Cod(_) => {
+                    None
+                }
             }
         })
         .unwrap_or_else(|| "el".into())
