@@ -2,8 +2,7 @@ use eqlog::*;
 use indoc::indoc;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::thread::sleep;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 use tempdir::TempDir;
 
 fn read_modified(path: &Path) -> SystemTime {
@@ -11,6 +10,22 @@ fn read_modified(path: &Path) -> SystemTime {
         .expect("Failed to read output file metadata")
         .modified()
         .expect("Failed to read output file modified time")
+}
+
+// Pin to a sentinel so a skip is distinguishable from a rewrite when the
+// filesystem mtime granularity is 1s.
+fn pin_modified(path: &Path) -> SystemTime {
+    let sentinel = SystemTime::UNIX_EPOCH;
+    fs::File::open(path)
+        .expect("Failed to open output file")
+        .set_modified(sentinel)
+        .expect("Failed to set output file modified time");
+    let actual = read_modified(path);
+    assert_eq!(
+        actual, sentinel,
+        "Filesystem did not honor the sentinel modified time"
+    );
+    sentinel
 }
 
 #[test]
@@ -36,18 +51,13 @@ fn unchanged_file_detected() {
     fs::write(in_file_path.as_path(), src).expect("Failed to write source file");
 
     process(&config).expect("Initial Eqlog compilation failed");
-    let modified_first: SystemTime = read_modified(out_file_path.as_path());
-
-    sleep(Duration::from_millis(1));
+    let sentinel = pin_modified(out_file_path.as_path());
 
     process(&config).expect("Second Eqlog compilation failed");
-    let modified_second: SystemTime = read_modified(out_file_path.as_path());
+    let modified_second = read_modified(out_file_path.as_path());
 
-    let duration = modified_second
-        .duration_since(modified_first)
-        .expect("No duration between modified_first and modified_second -- clock anomaly?");
-    assert!(
-        duration.is_zero(),
+    assert_eq!(
+        modified_second, sentinel,
         "The output file should not be changed if the input file hasn't changed"
     );
 }
@@ -77,19 +87,16 @@ fn changed_file_detected() {
 
     fs::write(in_file_path.as_path(), first_src).expect("Failed to write source file");
     process(&config).expect("Initial Eqlog compilation failed");
-    let modified_first: SystemTime = read_modified(out_file_path.as_path());
-
-    sleep(Duration::from_millis(1));
+    let first_out =
+        fs::read_to_string(out_file_path.as_path()).expect("Failed to read output file");
 
     fs::write(in_file_path.as_path(), second_src).expect("Failed to write source file");
     process(&config).expect("Second Eqlog compilation failed");
-    let modified_second: SystemTime = read_modified(out_file_path.as_path());
+    let second_out =
+        fs::read_to_string(out_file_path.as_path()).expect("Failed to read output file");
 
-    let duration = modified_second
-        .duration_since(modified_first)
-        .expect("No duration between modified_first and modified_second -- clock anomaly?");
-    assert!(
-        !duration.is_zero(),
+    assert_ne!(
+        first_out, second_out,
         "The output file should have changed when the input file changed"
     );
 }

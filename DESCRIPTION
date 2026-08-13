@@ -1,0 +1,6 @@
+Don't use close mtimes to detect eqlog rebuilds
+
+Compilation finishes in the same second, and many filesystems only store
+mtime at 1s resolution. The change-detection tests now pin a sentinel
+mtime to observe skips and compare generated contents to observe
+rewrites.
