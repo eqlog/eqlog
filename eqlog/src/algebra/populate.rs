@@ -771,7 +771,6 @@ fn resolve_mor_projection_apps(
     apps.into_iter().collect()
 }
 
-/// `Mor(M)` has no body, so the type name is looked up in `M` instead.
 pub(crate) fn mor_type_component(
     scopes: &Scopes,
     signature: &Signature,
