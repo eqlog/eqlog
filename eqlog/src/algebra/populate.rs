@@ -886,8 +886,7 @@ fn emit_known_apps(
 /// Resolves the application of `head` to `arg_els` and emits the corresponding
 /// [`FuncApp`]s.
 ///
-/// The mor_app type is the name written on the head, not inferred from the
-/// argument. Non-callee heads are still walked so nested terms are populated.
+/// Non-callee heads are still walked so nested terms are populated.
 ///
 /// `expected` is the result el previously committed for this term, if any.
 /// Returns `(result_el, changed)`.

@@ -1,6 +1,0 @@
-Error: morphism application must name a member type
- --> error-test-source/mor-app-must-name-type/theory.eql:9
-  | 
-9 |     then f(x)!;
-  |          ^     
-  | 

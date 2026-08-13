@@ -1,0 +1,6 @@
+Error: undeclared symbol "f"
+ --> error-test-source/variable-called-as-function/theory.eql:9
+  | 
+9 |     then f(x)!;
+  |          ^     
+  | 

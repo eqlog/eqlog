@@ -1,6 +1,0 @@
-Error: morphism application must name a member type
- --> error-test-source/mor-const-argument-number/theory.eql:8
-  | 
-8 |     if c()!;
-  |        ^    
-  | 

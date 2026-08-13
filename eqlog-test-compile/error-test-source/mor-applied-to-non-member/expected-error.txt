@@ -1,4 +1,4 @@
-Error: Morphisms can only be applied to member elements
+Error: Morphisms can only be applied to elements of the named type
   --> error-test-source/mor-applied-to-non-member/theory.eql:10
    | 
 10 |     then f.T(x) = f.T(x);

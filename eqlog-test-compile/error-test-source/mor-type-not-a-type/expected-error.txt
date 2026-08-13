@@ -1,6 +1,12 @@
-Error: undeclared symbol "foo"
- --> error-test-source/mor-type-not-a-type/theory.eql:9
+Error: expected type, found function "foo"
+  --> error-test-source/mor-type-not-a-type/theory.eql:10
+   | 
+10 |     then f.foo(x)!;
+   |          ^^^^^     
+   | 
+"foo" declared as function here:
+ --> error-test-source/mor-type-not-a-type/theory.eql:3
   | 
-9 |     then f.foo(x)!;
-  |          ^^^^^     
+3 |     func foo(T) -> T;
+  |     ^^^^^^^^^^^^^^^^^
   | 

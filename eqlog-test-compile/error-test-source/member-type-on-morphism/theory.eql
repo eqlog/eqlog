@@ -1,0 +1,9 @@
+model M {
+    type T;
+}
+
+rule {
+    if f: Mor(M);
+    if x: f.T;
+    then x = x;
+}

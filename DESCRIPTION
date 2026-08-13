@@ -1,8 +1,11 @@
-Apply morphisms as f.T(x), not f(x).
+Treat f(x) as function application only.
 
-A morphism is a record of functions, one per member type. Bare f(x)
-does not say which type is mapped, and overloads function application
-with morphism application. The type-component spelling f.T(x) is
-already in the grammar; T is looked up in the body of the model f is
-a morphism of, not on type Mor(M). Nested paths such as f.N.T(x) are
-rejected until nested models exist.
+Morphism application as f(x) was never released, so there is no
+migration diagnostic. A variable used as f(x) is an undeclared
+function; a const used as f(x) is a const called as a function.
+Member types and predicates live on model instances, so f.T in those
+positions is undeclared.
+
+Test applying f.T to the wrong member type of the same model, writing
+f.T as a type or predicate, and naming a declared non-type on a
+morphism.

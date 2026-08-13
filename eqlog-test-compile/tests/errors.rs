@@ -323,23 +323,33 @@ fn morphism_argument_number() {
 }
 
 #[test]
-fn mor_const_argument_number() {
-    test_case(Path::new("mor-const-argument-number"));
-}
-
-#[test]
 fn match_pattern_member_func() {
     test_case(Path::new("match-pattern-member-func"));
 }
 
 #[test]
-fn dom_applied_as_mor() {
-    test_case(Path::new("dom-applied-as-mor"));
+fn variable_called_as_function() {
+    test_case(Path::new("variable-called-as-function"));
 }
 
 #[test]
-fn mor_app_must_name_type() {
-    test_case(Path::new("mor-app-must-name-type"));
+fn dom_called_as_function() {
+    test_case(Path::new("dom-called-as-function"));
+}
+
+#[test]
+fn mor_applied_to_wrong_type() {
+    test_case(Path::new("mor-applied-to-wrong-type"));
+}
+
+#[test]
+fn member_type_on_morphism() {
+    test_case(Path::new("member-type-on-morphism"));
+}
+
+#[test]
+fn member_pred_on_morphism() {
+    test_case(Path::new("member-pred-on-morphism"));
 }
 
 #[test]
