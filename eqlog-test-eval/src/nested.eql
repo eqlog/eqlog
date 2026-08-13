@@ -1,0 +1,44 @@
+model Bundle {
+    model Fiber {
+        type El;
+        pred marked(El);
+        func tip() -> El;
+
+        rule tip_total {
+            then tip()!;
+        }
+    }
+
+    rule fiber_el_mors_total {
+        if g: Mor(Fiber);
+        if fiber_dom = dom(g);
+        if x: fiber_dom.El;
+        if cod(g)!;
+        then g.El(x)!;
+    }
+}
+
+rule use_tip {
+    if b: Bundle;
+    if f: b.Fiber;
+    if t = f.tip();
+    then t = t;
+}
+
+rule bundle_fiber_mors_total {
+    if h: Mor(Bundle);
+    if bundle_dom = dom(h);
+    if f: bundle_dom.Fiber;
+    if cod(h)!;
+    then h.Fiber(f)!;
+}
+
+// Three-level nesting: flatten only keeps the innermost parent, so C's
+// dom/cod are still 3-ary. This exists to keep codegen honest.
+model A {
+    model B {
+        model C {
+            type T;
+        }
+    }
+}

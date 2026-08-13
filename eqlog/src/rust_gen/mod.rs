@@ -1967,6 +1967,10 @@ fn display_mor_app_map_expr<'a>(
             .mor_app_func_for_type(typ)
             .expect("mor_app_func should be defined for member types");
         let mor_app_rel = FlatInRel::Rel(FlatRel::Func(mor_app_func));
+        // Nested member types flatten mor_app as (enclosing, mor, arg, result).
+        // The enclosing instance is `parent` from NestedMorphismWithSignature.
+        let parented = !ctx.signature().func(mor_app_func).parents.is_empty();
+        let order: &[usize] = if parented { &[0, 1, 2, 3] } else { &[0, 1, 2] };
 
         let mor_app_indices = index_selection
             .indices
@@ -1974,30 +1978,51 @@ fn display_mor_app_map_expr<'a>(
             .expect("mor_app rel should have indices");
         let mor_app_eval_index_new = mor_app_indices
             .iter()
-            .filter(|index| index.age == IndexAge::New && index.order.as_ref() == [0, 1, 2])
+            .filter(|index| index.age == IndexAge::New && index.order.as_ref() == order)
             .exactly_one()
-            .expect("should have exactly one new index with order [0, 1, 2] for mor_app rel");
+            .unwrap_or_else(|_| {
+                panic!("should have exactly one new index with order {order:?} for mor_app rel")
+            });
         let mor_app_eval_index_old = mor_app_indices
             .iter()
-            .filter(|index| index.age == IndexAge::Old && index.order.as_ref() == [0, 1, 2])
+            .filter(|index| index.age == IndexAge::Old && index.order.as_ref() == order)
             .exactly_one()
-            .expect("should have exactly one old index with order [0, 1, 2] for mor_app rel");
+            .unwrap_or_else(|_| {
+                panic!("should have exactly one old index with order {order:?} for mor_app rel")
+            });
 
         let mor_app_eval_index_new_name =
-            display_index_field_name(&mor_app_rel, mor_app_eval_index_new, ctx);
+            display_own_index_field_name(&mor_app_rel, mor_app_eval_index_new, ctx);
         let mor_app_eval_index_old_name =
-            display_index_field_name(&mor_app_rel, mor_app_eval_index_old, ctx);
+            display_own_index_field_name(&mor_app_rel, mor_app_eval_index_old, ctx);
 
-        writedoc! {f, "
-            self.{mor_app_eval_index_new_name}
-            .get(*morph)
-            .unwrap_or_else(|| PrefixTree2::empty())
-            .union(
-            self.{mor_app_eval_index_old_name}
-            .get(*morph)
-            .unwrap_or_else(|| PrefixTree2::empty()),
-            )
-        "}
+        if parented {
+            writedoc! {f, "
+                self.{mor_app_eval_index_new_name}
+                .get(*parent)
+                .unwrap_or_else(|| PrefixTree3::empty())
+                .get(*morph)
+                .unwrap_or_else(|| PrefixTree2::empty())
+                .union(
+                self.{mor_app_eval_index_old_name}
+                .get(*parent)
+                .unwrap_or_else(|| PrefixTree3::empty())
+                .get(*morph)
+                .unwrap_or_else(|| PrefixTree2::empty()),
+                )
+            "}
+        } else {
+            writedoc! {f, "
+                self.{mor_app_eval_index_new_name}
+                .get(*morph)
+                .unwrap_or_else(|| PrefixTree2::empty())
+                .union(
+                self.{mor_app_eval_index_old_name}
+                .get(*morph)
+                .unwrap_or_else(|| PrefixTree2::empty()),
+                )
+            "}
+        }
     })
 }
 
@@ -2143,6 +2168,148 @@ fn display_apply_morphism_index_propagated<'a>(
     })
 }
 
+fn index_with_order<'a>(
+    indices: &'a [IndexSpec],
+    age: IndexAge,
+    order: &'a [usize],
+) -> &'a IndexSpec {
+    indices
+        .iter()
+        .filter(|index| index.age == age && index.order.as_ref() == order)
+        .exactly_one()
+        .unwrap_or_else(|_| panic!("should have exactly one {age} index with order {order:?}"))
+}
+
+fn morphism_iter_pattern(parent_model_type: TypeId, ctx: &RustGenCtx<'_>) -> &'static str {
+    if ctx.signature().type_(parent_model_type).parents.is_empty() {
+        "MorphismWithSignature { morph, dom, cod }"
+    } else {
+        "NestedMorphismWithSignature { parent, morph, dom, cod }"
+    }
+}
+
+fn display_ordered_morphisms<'a>(
+    typ: TypeId,
+    ctx: &'a RustGenCtx<'a>,
+    index_selection: &'a IndexSelection,
+) -> impl Display + 'a {
+    FmtFn(move |f| {
+        let ids = ctx
+            .signature()
+            .ids_for_model_type(typ)
+            .expect("typ is model type");
+        let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
+        let nested = !ctx.signature().type_(typ).parents.is_empty();
+
+        let dom_rel = FlatInRel::Rel(FlatRel::Func(ids.dom));
+        let cod_rel = FlatInRel::Rel(FlatRel::Func(ids.cod));
+        let obj_rel = if nested {
+            FlatInRel::Rel(FlatRel::ModelMember(typ))
+        } else {
+            FlatInRel::TypeSet(typ)
+        };
+
+        let dom_indices = index_selection
+            .indices
+            .get(&dom_rel)
+            .expect("dom rel should have indices");
+        let cod_indices = index_selection
+            .indices
+            .get(&cod_rel)
+            .expect("cod rel should have indices");
+        let obj_indices = index_selection
+            .indices
+            .get(&obj_rel)
+            .expect("object rel should have indices");
+
+        let (dom_order, cod_order): (&[usize], &[usize]) = if nested {
+            (&[0, 2, 1], &[0, 1, 2])
+        } else {
+            (&[1, 0], &[0, 1])
+        };
+
+        let dom_new = display_own_index_field_name(
+            &dom_rel,
+            index_with_order(dom_indices, IndexAge::New, dom_order),
+            ctx,
+        );
+        let dom_old = display_own_index_field_name(
+            &dom_rel,
+            index_with_order(dom_indices, IndexAge::Old, dom_order),
+            ctx,
+        );
+        let cod_new = display_own_index_field_name(
+            &cod_rel,
+            index_with_order(cod_indices, IndexAge::New, cod_order),
+            ctx,
+        );
+        let cod_old = display_own_index_field_name(
+            &cod_rel,
+            index_with_order(cod_indices, IndexAge::Old, cod_order),
+            ctx,
+        );
+
+        let obj_new = if nested {
+            display_own_index_field_name(
+                &obj_rel,
+                index_with_order(obj_indices, IndexAge::New, &[0, 1]),
+                ctx,
+            )
+            .to_string()
+        } else {
+            let index = obj_indices
+                .iter()
+                .filter(|index| index.age == IndexAge::New)
+                .exactly_one()
+                .expect("should have exactly one new index for set rel");
+            display_own_index_field_name(&obj_rel, index, ctx).to_string()
+        };
+        let obj_old = if nested {
+            display_own_index_field_name(
+                &obj_rel,
+                index_with_order(obj_indices, IndexAge::Old, &[0, 1]),
+                ctx,
+            )
+            .to_string()
+        } else {
+            let index = obj_indices
+                .iter()
+                .filter(|index| index.age == IndexAge::Old)
+                .exactly_one()
+                .expect("should have exactly one old index for set rel");
+            display_own_index_field_name(&obj_rel, index, ctx).to_string()
+        };
+
+        if nested {
+            writedoc! {f, r#"
+                let ordered_{type_snake}_mor: Vec<eqlog_runtime::NestedMorphismWithSignature> =
+                eqlog_runtime::morphism_toposort_nested(
+                &self.{dom_new},
+                &self.{dom_old},
+                &self.{cod_new},
+                &self.{cod_old},
+                &self.{obj_old},
+                &self.{obj_new},
+                )
+                .expect("TODO: Return error about a cycle being present in the morphism category");
+            "#}
+        } else {
+            writedoc! {f, r#"
+                let ordered_{type_snake}_mor: Vec<eqlog_runtime::MorphismWithSignature> =
+                eqlog_runtime::morphism_toposort(
+                &self.{dom_new},
+                &self.{dom_old},
+                &self.{cod_new},
+                &self.{cod_old},
+                &self.{obj_old},
+                &self.{obj_new},
+                )
+                .expect("TODO: Return error about a cycle being present in the morphism category");
+            "#}
+        }
+    })
+}
+
 fn display_recompute_model_indices_fn<'a>(
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
@@ -2152,90 +2319,7 @@ fn display_recompute_model_indices_fn<'a>(
             .signature()
             .iter_types()
             .filter(|typ| matches!(ctx.signature().type_(*typ).kind, TypeKind::Model))
-            .map(|typ| {
-                FmtFn(move |f: &mut Formatter| -> Result {
-                    let ids = ctx
-                        .signature()
-                        .ids_for_model_type(typ)
-                        .expect("typ is model type");
-                    let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
-
-                    let dom_rel = FlatInRel::Rel(FlatRel::Func(ids.dom));
-                    let cod_rel = FlatInRel::Rel(FlatRel::Func(ids.cod));
-                    let set_rel = FlatInRel::TypeSet(typ);
-
-                    let dom_indices = index_selection
-                        .indices
-                        .get(&dom_rel)
-                        .expect("dom rel should have indices");
-                    let new_order_1_0 = dom_indices
-                        .iter()
-                        .filter(|index| index.age == IndexAge::New && index.order.as_ref() == [1, 0])
-                        .exactly_one()
-                        .expect("should have exactly one new index with order [1, 0] for dom rel");
-                    let old_order_1_0 = dom_indices
-                        .iter()
-                        .filter(|index| index.age == IndexAge::Old && index.order.as_ref() == [1, 0])
-                        .exactly_one()
-                        .expect("should have exactly one old index with order [1, 0] for dom rel");
-
-                    let dom_new_order_1_0 =
-                        display_index_field_name(&dom_rel, new_order_1_0, ctx);
-                    let dom_old_order_1_0 =
-                        display_index_field_name(&dom_rel, old_order_1_0, ctx);
-
-                    let cod_indices = index_selection
-                        .indices
-                        .get(&cod_rel)
-                        .expect("cod rel should have indices");
-                    let new_order_0_1 = cod_indices
-                        .iter()
-                        .filter(|index| index.age == IndexAge::New && index.order.as_ref() == [0, 1])
-                        .exactly_one()
-                        .expect("should have exactly one new index with order [0, 1] for cod rel");
-                    let old_order_0_1 = cod_indices
-                        .iter()
-                        .filter(|index| index.age == IndexAge::Old && index.order.as_ref() == [0, 1])
-                        .exactly_one()
-                        .expect("should have exactly one old index with order [0, 1] for cod rel");
-
-                    let cod_new_order_0_1 =
-                        display_index_field_name(&cod_rel, new_order_0_1, ctx);
-                    let cod_old_order_0_1 =
-                        display_index_field_name(&cod_rel, old_order_0_1, ctx);
-
-                    let set_indices = index_selection
-                        .indices
-                        .get(&set_rel)
-                        .expect("set rel should have indices");
-                    let new_order_0 = set_indices
-                        .iter()
-                        .filter(|index| index.age == IndexAge::New)
-                        .exactly_one()
-                        .expect("should have exactly one new index for set rel");
-                    let old_order_0 = set_indices
-                        .iter()
-                        .filter(|index| index.age == IndexAge::Old)
-                        .exactly_one()
-                        .expect("should have exactly one old index for set rel");
-
-                    let obj_new_order_0 = display_index_field_name(&set_rel, new_order_0, ctx);
-                    let obj_old_order_0 = display_index_field_name(&set_rel, old_order_0, ctx);
-
-                    writedoc! {f, r#"
-                        let ordered_{type_snake}_mor: Vec<eqlog_runtime::MorphismWithSignature> =
-                        eqlog_runtime::morphism_toposort(
-                        &self.{dom_new_order_1_0},
-                        &self.{dom_old_order_1_0},
-                        &self.{cod_new_order_0_1},
-                        &self.{cod_old_order_0_1},
-                        &self.{obj_new_order_0},
-                        &self.{obj_old_order_0},
-                        )
-                        .expect("TODO: Return error about a cycle being present in the morphism category");
-                    "#}
-                })
-            })
+            .map(|typ| display_ordered_morphisms(typ, ctx, index_selection))
             .format("\n");
 
         let compute_rel_sets = index_selection
@@ -2287,8 +2371,9 @@ fn display_recompute_model_indices_fn<'a>(
                     let suffix_len = arity.len() - prefix_len;
                     let prefix_columns = &columns[..prefix_len];
 
-                    let parent_model_type_snake =
-                        display_type(parent_model_type, ctx).to_string().to_case(Snake);
+                    let parent_model_type_snake = display_type(parent_model_type, ctx)
+                        .to_string()
+                        .to_case(Snake);
 
                     let member_maps = prefix_columns
                         .iter()
@@ -2318,12 +2403,13 @@ fn display_recompute_model_indices_fn<'a>(
                         suffix_len,
                     );
                     let suffix_type = display_prefix_tree_type(suffix_len);
+                    let mor_pat = morphism_iter_pattern(parent_model_type, ctx);
 
-                    writedoc!{f, r#"
+                    writedoc! {f, r#"
                         let mut {index_field_name}_all = self.{index_field_name}_own.clone();
                         let {index_field_name}_own = &mut self.{index_field_name}_own;
                         #[allow(unused)]
-                        for MorphismWithSignature {{ morph, dom, cod }} in ordered_{parent_model_type_snake}_mor.iter() {{
+                        for {mor_pat} in ordered_{parent_model_type_snake}_mor.iter() {{
                         {member_maps}
                         let mut propagated: Vec<([u32; {prefix_len}], {suffix_type})> = Vec::new();
                         {collect_propagated}
@@ -2546,6 +2632,20 @@ fn display_define_fn<'a>(func: FuncId, ctx: &'a RustGenCtx<'a>) -> impl Display 
             "parent_el"
         };
 
+        // The morphism is the second-to-last flat domain argument; any
+        // enclosing-model columns come first and must be forwarded to
+        // the nested `cod` projection.
+        let mor_app_cod_args = if domain.len() >= 2 {
+            func_arg_vars[..=domain.len() - 2]
+                .iter()
+                .cloned()
+                .map(display_var)
+                .format(", ")
+                .to_string()
+        } else {
+            String::new()
+        };
+
         let define_parent_var = FmtFn(move |f| {
             let Some(model_type) = codomain_parent_model else {
                 return Ok(());
@@ -2577,9 +2677,8 @@ fn display_define_fn<'a>(func: FuncId, ctx: &'a RustGenCtx<'a>) -> impl Display 
             let cod_func_snake = display_func(cod_func, ctx);
 
             assert!(func_is_mor_app);
-            let mor_arg = ElVar::from(0);
             writedoc! {f, "
-                let {parent_var} = self.define_{cod_func_snake}({mor_arg});
+                let {parent_var} = self.define_{cod_func_snake}({mor_app_cod_args});
             "}?;
             Ok(())
         });

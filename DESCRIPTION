@@ -1,0 +1,6 @@
+Compile nested model declarations.
+
+Codegen assumed every model's dom and cod were 2-ary Mor -> Model
+relations. Nested models prepend the enclosing instance, so those
+relations are 3-ary and toposort plus mor_app generation panicked.
+Nested morphism application such as f.N.T(x) is still rejected.

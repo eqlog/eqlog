@@ -227,22 +227,29 @@ pub fn select_indices<'a>(
         let mor_type = FlatInRel::TypeSet(ids.mor);
         let dom = FlatInRel::Rel(FlatRel::Func(ids.dom));
         let cod = FlatInRel::Rel(FlatRel::Func(ids.cod));
+        // Nested `dom`/`cod` flatten with the enclosing model first, so the
+        // object/morphism columns sit one to the right of the top-level case.
+        let (dom_projections, cod_projections) = if signature.func(ids.dom).parents.is_empty() {
+            (btreeset! {1}, btreeset! {0})
+        } else {
+            (btreeset! {0, 2}, btreeset! {0, 1})
+        };
 
         [
-            // Given an object, look up the set of outgoing morphisms.
+            // Given an object (and parent, when nested), look up outgoing morphisms.
             (
                 dom,
                 QuerySpec {
                     age: QueryAge::All,
-                    projections: btreeset! {1},
+                    projections: dom_projections,
                 },
             ),
-            // Given a morphism, look up the codomain.
+            // Given a morphism (and parent, when nested), look up the codomain.
             (
                 cod,
                 QuerySpec {
                     age: QueryAge::All,
-                    projections: btreeset! {0},
+                    projections: cod_projections,
                 },
             ),
             (

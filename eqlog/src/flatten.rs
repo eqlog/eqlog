@@ -4,7 +4,7 @@ use std::sync::Arc;
 use convert_case::{Case::Snake, Casing as _};
 
 use crate::algebra::populate::{MorphismKind, RuleStructures};
-use crate::algebra::signature::{FuncId, Signature};
+use crate::algebra::signature::{FuncId, Signature, TypeKind};
 use crate::algebra::structure::{ConcreteType, ElId, FuncApp, PredApp, Structure, StructureId};
 use crate::ast::*;
 use crate::flat_eqlog::*;
@@ -699,7 +699,15 @@ fn func_base_name(ctx: &FlattenCtx<'_>, func: FuncId) -> String {
         .iter_mor_app_funcs()
         .find(|(_, func0)| *func0 == func)
     {
-        return format!("{}_mor_app", ctx.signature.type_name(ctx.ast, member_type));
+        // Match rust_gen identifiers: morphism companions are `{Model}Mor`,
+        // not the diagnostic `Mor<Model>` spelling.
+        let member_name = match ctx.signature.type_(member_type).kind {
+            TypeKind::Mor(model) => format!("{}Mor", ctx.signature.type_name(ctx.ast, model)),
+            TypeKind::Plain | TypeKind::Model | TypeKind::Enum => {
+                ctx.signature.type_name(ctx.ast, member_type)
+            }
+        };
+        return format!("{member_name}_mor_app");
     }
     format!("func_{}", func.as_usize())
 }

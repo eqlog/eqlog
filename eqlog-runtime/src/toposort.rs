@@ -1,6 +1,6 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use crate::{PrefixTree1, PrefixTree2};
+use crate::{PrefixTree1, PrefixTree2, PrefixTree3};
 
 #[derive(Debug, Copy, Clone)]
 pub enum ToposortError {
@@ -99,6 +99,83 @@ pub fn morphism_toposort(
     }
 
     Ok(ordered_mors)
+}
+
+#[derive(Debug)]
+pub struct NestedMorphismWithSignature {
+    pub parent: u32,
+    pub morph: u32,
+    pub dom: u32,
+    pub cod: u32,
+}
+
+/// Topologically sorts morphisms of a nested model, one enclosing-model
+/// instance at a time.
+///
+/// Nested `dom`/`cod` are 3-ary because the enclosing model is prepended.
+/// Morphisms that live in different parent instances form disjoint
+/// categories, so each parent is sorted independently with
+/// [`morphism_toposort`].
+///
+/// Index orders:
+/// - `dom_*`: (parent, object, morphism)
+/// - `cod_*`: (parent, morphism, object)
+/// - `obj_*`: (parent, object), typically the model-membership index
+pub fn morphism_toposort_nested(
+    dom_new_order_0_2_1: &PrefixTree3,
+    dom_old_order_0_2_1: &PrefixTree3,
+    cod_new_order_0_1_2: &PrefixTree3,
+    cod_old_order_0_1_2: &PrefixTree3,
+    obj_old_order_0_1: &PrefixTree2,
+    obj_new_order_0_1: &PrefixTree2,
+) -> Result<Vec<NestedMorphismWithSignature>, ToposortError> {
+    let mut parents = BTreeSet::new();
+    for tree2 in [obj_old_order_0_1, obj_new_order_0_1] {
+        for (parent, _) in tree2.iter_restrictions() {
+            parents.insert(parent);
+        }
+    }
+    for tree3 in [
+        dom_new_order_0_2_1,
+        dom_old_order_0_2_1,
+        cod_new_order_0_1_2,
+        cod_old_order_0_1_2,
+    ] {
+        for (parent, _) in tree3.iter_restrictions() {
+            parents.insert(parent);
+        }
+    }
+
+    let mut ordered = Vec::new();
+    for parent in parents {
+        let part = morphism_toposort(
+            dom_new_order_0_2_1
+                .get(parent)
+                .unwrap_or_else(|| PrefixTree2::empty()),
+            dom_old_order_0_2_1
+                .get(parent)
+                .unwrap_or_else(|| PrefixTree2::empty()),
+            cod_new_order_0_1_2
+                .get(parent)
+                .unwrap_or_else(|| PrefixTree2::empty()),
+            cod_old_order_0_1_2
+                .get(parent)
+                .unwrap_or_else(|| PrefixTree2::empty()),
+            obj_old_order_0_1
+                .get(parent)
+                .unwrap_or_else(|| PrefixTree1::empty()),
+            obj_new_order_0_1
+                .get(parent)
+                .unwrap_or_else(|| PrefixTree1::empty()),
+        )?;
+        ordered.extend(part.into_iter().map(|m| NestedMorphismWithSignature {
+            parent,
+            morph: m.morph,
+            dom: m.dom,
+            cod: m.cod,
+        }));
+    }
+    Ok(ordered)
 }
 
 #[cfg(test)]
@@ -302,5 +379,56 @@ mod tests {
         let ordered = result.unwrap();
         assert_eq!(ordered.len(), 1);
         assert_eq!(ordered[0].morph, 0);
+    }
+
+    fn make_prefix_tree_3(triples: &[(u32, u32, u32)]) -> PrefixTree3 {
+        let mut tree = PrefixTree3::new();
+        for &(a, b, c) in triples {
+            tree.insert([a, b, c]);
+        }
+        tree
+    }
+
+    #[test]
+    fn test_nested_sorts_each_parent_separately() {
+        // Parent 10: 0 -> 1 via morphism 100
+        // Parent 20: 2 -> 3 -> 4 via morphisms 200, 201
+        let dom_new = make_prefix_tree_3(&[(10, 0, 100), (20, 2, 200), (20, 3, 201)]);
+        let dom_old = PrefixTree3::new();
+        let cod_new = make_prefix_tree_3(&[(10, 100, 1), (20, 200, 3), (20, 201, 4)]);
+        let cod_old = PrefixTree3::new();
+        let obj_new = make_prefix_tree_2(&[(10, 0), (10, 1), (20, 2), (20, 3), (20, 4)]);
+        let obj_old = PrefixTree2::new();
+
+        let ordered =
+            morphism_toposort_nested(&dom_new, &dom_old, &cod_new, &cod_old, &obj_old, &obj_new)
+                .unwrap();
+        assert_eq!(ordered.len(), 3);
+
+        let parent_10: Vec<_> = ordered.iter().filter(|m| m.parent == 10).collect();
+        assert_eq!(parent_10.len(), 1);
+        assert_eq!(parent_10[0].morph, 100);
+        assert_eq!(parent_10[0].dom, 0);
+        assert_eq!(parent_10[0].cod, 1);
+
+        let parent_20: Vec<_> = ordered.iter().filter(|m| m.parent == 20).collect();
+        assert_eq!(parent_20.len(), 2);
+        assert_eq!(parent_20[0].morph, 200);
+        assert_eq!(parent_20[1].morph, 201);
+    }
+
+    #[test]
+    fn test_nested_cycle_in_one_parent() {
+        // Parent 10 is a DAG; parent 20 has a cycle.
+        let dom_new = make_prefix_tree_3(&[(10, 0, 100), (20, 2, 200), (20, 3, 201)]);
+        let dom_old = PrefixTree3::new();
+        let cod_new = make_prefix_tree_3(&[(10, 100, 1), (20, 200, 3), (20, 201, 2)]);
+        let cod_old = PrefixTree3::new();
+        let obj_new = make_prefix_tree_2(&[(10, 0), (10, 1), (20, 2), (20, 3)]);
+        let obj_old = PrefixTree2::new();
+
+        let result =
+            morphism_toposort_nested(&dom_new, &dom_old, &cod_new, &cod_old, &obj_old, &obj_new);
+        assert!(matches!(result, Err(ToposortError::CycleDetected)));
     }
 }
