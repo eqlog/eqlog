@@ -119,6 +119,83 @@ fn three_level_nesting() {
     assert!(model.a_member_b(a, b));
     assert!(model.b_member_c(b, c));
     assert!(model.c_member_t(c, t));
+    assert!(model.apex(c).is_some());
+    assert!(model.c_member_t(c, model.apex(c).unwrap()));
+}
+
+#[test]
+fn four_level_nesting() {
+    let mut model = Nested::new();
+    let w = model.new_w();
+    let x = model.new_x(w);
+    let y = model.new_y(x);
+    let z = model.new_z(y);
+    let u = model.new_u(z);
+
+    assert!(model.w_member_x(w, x));
+    assert!(model.x_member_y(x, y));
+    assert!(model.y_member_z(y, z));
+    assert!(model.z_member_u(z, u));
+    model.close();
+    assert!(model.z_member_u(z, u));
+}
+
+#[test]
+fn deep_c_morphism_maps_marked() {
+    let mut model = Nested::new();
+    let a = model.new_a();
+    let b = model.new_b(a);
+    let c0 = model.new_c(b);
+    let c1 = model.new_c(b);
+    let x = model.new_t(c0);
+
+    let g = model.new_c_mor(b);
+    model.insert_c_mor_dom(b, g, c0);
+    model.insert_c_mor_cod(b, g, c1);
+    model.insert_tagged(c0, x);
+
+    model.close();
+
+    let y = model.t_mor_app(b, g, x).unwrap();
+    assert!(model.c_member_t(c1, y));
+    assert!(model.tagged(c1, y));
+}
+
+#[test]
+fn deep_b_morphism_maps_c() {
+    let mut model = Nested::new();
+    let a = model.new_a();
+    let b0 = model.new_b(a);
+    let b1 = model.new_b(a);
+    let c = model.new_c(b0);
+
+    let f = model.new_b_mor(a);
+    model.insert_b_mor_dom(a, f, b0);
+    model.insert_b_mor_cod(a, f, b1);
+
+    model.close();
+
+    let image = model.c_mor_app(a, f, c).unwrap();
+    assert!(model.b_member_c(b1, image));
+    assert!(!model.are_equal_c(c, image));
+}
+
+#[test]
+fn deep_a_morphism_maps_b() {
+    let mut model = Nested::new();
+    let a0 = model.new_a();
+    let a1 = model.new_a();
+    let b = model.new_b(a0);
+
+    let h = model.new_a_mor();
+    model.insert_a_mor_dom(h, a0);
+    model.insert_a_mor_cod(h, a1);
+
+    model.close();
+
+    let image = model.b_mor_app(h, b).unwrap();
+    assert!(model.a_member_b(a1, image));
+    assert!(!model.are_equal_b(b, image));
 }
 
 #[test]

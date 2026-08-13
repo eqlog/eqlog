@@ -33,12 +33,61 @@ rule bundle_fiber_mors_total {
     then h.Fiber(f)!;
 }
 
-// Three-level nesting: flatten only keeps the innermost parent, so C's
-// dom/cod are still 3-ary. This exists to keep codegen honest.
+// Flattening only prepends the innermost parent, so a model at any
+// depth still has 3-ary dom/cod. Rules and morphisms at each level
+// check that this is enough for arbitrary nesting.
 model A {
     model B {
         model C {
             type T;
+            pred tagged(T);
+            func apex() -> T;
+
+            rule apex_total {
+                then apex()!;
+            }
+        }
+
+        rule c_t_mors_total {
+            if g: Mor(C);
+            if c_dom = dom(g);
+            if x: c_dom.T;
+            if cod(g)!;
+            then g.T(x)!;
+        }
+    }
+
+    rule b_c_mors_total {
+        if f: Mor(B);
+        if b_dom = dom(f);
+        if c: b_dom.C;
+        if cod(f)!;
+        then f.C(c)!;
+    }
+}
+
+rule use_deep_tip {
+    if a: A;
+    if b: a.B;
+    if c: b.C;
+    if t = c.apex();
+    then t = t;
+}
+
+rule a_b_mors_total {
+    if h: Mor(A);
+    if a_dom = dom(h);
+    if b: a_dom.B;
+    if cod(h)!;
+    then h.B(b)!;
+}
+
+model W {
+    model X {
+        model Y {
+            model Z {
+                type U;
+            }
         }
     }
 }
