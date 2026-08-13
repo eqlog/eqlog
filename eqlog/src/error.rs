@@ -779,7 +779,10 @@ impl Display for CompileErrorWithContext {
                     "Member function expressions not allowed in match patterns\n"
                 )?;
                 write_loc(f, *location)?;
-                write!(f, "Only constructors may be used in patterns\n")?;
+                write!(
+                    f,
+                    "Only constructors may be used in patterns\n"
+                )?;
             }
             NonMorphismAppliedAsMorphism { location } => {
                 write!(f, "Expression is not a morphism\n")?;

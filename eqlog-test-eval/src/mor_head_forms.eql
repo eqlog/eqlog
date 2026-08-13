@@ -1,5 +1,4 @@
-// Coverage for morphism application whose morphism is an ambient const,
-// a function application, or a member const.
+// Morphism application whose morphism is a const, an application, or a member const.
 
 model Set {
     type S;

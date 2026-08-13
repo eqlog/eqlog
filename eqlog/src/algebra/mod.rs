@@ -147,9 +147,6 @@ fn morphism_application_errors(
     errors
 }
 
-/// A morphism application is `f.T(x)` (or `pick(s).T(x)`, `b.mor.T(x)`):
-/// a member-const head whose receiver is a morphism and whose name is a
-/// member type of that morphism's model.
 fn app_head_is_mor(
     ast: &Ast,
     scopes: &Scopes,

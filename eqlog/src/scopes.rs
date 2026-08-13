@@ -566,8 +566,7 @@ impl<'a> ScopeBuilder<'a> {
             Term::Wildcard => current,
             Term::App(id) => {
                 let AppTerm { head, args } = *self.ast.app_term(id);
-                // App heads never introduce variables. An identifier callee
-                // is a function or constructor, not a binding site.
+                // App heads never introduce variables.
                 let after_head = self.walk_app_head(current, head);
                 let after_args = self.walk_term_list(after_head, args);
                 self.insert_ordered(id, current, after_args);

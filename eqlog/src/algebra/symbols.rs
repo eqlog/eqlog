@@ -261,8 +261,6 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// Checks the head of an application. Only functions, constructors, and
-    /// named sort components of morphisms are legal callees.
     fn check_app_head(&mut self, head: TermId, ctx: RuleCtx<'a>) {
         match *self.ast.term(head) {
             Term::Ident(id) => {
@@ -336,13 +334,7 @@ impl<'a> Checker<'a> {
             Some(Symbol::Arg(_)) | None => self
                 .errors
                 .push(CompileError::UndeclaredSymbol { name, used_at }),
-            Some(
-                sym @ (Symbol::Type(_)
-                | Symbol::Pred(_)
-                | Symbol::Enum(_)
-                | Symbol::Model(_)
-                | Symbol::Rule(_)),
-            ) => self.check_decl_symbols(
+            Some(sym) => self.check_decl_symbols(
                 name,
                 &[LookupKind::Func, LookupKind::Ctor],
                 used_at,
@@ -381,26 +373,12 @@ impl<'a> Checker<'a> {
         match *self.ast.term(head) {
             Term::Ident(id) => {
                 let name = self.ast.ident_term(id).name.clone();
-                let symbol = self.scopes.lookup(self.scopes.exit(head), &name);
-                match symbol {
-                    Some(Symbol::Ctor(_)) => {}
-                    Some(Symbol::Var(_) | Symbol::Const(_)) => {
-                        self.check_head_lookup(symbol, name, self.ast.loc(head));
-                    }
-                    Some(Symbol::Func(_))
-                    | Some(Symbol::Type(_))
-                    | Some(Symbol::Pred(_))
-                    | Some(Symbol::Enum(_))
-                    | Some(Symbol::Model(_))
-                    | Some(Symbol::Rule(_))
-                    | Some(Symbol::Arg(_))
-                    | None => self.check_lookup(
-                        self.scopes.exit(head),
-                        name,
-                        &[LookupKind::Ctor],
-                        self.ast.loc(pattern),
-                    ),
-                }
+                self.check_lookup(
+                    self.scopes.exit(head),
+                    name,
+                    &[LookupKind::Ctor],
+                    self.ast.loc(pattern),
+                );
             }
             Term::MemberConst(mid) => {
                 let MemberConstTerm { receiver, name } = *self.ast.member_const_term(mid);
@@ -413,17 +391,7 @@ impl<'a> Checker<'a> {
                                 location: self.ast.loc(pattern),
                             });
                         }
-                        sym @ (Some(Symbol::Type(_))
-                        | Some(Symbol::Pred(_))
-                        | Some(Symbol::Const(_))
-                        | Some(Symbol::Enum(_))
-                        | Some(Symbol::Model(_))
-                        | Some(Symbol::Rule(_))
-                        | Some(Symbol::Arg(_))
-                        | Some(Symbol::Var(_))
-                        | None) => {
-                            self.check_head_lookup(sym, name.clone(), self.ast.loc(head));
-                        }
+                        sym => self.check_head_lookup(sym, name.clone(), self.ast.loc(head)),
                     }
                 }
             }
@@ -536,14 +504,13 @@ impl<'a> Checker<'a> {
 
     fn walk_mor_path_root(&mut self, term: TermId, ctx: RuleCtx<'a>) {
         let Term::MemberConst(mid) = *self.ast.term(term) else {
-            unreachable!("sort-component path root is a MemberConst");
+            unreachable!();
         };
         self.walk_term(self.ast.member_const_term(mid).receiver, ctx);
     }
 
-    /// Look up `name` in the model body of each morphism type of `receiver`.
-    /// A type/enum/model name is a legal sort component. Returns true if the
-    /// receiver had a morphism type.
+    /// True when `receiver` is a morphism, so the caller must not also look
+    /// the name up as a member of a model instance.
     fn check_mor_name(
         &mut self,
         receiver: TermId,

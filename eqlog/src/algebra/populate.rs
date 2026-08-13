@@ -767,11 +767,7 @@ fn resolve_mor_projection_apps(
     apps.into_iter().collect()
 }
 
-/// If `receiver_typ` is `Mor(M)` and `name` is a type, enum or model in
-/// `M`'s body, the corresponding [`TypeId`].
-///
-/// The name is resolved in `M`, not on the receiver type. `Mor(M)` has no
-/// body; looking it up as a member of the receiver would always fail.
+/// `Mor(M)` has no body, so the sort name is looked up in `M` instead.
 pub(crate) fn mor_sort_type(
     scopes: &Scopes,
     signature: &Signature,
@@ -886,17 +882,8 @@ fn emit_known_apps(
 /// Resolves the application of `head` to `arg_els` and emits the corresponding
 /// [`FuncApp`]s.
 ///
-/// Classification of `head`:
-/// - bare [`Term::Ident`]: function/ctor if that symbol is in scope;
-/// - [`Term::MemberConst`]: member function/ctor if the receiver is a model
-///   instance, or morphism application at a named sort if the receiver is a
-///   morphism and the name is a member type of that morphism's model;
-/// - app/dom/cod heads and other idents: not callees. Walked as terms so
-///   inner structure is populated, but they do not emit `mor_app`.
-///
-/// Sort-component heads require exactly one argument; other arities produce
-/// [`CompileError::MorphismArgumentNumber`]. The member type is the name
-/// written in the source, not inferred from the argument.
+/// The mor_app sort is the name written on the head, not inferred from the
+/// argument. Non-callee heads are still walked so nested terms are populated.
 ///
 /// `expected` is the result el previously committed for this term, if any.
 /// Returns `(result_el, changed)`.
