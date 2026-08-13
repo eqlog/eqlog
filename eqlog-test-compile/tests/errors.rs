@@ -191,6 +191,11 @@ fn undetermined_variable_type() {
 }
 
 #[test]
+fn undetermined_mor_app_type() {
+    test_case(Path::new("undetermined-mor-app-type"));
+}
+
+#[test]
 fn conflicting_term_type_equality() {
     test_case(Path::new("conflicting-term-type-equality"));
 }
@@ -232,10 +237,6 @@ fn surjectivity_violation_nested_application() {
 #[test]
 fn surjectivity_violation_branch() {
     test_case(Path::new("surjectivity-violation-branch"));
-}
-#[test]
-fn surjectivity_violation_mor_app() {
-    test_case(Path::new("surjectivity-violation-mor-app"));
 }
 
 #[test]
