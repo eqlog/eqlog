@@ -255,8 +255,16 @@ impl<'a> Checker<'a> {
                 if self.check_mor_name(receiver, &name, self.ast.loc(term), ctx) {
                     return;
                 }
+                let mut saw_model = false;
                 for scope in self.member_receiver_scopes(receiver, ctx) {
+                    saw_model = true;
                     self.check_member_const_lookup(scope, name.clone(), self.ast.loc(term));
+                }
+                if !saw_model && self.receiver_has_known_non_model_type(receiver, ctx) {
+                    self.errors.push(CompileError::UndeclaredSymbol {
+                        name,
+                        used_at: self.ast.loc(term),
+                    });
                 }
             }
             Term::Dom(id) => self.walk_term(self.ast.dom_term(id).arg, ctx),
@@ -301,10 +309,10 @@ impl<'a> Checker<'a> {
                     );
                 }
                 if !saw_model && self.receiver_has_known_non_model_type(receiver, ctx) {
-                    self.errors
-                        .push(CompileError::NonMorphismAppliedAsMorphism {
-                            location: self.ast.loc(receiver),
-                        });
+                    self.errors.push(CompileError::UndeclaredSymbol {
+                        name,
+                        used_at: self.ast.loc(head),
+                    });
                 }
             }
             Term::App(_) | Term::Dom(_) | Term::Cod(_) => {

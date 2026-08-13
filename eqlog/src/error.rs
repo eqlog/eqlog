@@ -164,9 +164,6 @@ pub enum CompileError {
     MatchPatternIsMemberFunc {
         location: Location,
     },
-    NonMorphismAppliedAsMorphism {
-        location: Location,
-    },
     MorphismAppliedToNonMember {
         location: Location,
     },
@@ -267,7 +264,6 @@ impl CompileError {
             CompileError::MatchNotExhaustive { match_location, .. } => *match_location,
             CompileError::IllegalMemberTypeExprInArgDecl { location } => *location,
             CompileError::MatchPatternIsMemberFunc { location } => *location,
-            CompileError::NonMorphismAppliedAsMorphism { location } => *location,
             CompileError::MorphismAppliedToNonMember { location } => *location,
             CompileError::MorphismApplicationMustNameType { location } => *location,
             CompileError::NestedMorphismApplication { location } => *location,
@@ -310,7 +306,6 @@ pub enum CompileErrorKind {
     MatchNotExhaustive,
     IllegalMemberTypeExprInArgDecl,
     MatchPatternIsMemberFunc,
-    NonMorphismAppliedAsMorphism,
     MorphismAppliedToNonMember,
     MorphismApplicationMustNameType,
     NestedMorphismApplication,
@@ -355,7 +350,6 @@ impl From<&CompileError> for CompileErrorKind {
                 CompileErrorKind::IllegalMemberTypeExprInArgDecl
             }
             MatchPatternIsMemberFunc { .. } => CompileErrorKind::MatchPatternIsMemberFunc,
-            NonMorphismAppliedAsMorphism { .. } => CompileErrorKind::NonMorphismAppliedAsMorphism,
             MorphismAppliedToNonMember { .. } => CompileErrorKind::MorphismAppliedToNonMember,
             MorphismApplicationMustNameType { .. } => {
                 CompileErrorKind::MorphismApplicationMustNameType
@@ -433,13 +427,6 @@ static COMPILE_ERROR_KIND_ORDER: LazyLock<HashSet<[CompileErrorKind; 2]>> = Lazy
         }
         if !relation.contains(&[k, NestedMorphismApplication]) {
             relation.insert([NestedMorphismApplication, k]);
-        }
-    }
-    transitive_closure(&mut relation);
-
-    for k in CompileErrorKind::iter() {
-        if !relation.contains(&[k, NonMorphismAppliedAsMorphism]) {
-            relation.insert([NonMorphismAppliedAsMorphism, k]);
         }
     }
     transitive_closure(&mut relation);
@@ -783,10 +770,6 @@ impl Display for CompileErrorWithContext {
                     f,
                     "Only constructors may be used in patterns\n"
                 )?;
-            }
-            NonMorphismAppliedAsMorphism { location } => {
-                write!(f, "Expression is not a morphism\n")?;
-                write_loc(f, *location)?;
             }
             MorphismAppliedToNonMember { location } => {
                 write!(f, "Morphisms can only be applied to member elements\n")?;

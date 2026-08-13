@@ -1,6 +1,6 @@
-Error: Expression is not a morphism
+Error: undeclared symbol "T"
   --> error-test-source/non-mor-applied-as-mor/theory.eql:11
    | 
 11 |     then f.T(x) = f.T(x);
-   |          ^               
+   |          ^^^             
    | 
