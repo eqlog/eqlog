@@ -2366,6 +2366,8 @@ fn display_ordered_morphisms<'a>(
             let cod_old_slice = display_tree_prefix_slice(&cod_old, parent_len, 2);
             let obj_old_slice = display_tree_prefix_slice(&obj_old, parent_len, 1);
             let obj_new_slice = display_tree_prefix_slice(&obj_new, parent_len, 1);
+            // TODO: Do not materialize the parent tuples. Nested loops over
+            // the parent columns can walk each prefix once without a set.
             writedoc! {f, r#"
                 let mut prefixes: BTreeSet<[u32; {parent_len}]> = BTreeSet::new();
                 {collect_new}
