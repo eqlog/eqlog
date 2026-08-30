@@ -135,61 +135,73 @@ Term: TermId = {
     },
 }
 
+#[inline]
+NamePath: ParsedNamePath = {
+    <l: @L> <mut state: PostfixTerm> <r: @R> =>? {
+        if state.names.is_empty() {
+            return match state.parsed {
+                ParsedTerm::Ident(ident) => Ok(ParsedNamePath::Ambient(ident)),
+                ParsedTerm::Term(_) | ParsedTerm::Parenthesized(_) => {
+                    Err(lalrpop_util::ParseError::User {
+                        error: CompileError::UnrecognizedToken {
+                            location: Location(l, r),
+                            expected: vec!["name or member path".to_string()],
+                        },
+                    })
+                }
+            };
+        }
+
+        let mut receiver = match state.parsed {
+            ParsedTerm::Ident(ident) => ast.push_term(ast.loc(ident), Term::Ident(ident)),
+            ParsedTerm::Term(term) => term,
+            ParsedTerm::Parenthesized(_) => unreachable!("parentheses are flattened"),
+        };
+        let final_name = state.names.pop().expect("non-empty member path");
+        for name in state.names {
+            let loc = Location(ast.loc(receiver).0, ast.loc(name).1);
+            let member = ast.push_term_member(loc, TermMember { term: receiver, name });
+            receiver = ast.push_term(loc, Term::Member(member));
+        }
+        let member = ast.push_term_member(
+            Location(ast.loc(receiver).0, ast.loc(final_name).1),
+            TermMember { term: receiver, name: final_name },
+        );
+        Ok(ParsedNamePath::Member(member))
+    },
+}
+
 TypeExpr: TypeExprId = {
     <l: @L> "Mor" "(" <name: Id> ")" <r: @R> => {
         let loc = Location(l, r);
         let m = ast.push_mor_type_expr(loc, MorTypeExpr { name });
         ast.push_type_expr(loc, TypeExpr::Mor(m))
     },
-    <l: @L> <term: Term> <r: @R> =>? {
+    <l: @L> <path: NamePath> <r: @R> => {
         let loc = Location(l, r);
-        Ok(match *ast.term(term) {
-            Term::Ident(ident) => {
-                ast.discard_term(term);
+        match path {
+            ParsedNamePath::Ambient(ident) => {
                 let name = ast.ident_term(ident).name.clone();
                 let ambient = ast.push_ambient_type_expr(loc, AmbientTypeExpr { name });
                 ast.push_type_expr(loc, TypeExpr::Ambient(ambient))
             }
-            Term::Member(member) => {
-                ast.discard_term(term);
-                ast.push_type_expr(loc, TypeExpr::Member(member))
-            }
-            Term::Wildcard | Term::App(_) | Term::Dom(_) | Term::Cod(_) => {
-                return Err(lalrpop_util::ParseError::User {
-                    error: CompileError::UnrecognizedToken {
-                        location: loc,
-                        expected: vec!["type expression".to_string()],
-                    },
-                });
-            }
-        })
+            ParsedNamePath::Member(member) => ast.push_type_expr(loc, TypeExpr::Member(member)),
+        }
     },
 }
 
 #[inline]
 PredExpr: PredExprId = {
-    <l: @L> <term: Term> <r: @R> =>? {
+    <l: @L> <path: NamePath> <r: @R> => {
         let loc = Location(l, r);
-        Ok(match *ast.term(term) {
-            Term::Ident(ident) => {
-                ast.discard_term(term);
+        match path {
+            ParsedNamePath::Ambient(ident) => {
                 let name = ast.ident_term(ident).name.clone();
                 let ambient = ast.push_ambient_pred_expr(loc, AmbientPredExpr { name });
                 ast.push_pred_expr(loc, PredExpr::Ambient(ambient))
             }
-            Term::Member(member) => {
-                ast.discard_term(term);
-                ast.push_pred_expr(loc, PredExpr::Member(member))
-            }
-            Term::Wildcard | Term::App(_) | Term::Dom(_) | Term::Cod(_) => {
-                return Err(lalrpop_util::ParseError::User {
-                    error: CompileError::UnrecognizedToken {
-                        location: loc,
-                        expected: vec!["predicate expression".to_string()],
-                    },
-                });
-            }
-        })
+            ParsedNamePath::Member(member) => ast.push_pred_expr(loc, PredExpr::Member(member)),
+        }
     },
 }
 

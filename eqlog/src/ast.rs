@@ -216,6 +216,11 @@ pub(crate) struct ParsedPostfixTerm {
     pub names: Vec<IdentTermId>,
 }
 
+pub(crate) enum ParsedNamePath {
+    Ambient(IdentTermId),
+    Member(TermMemberId),
+}
+
 #[derive(Clone, Debug)]
 pub struct TermList {
     pub terms: Vec<TermId>,
@@ -377,14 +382,6 @@ pub struct Ast {
 }
 
 impl Ast {
-    pub(crate) fn discard_term(&mut self, term: TermId) {
-        let Some((_, Node::Term(_))) = self.nodes.last() else {
-            panic!("term category conversion must discard the latest node")
-        };
-        assert_eq!(term.0 .0, self.nodes.len() - 1);
-        self.nodes.pop();
-    }
-
     pub fn new() -> Self {
         Self::default()
     }
@@ -583,5 +580,28 @@ mod tests {
     fn non_type_term_reports_a_parse_error() {
         let mut ast = Ast::default();
         assert!(ModuleParser::new().parse(&mut ast, "const x: _;").is_err());
+    }
+
+    #[test]
+    fn type_and_predicate_paths_do_not_create_final_terms() {
+        let source = "model M { type T; pred p(x: T); } rule { if m: M; if x: m.T; if m.p(x); }";
+        let mut ast = Ast::default();
+        assert!(ModuleParser::new().parse(&mut ast, source).is_ok());
+
+        assert!(!ast.nodes.iter().any(|(_, node)| {
+            let Node::Term(Term::Ident(ident)) = node else {
+                return false;
+            };
+            matches!(ast.ident_term(*ident).name.as_str(), "T" | "p")
+        }));
+        assert!(!ast.nodes.iter().any(|(_, node)| {
+            let Node::Term(Term::Member(member)) = node else {
+                return false;
+            };
+            matches!(
+                ast.ident_term(ast.term_member(*member).name).name.as_str(),
+                "T" | "p"
+            )
+        }));
     }
 }
