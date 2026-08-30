@@ -1,0 +1,5 @@
+Separate application heads from value terms
+
+Represent callable syntax independently so TermId consistently
+identifies expressions that produce algebraic elements in well-formed
+programs.
