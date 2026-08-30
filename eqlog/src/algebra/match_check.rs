@@ -68,7 +68,7 @@ fn pattern_ctor(pattern: TermId, ast: &Ast, scopes: &Scopes) -> Option<CtorDeclI
         return None;
     };
     let head = ast.app_term(aid).head;
-    let Term::Ident(id) = *ast.term(head) else {
+    let AppHead::Ident(id) = *ast.app_head(head) else {
         return None;
     };
     let name = &ast.ident_term(id).name;

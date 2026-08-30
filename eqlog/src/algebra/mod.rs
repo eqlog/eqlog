@@ -153,23 +153,30 @@ fn is_mor_type_component(
     signature: &Signature,
     rule: &RuleStructures,
     sid: StructureId,
-    head: TermId,
+    head: AppHeadId,
 ) -> bool {
-    match *ast.term(head) {
-        Term::Member(mid) => {
-            let TermMember {
-                term: receiver,
-                name,
-            } = *ast.term_member(mid);
+    match *ast.app_head(head) {
+        AppHead::Member(mid) => {
+            let member = ast.app_head_member(mid);
+            let receiver = member.receiver;
+            let name = *member.names.last().expect("member head without a name");
             let name = &ast.ident_term(name).name;
-            let Some(receiver_types) = concrete_types_of_term(rule, sid, receiver) else {
-                return false;
+            let receiver_types = if member.names.len() == 1 {
+                let Some(types) = concrete_types_of_term(rule, sid, receiver) else {
+                    return false;
+                };
+                types.into_iter().collect()
+            } else {
+                let Some(el) = rule.app_head_els[sid.0].get(&(mid, member.names.len() - 2)) else {
+                    return false;
+                };
+                rule.cat.structures[sid.0].concrete_types_of(*el)
             };
             receiver_types
                 .iter()
                 .any(|ct| mor_type_component(scopes, signature, ct.typ, name).is_some())
         }
-        Term::Ident(_) | Term::App(_) | Term::Dom(_) | Term::Cod(_) | Term::Wildcard => false,
+        AppHead::Ident(_) | AppHead::Term(_) => false,
     }
 }
 
@@ -179,22 +186,29 @@ fn check_morphism_application(
     signature: &Signature,
     rule: &RuleStructures,
     sid: StructureId,
-    head: TermId,
+    head: AppHeadId,
     arg: TermId,
     reported_non_members: &mut BTreeSet<TermId>,
     errors: &mut Vec<CompileError>,
 ) {
-    let Term::Member(mid) = *ast.term(head) else {
+    let AppHead::Member(mid) = *ast.app_head(head) else {
         return;
     };
-    let TermMember {
-        term: receiver,
-        name,
-    } = *ast.term_member(mid);
+    let member = ast.app_head_member(mid);
+    let receiver = member.receiver;
+    let name = *member.names.last().expect("member head without a name");
     let name = &ast.ident_term(name).name;
 
-    let Some(receiver_types) = concrete_types_of_term(rule, sid, receiver) else {
-        return;
+    let receiver_types = if member.names.len() == 1 {
+        let Some(types) = concrete_types_of_term(rule, sid, receiver) else {
+            return;
+        };
+        types.into_iter().collect()
+    } else {
+        let Some(el) = rule.app_head_els[sid.0].get(&(mid, member.names.len() - 2)) else {
+            return;
+        };
+        rule.cat.structures[sid.0].concrete_types_of(*el)
     };
 
     let mut types: Vec<(TypeId, TypeId)> = Vec::new();
@@ -335,21 +349,29 @@ fn is_ctor_app_for_enum(
         return false;
     };
     let head = ast.app_term(app_id).head;
-    match *ast.term(head) {
-        Term::Ident(ident_id) => {
+    match *ast.app_head(head) {
+        AppHead::Ident(ident_id) => {
             let scope = scopes.entry(ident_id);
             let name = &ast.ident_term(ident_id).name;
             let symbol = scopes.lookup(scope, name);
             ctor_symbol_has_codomain(symbol, enum_type, signature)
         }
-        Term::Member(member_id) => {
-            let TermMember {
-                term: receiver,
-                name,
-            } = *ast.term_member(member_id);
+        AppHead::Member(member_id) => {
+            let member = ast.app_head_member(member_id);
+            let receiver = member.receiver;
+            let name = *member.names.last().expect("member head without a name");
             let name = ast.ident_term(name).name.clone();
-            let Some(parent_types) = concrete_types_of_term(rule, sid, receiver) else {
-                return false;
+            let parent_types = if member.names.len() == 1 {
+                let Some(types) = concrete_types_of_term(rule, sid, receiver) else {
+                    return false;
+                };
+                types.into_iter().collect()
+            } else {
+                let Some(el) = rule.app_head_els[sid.0].get(&(member_id, member.names.len() - 2))
+                else {
+                    return false;
+                };
+                rule.cat.structures[sid.0].concrete_types_of(*el)
             };
             parent_types.into_iter().any(|ct| {
                 let Some(model_decl) = signature.model_decl_for_type(ct.typ) else {
@@ -360,7 +382,7 @@ fn is_ctor_app_for_enum(
                 ctor_symbol_has_codomain(sym, enum_type, signature)
             })
         }
-        Term::App(_) | Term::Wildcard | Term::Dom(_) | Term::Cod(_) => false,
+        AppHead::Term(_) => false,
     }
 }
 

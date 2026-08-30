@@ -1,10 +1,11 @@
 use crate::ast::*;
-use crate::grammar_util::{Location, NeverType};
+use crate::error::CompileError;
+use crate::grammar_util::Location;
 
 grammar(ast: &mut Ast);
 
 extern {
-    type Error = NeverType;
+    type Error = CompileError;
 }
 
 Id: String = {
@@ -39,59 +40,23 @@ Wildcard: TermId = {
     <l: @L> "_" <r: @R> => ast.push_term(Location(l, r), Term::Wildcard),
 }
 
-// Application is not "any Term + ArgList" (that is not LR(1) against equality
-// atoms and argument lists). Instead every call form ends in ArgList, and
-// chaining `f(x)(y)` is left-recursive on ApplicationTerm itself.
-// Compound value heads use an explicit production (dom/cod) or parentheses.
-ApplicationTerm: TermId = {
-    <l: @L> <nl: @L> <name: Id> <nr: @R> <args: ArgList> <r: @R> => {
-        let loc = Location(l, r);
-        let name_loc = Location(nl, nr);
-        let ident = ast.push_ident_term(name_loc, IdentTerm { name });
-        let head = ast.push_term(name_loc, Term::Ident(ident));
-        let a = ast.push_app_term(loc, AppTerm { head, args });
-        ast.push_term(loc, Term::App(a))
+TermAtom: ParsedTerm = {
+    <l: @L> <name: Id> <r: @R> => {
+        let ident = ast.push_ident_term(Location(l, r), IdentTerm { name });
+        ParsedTerm::Ident(ident)
     },
-    <l: @L> <m: TermMember> <args: ArgList> <r: @R> => {
-        let loc = Location(l, r);
-        let head = ast.push_term(ast.loc(m), Term::Member(m));
-        let a = ast.push_app_term(loc, AppTerm { head, args });
-        ast.push_term(loc, Term::App(a))
-    },
-    <l: @L> <head: ApplicationTerm> <args: ArgList> <r: @R> => {
-        let loc = Location(l, r);
-        let a = ast.push_app_term(loc, AppTerm { head, args });
-        ast.push_term(loc, Term::App(a))
-    },
-    <l: @L> <dl: @L> "dom" "(" <arg: Term> ")" <dr: @R> <args: ArgList> <r: @R> => {
-        let loc = Location(l, r);
-        let dom_loc = Location(dl, dr);
-        let d = ast.push_dom_term(dom_loc, DomTerm { arg });
-        let head = ast.push_term(dom_loc, Term::Dom(d));
-        let a = ast.push_app_term(loc, AppTerm { head, args });
-        ast.push_term(loc, Term::App(a))
-    },
-    <l: @L> <cl: @L> "cod" "(" <arg: Term> ")" <cr: @R> <args: ArgList> <r: @R> => {
-        let loc = Location(l, r);
-        let cod_loc = Location(cl, cr);
-        let c = ast.push_cod_term(cod_loc, CodTerm { arg });
-        let head = ast.push_term(cod_loc, Term::Cod(c));
-        let a = ast.push_app_term(loc, AppTerm { head, args });
-        ast.push_term(loc, Term::App(a))
-    },
-    <l: @L> "(" <head: Term> ")" <args: ArgList> <r: @R> => {
-        let loc = Location(l, r);
-        let a = ast.push_app_term(loc, AppTerm { head, args });
-        ast.push_term(loc, Term::App(a))
-    },
+    <term: Wildcard> => ParsedTerm::Term(term),
+    <term: DomTerm> => ParsedTerm::Term(term),
+    <term: CodTerm> => ParsedTerm::Term(term),
+    "(" <term: PostfixTerm> ")" => ParsedTerm::Parenthesized(Box::new(term)),
 }
 
-TermMember: TermMemberId = {
-    <l: @L> <term: Term> "." <nl: @L> <name: Id> <nr: @R> <r: @R> => {
-        let loc = Location(l, r);
-        let name = ast.push_ident_term(Location(nl, nr), IdentTerm { name });
-        ast.push_term_member(loc, TermMember { term, name })
+TermPostfix: TermPostfix = {
+    "." <l: @L> <name: Id> <r: @R> => {
+        let name = ast.push_ident_term(Location(l, r), IdentTerm { name });
+        TermPostfix::Member(name)
     },
+    <args: ArgList> => TermPostfix::Apply(args),
 }
 
 DomTerm: TermId = {
@@ -110,40 +75,121 @@ CodTerm: TermId = {
     },
 }
 
+PostfixTerm: ParsedPostfixTerm = {
+    #[precedence(level="0")]
+    <l: @L> <parsed: TermAtom> => match parsed {
+        ParsedTerm::Parenthesized(mut state) => {
+            state.start = l;
+            *state
+        }
+        ParsedTerm::Ident(_) | ParsedTerm::Term(_) =>
+            ParsedPostfixTerm { start: l, parsed, names: Vec::new() },
+    },
+    #[precedence(level="1")]
+    #[assoc(side="left")]
+    <mut state: PostfixTerm> <postfix: TermPostfix> => {
+        match postfix {
+            TermPostfix::Member(name) => state.names.push(name),
+            TermPostfix::Apply(args) => {
+                let head = if state.names.is_empty() {
+                    match state.parsed {
+                        ParsedTerm::Ident(ident) => ast.push_app_head(ast.loc(ident), AppHead::Ident(ident)),
+                        ParsedTerm::Term(term) => ast.push_app_head(ast.loc(term), AppHead::Term(term)),
+                        ParsedTerm::Parenthesized(_) => unreachable!("parentheses are flattened"),
+                    }
+                } else {
+                    let receiver = match state.parsed {
+                        ParsedTerm::Ident(ident) => ast.push_term(ast.loc(ident), Term::Ident(ident)),
+                        ParsedTerm::Term(term) => term,
+                        ParsedTerm::Parenthesized(_) => unreachable!("parentheses are flattened"),
+                    };
+                    let member = ast.push_app_head_member(
+                        Location(state.start, ast.loc(*state.names.last().unwrap()).1),
+                        AppHeadMember { receiver, names: std::mem::take(&mut state.names) },
+                    );
+                    ast.push_app_head(ast.loc(member), AppHead::Member(member))
+                };
+                let loc = Location(state.start, ast.loc(args).1);
+                let app = ast.push_app_term(loc, AppTerm { head, args });
+                state.parsed = ParsedTerm::Term(ast.push_term(loc, Term::App(app)));
+            }
+        }
+        state
+    },
+}
+
+#[inline]
 Term: TermId = {
-    <application: ApplicationTerm> => application,
-    <m: TermMember> => ast.push_term(ast.loc(m), Term::Member(m)),
-    <ident: IdentTerm> => ident,
-    <wildcard: Wildcard> => wildcard,
-    <dom_term: DomTerm> => dom_term,
-    <cod_term: CodTerm> => cod_term,
+    <state: PostfixTerm> => {
+        let mut term = match state.parsed {
+            ParsedTerm::Ident(ident) => ast.push_term(ast.loc(ident), Term::Ident(ident)),
+            ParsedTerm::Term(term) => term,
+            ParsedTerm::Parenthesized(_) => unreachable!("parentheses are flattened"),
+        };
+        for name in state.names {
+            let loc = Location(ast.loc(term).0, ast.loc(name).1);
+            let member = ast.push_term_member(loc, TermMember { term, name });
+            term = ast.push_term(loc, Term::Member(member));
+        }
+        term
+    },
 }
 
 TypeExpr: TypeExprId = {
-    <l: @L> <name: Id> <r: @R> => {
-        let loc = Location(l, r);
-        let a = ast.push_ambient_type_expr(loc, AmbientTypeExpr { name });
-        ast.push_type_expr(loc, TypeExpr::Ambient(a))
-    },
-    <l: @L> <m: TermMember> <r: @R> => {
-        ast.push_type_expr(Location(l, r), TypeExpr::Member(m))
-    },
     <l: @L> "Mor" "(" <name: Id> ")" <r: @R> => {
         let loc = Location(l, r);
         let m = ast.push_mor_type_expr(loc, MorTypeExpr { name });
         ast.push_type_expr(loc, TypeExpr::Mor(m))
     },
+    <l: @L> <term: Term> <r: @R> =>? {
+        let loc = Location(l, r);
+        Ok(match *ast.term(term) {
+            Term::Ident(ident) => {
+                ast.discard_term(term);
+                let name = ast.ident_term(ident).name.clone();
+                let ambient = ast.push_ambient_type_expr(loc, AmbientTypeExpr { name });
+                ast.push_type_expr(loc, TypeExpr::Ambient(ambient))
+            }
+            Term::Member(member) => {
+                ast.discard_term(term);
+                ast.push_type_expr(loc, TypeExpr::Member(member))
+            }
+            Term::Wildcard | Term::App(_) | Term::Dom(_) | Term::Cod(_) => {
+                return Err(lalrpop_util::ParseError::User {
+                    error: CompileError::UnrecognizedToken {
+                        location: loc,
+                        expected: vec!["type expression".to_string()],
+                    },
+                });
+            }
+        })
+    },
 }
 
 #[inline]
 PredExpr: PredExprId = {
-    <l: @L> <name: Id> <r: @R> => {
+    <l: @L> <term: Term> <r: @R> =>? {
         let loc = Location(l, r);
-        let a = ast.push_ambient_pred_expr(loc, AmbientPredExpr { name });
-        ast.push_pred_expr(loc, PredExpr::Ambient(a))
-    },
-    <l: @L> <m: TermMember> <r: @R> => {
-        ast.push_pred_expr(Location(l, r), PredExpr::Member(m))
+        Ok(match *ast.term(term) {
+            Term::Ident(ident) => {
+                ast.discard_term(term);
+                let name = ast.ident_term(ident).name.clone();
+                let ambient = ast.push_ambient_pred_expr(loc, AmbientPredExpr { name });
+                ast.push_pred_expr(loc, PredExpr::Ambient(ambient))
+            }
+            Term::Member(member) => {
+                ast.discard_term(term);
+                ast.push_pred_expr(loc, PredExpr::Member(member))
+            }
+            Term::Wildcard | Term::App(_) | Term::Dom(_) | Term::Cod(_) => {
+                return Err(lalrpop_util::ParseError::User {
+                    error: CompileError::UnrecognizedToken {
+                        location: loc,
+                        expected: vec!["predicate expression".to_string()],
+                    },
+                });
+            }
+        })
     },
 }
 

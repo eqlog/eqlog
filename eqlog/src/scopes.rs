@@ -97,6 +97,7 @@ ordered_from!(DefinedThenAtomId);
 ordered_from!(TermId);
 ordered_from!(IdentTermId);
 ordered_from!(AppTermId);
+ordered_from!(AppHeadId);
 ordered_from!(TermMemberId);
 ordered_from!(DomTermId);
 ordered_from!(CodTermId);
@@ -590,15 +591,24 @@ impl<'a> ScopeBuilder<'a> {
 
     /// Walks the head of an application without introducing variables for a
     /// bare identifier head. Compound heads use normal term walking.
-    fn walk_app_head(&mut self, current: ScopeId, head: TermId) -> ScopeId {
-        match *self.ast.term(head) {
-            Term::Ident(id) => {
+    fn walk_app_head(&mut self, current: ScopeId, head: AppHeadId) -> ScopeId {
+        let exit = match *self.ast.app_head(head) {
+            AppHead::Ident(id) => {
                 self.insert_ordered(id, current, current);
-                self.insert_ordered(head, current, current);
                 current
             }
-            _ => self.walk_term(current, head),
-        }
+            AppHead::Member(id) => {
+                let member = self.ast.app_head_member(id);
+                let scope = self.walk_term(current, member.receiver);
+                for &name in &member.names {
+                    self.insert_ordered(name, scope, scope);
+                }
+                scope
+            }
+            AppHead::Term(term) => self.walk_term(current, term),
+        };
+        self.insert_ordered(head, current, exit);
+        exit
     }
 
     fn walk_ident_term(&mut self, current: ScopeId, ident: IdentTermId) -> ScopeId {

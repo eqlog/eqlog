@@ -163,12 +163,29 @@ impl<'a> OccurrencesChecker<'a> {
             Term::Wildcard => {}
             Term::App(id) => {
                 let AppTerm { head, args } = *self.ast.app_term(id);
-                self.collect_term(head, occ);
+                self.collect_app_head(head, occ);
                 self.collect_term_list(args, occ);
             }
             Term::Member(id) => self.collect_term(self.ast.term_member(id).term, occ),
             Term::Dom(id) => self.collect_term(self.ast.dom_term(id).arg, occ),
             Term::Cod(id) => self.collect_term(self.ast.cod_term(id).arg, occ),
+        }
+    }
+
+    fn collect_app_head(&self, head: AppHeadId, occ: &mut Vec<VarOccurrence>) {
+        match *self.ast.app_head(head) {
+            AppHead::Ident(id) => {
+                let name = &self.ast.ident_term(id).name;
+                if let Some(Symbol::Var(binding)) = self.scopes.lookup(self.scopes.exit(head), name)
+                {
+                    occ.push(VarOccurrence {
+                        binding,
+                        location: self.ast.loc(head),
+                    });
+                }
+            }
+            AppHead::Member(id) => self.collect_term(self.ast.app_head_member(id).receiver, occ),
+            AppHead::Term(term) => self.collect_term(term, occ),
         }
     }
 

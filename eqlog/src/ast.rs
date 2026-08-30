@@ -43,6 +43,8 @@ typed_id!(ArgDeclListId);
 typed_id!(TermId);
 typed_id!(IdentTermId);
 typed_id!(AppTermId);
+typed_id!(AppHeadId);
+typed_id!(AppHeadMemberId);
 typed_id!(TermMemberId);
 typed_id!(DomTermId);
 typed_id!(CodTermId);
@@ -154,8 +156,21 @@ pub struct IdentTerm {
 
 #[derive(Copy, Clone, Debug)]
 pub struct AppTerm {
-    pub head: TermId,
+    pub head: AppHeadId,
     pub args: TermListId,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum AppHead {
+    Ident(IdentTermId),
+    Member(AppHeadMemberId),
+    Term(TermId),
+}
+
+#[derive(Clone, Debug)]
+pub struct AppHeadMember {
+    pub receiver: TermId,
+    pub names: Vec<IdentTermId>,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -182,6 +197,23 @@ pub enum Term {
     Member(TermMemberId),
     Dom(DomTermId),
     Cod(CodTermId),
+}
+
+pub(crate) enum ParsedTerm {
+    Ident(IdentTermId),
+    Term(TermId),
+    Parenthesized(Box<ParsedPostfixTerm>),
+}
+
+pub(crate) enum TermPostfix {
+    Member(IdentTermId),
+    Apply(TermListId),
+}
+
+pub(crate) struct ParsedPostfixTerm {
+    pub start: usize,
+    pub parsed: ParsedTerm,
+    pub names: Vec<IdentTermId>,
 }
 
 #[derive(Clone, Debug)]
@@ -313,6 +345,8 @@ pub enum Node {
     Term(Term),
     IdentTerm(IdentTerm),
     AppTerm(AppTerm),
+    AppHead(AppHead),
+    AppHeadMember(AppHeadMember),
     TermMember(TermMember),
     DomTerm(DomTerm),
     CodTerm(CodTerm),
@@ -343,6 +377,14 @@ pub struct Ast {
 }
 
 impl Ast {
+    pub(crate) fn discard_term(&mut self, term: TermId) {
+        let Some((_, Node::Term(_))) = self.nodes.last() else {
+            panic!("term category conversion must discard the latest node")
+        };
+        assert_eq!(term.0 .0, self.nodes.len() - 1);
+        self.nodes.pop();
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
@@ -396,6 +438,13 @@ accessor!(
 accessor!(term, push_term, TermId, Term);
 accessor!(ident_term, push_ident_term, IdentTermId, IdentTerm);
 accessor!(app_term, push_app_term, AppTermId, AppTerm);
+accessor!(app_head, push_app_head, AppHeadId, AppHead);
+accessor!(
+    app_head_member,
+    push_app_head_member,
+    AppHeadMemberId,
+    AppHeadMember
+);
 accessor!(term_member, push_term_member, TermMemberId, TermMember);
 accessor!(dom_term, push_dom_term, DomTermId, DomTerm);
 accessor!(cod_term, push_cod_term, CodTermId, CodTerm);
@@ -443,3 +492,96 @@ accessor!(if_stmt, push_if_stmt, IfStmtId, IfStmt);
 accessor!(then_stmt, push_then_stmt, ThenStmtId, ThenStmt);
 accessor!(branch_stmt, push_branch_stmt, BranchStmtId, BranchStmt);
 accessor!(match_stmt, push_match_stmt, MatchStmtId, MatchStmt);
+
+#[cfg(test)]
+mod tests {
+    use super::{AppHead, Ast, Decl, IfAtom, Node, Stmt, Term};
+    use crate::grammar::ModuleParser;
+
+    fn parse_equal_rhs(source: &str) -> (Ast, super::TermId) {
+        let mut ast = Ast::default();
+        let module = match ModuleParser::new().parse(&mut ast, source) {
+            Ok(module) => module,
+            Err(_) => panic!("module did not parse"),
+        };
+        let Decl::Rule(rule) = *ast.decl(ast.module(module).decls[0]) else {
+            panic!("expected rule")
+        };
+        let Stmt::If(if_stmt) = *ast.stmt(ast.rule_decl(rule).body[0]) else {
+            panic!("expected if statement")
+        };
+        let IfAtom::Equal(equal) = *ast.if_atom(ast.if_stmt(if_stmt).atom) else {
+            panic!("expected equality")
+        };
+        let rhs = ast.equal_atom(equal).rhs;
+        (ast, rhs)
+    }
+
+    #[test]
+    fn named_application_head_is_not_a_term() {
+        let (ast, rhs) = parse_equal_rhs("rule { if x = foo(x); }");
+        let Term::App(app) = *ast.term(rhs) else {
+            panic!("expected application")
+        };
+        let AppHead::Ident(foo) = *ast.app_head(ast.app_term(app).head) else {
+            panic!("expected named application head")
+        };
+        assert_eq!(ast.ident_term(foo).name, "foo");
+        assert!(!ast.nodes.iter().any(|(_, node)| {
+            let Node::Term(Term::Ident(ident)) = node else {
+                return false;
+            };
+            ast.ident_term(*ident).name == "foo"
+        }));
+    }
+
+    #[test]
+    fn computed_application_head_retains_its_term() {
+        let (ast, rhs) = parse_equal_rhs("rule { if x = foo(x)(x); }");
+        let Term::App(outer) = *ast.term(rhs) else {
+            panic!("expected outer application")
+        };
+        let AppHead::Term(inner) = *ast.app_head(ast.app_term(outer).head) else {
+            panic!("expected computed application head")
+        };
+        assert!(matches!(ast.term(inner), Term::App(_)));
+    }
+
+    #[test]
+    fn member_application_head_does_not_materialize_prefix_terms() {
+        for source in [
+            "rule { if x = foo.bar.p(x); }",
+            "rule { if x = (foo.bar).p(x); }",
+        ] {
+            let (ast, rhs) = parse_equal_rhs(source);
+            let Term::App(app) = *ast.term(rhs) else {
+                panic!("expected application")
+            };
+            let AppHead::Member(member) = *ast.app_head(ast.app_term(app).head) else {
+                panic!("expected member application head")
+            };
+            let member = ast.app_head_member(member);
+            assert_eq!(
+                member
+                    .names
+                    .iter()
+                    .map(|name| ast.ident_term(*name).name.as_str())
+                    .collect::<Vec<_>>(),
+                ["bar", "p"]
+            );
+            assert!(matches!(ast.term(member.receiver), Term::Ident(_)));
+            assert!(!ast.nodes.iter().any(|(_, node)| {
+                let Node::Term(Term::Member(member)) = node else {
+                    return false;
+                };
+                ast.ident_term(ast.term_member(*member).name).name == "bar"
+            }));
+        }
+    }
+
+    #[test]
+    fn non_type_term_reports_a_parse_error() {
+        let mut ast = Ast::default();
+        assert!(ModuleParser::new().parse(&mut ast, "const x: _;").is_err());
+    }
+}
