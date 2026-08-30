@@ -227,22 +227,28 @@ pub fn select_indices<'a>(
         let mor_type = FlatInRel::TypeSet(ids.mor);
         let dom = FlatInRel::Rel(FlatRel::Func(ids.dom));
         let cod = FlatInRel::Rel(FlatRel::Func(ids.cod));
+        // `dom`/`cod` flatten as (parents..., mor, obj). Toposort needs
+        // "given parents+object, outgoing mors" and "given parents+mor, obj".
+        let parent_len = signature.func(ids.dom).parents.len();
+        let mut dom_projections = (0..parent_len).collect::<BTreeSet<_>>();
+        dom_projections.insert(parent_len + 1);
+        let cod_projections = (0..=parent_len).collect::<BTreeSet<_>>();
 
         [
-            // Given an object, look up the set of outgoing morphisms.
+            // Given an object (and parent, when nested), look up outgoing morphisms.
             (
                 dom,
                 QuerySpec {
                     age: QueryAge::All,
-                    projections: btreeset! {1},
+                    projections: dom_projections,
                 },
             ),
-            // Given a morphism, look up the codomain.
+            // Given a morphism (and parent, when nested), look up the codomain.
             (
                 cod,
                 QuerySpec {
                     age: QueryAge::All,
-                    projections: btreeset! {0},
+                    projections: cod_projections,
                 },
             ),
             (

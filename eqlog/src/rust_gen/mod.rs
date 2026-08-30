@@ -15,6 +15,7 @@ use crate::ram::*;
 use convert_case::{Case, Casing};
 use indoc::{formatdoc, writedoc};
 use itertools::Itertools;
+use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter, Result};
 use std::iter::once;
@@ -218,6 +219,13 @@ fn display_is_dirty_fn<'a>(
     })
 }
 
+fn membership_self_type(rel: FlatRel) -> Option<TypeId> {
+    match rel {
+        FlatRel::ModelMember(typ) => Some(typ),
+        FlatRel::Pred(_) | FlatRel::Func(_) => None,
+    }
+}
+
 fn display_dependent_type_checks<'a>(
     rel: FlatRel,
     arity_types: &'a [TypeId],
@@ -252,6 +260,16 @@ fn display_dependent_type_checks<'a>(
                 let cod_func = display_func(model_ids.cod, ctx);
                 let member_rel = display_rel(FlatRel::ModelMember(member_type), ctx);
                 let mor_func_args = rel_args[..=mor_pos].iter().format(", ").to_string();
+                let outer_parents = rel_args[..mor_pos]
+                    .iter()
+                    .map(|v| format!("{v}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let member_prefix = if outer_parents.is_empty() {
+                    String::new()
+                } else {
+                    format!("{outer_parents}, ")
+                };
 
                 if checked_len > arg_pos {
                     let arg_expr = &rel_args[arg_pos];
@@ -259,7 +277,7 @@ fn display_dependent_type_checks<'a>(
                         let dependent_parent_{arg_pos} = self.{dom_func}({mor_func_args})
                             .expect(\"invalid dependent argument: morphism application requires a defined domain\");
                         assert!(
-                            self.{member_rel}(dependent_parent_{arg_pos}, {arg_expr}),
+                            self.{member_rel}({member_prefix}dependent_parent_{arg_pos}, {arg_expr}),
                             \"invalid dependent argument: morphism application argument is not a member of the morphism domain\"
                         );
                     "}?;
@@ -271,7 +289,7 @@ fn display_dependent_type_checks<'a>(
                         let dependent_parent_{result_pos} = self.{cod_func}({mor_func_args})
                             .expect(\"invalid dependent argument: morphism application requires a defined codomain\");
                         assert!(
-                            self.{member_rel}(dependent_parent_{result_pos}, {result_expr}),
+                            self.{member_rel}({member_prefix}dependent_parent_{result_pos}, {result_expr}),
                             \"invalid dependent argument: morphism application result is not a member of the morphism codomain\"
                         );
                     "}?;
@@ -281,31 +299,27 @@ fn display_dependent_type_checks<'a>(
             }
         }
 
-        if rel.is_model_membership_relation() {
-            return Ok(());
-        }
-
-        let Some(parent_model_type) = rel.parent_model_type(ctx.signature()) else {
-            return Ok(());
-        };
-        assert_eq!(
-            arity_types.first().copied(),
-            Some(parent_model_type),
-            "member relations should be flattened with the parent model first"
-        );
-        let parent_expr = &rel_args[0];
-
-        for pos in 1..checked_len {
+        for pos in 0..checked_len {
             let typ = arity_types[pos];
-            if ctx.signature().type_(typ).parents.last().copied() != Some(parent_model_type) {
+            let parents = &ctx.signature().type_(typ).parents;
+            if parents.is_empty() {
+                continue;
+            }
+            if membership_self_type(rel) == Some(typ) {
+                continue;
+            }
+            if arity_types.get(..parents.len()) != Some(parents.as_slice()) {
                 continue;
             }
 
             let member_rel = display_rel(FlatRel::ModelMember(typ), ctx);
-            let member_expr = &rel_args[pos];
+            let member_args = rel_args[..parents.len()]
+                .iter()
+                .chain(once(&rel_args[pos]))
+                .format(", ");
             writedoc! {f, "
                 assert!(
-                    self.{member_rel}({parent_expr}, {member_expr}),
+                    self.{member_rel}({member_args}),
                     \"invalid dependent argument: element is not a member of the supplied parent model\"
                 );
             "}?;
@@ -904,21 +918,33 @@ fn display_new_element_fn_internal<'a>(
         let type_snake = type_camel.to_case(Snake);
         let type_snake = type_snake.as_str();
 
-        let parent_type = ctx.signature().type_(typ).parents.last().copied();
+        let parent_types = ctx.signature().type_(typ).parents.clone();
         let parent_param = FmtFn(move |f| {
-            let Some(parent_type) = parent_type else {
-                return Ok(());
-            };
-            write!(f, "parent: {}", display_type(parent_type, ctx))
+            parent_types
+                .iter()
+                .copied()
+                .enumerate()
+                .try_for_each(|(i, parent_type)| {
+                    let type_camel = display_type(parent_type, ctx)
+                        .to_string()
+                        .to_case(UpperCamel);
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "parent{i}: {type_camel}")
+                })
         });
 
         let insert_parent = FmtFn(move |f| {
-            if parent_type.is_none() {
+            if ctx.signature().type_(typ).parents.is_empty() {
                 return Ok(());
             }
             let parent_pred = display_rel(FlatRel::ModelMember(typ), ctx);
-
-            write!(f, "self.insert_{parent_pred}(parent, el.into());")
+            let parent_args = (0..ctx.signature().type_(typ).parents.len())
+                .map(|i| format!("parent{i}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            write!(f, "self.insert_{parent_pred}({parent_args}, el.into());")
         });
 
         let type_set_rel = FlatInRel::TypeSet(typ);
@@ -959,19 +985,33 @@ fn display_new_element_fn<'a>(typ: TypeId, ctx: &'a RustGenCtx<'a>) -> impl 'a +
         let type_camel = display_type(typ, ctx).to_string().to_case(UpperCamel);
         let type_snake = type_camel.to_case(Snake);
 
-        let parent_type = ctx.signature().type_(typ).parents.last().copied();
+        let parent_types = ctx.signature().type_(typ).parents.clone();
         let parent_param = FmtFn(move |f| {
-            let Some(parent_type) = parent_type else {
-                return Ok(());
-            };
-            write!(f, "parent: {}", display_type(parent_type, ctx))
+            parent_types
+                .iter()
+                .copied()
+                .enumerate()
+                .try_for_each(|(i, parent_type)| {
+                    let type_camel = display_type(parent_type, ctx)
+                        .to_string()
+                        .to_case(UpperCamel);
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "parent{i}: {type_camel}")
+                })
         });
 
         let parent_arg = FmtFn(move |f| {
-            if parent_type.is_none() {
-                return Ok(());
-            }
-            write!(f, "parent")
+            let n = ctx.signature().type_(typ).parents.len();
+            write!(
+                f,
+                "{}",
+                (0..n)
+                    .map(|i| format!("parent{i}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
         });
 
         writedoc! {f, "
@@ -1934,14 +1974,28 @@ impl MorphismIndexColumnKind {
     }
 }
 
+fn parent_prefix_len(rel: &FlatInRel, ctx: &RustGenCtx<'_>) -> usize {
+    match rel {
+        FlatInRel::Rel(rel) | FlatInRel::RelWithDiagonals { rel, .. } => match rel {
+            FlatRel::Pred(pred) => ctx.signature().pred(*pred).parents.len(),
+            FlatRel::Func(func) => ctx.signature().func(*func).parents.len(),
+            FlatRel::ModelMember(typ) => ctx.signature().type_(*typ).parents.len(),
+        },
+        FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => 0,
+    }
+}
+
 fn morphism_index_column_kind(
     parent_model_type: TypeId,
     column_index: usize,
+    prefix_len: usize,
     typ: TypeId,
     ctx: &RustGenCtx<'_>,
 ) -> MorphismIndexColumnKind {
-    if column_index == 0 {
-        assert_eq!(typ, parent_model_type);
+    // Only the flattened enclosing-model prefix is rewritten from dom to
+    // cod. An argument that happens to have the same type as a parent
+    // model (e.g. tagged_by(Set, S)) must be copied.
+    if column_index < prefix_len && typ == parent_model_type {
         return MorphismIndexColumnKind::Parent;
     }
 
@@ -1956,6 +2010,56 @@ fn display_prefix_tree_type(arity_len: usize) -> impl Display {
     FmtFn(move |f| write!(f, "PrefixTree{arity_len}"))
 }
 
+fn display_parent_then_morph_gets(base: String, parent_len: usize) -> String {
+    let mut expr = base;
+    let mut dim = parent_len + 3;
+    for i in 0..parent_len {
+        dim -= 1;
+        expr = format!("{expr}.get(parents[{i}]).unwrap_or_else(|| PrefixTree{dim}::empty())");
+    }
+    format!("{expr}.get(*morph).unwrap_or_else(|| PrefixTree2::empty())")
+}
+
+fn display_tree_prefix_slice(field: &str, parent_len: usize, leaf_dim: usize) -> String {
+    let mut expr = format!("self.{field}");
+    for i in 0..parent_len {
+        if i == 0 {
+            expr = format!("{expr}.get(parents[{i}])");
+        } else {
+            expr = format!("{expr}.and_then(|t| t.get(parents[{i}]))");
+        }
+    }
+    format!("{expr}.unwrap_or_else(|| PrefixTree{leaf_dim}::empty())")
+}
+
+fn display_collect_parent_prefixes(field: &str, parent_len: usize) -> String {
+    let mut body = format!(
+        "prefixes.insert([{}]);",
+        (0..parent_len)
+            .map(|i| format!("p{i}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    for i in (0..parent_len).rev() {
+        let src = if i == 0 {
+            format!("self.{field}")
+        } else {
+            format!("t{}", i - 1)
+        };
+        let bind = if i + 1 == parent_len {
+            "_"
+        } else {
+            &format!("t{i}")
+        };
+        body = formatdoc! {"
+            for (p{i}, {bind}) in {src}.iter_restrictions() {{
+            {body}
+            }}
+        "};
+    }
+    body
+}
+
 fn display_mor_app_map_expr<'a>(
     typ: TypeId,
     ctx: &'a RustGenCtx<'a>,
@@ -1967,35 +2071,35 @@ fn display_mor_app_map_expr<'a>(
             .mor_app_func_for_type(typ)
             .expect("mor_app_func should be defined for member types");
         let mor_app_rel = FlatInRel::Rel(FlatRel::Func(mor_app_func));
+        let parent_len = ctx.signature().func(mor_app_func).parents.len();
+        let order: Vec<usize> = (0..parent_len + 3).collect();
 
         let mor_app_indices = index_selection
             .indices
             .get(&mor_app_rel)
             .expect("mor_app rel should have indices");
-        let mor_app_eval_index_new = mor_app_indices
-            .iter()
-            .filter(|index| index.age == IndexAge::New && index.order.as_ref() == [0, 1, 2])
-            .exactly_one()
-            .expect("should have exactly one new index with order [0, 1, 2] for mor_app rel");
-        let mor_app_eval_index_old = mor_app_indices
-            .iter()
-            .filter(|index| index.age == IndexAge::Old && index.order.as_ref() == [0, 1, 2])
-            .exactly_one()
-            .expect("should have exactly one old index with order [0, 1, 2] for mor_app rel");
+        let mor_app_eval_index_new =
+            index_with_order(mor_app_indices, IndexAge::New, order.as_slice());
+        let mor_app_eval_index_old =
+            index_with_order(mor_app_indices, IndexAge::Old, order.as_slice());
 
         let mor_app_eval_index_new_name =
-            display_index_field_name(&mor_app_rel, mor_app_eval_index_new, ctx);
+            display_own_index_field_name(&mor_app_rel, mor_app_eval_index_new, ctx);
         let mor_app_eval_index_old_name =
-            display_index_field_name(&mor_app_rel, mor_app_eval_index_old, ctx);
+            display_own_index_field_name(&mor_app_rel, mor_app_eval_index_old, ctx);
 
+        let new_gets = display_parent_then_morph_gets(
+            format!("self.{mor_app_eval_index_new_name}"),
+            parent_len,
+        );
+        let old_gets = display_parent_then_morph_gets(
+            format!("self.{mor_app_eval_index_old_name}"),
+            parent_len,
+        );
         writedoc! {f, "
-            self.{mor_app_eval_index_new_name}
-            .get(*morph)
-            .unwrap_or_else(|| PrefixTree2::empty())
+            {new_gets}
             .union(
-            self.{mor_app_eval_index_old_name}
-            .get(*morph)
-            .unwrap_or_else(|| PrefixTree2::empty()),
+            {old_gets},
             )
         "}
     })
@@ -2143,201 +2247,288 @@ fn display_apply_morphism_index_propagated<'a>(
     })
 }
 
+fn index_with_order<'a>(
+    indices: &'a [IndexSpec],
+    age: IndexAge,
+    order: &'a [usize],
+) -> &'a IndexSpec {
+    indices
+        .iter()
+        .filter(|index| index.age == age && index.order.as_ref() == order)
+        .exactly_one()
+        .unwrap_or_else(|_| panic!("should have exactly one {age} index with order {order:?}"))
+}
+
+fn morphism_iter_pattern(parent_model_type: TypeId, ctx: &RustGenCtx<'_>) -> &'static str {
+    if ctx.signature().type_(parent_model_type).parents.is_empty() {
+        "MorphismWithSignature { morph, dom, cod }"
+    } else {
+        "(parents, MorphismWithSignature { morph, dom, cod })"
+    }
+}
+
+fn display_ordered_morphisms<'a>(
+    typ: TypeId,
+    ctx: &'a RustGenCtx<'a>,
+    index_selection: &'a IndexSelection,
+) -> impl Display + 'a {
+    FmtFn(move |f| {
+        let ids = ctx
+            .signature()
+            .ids_for_model_type(typ)
+            .expect("typ is model type");
+        let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
+        let parent_len = ctx.signature().type_(typ).parents.len();
+
+        let dom_rel = FlatInRel::Rel(FlatRel::Func(ids.dom));
+        let cod_rel = FlatInRel::Rel(FlatRel::Func(ids.cod));
+        let obj_rel = if parent_len == 0 {
+            FlatInRel::TypeSet(typ)
+        } else {
+            FlatInRel::Rel(FlatRel::ModelMember(typ))
+        };
+
+        let dom_indices = index_selection
+            .indices
+            .get(&dom_rel)
+            .expect("dom rel should have indices");
+        let cod_indices = index_selection
+            .indices
+            .get(&cod_rel)
+            .expect("cod rel should have indices");
+        let obj_indices = index_selection
+            .indices
+            .get(&obj_rel)
+            .expect("object rel should have indices");
+
+        let mut dom_order: Vec<usize> = (0..parent_len).collect();
+        dom_order.push(parent_len + 1);
+        dom_order.push(parent_len);
+        let cod_order: Vec<usize> = (0..parent_len + 2).collect();
+        let obj_order: Vec<usize> = (0..parent_len + 1).collect();
+
+        let dom_new = display_own_index_field_name(
+            &dom_rel,
+            index_with_order(dom_indices, IndexAge::New, &dom_order),
+            ctx,
+        )
+        .to_string();
+        let dom_old = display_own_index_field_name(
+            &dom_rel,
+            index_with_order(dom_indices, IndexAge::Old, &dom_order),
+            ctx,
+        )
+        .to_string();
+        let cod_new = display_own_index_field_name(
+            &cod_rel,
+            index_with_order(cod_indices, IndexAge::New, &cod_order),
+            ctx,
+        )
+        .to_string();
+        let cod_old = display_own_index_field_name(
+            &cod_rel,
+            index_with_order(cod_indices, IndexAge::Old, &cod_order),
+            ctx,
+        )
+        .to_string();
+        let obj_new = display_own_index_field_name(
+            &obj_rel,
+            index_with_order(obj_indices, IndexAge::New, &obj_order),
+            ctx,
+        )
+        .to_string();
+        let obj_old = display_own_index_field_name(
+            &obj_rel,
+            index_with_order(obj_indices, IndexAge::Old, &obj_order),
+            ctx,
+        )
+        .to_string();
+
+        if parent_len == 0 {
+            writedoc! {f, r#"
+                let ordered_{type_snake}_mor: Vec<eqlog_runtime::MorphismWithSignature> =
+                eqlog_runtime::morphism_toposort(
+                &self.{dom_new},
+                &self.{dom_old},
+                &self.{cod_new},
+                &self.{cod_old},
+                &self.{obj_old},
+                &self.{obj_new},
+                )
+                .expect("TODO: Return error about a cycle being present in the morphism category");
+            "#}
+        } else {
+            let collect_new = display_collect_parent_prefixes(&obj_new, parent_len);
+            let collect_old = display_collect_parent_prefixes(&obj_old, parent_len);
+            let dom_new_slice = display_tree_prefix_slice(&dom_new, parent_len, 2);
+            let dom_old_slice = display_tree_prefix_slice(&dom_old, parent_len, 2);
+            let cod_new_slice = display_tree_prefix_slice(&cod_new, parent_len, 2);
+            let cod_old_slice = display_tree_prefix_slice(&cod_old, parent_len, 2);
+            let obj_old_slice = display_tree_prefix_slice(&obj_old, parent_len, 1);
+            let obj_new_slice = display_tree_prefix_slice(&obj_new, parent_len, 1);
+            // TODO: Do not materialize the parent tuples. Nested loops over
+            // the parent columns can walk each prefix once without a set.
+            writedoc! {f, r#"
+                let mut prefixes: BTreeSet<[u32; {parent_len}]> = BTreeSet::new();
+                {collect_new}
+                {collect_old}
+                let mut ordered_{type_snake}_mor: Vec<([u32; {parent_len}], eqlog_runtime::MorphismWithSignature)> = Vec::new();
+                for parents in prefixes {{
+                    let part = eqlog_runtime::morphism_toposort(
+                        {dom_new_slice},
+                        {dom_old_slice},
+                        {cod_new_slice},
+                        {cod_old_slice},
+                        {obj_old_slice},
+                        {obj_new_slice},
+                    )
+                    .expect("TODO: Return error about a cycle being present in the morphism category");
+                    for m in part {{
+                        ordered_{type_snake}_mor.push((parents, m));
+                    }}
+                }}
+            "#}
+        }
+    })
+}
+
+fn model_types_inner_first(ctx: &RustGenCtx<'_>) -> Vec<TypeId> {
+    let mut models: Vec<TypeId> = ctx
+        .signature()
+        .iter_types()
+        .filter(|&typ| matches!(ctx.signature().type_(typ).kind, TypeKind::Model))
+        .collect();
+    models.sort_by_key(|&typ| (Reverse(ctx.signature().type_(typ).parents.len()), typ));
+    models
+}
+
+fn display_remap_parented_index<'a>(
+    flat_in_rel: FlatInRel,
+    index_spec: IndexSpec,
+    parent_model_type: TypeId,
+    ctx: &'a RustGenCtx<'a>,
+    index_selection: &'a IndexSelection,
+) -> impl Display + 'a {
+    FmtFn(move |f| {
+        let flat_arity = flat_in_rel.arity(ctx.signature());
+        let arity: Vec<_> = index_spec
+            .order
+            .iter()
+            .copied()
+            .map(|i| flat_arity[i])
+            .collect();
+        let arity = arity.as_slice();
+
+        let index_field_name = display_index_field_name(&flat_in_rel, &index_spec, ctx).to_string();
+        let index_field_name = index_field_name.as_str();
+
+        let parent_cols = parent_prefix_len(&flat_in_rel, ctx);
+        let columns: Vec<_> = index_spec
+            .order
+            .iter()
+            .copied()
+            .map(|column_index| {
+                morphism_index_column_kind(
+                    parent_model_type,
+                    column_index,
+                    parent_cols,
+                    flat_arity[column_index],
+                    ctx,
+                )
+            })
+            .collect();
+        let prefix_len = columns
+            .iter()
+            .rposition(|column| column.needs_mapping())
+            .expect("index over a parented relation should contain the parent")
+            + 1;
+        let suffix_len = arity.len() - prefix_len;
+        let prefix_columns = &columns[..prefix_len];
+
+        let parent_model_type_snake = display_type(parent_model_type, ctx)
+            .to_string()
+            .to_case(Snake);
+
+        let member_maps = prefix_columns
+            .iter()
+            .copied()
+            .enumerate()
+            .filter_map(|(i, column)| match column {
+                MorphismIndexColumnKind::Member(typ) => Some(FmtFn(move |f| {
+                    let map = display_mor_app_map_expr(typ, ctx, index_selection);
+                    writedoc! {f, "
+                        let map_el{i} = {map};
+                    "}
+                })),
+                MorphismIndexColumnKind::Parent | MorphismIndexColumnKind::Copy => None,
+            })
+            .format("\n");
+
+        let collect_propagated = display_morphism_index_prefix_walk(
+            prefix_columns,
+            arity.len(),
+            format!("{index_field_name}_all"),
+            true,
+        );
+        let apply_propagated = display_apply_morphism_index_propagated(
+            index_field_name,
+            arity.len(),
+            prefix_len,
+            suffix_len,
+        );
+        let suffix_type = display_prefix_tree_type(suffix_len);
+        let mor_pat = morphism_iter_pattern(parent_model_type, ctx);
+
+        writedoc! {f, r#"
+            let mut {index_field_name}_all = self.{index_field_name}_own.clone();
+            let {index_field_name}_own = &mut self.{index_field_name}_own;
+            #[allow(unused)]
+            for {mor_pat} in ordered_{parent_model_type_snake}_mor.iter() {{
+            {member_maps}
+            let mut propagated: Vec<([u32; {prefix_len}], {suffix_type})> = Vec::new();
+            {collect_propagated}
+            {apply_propagated}
+            }}
+            self.{index_field_name}_all = {index_field_name}_all;
+        "#}
+    })
+}
+
 fn display_recompute_model_indices_fn<'a>(
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let compute_ordered_mor_vars = ctx
-            .signature()
-            .iter_types()
-            .filter(|typ| matches!(ctx.signature().type_(*typ).kind, TypeKind::Model))
+        // Inner models first so their member indices are saturated before an
+        // enclosing model remaps those members along its own morphisms.
+        let body = model_types_inner_first(ctx)
+            .into_iter()
             .map(|typ| {
-                FmtFn(move |f: &mut Formatter| -> Result {
-                    let ids = ctx
-                        .signature()
-                        .ids_for_model_type(typ)
-                        .expect("typ is model type");
-                    let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
-
-                    let dom_rel = FlatInRel::Rel(FlatRel::Func(ids.dom));
-                    let cod_rel = FlatInRel::Rel(FlatRel::Func(ids.cod));
-                    let set_rel = FlatInRel::TypeSet(typ);
-
-                    let dom_indices = index_selection
-                        .indices
-                        .get(&dom_rel)
-                        .expect("dom rel should have indices");
-                    let new_order_1_0 = dom_indices
-                        .iter()
-                        .filter(|index| index.age == IndexAge::New && index.order.as_ref() == [1, 0])
-                        .exactly_one()
-                        .expect("should have exactly one new index with order [1, 0] for dom rel");
-                    let old_order_1_0 = dom_indices
-                        .iter()
-                        .filter(|index| index.age == IndexAge::Old && index.order.as_ref() == [1, 0])
-                        .exactly_one()
-                        .expect("should have exactly one old index with order [1, 0] for dom rel");
-
-                    let dom_new_order_1_0 =
-                        display_index_field_name(&dom_rel, new_order_1_0, ctx);
-                    let dom_old_order_1_0 =
-                        display_index_field_name(&dom_rel, old_order_1_0, ctx);
-
-                    let cod_indices = index_selection
-                        .indices
-                        .get(&cod_rel)
-                        .expect("cod rel should have indices");
-                    let new_order_0_1 = cod_indices
-                        .iter()
-                        .filter(|index| index.age == IndexAge::New && index.order.as_ref() == [0, 1])
-                        .exactly_one()
-                        .expect("should have exactly one new index with order [0, 1] for cod rel");
-                    let old_order_0_1 = cod_indices
-                        .iter()
-                        .filter(|index| index.age == IndexAge::Old && index.order.as_ref() == [0, 1])
-                        .exactly_one()
-                        .expect("should have exactly one old index with order [0, 1] for cod rel");
-
-                    let cod_new_order_0_1 =
-                        display_index_field_name(&cod_rel, new_order_0_1, ctx);
-                    let cod_old_order_0_1 =
-                        display_index_field_name(&cod_rel, old_order_0_1, ctx);
-
-                    let set_indices = index_selection
-                        .indices
-                        .get(&set_rel)
-                        .expect("set rel should have indices");
-                    let new_order_0 = set_indices
-                        .iter()
-                        .filter(|index| index.age == IndexAge::New)
-                        .exactly_one()
-                        .expect("should have exactly one new index for set rel");
-                    let old_order_0 = set_indices
-                        .iter()
-                        .filter(|index| index.age == IndexAge::Old)
-                        .exactly_one()
-                        .expect("should have exactly one old index for set rel");
-
-                    let obj_new_order_0 = display_index_field_name(&set_rel, new_order_0, ctx);
-                    let obj_old_order_0 = display_index_field_name(&set_rel, old_order_0, ctx);
-
-                    writedoc! {f, r#"
-                        let ordered_{type_snake}_mor: Vec<eqlog_runtime::MorphismWithSignature> =
-                        eqlog_runtime::morphism_toposort(
-                        &self.{dom_new_order_1_0},
-                        &self.{dom_old_order_1_0},
-                        &self.{cod_new_order_0_1},
-                        &self.{cod_old_order_0_1},
-                        &self.{obj_new_order_0},
-                        &self.{obj_old_order_0},
-                        )
-                        .expect("TODO: Return error about a cycle being present in the morphism category");
-                    "#}
-                })
-            })
-            .format("\n");
-
-        let compute_rel_sets = index_selection
-            .indices
-            .iter()
-            .flat_map(|(rel, indices)| {
-                indices
-                    .iter()
-                    .map(move |index| (rel.clone(), index.clone()))
-            })
-            .filter_map(|(flat_in_rel, index_spec)| {
-                let parent_model_type = flat_in_rel.parent_model_type(ctx.signature())?;
-                Some((flat_in_rel, index_spec, parent_model_type))
-            })
-            .map(|(flat_in_rel, index_spec, parent_model_type)| {
                 FmtFn(move |f| {
-                    let flat_in_rel = &flat_in_rel;
-                    let flat_arity = flat_in_rel.arity(ctx.signature());
-                    let arity: Vec<_> = index_spec
-                        .order
+                    let ordered = display_ordered_morphisms(typ, ctx, index_selection);
+                    let remaps = index_selection
+                        .indices
                         .iter()
-                        .copied()
-                        .map(|i| flat_arity[i])
-                        .collect();
-                    let arity = arity.as_slice();
-
-                    let index_field_name =
-                        display_index_field_name(&flat_in_rel, &index_spec, ctx).to_string();
-                    let index_field_name = index_field_name.as_str();
-
-                    let columns: Vec<_> = index_spec
-                        .order
-                        .iter()
-                        .copied()
-                        .map(|column_index| {
-                            morphism_index_column_kind(
-                                parent_model_type,
-                                column_index,
-                                flat_arity[column_index],
-                                ctx,
-                            )
+                        .flat_map(|(rel, indices)| {
+                            indices
+                                .iter()
+                                .map(move |index| (rel.clone(), index.clone()))
                         })
-                        .collect();
-                    let prefix_len = columns
-                        .iter()
-                        .rposition(|column| column.needs_mapping())
-                        .expect("index over a parented relation should contain the parent")
-                        + 1;
-                    let suffix_len = arity.len() - prefix_len;
-                    let prefix_columns = &columns[..prefix_len];
-
-                    let parent_model_type_snake =
-                        display_type(parent_model_type, ctx).to_string().to_case(Snake);
-
-                    let member_maps = prefix_columns
-                        .iter()
-                        .copied()
-                        .enumerate()
-                        .filter_map(|(i, column)| match column {
-                            MorphismIndexColumnKind::Member(typ) => Some(FmtFn(move |f| {
-                                let map = display_mor_app_map_expr(typ, ctx, index_selection);
-                                writedoc! {f, "
-                                    let map_el{i} = {map};
-                                "}
-                            })),
-                            MorphismIndexColumnKind::Parent | MorphismIndexColumnKind::Copy => None,
+                        .filter(|(rel, _)| rel.parent_model_type(ctx.signature()) == Some(typ))
+                        .map(|(rel, index)| {
+                            display_remap_parented_index(rel, index, typ, ctx, index_selection)
                         })
                         .format("\n");
-
-                    let collect_propagated = display_morphism_index_prefix_walk(
-                        prefix_columns,
-                        arity.len(),
-                        format!("{index_field_name}_all"),
-                        true,
-                    );
-                    let apply_propagated = display_apply_morphism_index_propagated(
-                        index_field_name,
-                        arity.len(),
-                        prefix_len,
-                        suffix_len,
-                    );
-                    let suffix_type = display_prefix_tree_type(suffix_len);
-
-                    writedoc!{f, r#"
-                        let mut {index_field_name}_all = self.{index_field_name}_own.clone();
-                        let {index_field_name}_own = &mut self.{index_field_name}_own;
-                        #[allow(unused)]
-                        for MorphismWithSignature {{ morph, dom, cod }} in ordered_{parent_model_type_snake}_mor.iter() {{
-                        {member_maps}
-                        let mut propagated: Vec<([u32; {prefix_len}], {suffix_type})> = Vec::new();
-                        {collect_propagated}
-                        {apply_propagated}
-                        }}
-                        self.{index_field_name}_all = {index_field_name}_all;
-                    "#}
+                    writedoc! {f, "
+                        {ordered}
+                        {remaps}
+                    "}
                 })
             })
             .format("\n");
         writedoc! {f, "
             fn recompute_model_indices(&mut self) {{
-            {compute_ordered_mor_vars}
-            {compute_rel_sets}
+            {body}
             }}
         "}
     })
@@ -2538,51 +2729,59 @@ fn display_define_fn<'a>(func: FuncId, ctx: &'a RustGenCtx<'a>) -> impl Display 
             .map(display_var)
             .format(", ");
 
-        let codomain_parent_model = ctx.signature().type_(codomain).parents.last().copied();
+        let codomain_parents = ctx.signature().type_(codomain).parents.clone();
+        let func_is_mor_app = ctx.signature().type_for_mor_app_func(func).is_some();
 
-        let parent_var: &str = if codomain_parent_model.is_none() {
-            ""
+        let mor_app_cod_args = if domain.len() >= 2 {
+            func_arg_vars[..=domain.len() - 2]
+                .iter()
+                .cloned()
+                .map(display_var)
+                .format(", ")
+                .to_string()
         } else {
-            "parent_el"
+            String::new()
         };
 
-        let define_parent_var = FmtFn(move |f| {
-            let Some(model_type) = codomain_parent_model else {
-                return Ok(());
-            };
-
-            let func_is_mor_app = ctx.signature().type_for_mor_app_func(func).is_some();
-
-            if !func_is_mor_app {
-                // This works if `func` is a model member function, in which case its first argument is
-                // parent model. That's OK for now, but when we introduce dependent types in function
-                // signatures it will break, since then the codomain might be a member type while the
-                // function is not a member.
-                assert_eq!(
-                    ctx.signature().func(func).parents.last().copied(),
-                    Some(model_type)
-                );
-                let parent_arg = ElVar::from(0);
-                writedoc! {f, "
-                    let {parent_var} = {parent_arg};"
-                }?;
-                return Ok(());
-            }
-
+        let define_parent_var = if func_is_mor_app && !codomain_parents.is_empty() {
+            let model_type = *codomain_parents.last().unwrap();
             let cod_func = ctx
                 .signature()
                 .ids_for_model_type(model_type)
                 .expect("parent model type should have model ids")
                 .cod;
             let cod_func_snake = display_func(cod_func, ctx);
+            format!("let parent_el = self.define_{cod_func_snake}({mor_app_cod_args});")
+        } else {
+            String::new()
+        };
 
-            assert!(func_is_mor_app);
-            let mor_arg = ElVar::from(0);
-            writedoc! {f, "
-                let {parent_var} = self.define_{cod_func_snake}({mor_arg});
-            "}?;
-            Ok(())
-        });
+        let new_parent_args = if codomain_parents.is_empty() {
+            String::new()
+        } else if func_is_mor_app {
+            let outer = func_arg_vars[..codomain_parents.len() - 1]
+                .iter()
+                .cloned()
+                .map(display_var)
+                .format(", ")
+                .to_string();
+            if outer.is_empty() {
+                "parent_el".to_string()
+            } else {
+                format!("{outer}, parent_el")
+            }
+        } else {
+            assert_eq!(
+                ctx.signature().func(func).parents.as_slice(),
+                codomain_parents.as_slice()
+            );
+            func_arg_vars[..codomain_parents.len()]
+                .iter()
+                .cloned()
+                .map(display_var)
+                .format(", ")
+                .to_string()
+        };
 
         writedoc! {f, "
             /// Enforces that `{func_snake}({args})` is defined, adjoining a new element if necessary.
@@ -2592,7 +2791,7 @@ fn display_define_fn<'a>(func: FuncId, ctx: &'a RustGenCtx<'a>) -> impl Display 
                     Some(result) => result,
                     None => {{
                         {define_parent_var}
-                        let {result_var} = self.new_{codomain_snake}_internal({parent_var});
+                        let {result_var} = self.new_{codomain_snake}_internal({new_parent_args});
                         self.insert_{func_snake}({rel_args});
                         {result_var}
                     }}

@@ -4,7 +4,7 @@ use std::sync::Arc;
 use convert_case::{Case::Snake, Casing as _};
 
 use crate::algebra::populate::{MorphismKind, RuleStructures};
-use crate::algebra::signature::{FuncId, Signature};
+use crate::algebra::signature::{FuncId, Signature, TypeKind};
 use crate::algebra::structure::{ConcreteType, ElId, FuncApp, PredApp, Structure, StructureId};
 use crate::ast::*;
 use crate::flat_eqlog::*;
@@ -215,13 +215,18 @@ fn flat_rel_apps(
     for &el in st.els.keys() {
         let el = flat_el(st, el);
         let concrete_type = concrete_type_of(rule, structure, el);
-        let Some(&parent) = concrete_type.parents.last() else {
+        if concrete_type.parents.is_empty() {
             // Parentless types are lowered through their type sets, not
             // through model-member relations.
             continue;
         };
         let rel = FlatRel::ModelMember(concrete_type.typ);
-        let args = vec![flat_el(st, parent), el];
+        let mut args: Vec<ElId> = concrete_type
+            .parents
+            .iter()
+            .map(|&parent| flat_el(st, parent))
+            .collect();
+        args.push(el);
         apps.insert(FlatRelApp { rel, args });
     }
 
@@ -251,10 +256,8 @@ fn flat_func_domain_args(st: &Structure, app: &FuncApp) -> Vec<ElId> {
 }
 
 fn flat_args(st: &Structure, parents: &[ElId], args: &[ElId]) -> Vec<ElId> {
-    let mut flat_args = Vec::with_capacity(args.len() + usize::from(!parents.is_empty()));
-    if let Some(&parent) = parents.last() {
-        flat_args.push(flat_el(st, parent));
-    }
+    let mut flat_args = Vec::with_capacity(parents.len() + args.len());
+    flat_args.extend(parents.iter().map(|&parent| flat_el(st, parent)));
     flat_args.extend(args.iter().map(|&arg| flat_el(st, arg)));
     flat_args
 }
@@ -373,8 +376,11 @@ fn flatten_if_arbitrary(
             continue;
         }
         if app.rel.is_model_membership_relation() {
-            assert_eq!(app.args.len(), 2, "model member predicates have arity 2");
-            if constrained.contains(&app.args[1]) {
+            let member = *app
+                .args
+                .last()
+                .expect("model member predicates include the member element");
+            if constrained.contains(&member) {
                 continue;
             }
         }
@@ -699,7 +705,15 @@ fn func_base_name(ctx: &FlattenCtx<'_>, func: FuncId) -> String {
         .iter_mor_app_funcs()
         .find(|(_, func0)| *func0 == func)
     {
-        return format!("{}_mor_app", ctx.signature.type_name(ctx.ast, member_type));
+        // Match rust_gen identifiers: morphism companions are `{Model}Mor`,
+        // not the diagnostic `Mor<Model>` spelling.
+        let member_name = match ctx.signature.type_(member_type).kind {
+            TypeKind::Mor(model) => format!("{}Mor", ctx.signature.type_name(ctx.ast, model)),
+            TypeKind::Plain | TypeKind::Model | TypeKind::Enum => {
+                ctx.signature.type_name(ctx.ast, member_type)
+            }
+        };
+        return format!("{member_name}_mor_app");
     }
     format!("func_{}", func.as_usize())
 }

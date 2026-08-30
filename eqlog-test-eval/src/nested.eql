@@ -1,0 +1,110 @@
+model Bundle {
+    model Fiber {
+        type El;
+        pred marked(El);
+        func tip() -> El;
+
+        rule tip_total {
+            then tip()!;
+        }
+    }
+
+    rule fiber_el_mors_total {
+        if g: Mor(Fiber);
+        if fiber_dom = dom(g);
+        if x: fiber_dom.El;
+        if cod(g)!;
+        then g.El(x)!;
+    }
+
+    pred reached_marked_image(fiber: Fiber);
+    rule lookup_marked_image {
+        if g: Mor(Fiber);
+        if fiber_dom = dom(g);
+        if x: fiber_dom.El;
+        if fiber.marked(g.El(x));
+        then reached_marked_image(fiber);
+    }
+}
+
+rule use_tip {
+    if b: Bundle;
+    if f: b.Fiber;
+    if t = f.tip();
+    then t = t;
+}
+
+rule bundle_fiber_mors_total {
+    if h: Mor(Bundle);
+    if bundle_dom = dom(h);
+    if f: bundle_dom.Fiber;
+    if cod(h)!;
+    then h.Fiber(f)!;
+}
+
+// Relations at every depth prepend the full ancestor chain so prefix
+// trees can restrict from the outermost model inward.
+model A {
+    model B {
+        model C {
+            type T;
+            pred tagged(T);
+            func apex() -> T;
+
+            rule apex_total {
+                then apex()!;
+            }
+        }
+
+        rule c_t_mors_total {
+            if g: Mor(C);
+            if c_dom = dom(g);
+            if x: c_dom.T;
+            if cod(g)!;
+            then g.T(x)!;
+        }
+
+        pred reached_tagged_image(c: C);
+        rule lookup_tagged_image {
+            if g: Mor(C);
+            if c_dom = dom(g);
+            if x: c_dom.T;
+            if c.tagged(g.T(x));
+            then reached_tagged_image(c);
+        }
+    }
+
+    rule b_c_mors_total {
+        if f: Mor(B);
+        if b_dom = dom(f);
+        if c: b_dom.C;
+        if cod(f)!;
+        then f.C(c)!;
+    }
+}
+
+rule use_deep_tip {
+    if a: A;
+    if b: a.B;
+    if c: b.C;
+    if t = c.apex();
+    then t = t;
+}
+
+rule a_b_mors_total {
+    if h: Mor(A);
+    if a_dom = dom(h);
+    if b: a_dom.B;
+    if cod(h)!;
+    then h.B(b)!;
+}
+
+model W {
+    model X {
+        model Y {
+            model Z {
+                type U;
+            }
+        }
+    }
+}
