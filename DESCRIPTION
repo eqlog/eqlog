@@ -1,6 +1,6 @@
-Compile nested model declarations.
+Support nested models and their morphisms.
 
 Every nested relation prepends its full enclosing-model chain, not
 just the innermost parent, so prefix trees can restrict from the
-outside in. Membership predicates carry one column per ancestor.
-Nested morphism application such as f.N.T(x) is still rejected.
+outside in. Membership predicates carry one column per ancestor, and
+morphism propagation walks nested models from the inside out.
