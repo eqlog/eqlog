@@ -700,10 +700,10 @@ fn func_base_name(ctx: &FlattenCtx<'_>, func: FuncId) -> String {
         let suffix = if ids.dom == func { "dom" } else { "cod" };
         return format!("{model_name}_mor_{suffix}");
     }
-    if let Some((member_type, _)) = ctx
+    if let Some((parent_model, member_type, _)) = ctx
         .signature
         .iter_mor_app_funcs()
-        .find(|(_, func0)| *func0 == func)
+        .find(|(_, _, func0)| *func0 == func)
     {
         // Match rust_gen identifiers: morphism companions are `{Model}Mor`,
         // not the diagnostic `Mor<Model>` spelling.
@@ -713,7 +713,12 @@ fn func_base_name(ctx: &FlattenCtx<'_>, func: FuncId) -> String {
                 ctx.signature.type_name(ctx.ast, member_type)
             }
         };
-        return format!("{member_name}_mor_app");
+        let immediate_parent = ctx.signature.type_(member_type).parents.last().copied();
+        if immediate_parent == Some(parent_model) {
+            return format!("{member_name}_mor_app");
+        }
+        let parent_name = ctx.signature.type_name(ctx.ast, parent_model);
+        return format!("{parent_name}_{member_name}_mor_app");
     }
     format!("func_{}", func.as_usize())
 }

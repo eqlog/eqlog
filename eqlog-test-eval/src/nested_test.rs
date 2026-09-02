@@ -220,6 +220,34 @@ fn c_morphism_image_found_by_rule() {
 }
 
 #[test]
+fn outer_morphism_maps_deep_members() {
+    let mut model = Nested::new();
+    let a0 = model.new_a();
+    let a1 = model.new_a();
+    let b0 = model.new_b(a0);
+    let c0 = model.new_c(a0, b0);
+    let x = model.new_t(a0, b0, c0);
+    let b1 = model.new_b(a1);
+    let c1 = model.new_c(a1, b1);
+    let y = model.new_t(a1, b1, c1);
+
+    let h = model.new_a_mor();
+    model.insert_a_mor_dom(h, a0);
+    model.insert_a_mor_cod(h, a1);
+    model.insert_b_mor_app(h, b0, b1);
+    model.insert_a_c_mor_app(h, c0, c1);
+    model.insert_a_t_mor_app(h, x, y);
+    model.close();
+
+    assert_eq!(model.b_mor_app(h, b0), Some(b1));
+    assert_eq!(model.a_c_mor_app(h, c0), Some(c1));
+    assert_eq!(model.a_t_mor_app(h, x), Some(y));
+    assert!(model.a_member_b(a1, b1));
+    assert!(model.b_member_c(a1, b1, c1));
+    assert!(model.c_member_t(a1, b1, c1, y));
+}
+
+#[test]
 fn c_morphism_applies_to_apex() {
     let mut model = Nested::new();
     let a = model.new_a();

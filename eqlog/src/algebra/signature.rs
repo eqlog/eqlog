@@ -112,11 +112,10 @@ pub struct Signature {
     func_decls: BTreeMap<FuncDeclId, FuncId>,
     const_decls: BTreeMap<ConstDeclId, FuncId>,
     ctor_decls: BTreeMap<CtorDeclId, FuncId>,
-    /// Per-member-type morphism-application function. Keyed by the
-    /// member type `T`. The function takes `(Mor<M>, T)` and returns
-    /// `T`, where `M` is the model containing `T`. Populated for every
-    /// type whose `parents` ends in a model type.
-    mor_app_funcs: BTreeMap<TypeId, FuncId>,
+    /// Morphism-application functions keyed by an enclosing model and a
+    /// descendant member type. Each function takes `(Mor<M>, T)` and
+    /// returns `T`, allowing the same morphism to act at every depth.
+    mor_app_funcs: BTreeMap<(TypeId, TypeId), FuncId>,
 }
 
 impl Signature {
@@ -172,10 +171,10 @@ impl Signature {
         self.ctor_decls.iter().map(|(&decl, &func)| (decl, func))
     }
 
-    pub fn iter_mor_app_funcs(&self) -> impl Iterator<Item = (TypeId, FuncId)> + '_ {
+    pub fn iter_mor_app_funcs(&self) -> impl Iterator<Item = (TypeId, TypeId, FuncId)> + '_ {
         self.mor_app_funcs
             .iter()
-            .map(|(&member_type, &func)| (member_type, func))
+            .map(|(&(parent_model, member_type), &func)| (parent_model, member_type, func))
     }
 
     pub fn type_for_type_decl(&self, id: TypeDeclId) -> TypeId {
@@ -213,14 +212,23 @@ impl Signature {
     /// The returned function has signature `(Mor<M>, T) -> T`, where
     /// `M` is the innermost enclosing model and `T = tid`.
     pub fn mor_app_func_for_type(&self, tid: TypeId) -> Option<FuncId> {
-        self.mor_app_funcs.get(&tid).copied()
+        let parent = self.type_(tid).parents.last().copied()?;
+        self.mor_app_func(parent, tid)
     }
 
-    /// Inverse of [`Self::mor_app_func_for_type`].
-    pub fn type_for_mor_app_func(&self, fid: FuncId) -> Option<TypeId> {
+    pub fn mor_app_func(&self, parent_model: TypeId, tid: TypeId) -> Option<FuncId> {
+        self.mor_app_funcs.get(&(parent_model, tid)).copied()
+    }
+
+    /// Returns the enclosing model and member type for a generated action.
+    pub fn types_for_mor_app_func(&self, fid: FuncId) -> Option<(TypeId, TypeId)> {
         self.mor_app_funcs
             .iter()
-            .find_map(|(t, f)| (*f == fid).then_some(*t))
+            .find_map(|(types, f)| (*f == fid).then_some(*types))
+    }
+
+    pub fn type_for_mor_app_func(&self, fid: FuncId) -> Option<TypeId> {
+        self.types_for_mor_app_func(fid).map(|(_, member)| member)
     }
 
     /// Returns the [`ModelIds`] whose model-instance type is `tid`, or
@@ -399,19 +407,21 @@ impl<'a> Builder<'a> {
             kind,
             parents: parents.to_vec(),
         });
-        if let Some((parent_model, outer)) = parents.split_last() {
+        for (parent_index, &parent_model) in parents.iter().enumerate() {
             let parent_mor = self
                 .signature
                 .model_decls
                 .values()
-                .find_map(|ids| (ids.type_ == *parent_model).then_some(ids.mor))
+                .find_map(|ids| (ids.type_ == parent_model).then_some(ids.mor))
                 .expect("enclosing model registered before its body is walked");
             let fid = self.signature.push_func(Func {
-                parents: outer.to_vec(),
+                parents: parents[..parent_index].to_vec(),
                 domain: vec![parent_mor, tid],
                 codomain: tid,
             });
-            self.signature.mor_app_funcs.insert(tid, fid);
+            self.signature
+                .mor_app_funcs
+                .insert((parent_model, tid), fid);
         }
         tid
     }

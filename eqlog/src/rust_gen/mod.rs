@@ -238,20 +238,20 @@ fn display_dependent_type_checks<'a>(
         assert_eq!(arity_types.len(), rel_args.len());
 
         if let FlatRel::Func(func) = rel {
-            if let Some(member_type) = ctx.signature().type_for_mor_app_func(func) {
+            if let Some((parent_model_type, member_type)) =
+                ctx.signature().types_for_mor_app_func(func)
+            {
+                if ctx.signature().type_(member_type).parents.last().copied()
+                    != Some(parent_model_type)
+                {
+                    return Ok(());
+                }
                 let flat_dom_len = flat_domain(func, ctx.signature()).len();
                 assert!(flat_dom_len >= 2);
                 let mor_pos = flat_dom_len - 2;
                 let arg_pos = flat_dom_len - 1;
                 let result_pos = flat_dom_len;
 
-                let parent_model_type = ctx
-                    .signature()
-                    .type_(member_type)
-                    .parents
-                    .last()
-                    .copied()
-                    .expect("mor_app member type should have a parent model");
                 let model_ids = ctx
                     .signature()
                     .ids_for_model_type(parent_model_type)
@@ -1999,7 +1999,12 @@ fn morphism_index_column_kind(
         return MorphismIndexColumnKind::Parent;
     }
 
-    if ctx.signature().type_(typ).parents.last().copied() == Some(parent_model_type) {
+    if ctx
+        .signature()
+        .type_(typ)
+        .parents
+        .contains(&parent_model_type)
+    {
         return MorphismIndexColumnKind::Member(typ);
     }
 
@@ -2061,6 +2066,7 @@ fn display_collect_parent_prefixes(field: &str, parent_len: usize) -> String {
 }
 
 fn display_mor_app_map_expr<'a>(
+    parent_model_type: TypeId,
     typ: TypeId,
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
@@ -2068,7 +2074,7 @@ fn display_mor_app_map_expr<'a>(
     FmtFn(move |f| {
         let mor_app_func = ctx
             .signature()
-            .mor_app_func_for_type(typ)
+            .mor_app_func(parent_model_type, typ)
             .expect("mor_app_func should be defined for member types");
         let mor_app_rel = FlatInRel::Rel(FlatRel::Func(mor_app_func));
         let parent_len = ctx.signature().func(mor_app_func).parents.len();
@@ -2455,7 +2461,8 @@ fn display_remap_parented_index<'a>(
             .enumerate()
             .filter_map(|(i, column)| match column {
                 MorphismIndexColumnKind::Member(typ) => Some(FmtFn(move |f| {
-                    let map = display_mor_app_map_expr(typ, ctx, index_selection);
+                    let map =
+                        display_mor_app_map_expr(parent_model_type, typ, ctx, index_selection);
                     writedoc! {f, "
                         let map_el{i} = {map};
                     "}
@@ -2728,6 +2735,25 @@ fn display_define_fn<'a>(func: FuncId, ctx: &'a RustGenCtx<'a>) -> impl Display 
             .chain(once(result_var.clone()))
             .map(display_var)
             .format(", ");
+
+        if let Some((parent_model, member_type)) = ctx.signature().types_for_mor_app_func(func) {
+            if ctx.signature().type_(member_type).parents.last().copied() != Some(parent_model) {
+                writedoc! {f, "
+                    /// Returns a nested morphism image that has already been derived by closure.
+                    #[allow(dead_code)]
+                    pub fn define_{func_snake}(&mut self, {fn_args}) -> {codomain_camel} {{
+                        self.{func_snake}({args}).expect(
+                            \"nested morphism images must be derived by model closure\"
+                        )
+                    }}
+                "}
+            } else {
+                Ok(())
+            }?;
+            if ctx.signature().type_(member_type).parents.last().copied() != Some(parent_model) {
+                return Ok(());
+            }
+        }
 
         let codomain_parents = ctx.signature().type_(codomain).parents.clone();
         let func_is_mor_app = ctx.signature().type_for_mor_app_func(func).is_some();

@@ -801,6 +801,42 @@ pub(crate) fn mor_type_component(
     }
 }
 
+pub(crate) fn mor_type_path_component(
+    scopes: &Scopes,
+    signature: &Signature,
+    receiver_typ: TypeId,
+    names: &[&str],
+) -> Option<TypeId> {
+    let TypeKind::Mor(mut model_tid) = signature.type_(receiver_typ).kind else {
+        return None;
+    };
+    let mut resolved = None;
+    for (index, name) in names.iter().enumerate() {
+        let model_decl = signature.model_decl_for_type(model_tid)?;
+        let body = scopes.scope(scopes.unordered(model_decl));
+        let typ = match body.symbols.get(*name).copied()? {
+            Symbol::Type(td) => signature.type_for_type_decl(td),
+            Symbol::Enum(ed) => signature.type_for_enum_decl(ed),
+            Symbol::Model(md) => signature.ids_for_model_decl(md).type_,
+            Symbol::Pred(_)
+            | Symbol::Func(_)
+            | Symbol::Const(_)
+            | Symbol::Ctor(_)
+            | Symbol::Rule(_)
+            | Symbol::Arg(_)
+            | Symbol::Var(_) => return None,
+        };
+        resolved = Some(typ);
+        if index + 1 < names.len() {
+            if !matches!(signature.type_(typ).kind, TypeKind::Model) {
+                return None;
+            }
+            model_tid = typ;
+        }
+    }
+    resolved
+}
+
 fn concrete_types_of_el(
     rule: &RuleStructures,
     current: StructureId,
@@ -949,73 +985,99 @@ fn emit_app(
             );
             changed |= receiver_el.1;
             let mut receiver_el = receiver_el.0;
-            for (index, &prefix_name) in member.names[..member.names.len() - 1].iter().enumerate() {
-                let const_name = &ast.ident_term(prefix_name).name;
-                let candidates =
-                    member_scopes_and_parents(rule, current, receiver_el, scopes, signature)
-                        .into_iter()
-                        .filter_map(|(body, parents)| {
-                            let const_decl = match body.symbols.get(const_name).copied()? {
-                                Symbol::Const(const_decl) => const_decl,
-                                Symbol::Type(_)
-                                | Symbol::Pred(_)
-                                | Symbol::Func(_)
-                                | Symbol::Enum(_)
-                                | Symbol::Ctor(_)
-                                | Symbol::Model(_)
-                                | Symbol::Rule(_)
-                                | Symbol::Arg(_)
-                                | Symbol::Var(_) => return None,
-                            };
-                            let fid = signature.func_for_const_decl(const_decl)?;
-                            Some((fid, parents))
-                        })
-                        .collect();
-                let key = (mid, index);
-                let prior = rule.app_head_els[current.0].get(&key).copied();
-                let (prefix_el, c) =
-                    match emit_known_apps(candidates, Vec::new(), prior, current, rule) {
-                        Some(result) => result,
-                        None => expected_or_fresh(prior, current, rule),
-                    };
-                changed |= c;
-                if prior.is_none() {
-                    rule.app_head_els[current.0].insert(key, prefix_el);
-                    changed = true;
-                }
-                receiver_el = prefix_el;
-            }
-            let name = *member.names.last().expect("member head without a name");
-            let name = &ast.ident_term(name).name;
-            for (body, parents) in
-                member_scopes_and_parents(rule, current, receiver_el, scopes, signature)
-            {
-                let func_id = match body.symbols.get(name).copied() {
-                    Some(Symbol::Func(fd)) => signature.func_for_func_decl(fd),
-                    Some(Symbol::Ctor(cd)) => signature.func_for_ctor_decl(cd),
-                    Some(Symbol::Const(_))
-                    | Some(Symbol::Type(_))
-                    | Some(Symbol::Pred(_))
-                    | Some(Symbol::Enum(_))
-                    | Some(Symbol::Model(_))
-                    | Some(Symbol::Rule(_))
-                    | Some(Symbol::Arg(_))
-                    | Some(Symbol::Var(_))
-                    | None => None,
-                };
-                if let Some(fid) = func_id {
-                    func_candidates.push((fid, parents));
-                }
-            }
-            for ct in concrete_types_of_el(rule, current, receiver_el) {
-                let Some(type_tid) = mor_type_component(scopes, signature, ct.typ, name) else {
+            let receiver_types = concrete_types_of_el(rule, current, receiver_el);
+            let unresolved_path = member.names.len() > 1 && receiver_types.is_empty();
+            let path_names: Vec<&str> = member
+                .names
+                .iter()
+                .map(|name| ast.ident_term(*name).name.as_str())
+                .collect();
+            for ct in receiver_types {
+                let TypeKind::Mor(parent_model) = signature.type_(ct.typ).kind else {
                     continue;
                 };
-                let Some(fid) = signature.mor_app_func_for_type(type_tid) else {
+                let Some(type_tid) =
+                    mor_type_path_component(scopes, signature, ct.typ, path_names.as_slice())
+                else {
+                    continue;
+                };
+                let Some(fid) = signature.mor_app_func(parent_model, type_tid) else {
                     continue;
                 };
                 mor_candidates.insert((fid, ct.parents));
                 mor_el = Some(receiver_el);
+            }
+            if mor_candidates.is_empty() && !unresolved_path {
+                for (index, &prefix_name) in
+                    member.names[..member.names.len() - 1].iter().enumerate()
+                {
+                    let const_name = &ast.ident_term(prefix_name).name;
+                    let candidates =
+                        member_scopes_and_parents(rule, current, receiver_el, scopes, signature)
+                            .into_iter()
+                            .filter_map(|(body, parents)| {
+                                let const_decl = match body.symbols.get(const_name).copied()? {
+                                    Symbol::Const(const_decl) => const_decl,
+                                    Symbol::Type(_)
+                                    | Symbol::Pred(_)
+                                    | Symbol::Func(_)
+                                    | Symbol::Enum(_)
+                                    | Symbol::Ctor(_)
+                                    | Symbol::Model(_)
+                                    | Symbol::Rule(_)
+                                    | Symbol::Arg(_)
+                                    | Symbol::Var(_) => return None,
+                                };
+                                let fid = signature.func_for_const_decl(const_decl)?;
+                                Some((fid, parents))
+                            })
+                            .collect();
+                    let key = (mid, index);
+                    let prior = rule.app_head_els[current.0].get(&key).copied();
+                    let (prefix_el, c) =
+                        match emit_known_apps(candidates, Vec::new(), prior, current, rule) {
+                            Some(result) => result,
+                            None => expected_or_fresh(prior, current, rule),
+                        };
+                    changed |= c;
+                    if prior.is_none() {
+                        rule.app_head_els[current.0].insert(key, prefix_el);
+                        changed = true;
+                    }
+                    receiver_el = prefix_el;
+                }
+                let name = *member.names.last().expect("member head without a name");
+                let name = &ast.ident_term(name).name;
+                for (body, parents) in
+                    member_scopes_and_parents(rule, current, receiver_el, scopes, signature)
+                {
+                    let func_id = match body.symbols.get(name).copied() {
+                        Some(Symbol::Func(fd)) => signature.func_for_func_decl(fd),
+                        Some(Symbol::Ctor(cd)) => signature.func_for_ctor_decl(cd),
+                        Some(Symbol::Const(_))
+                        | Some(Symbol::Type(_))
+                        | Some(Symbol::Pred(_))
+                        | Some(Symbol::Enum(_))
+                        | Some(Symbol::Model(_))
+                        | Some(Symbol::Rule(_))
+                        | Some(Symbol::Arg(_))
+                        | Some(Symbol::Var(_))
+                        | None => None,
+                    };
+                    if let Some(fid) = func_id {
+                        func_candidates.push((fid, parents));
+                    }
+                }
+                for ct in concrete_types_of_el(rule, current, receiver_el) {
+                    let Some(type_tid) = mor_type_component(scopes, signature, ct.typ, name) else {
+                        continue;
+                    };
+                    let Some(fid) = signature.mor_app_func_for_type(type_tid) else {
+                        continue;
+                    };
+                    mor_candidates.insert((fid, ct.parents));
+                    mor_el = Some(receiver_el);
+                }
             }
         }
         AppHead::Term(term) => {

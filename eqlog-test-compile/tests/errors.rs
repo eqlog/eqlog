@@ -358,11 +358,6 @@ fn mor_type_component_used_as_term() {
 }
 
 #[test]
-fn nested_mor_app_not_supported() {
-    test_case(Path::new("nested-mor-app-not-supported"));
-}
-
-#[test]
 fn mor_type_not_a_type() {
     test_case(Path::new("mor-type-not-a-type"));
 }

@@ -373,10 +373,8 @@ impl Structure {
         let mut changed = false;
 
         for (app, result) in apps {
-            let Some(member_tid) = signature.type_for_mor_app_func(app.func) else {
-                continue;
-            };
-            let Some(&parent_model_tid) = signature.type_(member_tid).parents.last() else {
+            let Some((parent_model_tid, member_tid)) = signature.types_for_mor_app_func(app.func)
+            else {
                 continue;
             };
             let Some(model_ids) = signature.ids_for_model_type(parent_model_tid) else {
@@ -390,6 +388,7 @@ impl Structure {
             let arg_el = self.root(app.args[1]);
             let result = self.root(result);
             let outer_parents: Vec<ElId> = app.parents.iter().map(|p| self.root(*p)).collect();
+            let parent_index = outer_parents.len();
 
             let dom_app = FuncApp {
                 func: model_ids.dom,
@@ -402,38 +401,42 @@ impl Structure {
                 args: vec![mor_el],
             };
 
-            for domain_el in self.member_parents_from_type(arg_el, member_tid) {
+            for domain_el in self.member_parent_at(arg_el, member_tid, parent_index) {
                 changed |= self.insert_func_app_or_equate(dom_app.clone(), domain_el);
             }
-            for codomain_el in self.member_parents_from_type(result, member_tid) {
+            for codomain_el in self.member_parent_at(result, member_tid, parent_index) {
                 changed |= self.insert_func_app_or_equate(cod_app.clone(), codomain_el);
             }
 
-            if let Some(&domain_el) = self.func_apps.get(&dom_app) {
-                let mut parents = outer_parents.clone();
-                parents.push(self.root(domain_el));
-                if self.impose_concrete_type(
-                    arg_el,
-                    ConcreteType {
-                        typ: member_tid,
-                        parents,
-                    },
-                ) {
-                    changed = true;
+            if signature.type_(member_tid).parents.len() == parent_index + 1 {
+                if let Some(&domain_el) = self.func_apps.get(&dom_app) {
+                    let mut parents = outer_parents.clone();
+                    parents.push(self.root(domain_el));
+                    if self.impose_concrete_type(
+                        arg_el,
+                        ConcreteType {
+                            typ: member_tid,
+                            parents,
+                        },
+                    ) {
+                        changed = true;
+                    }
                 }
             }
 
-            if let Some(&codomain_el) = self.func_apps.get(&cod_app) {
-                let mut parents = outer_parents.clone();
-                parents.push(self.root(codomain_el));
-                if self.impose_concrete_type(
-                    result,
-                    ConcreteType {
-                        typ: member_tid,
-                        parents,
-                    },
-                ) {
-                    changed = true;
+            if signature.type_(member_tid).parents.len() == parent_index + 1 {
+                if let Some(&codomain_el) = self.func_apps.get(&cod_app) {
+                    let mut parents = outer_parents.clone();
+                    parents.push(self.root(codomain_el));
+                    if self.impose_concrete_type(
+                        result,
+                        ConcreteType {
+                            typ: member_tid,
+                            parents,
+                        },
+                    ) {
+                        changed = true;
+                    }
                 }
             }
         }
@@ -441,13 +444,12 @@ impl Structure {
         changed
     }
 
-    /// Returns the innermost parents of all concrete types on `el` whose
-    /// underlying type is `member_tid`.
-    fn member_parents_from_type(&self, el: ElId, member_tid: TypeId) -> Vec<ElId> {
+    /// Returns one requested parent from each matching concrete type on `el`.
+    fn member_parent_at(&self, el: ElId, member_tid: TypeId, index: usize) -> Vec<ElId> {
         self.concrete_types_of(el)
             .into_iter()
             .filter(|ct| ct.typ == member_tid)
-            .filter_map(|ct| ct.parents.last().copied())
+            .filter_map(|ct| ct.parents.get(index).copied())
             .map(|parent| self.root(parent))
             .collect::<BTreeSet<_>>()
             .into_iter()

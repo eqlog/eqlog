@@ -99,6 +99,18 @@ rule a_b_mors_total {
     then h.B(b)!;
 }
 
+rule recognize_deep_mor_app {
+    if h: Mor(A);
+    if a_dom = dom(h);
+    if b: a_dom.B;
+    if c: b.C;
+    if x: c.T;
+    if cod(h)!;
+    if y: c.T;
+    if y = h.B.C.T(x);
+    then x = x;
+}
+
 model W {
     model X {
         model Y {
