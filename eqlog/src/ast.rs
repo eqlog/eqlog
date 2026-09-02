@@ -199,6 +199,8 @@ pub enum Term {
     Cod(CodTermId),
 }
 
+// LALRPOP cannot declare the recursive Rust types used by grammar actions.
+// These values exist only while parsing and are never stored as AST nodes.
 pub(crate) enum ParsedTerm {
     Ident(IdentTermId),
     Term(TermId),
