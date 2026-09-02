@@ -135,12 +135,46 @@ impl<'a> BindingsChecker<'a> {
             Term::Wildcard => {}
             Term::App(id) => {
                 let AppTerm { head, args } = *self.ast.app_term(id);
-                self.check_epic_term(head);
+                self.check_epic_app_head(head);
                 for arg in self.ast.term_list(args).terms.clone() {
                     self.check_epic_term(arg);
                 }
             }
             Term::Dom(_) | Term::Cod(_) => {}
+        }
+    }
+
+    fn check_epic_app_head(&mut self, head: AppHeadId) {
+        match *self.ast.app_head(head) {
+            AppHead::Ident(id) => {
+                let name = &self.ast.ident_term(id).name;
+                match self.scopes.lookup(self.scopes.exit(head), name) {
+                    Some(Symbol::Var(binding)) => {
+                        if self.scopes.lookup(self.scopes.entry(head), name)
+                            != Some(Symbol::Var(binding))
+                        {
+                            self.errors
+                                .push(CompileError::VariableIntroducedInThenStmt {
+                                    location: self.ast.loc(head),
+                                });
+                        }
+                    }
+                    Some(
+                        Symbol::Type(_)
+                        | Symbol::Pred(_)
+                        | Symbol::Func(_)
+                        | Symbol::Const(_)
+                        | Symbol::Enum(_)
+                        | Symbol::Ctor(_)
+                        | Symbol::Model(_)
+                        | Symbol::Rule(_)
+                        | Symbol::Arg(_),
+                    )
+                    | None => {}
+                }
+            }
+            AppHead::Member(id) => self.check_epic_term(self.ast.app_head_member(id).receiver),
+            AppHead::Term(term) => self.check_epic_term(term),
         }
     }
 
@@ -180,13 +214,13 @@ impl<'a> BindingsChecker<'a> {
             _ => return,
         };
         let head = self.ast.app_term(app).head;
-        let ctor_head = match *self.ast.term(head) {
-            Term::Ident(id) => matches!(
+        let ctor_head = match *self.ast.app_head(head) {
+            AppHead::Ident(id) => matches!(
                 self.scopes
                     .lookup(self.scopes.exit(head), &self.ast.ident_term(id).name),
                 Some(Symbol::Ctor(_))
             ),
-            _ => false,
+            AppHead::Member(_) | AppHead::Term(_) => false,
         };
         if !ctor_head {
             return;

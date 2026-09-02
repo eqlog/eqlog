@@ -57,6 +57,9 @@ pub struct RuleStructures {
     /// structure only; cross-structure el equality is reconstructed
     /// via morphisms.
     pub semantic_els: Vec<BTreeMap<TermId, ElId>>,
+    /// Intermediate member prefixes in application heads are not terms, but
+    /// valid constant prefixes still denote elements during algebraization.
+    pub app_head_els: Vec<BTreeMap<(AppHeadMemberId, usize), ElId>>,
     pub stmt_before: BTreeMap<StmtId, StructureId>,
     pub stmt_after: BTreeMap<StmtId, StructureId>,
     /// Origin tag for each statement's morphism, keyed by the
@@ -86,6 +89,7 @@ impl RuleStructures {
     fn push_blank(&mut self) -> StructureId {
         let id = self.cat.push(Structure::default());
         self.semantic_els.push(BTreeMap::new());
+        self.app_head_els.push(BTreeMap::new());
         id
     }
 
@@ -98,6 +102,7 @@ impl RuleStructures {
         let identity = identity_elmap(&clone);
         let new_id = self.cat.push(clone);
         self.semantic_els.push(BTreeMap::new());
+        self.app_head_els.push(BTreeMap::new());
         self.cat.add_morphism(id, new_id, identity);
         new_id
     }
@@ -891,7 +896,7 @@ fn emit_known_apps(
 /// Returns `(result_el, changed)`.
 fn emit_app(
     app: AppTermId,
-    head: TermId,
+    head: AppHeadId,
     arg_els: Vec<ElId>,
     expected: Option<ElId>,
     current: StructureId,
@@ -906,8 +911,8 @@ fn emit_app(
     let mut mor_candidates: BTreeSet<(FuncId, Vec<ElId>)> = BTreeSet::new();
     let mut mor_el: Option<ElId> = None;
 
-    match *ast.term(head) {
-        Term::Ident(id) => {
+    match *ast.app_head(head) {
+        AppHead::Ident(id) => {
             let name = &ast.ident_term(id).name;
             // Use exit scope: head idents never introduce bindings, so entry
             // and exit coincide, but exit is the canonical lookup site for
@@ -929,19 +934,58 @@ fn emit_app(
                 let parents =
                     rule.cat.structures[current.0].ambient_parents(&signature.func(fid).parents);
                 func_candidates.push((fid, parents));
-            } else {
-                let (_, c) = walk_term(head, current, rule, ast, scopes, signature, errors);
-                changed |= c;
             }
         }
-        Term::Member(mid) => {
-            let TermMember {
-                term: receiver,
-                name,
-            } = *ast.term_member(mid);
-            let (receiver_el, c) =
-                walk_term(receiver, current, rule, ast, scopes, signature, errors);
-            changed |= c;
+        AppHead::Member(mid) => {
+            let member = ast.app_head_member(mid);
+            let receiver_el = walk_term(
+                member.receiver,
+                current,
+                rule,
+                ast,
+                scopes,
+                signature,
+                errors,
+            );
+            changed |= receiver_el.1;
+            let mut receiver_el = receiver_el.0;
+            for (index, &prefix_name) in member.names[..member.names.len() - 1].iter().enumerate() {
+                let const_name = &ast.ident_term(prefix_name).name;
+                let candidates =
+                    member_scopes_and_parents(rule, current, receiver_el, scopes, signature)
+                        .into_iter()
+                        .filter_map(|(body, parents)| {
+                            let const_decl = match body.symbols.get(const_name).copied()? {
+                                Symbol::Const(const_decl) => const_decl,
+                                Symbol::Type(_)
+                                | Symbol::Pred(_)
+                                | Symbol::Func(_)
+                                | Symbol::Enum(_)
+                                | Symbol::Ctor(_)
+                                | Symbol::Model(_)
+                                | Symbol::Rule(_)
+                                | Symbol::Arg(_)
+                                | Symbol::Var(_) => return None,
+                            };
+                            let fid = signature.func_for_const_decl(const_decl)?;
+                            Some((fid, parents))
+                        })
+                        .collect();
+                let key = (mid, index);
+                let prior = rule.app_head_els[current.0].get(&key).copied();
+                let (prefix_el, c) =
+                    match emit_known_apps(candidates, Vec::new(), prior, current, rule) {
+                        Some(result) => result,
+                        None => expected_or_fresh(prior, current, rule),
+                    };
+                changed |= c;
+                if prior.is_none() {
+                    rule.app_head_els[current.0].insert(key, prefix_el);
+                    changed = true;
+                }
+                receiver_el = prefix_el;
+            }
+            let name = *member.names.last().expect("member head without a name");
             let name = &ast.ident_term(name).name;
             for (body, parents) in
                 member_scopes_and_parents(rule, current, receiver_el, scopes, signature)
@@ -974,11 +1018,10 @@ fn emit_app(
                 mor_el = Some(receiver_el);
             }
         }
-        Term::App(_) | Term::Dom(_) | Term::Cod(_) => {
-            let (_, c) = walk_term(head, current, rule, ast, scopes, signature, errors);
+        AppHead::Term(term) => {
+            let (_, c) = walk_term(term, current, rule, ast, scopes, signature, errors);
             changed |= c;
         }
-        Term::Wildcard => {}
     }
 
     let mut result = expected;

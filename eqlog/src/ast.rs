@@ -43,6 +43,8 @@ typed_id!(ArgDeclListId);
 typed_id!(TermId);
 typed_id!(IdentTermId);
 typed_id!(AppTermId);
+typed_id!(AppHeadId);
+typed_id!(AppHeadMemberId);
 typed_id!(TermMemberId);
 typed_id!(DomTermId);
 typed_id!(CodTermId);
@@ -154,8 +156,21 @@ pub struct IdentTerm {
 
 #[derive(Copy, Clone, Debug)]
 pub struct AppTerm {
-    pub head: TermId,
+    pub head: AppHeadId,
     pub args: TermListId,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum AppHead {
+    Ident(IdentTermId),
+    Member(AppHeadMemberId),
+    Term(TermId),
+}
+
+#[derive(Clone, Debug)]
+pub struct AppHeadMember {
+    pub receiver: TermId,
+    pub names: Vec<IdentTermId>,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -182,6 +197,30 @@ pub enum Term {
     Member(TermMemberId),
     Dom(DomTermId),
     Cod(CodTermId),
+}
+
+// LALRPOP cannot declare the recursive Rust types used by grammar actions.
+// These values exist only while parsing and are never stored as AST nodes.
+pub(crate) enum ParsedTerm {
+    Ident(IdentTermId),
+    Term(TermId),
+    Parenthesized(Box<ParsedPostfixTerm>),
+}
+
+pub(crate) enum TermPostfix {
+    Member(IdentTermId),
+    Apply(TermListId),
+}
+
+pub(crate) struct ParsedPostfixTerm {
+    pub start: usize,
+    pub parsed: ParsedTerm,
+    pub names: Vec<IdentTermId>,
+}
+
+pub(crate) enum ParsedNamePath {
+    Ambient(IdentTermId),
+    Member(TermMemberId),
 }
 
 #[derive(Clone, Debug)]
@@ -313,6 +352,8 @@ pub enum Node {
     Term(Term),
     IdentTerm(IdentTerm),
     AppTerm(AppTerm),
+    AppHead(AppHead),
+    AppHeadMember(AppHeadMember),
     TermMember(TermMember),
     DomTerm(DomTerm),
     CodTerm(CodTerm),
@@ -396,6 +437,13 @@ accessor!(
 accessor!(term, push_term, TermId, Term);
 accessor!(ident_term, push_ident_term, IdentTermId, IdentTerm);
 accessor!(app_term, push_app_term, AppTermId, AppTerm);
+accessor!(app_head, push_app_head, AppHeadId, AppHead);
+accessor!(
+    app_head_member,
+    push_app_head_member,
+    AppHeadMemberId,
+    AppHeadMember
+);
 accessor!(term_member, push_term_member, TermMemberId, TermMember);
 accessor!(dom_term, push_dom_term, DomTermId, DomTerm);
 accessor!(cod_term, push_cod_term, CodTermId, CodTerm);
@@ -443,3 +491,205 @@ accessor!(if_stmt, push_if_stmt, IfStmtId, IfStmt);
 accessor!(then_stmt, push_then_stmt, ThenStmtId, ThenStmt);
 accessor!(branch_stmt, push_branch_stmt, BranchStmtId, BranchStmt);
 accessor!(match_stmt, push_match_stmt, MatchStmtId, MatchStmt);
+
+#[cfg(test)]
+mod tests {
+    use super::{AppHead, Ast, Decl, IfAtom, Node, Stmt, Term};
+    use crate::grammar::ModuleParser;
+
+    fn node_term(node: &Node) -> Option<&Term> {
+        match node {
+            Node::Term(term) => Some(term),
+            Node::Module(_)
+            | Node::Decl(_)
+            | Node::TypeDecl(_)
+            | Node::PredDecl(_)
+            | Node::FuncDecl(_)
+            | Node::ConstDecl(_)
+            | Node::RuleDecl(_)
+            | Node::EnumDecl(_)
+            | Node::ModelDecl(_)
+            | Node::CtorDecl(_)
+            | Node::ArgDecl(_)
+            | Node::ArgDeclList(_)
+            | Node::IdentTerm(_)
+            | Node::AppTerm(_)
+            | Node::AppHead(_)
+            | Node::AppHeadMember(_)
+            | Node::TermMember(_)
+            | Node::DomTerm(_)
+            | Node::CodTerm(_)
+            | Node::TermList(_)
+            | Node::TypeExpr(_)
+            | Node::AmbientTypeExpr(_)
+            | Node::MorTypeExpr(_)
+            | Node::PredExpr(_)
+            | Node::AmbientPredExpr(_)
+            | Node::IfAtom(_)
+            | Node::ThenAtom(_)
+            | Node::EqualAtom(_)
+            | Node::PredAtom(_)
+            | Node::DefinedIfAtom(_)
+            | Node::VarIfAtom(_)
+            | Node::DefinedThenAtom(_)
+            | Node::MatchCase(_)
+            | Node::Stmt(_)
+            | Node::IfStmt(_)
+            | Node::ThenStmt(_)
+            | Node::BranchStmt(_)
+            | Node::MatchStmt(_) => None,
+        }
+    }
+
+    fn parse_equal_rhs(source: &str) -> (Ast, super::TermId) {
+        let mut ast = Ast::default();
+        let module = match ModuleParser::new().parse(&mut ast, source) {
+            Ok(module) => module,
+            Err(_) => panic!("module did not parse"),
+        };
+        let rule = match *ast.decl(ast.module(module).decls[0]) {
+            Decl::Rule(rule) => rule,
+            Decl::Type(_)
+            | Decl::Pred(_)
+            | Decl::Func(_)
+            | Decl::Const(_)
+            | Decl::Enum(_)
+            | Decl::Model(_) => panic!("expected rule"),
+        };
+        let if_stmt = match *ast.stmt(ast.rule_decl(rule).body[0]) {
+            Stmt::If(if_stmt) => if_stmt,
+            Stmt::Then(_) | Stmt::Branch(_) | Stmt::Match(_) => panic!("expected if statement"),
+        };
+        let equal = match *ast.if_atom(ast.if_stmt(if_stmt).atom) {
+            IfAtom::Equal(equal) => equal,
+            IfAtom::Defined(_) | IfAtom::Pred(_) | IfAtom::Var(_) => panic!("expected equality"),
+        };
+        let rhs = ast.equal_atom(equal).rhs;
+        (ast, rhs)
+    }
+
+    #[test]
+    fn named_application_head_is_not_a_term() {
+        let (ast, rhs) = parse_equal_rhs("rule { if x = foo(x); }");
+        let app = match *ast.term(rhs) {
+            Term::App(app) => app,
+            Term::Ident(_) | Term::Wildcard | Term::Member(_) | Term::Dom(_) | Term::Cod(_) => {
+                panic!("expected application")
+            }
+        };
+        let foo = match *ast.app_head(ast.app_term(app).head) {
+            AppHead::Ident(foo) => foo,
+            AppHead::Member(_) | AppHead::Term(_) => panic!("expected named application head"),
+        };
+        assert_eq!(ast.ident_term(foo).name, "foo");
+        assert!(!ast.nodes.iter().any(|(_, node)| {
+            match node_term(node) {
+                Some(Term::Ident(ident)) => ast.ident_term(*ident).name == "foo",
+                Some(
+                    Term::Wildcard | Term::App(_) | Term::Member(_) | Term::Dom(_) | Term::Cod(_),
+                )
+                | None => false,
+            }
+        }));
+    }
+
+    #[test]
+    fn computed_application_head_retains_its_term() {
+        let (ast, rhs) = parse_equal_rhs("rule { if x = foo(x)(x); }");
+        let outer = match *ast.term(rhs) {
+            Term::App(outer) => outer,
+            Term::Ident(_) | Term::Wildcard | Term::Member(_) | Term::Dom(_) | Term::Cod(_) => {
+                panic!("expected outer application")
+            }
+        };
+        let inner = match *ast.app_head(ast.app_term(outer).head) {
+            AppHead::Term(inner) => inner,
+            AppHead::Ident(_) | AppHead::Member(_) => panic!("expected computed application head"),
+        };
+        assert!(matches!(ast.term(inner), Term::App(_)));
+    }
+
+    #[test]
+    fn member_application_head_does_not_materialize_prefix_terms() {
+        for source in [
+            "rule { if x = foo.bar.p(x); }",
+            "rule { if x = (foo.bar).p(x); }",
+        ] {
+            let (ast, rhs) = parse_equal_rhs(source);
+            let app = match *ast.term(rhs) {
+                Term::App(app) => app,
+                Term::Ident(_) | Term::Wildcard | Term::Member(_) | Term::Dom(_) | Term::Cod(_) => {
+                    panic!("expected application")
+                }
+            };
+            let member = match *ast.app_head(ast.app_term(app).head) {
+                AppHead::Member(member) => member,
+                AppHead::Ident(_) | AppHead::Term(_) => {
+                    panic!("expected member application head")
+                }
+            };
+            let member = ast.app_head_member(member);
+            assert_eq!(
+                member
+                    .names
+                    .iter()
+                    .map(|name| ast.ident_term(*name).name.as_str())
+                    .collect::<Vec<_>>(),
+                ["bar", "p"]
+            );
+            assert!(matches!(ast.term(member.receiver), Term::Ident(_)));
+            assert!(!ast.nodes.iter().any(|(_, node)| {
+                match node_term(node) {
+                    Some(Term::Member(member)) => {
+                        ast.ident_term(ast.term_member(*member).name).name == "bar"
+                    }
+                    Some(
+                        Term::Ident(_)
+                        | Term::Wildcard
+                        | Term::App(_)
+                        | Term::Dom(_)
+                        | Term::Cod(_),
+                    )
+                    | None => false,
+                }
+            }));
+        }
+    }
+
+    #[test]
+    fn non_type_term_reports_a_parse_error() {
+        let mut ast = Ast::default();
+        assert!(ModuleParser::new().parse(&mut ast, "const x: _;").is_err());
+    }
+
+    #[test]
+    fn type_and_predicate_paths_do_not_create_final_terms() {
+        let source = "model M { type T; pred p(x: T); } rule { if m: M; if x: m.T; if m.p(x); }";
+        let mut ast = Ast::default();
+        assert!(ModuleParser::new().parse(&mut ast, source).is_ok());
+
+        assert!(!ast.nodes.iter().any(|(_, node)| {
+            match node_term(node) {
+                Some(Term::Ident(ident)) => {
+                    matches!(ast.ident_term(*ident).name.as_str(), "T" | "p")
+                }
+                Some(
+                    Term::Wildcard | Term::App(_) | Term::Member(_) | Term::Dom(_) | Term::Cod(_),
+                )
+                | None => false,
+            }
+        }));
+        assert!(!ast.nodes.iter().any(|(_, node)| {
+            match node_term(node) {
+                Some(Term::Member(member)) => matches!(
+                    ast.ident_term(ast.term_member(*member).name).name.as_str(),
+                    "T" | "p"
+                ),
+                Some(
+                    Term::Ident(_) | Term::Wildcard | Term::App(_) | Term::Dom(_) | Term::Cod(_),
+                )
+                | None => false,
+            }
+        }));
+    }
+}

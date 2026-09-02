@@ -172,7 +172,7 @@ impl<'a> SyntacticChecker<'a> {
             Term::Ident(_) => Ok(()),
             Term::App(id) => {
                 let AppTerm { head, args } = *self.ast.app_term(id);
-                self.check_then_term(head)?;
+                self.check_then_app_head(head)?;
                 for arg in self.ast.term_list(args).terms.clone() {
                     self.check_then_term(arg)?;
                 }
@@ -181,6 +181,14 @@ impl<'a> SyntacticChecker<'a> {
             Term::Member(id) => self.check_then_term(self.ast.term_member(id).term),
             Term::Dom(id) => self.check_then_term(self.ast.dom_term(id).arg),
             Term::Cod(id) => self.check_then_term(self.ast.cod_term(id).arg),
+        }
+    }
+
+    fn check_then_app_head(&self, head: AppHeadId) -> Check {
+        match *self.ast.app_head(head) {
+            AppHead::Ident(_) => Ok(()),
+            AppHead::Member(id) => self.check_then_term(self.ast.app_head_member(id).receiver),
+            AppHead::Term(term) => self.check_then_term(term),
         }
     }
 

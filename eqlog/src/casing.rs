@@ -192,12 +192,20 @@ impl<'a> CasingChecker<'a> {
             Term::Wildcard => Ok(()),
             Term::App(id) => {
                 let AppTerm { head, args } = *self.ast.app_term(id);
-                self.walk_term(head)?;
+                self.walk_app_head(head)?;
                 self.walk_term_list(args)
             }
             Term::Member(id) => self.walk_term(self.ast.term_member(id).term),
             Term::Dom(id) => self.walk_term(self.ast.dom_term(id).arg),
             Term::Cod(id) => self.walk_term(self.ast.cod_term(id).arg),
+        }
+    }
+
+    fn walk_app_head(&self, head: AppHeadId) -> Check {
+        match *self.ast.app_head(head) {
+            AppHead::Ident(id) => self.check_ident_term(id, self.ast.loc(head)),
+            AppHead::Member(id) => self.walk_term(self.ast.app_head_member(id).receiver),
+            AppHead::Term(term) => self.walk_term(term),
         }
     }
 
