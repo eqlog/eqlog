@@ -1,0 +1,4 @@
+Support nested morphism applications
+
+Allow an enclosing model morphism to act on members at any nesting depth
+through paths such as `f.X.T`.
