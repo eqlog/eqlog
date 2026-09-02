@@ -955,10 +955,17 @@ fn emit_app(
                     member_scopes_and_parents(rule, current, receiver_el, scopes, signature)
                         .into_iter()
                         .filter_map(|(body, parents)| {
-                            let Symbol::Const(const_decl) =
-                                body.symbols.get(const_name).copied()?
-                            else {
-                                return None;
+                            let const_decl = match body.symbols.get(const_name).copied()? {
+                                Symbol::Const(const_decl) => const_decl,
+                                Symbol::Type(_)
+                                | Symbol::Pred(_)
+                                | Symbol::Func(_)
+                                | Symbol::Enum(_)
+                                | Symbol::Ctor(_)
+                                | Symbol::Model(_)
+                                | Symbol::Rule(_)
+                                | Symbol::Arg(_)
+                                | Symbol::Var(_) => return None,
                             };
                             let fid = signature.func_for_const_decl(const_decl)?;
                             Some((fid, parents))

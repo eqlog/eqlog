@@ -176,12 +176,23 @@ impl<'a> OccurrencesChecker<'a> {
         match *self.ast.app_head(head) {
             AppHead::Ident(id) => {
                 let name = &self.ast.ident_term(id).name;
-                if let Some(Symbol::Var(binding)) = self.scopes.lookup(self.scopes.exit(head), name)
-                {
-                    occ.push(VarOccurrence {
+                match self.scopes.lookup(self.scopes.exit(head), name) {
+                    Some(Symbol::Var(binding)) => occ.push(VarOccurrence {
                         binding,
                         location: self.ast.loc(head),
-                    });
+                    }),
+                    Some(
+                        Symbol::Type(_)
+                        | Symbol::Pred(_)
+                        | Symbol::Func(_)
+                        | Symbol::Const(_)
+                        | Symbol::Enum(_)
+                        | Symbol::Ctor(_)
+                        | Symbol::Model(_)
+                        | Symbol::Rule(_)
+                        | Symbol::Arg(_),
+                    )
+                    | None => {}
                 }
             }
             AppHead::Member(id) => self.collect_term(self.ast.app_head_member(id).receiver, occ),

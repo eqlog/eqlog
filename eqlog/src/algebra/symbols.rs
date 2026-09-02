@@ -319,9 +319,10 @@ impl<'a> Checker<'a> {
                         };
                         let prefix_name = self.ast.ident_term(prefix).name.clone();
                         for concrete in types {
-                            let Some(model_decl) = self.signature.model_decl_for_type(concrete.typ)
-                            else {
-                                continue;
+                            let model_decl = match self.signature.model_decl_for_type(concrete.typ)
+                            {
+                                Some(model_decl) => model_decl,
+                                None => continue,
                             };
                             self.check_member_const_lookup(
                                 self.scopes.unordered(model_decl),
@@ -340,9 +341,9 @@ impl<'a> Checker<'a> {
                     }
                     let mut saw_model = false;
                     for concrete in receiver_types {
-                        let Some(model_decl) = self.signature.model_decl_for_type(concrete.typ)
-                        else {
-                            continue;
+                        let model_decl = match self.signature.model_decl_for_type(concrete.typ) {
+                            Some(model_decl) => model_decl,
+                            None => continue,
                         };
                         saw_model = true;
                         self.check_head_lookup(
@@ -447,9 +448,9 @@ impl<'a> Checker<'a> {
                     self.check_app_head(head, ctx);
                     let name = self.ast.ident_term(name).name.clone();
                     for concrete in self.app_head_prefix_types(mid, member.names.len() - 2, ctx) {
-                        let Some(model_decl) = self.signature.model_decl_for_type(concrete.typ)
-                        else {
-                            continue;
+                        let model_decl = match self.signature.model_decl_for_type(concrete.typ) {
+                            Some(model_decl) => model_decl,
+                            None => continue,
                         };
                         let scope = self.scopes.unordered(model_decl);
                         if matches!(
@@ -591,15 +592,17 @@ impl<'a> Checker<'a> {
         prefix: usize,
         ctx: RuleCtx<'a>,
     ) -> Vec<ConcreteType> {
-        let (Some(rule), Some(current)) = (ctx.rule, ctx.current) else {
-            return Vec::new();
+        let (rule, current) = match (ctx.rule, ctx.current) {
+            (Some(rule), Some(current)) => (rule, current),
+            (Some(_), None) | (None, Some(_)) | (None, None) => return Vec::new(),
         };
-        let Some(el) = rule
+        let el = match rule
             .app_head_els
             .get(current.0)
             .and_then(|els| els.get(&(member, prefix)))
-        else {
-            return Vec::new();
+        {
+            Some(el) => el,
+            None => return Vec::new(),
         };
         rule.cat.structures[current.0].concrete_types_of(*el)
     }
@@ -607,15 +610,17 @@ impl<'a> Checker<'a> {
     fn check_mor_types(&mut self, types: &[ConcreteType], name: &str, used_at: Location) -> bool {
         let mut saw_mor = false;
         for concrete in types {
-            let TypeKind::Mor(model_tid) = self.signature.type_(concrete.typ).kind else {
-                continue;
+            let model_tid = match self.signature.type_(concrete.typ).kind {
+                TypeKind::Mor(model_tid) => model_tid,
+                TypeKind::Plain | TypeKind::Model | TypeKind::Enum => continue,
             };
             saw_mor = true;
             if mor_type_component(self.scopes, self.signature, concrete.typ, name).is_some() {
                 continue;
             }
-            let Some(model_decl) = self.signature.model_decl_for_type(model_tid) else {
-                continue;
+            let model_decl = match self.signature.model_decl_for_type(model_tid) {
+                Some(model_decl) => model_decl,
+                None => continue,
             };
             self.check_member_lookup(
                 self.scopes.unordered(model_decl),
@@ -642,8 +647,9 @@ impl<'a> Checker<'a> {
     }
 
     fn is_mor_app_head_component(&self, head: AppHeadId, ctx: RuleCtx<'a>) -> bool {
-        let AppHead::Member(mid) = *self.ast.app_head(head) else {
-            return false;
+        let mid = match *self.ast.app_head(head) {
+            AppHead::Member(mid) => mid,
+            AppHead::Ident(_) | AppHead::Term(_) => return false,
         };
         let member = self.ast.app_head_member(mid);
         let receiver = member.receiver;

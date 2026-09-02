@@ -495,20 +495,72 @@ mod tests {
     use super::{AppHead, Ast, Decl, IfAtom, Node, Stmt, Term};
     use crate::grammar::ModuleParser;
 
+    fn node_term(node: &Node) -> Option<&Term> {
+        match node {
+            Node::Term(term) => Some(term),
+            Node::Module(_)
+            | Node::Decl(_)
+            | Node::TypeDecl(_)
+            | Node::PredDecl(_)
+            | Node::FuncDecl(_)
+            | Node::ConstDecl(_)
+            | Node::RuleDecl(_)
+            | Node::EnumDecl(_)
+            | Node::ModelDecl(_)
+            | Node::CtorDecl(_)
+            | Node::ArgDecl(_)
+            | Node::ArgDeclList(_)
+            | Node::IdentTerm(_)
+            | Node::AppTerm(_)
+            | Node::AppHead(_)
+            | Node::AppHeadMember(_)
+            | Node::TermMember(_)
+            | Node::DomTerm(_)
+            | Node::CodTerm(_)
+            | Node::TermList(_)
+            | Node::TypeExpr(_)
+            | Node::AmbientTypeExpr(_)
+            | Node::MorTypeExpr(_)
+            | Node::PredExpr(_)
+            | Node::AmbientPredExpr(_)
+            | Node::IfAtom(_)
+            | Node::ThenAtom(_)
+            | Node::EqualAtom(_)
+            | Node::PredAtom(_)
+            | Node::DefinedIfAtom(_)
+            | Node::VarIfAtom(_)
+            | Node::DefinedThenAtom(_)
+            | Node::MatchCase(_)
+            | Node::Stmt(_)
+            | Node::IfStmt(_)
+            | Node::ThenStmt(_)
+            | Node::BranchStmt(_)
+            | Node::MatchStmt(_) => None,
+        }
+    }
+
     fn parse_equal_rhs(source: &str) -> (Ast, super::TermId) {
         let mut ast = Ast::default();
         let module = match ModuleParser::new().parse(&mut ast, source) {
             Ok(module) => module,
             Err(_) => panic!("module did not parse"),
         };
-        let Decl::Rule(rule) = *ast.decl(ast.module(module).decls[0]) else {
-            panic!("expected rule")
+        let rule = match *ast.decl(ast.module(module).decls[0]) {
+            Decl::Rule(rule) => rule,
+            Decl::Type(_)
+            | Decl::Pred(_)
+            | Decl::Func(_)
+            | Decl::Const(_)
+            | Decl::Enum(_)
+            | Decl::Model(_) => panic!("expected rule"),
         };
-        let Stmt::If(if_stmt) = *ast.stmt(ast.rule_decl(rule).body[0]) else {
-            panic!("expected if statement")
+        let if_stmt = match *ast.stmt(ast.rule_decl(rule).body[0]) {
+            Stmt::If(if_stmt) => if_stmt,
+            Stmt::Then(_) | Stmt::Branch(_) | Stmt::Match(_) => panic!("expected if statement"),
         };
-        let IfAtom::Equal(equal) = *ast.if_atom(ast.if_stmt(if_stmt).atom) else {
-            panic!("expected equality")
+        let equal = match *ast.if_atom(ast.if_stmt(if_stmt).atom) {
+            IfAtom::Equal(equal) => equal,
+            IfAtom::Defined(_) | IfAtom::Pred(_) | IfAtom::Var(_) => panic!("expected equality"),
         };
         let rhs = ast.equal_atom(equal).rhs;
         (ast, rhs)
@@ -517,29 +569,40 @@ mod tests {
     #[test]
     fn named_application_head_is_not_a_term() {
         let (ast, rhs) = parse_equal_rhs("rule { if x = foo(x); }");
-        let Term::App(app) = *ast.term(rhs) else {
-            panic!("expected application")
+        let app = match *ast.term(rhs) {
+            Term::App(app) => app,
+            Term::Ident(_) | Term::Wildcard | Term::Member(_) | Term::Dom(_) | Term::Cod(_) => {
+                panic!("expected application")
+            }
         };
-        let AppHead::Ident(foo) = *ast.app_head(ast.app_term(app).head) else {
-            panic!("expected named application head")
+        let foo = match *ast.app_head(ast.app_term(app).head) {
+            AppHead::Ident(foo) => foo,
+            AppHead::Member(_) | AppHead::Term(_) => panic!("expected named application head"),
         };
         assert_eq!(ast.ident_term(foo).name, "foo");
         assert!(!ast.nodes.iter().any(|(_, node)| {
-            let Node::Term(Term::Ident(ident)) = node else {
-                return false;
-            };
-            ast.ident_term(*ident).name == "foo"
+            match node_term(node) {
+                Some(Term::Ident(ident)) => ast.ident_term(*ident).name == "foo",
+                Some(
+                    Term::Wildcard | Term::App(_) | Term::Member(_) | Term::Dom(_) | Term::Cod(_),
+                )
+                | None => false,
+            }
         }));
     }
 
     #[test]
     fn computed_application_head_retains_its_term() {
         let (ast, rhs) = parse_equal_rhs("rule { if x = foo(x)(x); }");
-        let Term::App(outer) = *ast.term(rhs) else {
-            panic!("expected outer application")
+        let outer = match *ast.term(rhs) {
+            Term::App(outer) => outer,
+            Term::Ident(_) | Term::Wildcard | Term::Member(_) | Term::Dom(_) | Term::Cod(_) => {
+                panic!("expected outer application")
+            }
         };
-        let AppHead::Term(inner) = *ast.app_head(ast.app_term(outer).head) else {
-            panic!("expected computed application head")
+        let inner = match *ast.app_head(ast.app_term(outer).head) {
+            AppHead::Term(inner) => inner,
+            AppHead::Ident(_) | AppHead::Member(_) => panic!("expected computed application head"),
         };
         assert!(matches!(ast.term(inner), Term::App(_)));
     }
@@ -551,11 +614,17 @@ mod tests {
             "rule { if x = (foo.bar).p(x); }",
         ] {
             let (ast, rhs) = parse_equal_rhs(source);
-            let Term::App(app) = *ast.term(rhs) else {
-                panic!("expected application")
+            let app = match *ast.term(rhs) {
+                Term::App(app) => app,
+                Term::Ident(_) | Term::Wildcard | Term::Member(_) | Term::Dom(_) | Term::Cod(_) => {
+                    panic!("expected application")
+                }
             };
-            let AppHead::Member(member) = *ast.app_head(ast.app_term(app).head) else {
-                panic!("expected member application head")
+            let member = match *ast.app_head(ast.app_term(app).head) {
+                AppHead::Member(member) => member,
+                AppHead::Ident(_) | AppHead::Term(_) => {
+                    panic!("expected member application head")
+                }
             };
             let member = ast.app_head_member(member);
             assert_eq!(
@@ -568,10 +637,19 @@ mod tests {
             );
             assert!(matches!(ast.term(member.receiver), Term::Ident(_)));
             assert!(!ast.nodes.iter().any(|(_, node)| {
-                let Node::Term(Term::Member(member)) = node else {
-                    return false;
-                };
-                ast.ident_term(ast.term_member(*member).name).name == "bar"
+                match node_term(node) {
+                    Some(Term::Member(member)) => {
+                        ast.ident_term(ast.term_member(*member).name).name == "bar"
+                    }
+                    Some(
+                        Term::Ident(_)
+                        | Term::Wildcard
+                        | Term::App(_)
+                        | Term::Dom(_)
+                        | Term::Cod(_),
+                    )
+                    | None => false,
+                }
             }));
         }
     }
@@ -589,19 +667,27 @@ mod tests {
         assert!(ModuleParser::new().parse(&mut ast, source).is_ok());
 
         assert!(!ast.nodes.iter().any(|(_, node)| {
-            let Node::Term(Term::Ident(ident)) = node else {
-                return false;
-            };
-            matches!(ast.ident_term(*ident).name.as_str(), "T" | "p")
+            match node_term(node) {
+                Some(Term::Ident(ident)) => {
+                    matches!(ast.ident_term(*ident).name.as_str(), "T" | "p")
+                }
+                Some(
+                    Term::Wildcard | Term::App(_) | Term::Member(_) | Term::Dom(_) | Term::Cod(_),
+                )
+                | None => false,
+            }
         }));
         assert!(!ast.nodes.iter().any(|(_, node)| {
-            let Node::Term(Term::Member(member)) = node else {
-                return false;
-            };
-            matches!(
-                ast.ident_term(ast.term_member(*member).name).name.as_str(),
-                "T" | "p"
-            )
+            match node_term(node) {
+                Some(Term::Member(member)) => matches!(
+                    ast.ident_term(ast.term_member(*member).name).name.as_str(),
+                    "T" | "p"
+                ),
+                Some(
+                    Term::Ident(_) | Term::Wildcard | Term::App(_) | Term::Dom(_) | Term::Cod(_),
+                )
+                | None => false,
+            }
         }));
     }
 }

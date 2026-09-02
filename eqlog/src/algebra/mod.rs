@@ -162,13 +162,15 @@ fn is_mor_type_component(
             let name = *member.names.last().expect("member head without a name");
             let name = &ast.ident_term(name).name;
             let receiver_types = if member.names.len() == 1 {
-                let Some(types) = concrete_types_of_term(rule, sid, receiver) else {
-                    return false;
+                let types = match concrete_types_of_term(rule, sid, receiver) {
+                    Some(types) => types,
+                    None => return false,
                 };
                 types.into_iter().collect()
             } else {
-                let Some(el) = rule.app_head_els[sid.0].get(&(mid, member.names.len() - 2)) else {
-                    return false;
+                let el = match rule.app_head_els[sid.0].get(&(mid, member.names.len() - 2)) {
+                    Some(el) => el,
+                    None => return false,
                 };
                 rule.cat.structures[sid.0].concrete_types_of(*el)
             };
@@ -191,8 +193,9 @@ fn check_morphism_application(
     reported_non_members: &mut BTreeSet<TermId>,
     errors: &mut Vec<CompileError>,
 ) {
-    let AppHead::Member(mid) = *ast.app_head(head) else {
-        return;
+    let mid = match *ast.app_head(head) {
+        AppHead::Member(mid) => mid,
+        AppHead::Ident(_) | AppHead::Term(_) => return,
     };
     let member = ast.app_head_member(mid);
     let receiver = member.receiver;
@@ -200,13 +203,15 @@ fn check_morphism_application(
     let name = &ast.ident_term(name).name;
 
     let receiver_types = if member.names.len() == 1 {
-        let Some(types) = concrete_types_of_term(rule, sid, receiver) else {
-            return;
+        let types = match concrete_types_of_term(rule, sid, receiver) {
+            Some(types) => types,
+            None => return,
         };
         types.into_iter().collect()
     } else {
-        let Some(el) = rule.app_head_els[sid.0].get(&(mid, member.names.len() - 2)) else {
-            return;
+        let el = match rule.app_head_els[sid.0].get(&(mid, member.names.len() - 2)) {
+            Some(el) => el,
+            None => return,
         };
         rule.cat.structures[sid.0].concrete_types_of(*el)
     };
@@ -362,14 +367,15 @@ fn is_ctor_app_for_enum(
             let name = *member.names.last().expect("member head without a name");
             let name = ast.ident_term(name).name.clone();
             let parent_types = if member.names.len() == 1 {
-                let Some(types) = concrete_types_of_term(rule, sid, receiver) else {
-                    return false;
+                let types = match concrete_types_of_term(rule, sid, receiver) {
+                    Some(types) => types,
+                    None => return false,
                 };
                 types.into_iter().collect()
             } else {
-                let Some(el) = rule.app_head_els[sid.0].get(&(member_id, member.names.len() - 2))
-                else {
-                    return false;
+                let el = match rule.app_head_els[sid.0].get(&(member_id, member.names.len() - 2)) {
+                    Some(el) => el,
+                    None => return false,
                 };
                 rule.cat.structures[sid.0].concrete_types_of(*el)
             };
