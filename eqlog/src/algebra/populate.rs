@@ -804,10 +804,7 @@ pub(crate) fn mor_type_component(
 /// Resolves the member type selected by a morphism-application head.
 /// For `f: Mor(M)`, the head of `f.N.T(x)` supplies `names = ["N", "T"]`:
 /// `N` names a model inside `M`, and the result is the `TypeId` of `N`'s `T`.
-/// The path selects declarations so `f` can act below its immediate members.
-/// Intermediate names must denote models; the final name can denote a plain
-/// type, enum, or model. Returns `None` for an empty or invalid path, or a
-/// non-morphism receiver.
+/// Returns `None` for an empty or invalid path, or a non-morphism receiver.
 pub(crate) fn mor_type_path_component(
     scopes: &Scopes,
     signature: &Signature,
