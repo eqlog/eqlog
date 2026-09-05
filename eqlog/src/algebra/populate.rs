@@ -998,15 +998,13 @@ fn emit_app(
                     TypeKind::Mor(parent_model) => parent_model,
                     TypeKind::Plain | TypeKind::Model | TypeKind::Enum => continue,
                 };
-                let type_tid =
-                    match mor_type_path_component(scopes, signature, ct.typ, path_names.as_slice())
-                    {
-                        Some(type_tid) => type_tid,
-                        None => continue,
-                    };
-                let fid = match signature.mor_app_func(parent_model, type_tid) {
-                    Some(fid) => fid,
-                    None => continue,
+                let Some(type_tid) =
+                    mor_type_path_component(scopes, signature, ct.typ, path_names.as_slice())
+                else {
+                    continue;
+                };
+                let Some(fid) = signature.mor_app_func(parent_model, type_tid) else {
+                    continue;
                 };
                 mor_candidates.insert((fid, ct.parents));
                 mor_el = Some(receiver_el);
@@ -1068,19 +1066,16 @@ fn emit_app(
                         | Some(Symbol::Var(_))
                         | None => None,
                     };
-                    match func_id {
-                        Some(fid) => func_candidates.push((fid, parents)),
-                        None => {}
+                    if let Some(fid) = func_id {
+                        func_candidates.push((fid, parents));
                     }
                 }
                 for ct in concrete_types_of_el(rule, current, receiver_el) {
-                    let type_tid = match mor_type_component(scopes, signature, ct.typ, name) {
-                        Some(type_tid) => type_tid,
-                        None => continue,
+                    let Some(type_tid) = mor_type_component(scopes, signature, ct.typ, name) else {
+                        continue;
                     };
-                    let fid = match signature.mor_app_func_for_type(type_tid) {
-                        Some(fid) => fid,
-                        None => continue,
+                    let Some(fid) = signature.mor_app_func_for_type(type_tid) else {
+                        continue;
                     };
                     mor_candidates.insert((fid, ct.parents));
                     mor_el = Some(receiver_el);
