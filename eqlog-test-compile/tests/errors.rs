@@ -196,6 +196,23 @@ fn undetermined_mor_app_type() {
 }
 
 #[test]
+fn nested_mor_app_conflicting_parent() {
+    test_case(Path::new("nested-mor-app-conflicting-parent"));
+}
+
+#[test]
+fn nested_mor_app_missing_parent_image() {
+    // TODO: Improve the diagnostic to identify the missing parent image h.N(n).
+    test_case(Path::new("nested-mor-app-missing-parent-image"));
+}
+
+#[test]
+fn nested_mor_app_missing_codomain() {
+    // TODO: Improve the diagnostic to identify the missing cod(h).
+    test_case(Path::new("nested-mor-app-missing-codomain"));
+}
+
+#[test]
 fn conflicting_term_type_equality() {
     test_case(Path::new("conflicting-term-type-equality"));
 }
@@ -355,11 +372,6 @@ fn member_pred_on_morphism() {
 #[test]
 fn mor_type_component_used_as_term() {
     test_case(Path::new("mor-type-component-used-as-term"));
-}
-
-#[test]
-fn nested_mor_app_not_supported() {
-    test_case(Path::new("nested-mor-app-not-supported"));
 }
 
 #[test]

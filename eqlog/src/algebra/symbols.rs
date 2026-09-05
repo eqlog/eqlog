@@ -9,7 +9,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::algebra::populate::{mor_type_component, RuleStructures};
+use crate::algebra::populate::{mor_type_component, mor_type_path_component, RuleStructures};
 use crate::algebra::signature::{Signature, TypeKind};
 use crate::algebra::structure::{ConcreteType, StructureId};
 use crate::ast::*;
@@ -287,6 +287,27 @@ impl<'a> Checker<'a> {
                 let receiver = member.receiver;
                 let name = *member.names.last().expect("member head without a name");
                 let name = self.ast.ident_term(name).name.clone();
+                let path_names: Vec<&str> = member
+                    .names
+                    .iter()
+                    .map(|name| self.ast.ident_term(*name).name.as_str())
+                    .collect();
+                if self
+                    .receiver_types(receiver, ctx)
+                    .into_iter()
+                    .any(|concrete| {
+                        mor_type_path_component(
+                            self.scopes,
+                            self.signature,
+                            concrete.typ,
+                            path_names.as_slice(),
+                        )
+                        .is_some()
+                    })
+                {
+                    self.walk_term(receiver, ctx);
+                    return;
+                }
                 if member.names.len() > 1 {
                     let first_name = &self.ast.ident_term(member.names[0]).name;
                     if self

@@ -28,7 +28,7 @@ use std::mem;
 
 use eqlog_runtime::Unification;
 
-use crate::algebra::signature::{FuncId, PredId, Signature, TypeId};
+use crate::algebra::signature::{FuncId, MorphismMemberTypes, PredId, Signature, TypeId};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ElId(pub(super) usize);
@@ -110,6 +110,10 @@ pub struct Structure {
     /// Pending [`Structure::impose_type`] assertions. Persists across
     /// `close` calls; canonicalised alongside `els`.
     pub(super) pending_type_impositions: Vec<(ElId, ConcreteType)>,
+    /// Premises may bind unnamed parents; conclusions must use existing ones.
+    pub(super) allow_new_type_parents: bool,
+    /// Unnamed parents can be refined by a later concrete type annotation.
+    inferred_parent_els: BTreeSet<ElId>,
 }
 
 impl Default for Structure {
@@ -123,6 +127,8 @@ impl Default for Structure {
             unification: Unification::new(),
             pending_equalities: Vec::new(),
             pending_type_impositions: Vec::new(),
+            allow_new_type_parents: false,
+            inferred_parent_els: BTreeSet::new(),
         }
     }
 }
@@ -267,6 +273,11 @@ impl Structure {
 
             // Deterministic winner: smaller id stays root.
             let (keep, drop) = if a.0 <= b.0 { (a, b) } else { (b, a) };
+            let keep_inferred = self.inferred_parent_els.remove(&keep);
+            let drop_inferred = self.inferred_parent_els.remove(&drop);
+            if keep_inferred && drop_inferred {
+                self.inferred_parent_els.insert(keep);
+            }
             self.unification.union_roots_into(drop, keep);
 
             let mut merged = self.els.remove(&keep).unwrap_or_default();
@@ -373,12 +384,11 @@ impl Structure {
         let mut changed = false;
 
         for (app, result) in apps {
-            let Some(member_tid) = signature.type_for_mor_app_func(app.func) else {
+            let Some(types) = signature.types_for_mor_app_func(app.func) else {
                 continue;
             };
-            let Some(&parent_model_tid) = signature.type_(member_tid).parents.last() else {
-                continue;
-            };
+            let parent_model_tid = types.model_type(signature);
+            let member_tid = types.member_type;
             let Some(model_ids) = signature.ids_for_model_type(parent_model_tid) else {
                 continue;
             };
@@ -390,6 +400,7 @@ impl Structure {
             let arg_el = self.root(app.args[1]);
             let result = self.root(result);
             let outer_parents: Vec<ElId> = app.parents.iter().map(|p| self.root(*p)).collect();
+            let parent_index = outer_parents.len();
 
             let dom_app = FuncApp {
                 func: model_ids.dom,
@@ -402,52 +413,188 @@ impl Structure {
                 args: vec![mor_el],
             };
 
-            for domain_el in self.member_parents_from_type(arg_el, member_tid) {
+            for domain_el in self.member_parent_at(arg_el, member_tid, parent_index) {
                 changed |= self.insert_func_app_or_equate(dom_app.clone(), domain_el);
             }
-            for codomain_el in self.member_parents_from_type(result, member_tid) {
+            for codomain_el in self.member_parent_at(result, member_tid, parent_index) {
                 changed |= self.insert_func_app_or_equate(cod_app.clone(), codomain_el);
             }
 
-            if let Some(&domain_el) = self.func_apps.get(&dom_app) {
-                let mut parents = outer_parents.clone();
-                parents.push(self.root(domain_el));
-                if self.impose_concrete_type(
-                    arg_el,
-                    ConcreteType {
-                        typ: member_tid,
-                        parents,
-                    },
-                ) {
-                    changed = true;
-                }
+            if signature.type_(member_tid).parents.len() != parent_index + 1 {
+                changed |= self.infer_nested_morphism_app(&app, result, types, signature);
+                continue;
             }
 
-            if let Some(&codomain_el) = self.func_apps.get(&cod_app) {
+            for (projection, member) in [(dom_app, arg_el), (cod_app, result)] {
+                let Some(&parent) = self.func_apps.get(&projection) else {
+                    continue;
+                };
                 let mut parents = outer_parents.clone();
-                parents.push(self.root(codomain_el));
-                if self.impose_concrete_type(
-                    result,
+                parents.push(self.root(parent));
+                changed |= self.impose_concrete_type(
+                    member,
                     ConcreteType {
                         typ: member_tid,
                         parents,
                     },
-                ) {
-                    changed = true;
-                }
+                );
             }
         }
 
         changed
     }
 
-    /// Returns the innermost parents of all concrete types on `el` whose
-    /// underlying type is `member_tid`.
-    fn member_parents_from_type(&self, el: ElId, member_tid: TypeId) -> Vec<ElId> {
+    /// For `y = h.B.T(x)`, infer `x: b.T` and `y: h.B(b).T`, with
+    /// `b: dom(h).B`. Unnamed parents are existential variables in premises.
+    fn infer_nested_morphism_app(
+        &mut self,
+        app: &FuncApp,
+        result: ElId,
+        types: MorphismMemberTypes,
+        signature: &Signature,
+    ) -> bool {
+        let mut changed = false;
+        let model_ids = signature
+            .ids_for_model_type(types.model_type(signature))
+            .expect("morphism type should have model ids");
+        let arg = self.root(app.args[1]);
+        let mor = self.root(app.args[0]);
+        let parent_types = &signature.type_(types.member_type).parents;
+        let outer_parents: Vec<ElId> = app.parents.iter().map(|p| self.root(*p)).collect();
+
+        let source_type = self.member_type_for_inference(arg, types.member_type);
+        let source_parents = if let Some(ct) = source_type {
+            ct.parents
+        } else {
+            if !self.allow_new_type_parents {
+                return false;
+            }
+            let dom_app = FuncApp {
+                func: model_ids.dom,
+                parents: outer_parents.clone(),
+                args: vec![mor],
+            };
+            let domain = self
+                .infer_parent_app(dom_app, None, &mut changed)
+                .expect("premises can introduce a morphism domain");
+            let mut parents = outer_parents.clone();
+            parents.push(domain);
+            for &typ in &parent_types[parents.len()..] {
+                let parent = self.push_el();
+                self.inferred_parent_els.insert(parent);
+                changed |= self.impose_concrete_type(
+                    parent,
+                    ConcreteType {
+                        typ,
+                        parents: parents.clone(),
+                    },
+                );
+                parents.push(parent);
+            }
+            parents
+        };
+        changed |= self.impose_concrete_type(
+            arg,
+            ConcreteType {
+                typ: types.member_type,
+                parents: source_parents.clone(),
+            },
+        );
+
+        let result_type = self.member_type_for_inference(result, types.member_type);
+        let cod_app = FuncApp {
+            func: model_ids.cod,
+            parents: outer_parents.clone(),
+            args: vec![mor],
+        };
+        let expected_cod = result_type
+            .as_ref()
+            .map(|ct| ct.parents[outer_parents.len()]);
+        let Some(codomain) = self.infer_parent_app(cod_app, expected_cod, &mut changed) else {
+            return changed;
+        };
+        let mut result_parents = outer_parents.clone();
+        result_parents.push(codomain);
+        for index in result_parents.len()..parent_types.len() {
+            let typ = parent_types[index];
+            let func = signature
+                .mor_app_func(MorphismMemberTypes {
+                    morphism_type: types.morphism_type,
+                    member_type: typ,
+                })
+                .expect("nested parents should have morphism applications");
+            let parent_app = FuncApp {
+                func,
+                parents: outer_parents.clone(),
+                args: vec![mor, source_parents[index]],
+            };
+            let expected_parent = result_type.as_ref().map(|ct| ct.parents[index]);
+            let Some(parent) = self.infer_parent_app(parent_app, expected_parent, &mut changed)
+            else {
+                return changed;
+            };
+            changed |= self.impose_concrete_type(
+                parent,
+                ConcreteType {
+                    typ,
+                    parents: result_parents.clone(),
+                },
+            );
+            result_parents.push(parent);
+        }
+        changed |= self.impose_concrete_type(
+            result,
+            ConcreteType {
+                typ: types.member_type,
+                parents: result_parents,
+            },
+        );
+        changed
+    }
+
+    fn member_type_for_inference(&self, el: ElId, typ: TypeId) -> Option<ConcreteType> {
+        self.pending_type_impositions
+            .iter()
+            .filter(|(el0, ct)| self.root(*el0) == self.root(el) && ct.typ == typ)
+            .map(|(_, ct)| self.canonical_type(ct.clone()))
+            .chain(self.concrete_types_of(el))
+            .find(|ct| ct.typ == typ)
+    }
+
+    fn infer_parent_app(
+        &mut self,
+        app: FuncApp,
+        expected: Option<ElId>,
+        changed: &mut bool,
+    ) -> Option<ElId> {
+        let app = FuncApp {
+            func: app.func,
+            parents: app.parents.into_iter().map(|el| self.root(el)).collect(),
+            args: app.args.into_iter().map(|el| self.root(el)).collect(),
+        };
+        if let Some(result) = expected {
+            *changed |= self.insert_func_app_or_equate(app, result);
+            return Some(self.root(result));
+        }
+        if let Some(&result) = self.func_apps.get(&app) {
+            return Some(self.root(result));
+        }
+        if !self.allow_new_type_parents {
+            return None;
+        }
+        let result = self.push_el();
+        self.inferred_parent_els.insert(result);
+        self.func_apps.insert(app, result);
+        *changed = true;
+        Some(result)
+    }
+
+    /// Returns one requested parent from each matching concrete type on `el`.
+    fn member_parent_at(&self, el: ElId, member_tid: TypeId, index: usize) -> Vec<ElId> {
         self.concrete_types_of(el)
             .into_iter()
             .filter(|ct| ct.typ == member_tid)
-            .filter_map(|ct| ct.parents.last().copied())
+            .filter_map(|ct| ct.parents.get(index).copied())
             .map(|parent| self.root(parent))
             .collect::<BTreeSet<_>>()
             .into_iter()
@@ -482,12 +629,29 @@ impl Structure {
         }
     }
 
-    /// Asserts that `el` has type `ct`. Returns true iff a fresh concrete
-    /// type fact was recorded.
+    /// Imposes `ct`, refining unnamed parents when a concrete parent is known.
+    /// Returns true if a type fact or parent equality was added.
     fn impose_concrete_type(&mut self, el: ElId, ct: ConcreteType) -> bool {
+        let mut changed = false;
+        for existing in self.concrete_types_of(el) {
+            if existing.typ != ct.typ {
+                continue;
+            }
+            for (&a, &b) in existing.parents.iter().zip(&ct.parents) {
+                let a = self.root(a);
+                let b = self.root(b);
+                if a != b
+                    && (self.inferred_parent_els.contains(&a)
+                        || self.inferred_parent_els.contains(&b))
+                {
+                    self.equate(a, b);
+                    changed |= self.drain_equalities();
+                }
+            }
+        }
         let root = self.root(el);
         let ct = self.canonical_type(ct);
-        self.els.entry(root).or_default().insert(ct)
+        changed | self.els.entry(root).or_default().insert(ct)
     }
 
     pub(super) fn insert_concrete_type_fact(&mut self, el: ElId, ct: ConcreteType) -> bool {
@@ -785,6 +949,22 @@ impl StructureCat {
                         changed = true;
                     }
                 }
+            }
+        }
+
+        // Type inference can introduce parents after successor structures
+        // have been cloned, so their element maps must grow with the source.
+        for &el in src_st.els.keys() {
+            match map.entry(src_st.root(el)) {
+                Entry::Vacant(entry) => {
+                    let target = tgt_st.push_el();
+                    if src_st.inferred_parent_els.contains(&el) {
+                        tgt_st.inferred_parent_els.insert(target);
+                    }
+                    entry.insert(target);
+                    changed = true;
+                }
+                Entry::Occupied(_) => {}
             }
         }
 

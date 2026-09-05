@@ -1,0 +1,17 @@
+model M {
+    model N {
+        type T;
+        func op(T) -> T;
+    }
+}
+
+rule {
+    if f: Mor(M);
+    if y = f.N.T(x);
+    if m = dom(f);
+    if n0: m.N;
+    if n1: m.N;
+    if x: n0.T;
+    then n1.op(x)!;
+    then y = y;
+}

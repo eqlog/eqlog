@@ -81,6 +81,15 @@ model A {
         if cod(f)!;
         then f.C(c)!;
     }
+
+    pred recognized_mid_mor_app(f: Mor(B));
+    rule recognize_mid_mor_app {
+        if f: Mor(B);
+        if y = f.C.T(x);
+        then x = x;
+        then y = y;
+        then recognized_mid_mor_app(f);
+    }
 }
 
 rule use_deep_tip {
@@ -97,6 +106,55 @@ rule a_b_mors_total {
     if b: a_dom.B;
     if cod(h)!;
     then h.B(b)!;
+}
+
+pred recognized_deep_mor_app(h: Mor(A));
+
+rule recognize_deep_mor_app {
+    if h: Mor(A);
+    if y = h.B.C.T(x);
+    then x = x;
+    then y = y;
+    then recognized_deep_mor_app(h);
+}
+
+pred recognized_deep_mor_app_from_source(h: Mor(A));
+rule recognize_deep_mor_app_from_source {
+    if h: Mor(A);
+    if a = dom(h);
+    if b: a.B;
+    if c: b.C;
+    if x: c.T;
+    if y = h.B.C.T(x);
+    then y = y;
+    then recognized_deep_mor_app_from_source(h);
+}
+
+pred recognized_deep_mor_app_with_later_types(h: Mor(A));
+rule recognize_deep_mor_app_with_later_types {
+    if h: Mor(A);
+    if y = h.B.C.T(x);
+    if a = dom(h);
+    if b: a.B;
+    if c: b.C;
+    if x: c.T;
+    if d = cod(h);
+    if e: d.B;
+    if f: e.C;
+    if y: f.T;
+    then recognized_deep_mor_app_with_later_types(h);
+}
+
+pred recognized_deep_mor_app_in_branch(h: Mor(A));
+rule recognize_deep_mor_app_in_branch {
+    if h: Mor(A);
+    if y = h.B.C.T(x);
+    branch {
+        then x = x;
+    } along {
+        then y = y;
+    }
+    then recognized_deep_mor_app_in_branch(h);
 }
 
 model W {

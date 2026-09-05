@@ -1,0 +1,8 @@
+Error: term has conflicting types:
+  --> error-test-source/nested-mor-app-conflicting-parent/theory.eql:10
+   | 
+10 |     if y = f.N.T(x);
+   |                  ^  
+   | 
+- Could be n0.T
+- Could be n1.T

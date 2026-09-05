@@ -765,7 +765,7 @@ impl Display for CompileErrorWithContext {
                 write_loc(f, *location)?;
             }
             NestedMorphismApplication { location } => {
-                write!(f, "nested morphism application is not supported yet\n")?;
+                write!(f, "invalid nested morphism application\n")?;
                 write_loc(f, *location)?;
             }
         }

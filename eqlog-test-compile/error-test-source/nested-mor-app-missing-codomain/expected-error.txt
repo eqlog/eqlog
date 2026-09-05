@@ -1,0 +1,6 @@
+Error: type of term undetermined
+  --> error-test-source/nested-mor-app-missing-codomain/theory.eql:12
+   | 
+12 |     then h.N.T(x)!;
+   |          ^^^^^^^^  
+   | 

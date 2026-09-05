@@ -4,7 +4,7 @@ use std::{
 };
 
 use super::ast::*;
-use crate::algebra::signature::{FuncId, Signature};
+use crate::algebra::signature::{FuncId, Signature, TypeId};
 use itertools::Itertools as _;
 use maplit::btreeset;
 use std::sync::Arc;
@@ -84,6 +84,13 @@ impl QuerySpec {
         );
         QuerySpec {
             projections: (0..flat_dom.len()).collect(),
+            age: QueryAge::All,
+        }
+    }
+
+    pub fn member_parents(member_type: TypeId, signature: &Signature) -> Self {
+        QuerySpec {
+            projections: btreeset! {signature.type_(member_type).parents.len()},
             age: QueryAge::All,
         }
     }
@@ -222,6 +229,20 @@ pub fn select_indices<'a>(
         )
     }));
 
+    // Nested morphism checks recover parent chains from membership, including
+    // inherited tuples, without scanning every member in the model.
+    query_specs.extend(signature.iter_mor_app_funcs().filter_map(|(types, _)| {
+        let parent_len = signature.type_(types.member_type).parents.len();
+        let outer_len = signature.type_(types.morphism_type).parents.len();
+        if parent_len <= outer_len + 1 {
+            return None;
+        }
+        Some((
+            FlatInRel::Rel(FlatRel::ModelMember(types.member_type)),
+            QuerySpec::member_parents(types.member_type, signature),
+        ))
+    }));
+
     // The query specs needed for topological sorting of the model morphism graph.
     query_specs.extend(signature.iter_model_decls().flat_map(|(_decl, ids)| {
         let mor_type = FlatInRel::TypeSet(ids.mor);
@@ -259,6 +280,21 @@ pub fn select_indices<'a>(
                 },
             ),
         ]
+    }));
+
+    // Topological sorting groups model objects by their enclosing parents.
+    // Preserve that prefix order even when membership also needs a reverse index.
+    query_specs.extend(signature.iter_model_decls().flat_map(|(_, ids)| {
+        let rel = FlatInRel::Rel(FlatRel::ModelMember(ids.type_));
+        (1..=signature.type_(ids.type_).parents.len()).map(move |prefix_len| {
+            (
+                rel.clone(),
+                QuerySpec {
+                    age: QueryAge::All,
+                    projections: (0..prefix_len).collect(),
+                },
+            )
+        })
     }));
 
     let queries: BTreeMap<(FlatInRel, QuerySpec), Vec<IndexSpec>> = query_specs
