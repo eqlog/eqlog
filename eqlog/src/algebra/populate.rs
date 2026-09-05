@@ -1014,7 +1014,9 @@ fn emit_app(
                 mor_candidates.insert((fid, ct.parents));
                 mor_el = Some(receiver_el);
             }
-            // For `m.c.g(x)`, follow constant `c` to find the receiver of `g`.
+            // Try to resolve each path component before the final name as a
+            // constant, in order: for `m.c.d.g(x)`, try `c` on `m`, then `d`
+            // on the result, to find the receiver of `g`.
             // Cache prefix results so later passes refine the same elements.
             // Multi-part paths wait until the initial receiver's type is known.
             if mor_candidates.is_empty() && !unresolved_path {
