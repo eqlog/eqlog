@@ -373,9 +373,9 @@ impl Structure {
         let mut changed = false;
 
         for (app, result) in apps {
-            let Some((parent_model_tid, member_tid)) = signature.types_for_mor_app_func(app.func)
-            else {
-                continue;
+            let (parent_model_tid, member_tid) = match signature.types_for_mor_app_func(app.func) {
+                Some(types) => types,
+                None => continue,
             };
             let Some(model_ids) = signature.ids_for_model_type(parent_model_tid) else {
                 continue;
@@ -409,34 +409,40 @@ impl Structure {
             }
 
             if signature.type_(member_tid).parents.len() == parent_index + 1 {
-                if let Some(&domain_el) = self.func_apps.get(&dom_app) {
-                    let mut parents = outer_parents.clone();
-                    parents.push(self.root(domain_el));
-                    if self.impose_concrete_type(
-                        arg_el,
-                        ConcreteType {
-                            typ: member_tid,
-                            parents,
-                        },
-                    ) {
-                        changed = true;
+                match self.func_apps.get(&dom_app) {
+                    Some(&domain_el) => {
+                        let mut parents = outer_parents.clone();
+                        parents.push(self.root(domain_el));
+                        if self.impose_concrete_type(
+                            arg_el,
+                            ConcreteType {
+                                typ: member_tid,
+                                parents,
+                            },
+                        ) {
+                            changed = true;
+                        }
                     }
+                    None => {}
                 }
             }
 
             if signature.type_(member_tid).parents.len() == parent_index + 1 {
-                if let Some(&codomain_el) = self.func_apps.get(&cod_app) {
-                    let mut parents = outer_parents.clone();
-                    parents.push(self.root(codomain_el));
-                    if self.impose_concrete_type(
-                        result,
-                        ConcreteType {
-                            typ: member_tid,
-                            parents,
-                        },
-                    ) {
-                        changed = true;
+                match self.func_apps.get(&cod_app) {
+                    Some(&codomain_el) => {
+                        let mut parents = outer_parents.clone();
+                        parents.push(self.root(codomain_el));
+                        if self.impose_concrete_type(
+                            result,
+                            ConcreteType {
+                                typ: member_tid,
+                                parents,
+                            },
+                        ) {
+                            changed = true;
+                        }
                     }
+                    None => {}
                 }
             }
         }

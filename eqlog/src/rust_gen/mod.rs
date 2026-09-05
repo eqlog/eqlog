@@ -237,43 +237,42 @@ fn display_dependent_type_checks<'a>(
         assert!(checked_len <= arity_types.len());
         assert_eq!(arity_types.len(), rel_args.len());
 
-        if let FlatRel::Func(func) = rel {
-            if let Some((parent_model_type, member_type)) =
-                ctx.signature().types_for_mor_app_func(func)
-            {
-                if ctx.signature().type_(member_type).parents.last().copied()
-                    != Some(parent_model_type)
-                {
-                    return Ok(());
-                }
-                let flat_dom_len = flat_domain(func, ctx.signature()).len();
-                assert!(flat_dom_len >= 2);
-                let mor_pos = flat_dom_len - 2;
-                let arg_pos = flat_dom_len - 1;
-                let result_pos = flat_dom_len;
+        match rel {
+            FlatRel::Func(func) => match ctx.signature().types_for_mor_app_func(func) {
+                Some((parent_model_type, member_type)) => {
+                    if ctx.signature().type_(member_type).parents.last().copied()
+                        != Some(parent_model_type)
+                    {
+                        return Ok(());
+                    }
+                    let flat_dom_len = flat_domain(func, ctx.signature()).len();
+                    assert!(flat_dom_len >= 2);
+                    let mor_pos = flat_dom_len - 2;
+                    let arg_pos = flat_dom_len - 1;
+                    let result_pos = flat_dom_len;
 
-                let model_ids = ctx
-                    .signature()
-                    .ids_for_model_type(parent_model_type)
-                    .expect("member parent should be a model type");
-                let dom_func = display_func(model_ids.dom, ctx);
-                let cod_func = display_func(model_ids.cod, ctx);
-                let member_rel = display_rel(FlatRel::ModelMember(member_type), ctx);
-                let mor_func_args = rel_args[..=mor_pos].iter().format(", ").to_string();
-                let outer_parents = rel_args[..mor_pos]
-                    .iter()
-                    .map(|v| format!("{v}"))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                let member_prefix = if outer_parents.is_empty() {
-                    String::new()
-                } else {
-                    format!("{outer_parents}, ")
-                };
+                    let model_ids = ctx
+                        .signature()
+                        .ids_for_model_type(parent_model_type)
+                        .expect("member parent should be a model type");
+                    let dom_func = display_func(model_ids.dom, ctx);
+                    let cod_func = display_func(model_ids.cod, ctx);
+                    let member_rel = display_rel(FlatRel::ModelMember(member_type), ctx);
+                    let mor_func_args = rel_args[..=mor_pos].iter().format(", ").to_string();
+                    let outer_parents = rel_args[..mor_pos]
+                        .iter()
+                        .map(|v| format!("{v}"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    let member_prefix = if outer_parents.is_empty() {
+                        String::new()
+                    } else {
+                        format!("{outer_parents}, ")
+                    };
 
-                if checked_len > arg_pos {
-                    let arg_expr = &rel_args[arg_pos];
-                    writedoc! {f, "
+                    if checked_len > arg_pos {
+                        let arg_expr = &rel_args[arg_pos];
+                        writedoc! {f, "
                         let dependent_parent_{arg_pos} = self.{dom_func}({mor_func_args})
                             .expect(\"invalid dependent argument: morphism application requires a defined domain\");
                         assert!(
@@ -281,11 +280,11 @@ fn display_dependent_type_checks<'a>(
                             \"invalid dependent argument: morphism application argument is not a member of the morphism domain\"
                         );
                     "}?;
-                }
+                    }
 
-                if checked_len > result_pos {
-                    let result_expr = &rel_args[result_pos];
-                    writedoc! {f, "
+                    if checked_len > result_pos {
+                        let result_expr = &rel_args[result_pos];
+                        writedoc! {f, "
                         let dependent_parent_{result_pos} = self.{cod_func}({mor_func_args})
                             .expect(\"invalid dependent argument: morphism application requires a defined codomain\");
                         assert!(
@@ -293,10 +292,13 @@ fn display_dependent_type_checks<'a>(
                             \"invalid dependent argument: morphism application result is not a member of the morphism codomain\"
                         );
                     "}?;
-                }
+                    }
 
-                return Ok(());
-            }
+                    return Ok(());
+                }
+                None => {}
+            },
+            FlatRel::ModelMember(_) | FlatRel::Pred(_) => {}
         }
 
         for pos in 0..checked_len {
@@ -2736,9 +2738,11 @@ fn display_define_fn<'a>(func: FuncId, ctx: &'a RustGenCtx<'a>) -> impl Display 
             .map(display_var)
             .format(", ");
 
-        if let Some((parent_model, member_type)) = ctx.signature().types_for_mor_app_func(func) {
-            if ctx.signature().type_(member_type).parents.last().copied() != Some(parent_model) {
-                writedoc! {f, "
+        match ctx.signature().types_for_mor_app_func(func) {
+            Some((parent_model, member_type)) => {
+                if ctx.signature().type_(member_type).parents.last().copied() != Some(parent_model)
+                {
+                    writedoc! {f, "
                     /// Returns a nested morphism image that has already been derived by closure.
                     #[allow(dead_code)]
                     pub fn define_{func_snake}(&mut self, {fn_args}) -> {codomain_camel} {{
@@ -2747,12 +2751,15 @@ fn display_define_fn<'a>(func: FuncId, ctx: &'a RustGenCtx<'a>) -> impl Display 
                         )
                     }}
                 "}
-            } else {
-                Ok(())
-            }?;
-            if ctx.signature().type_(member_type).parents.last().copied() != Some(parent_model) {
-                return Ok(());
+                } else {
+                    Ok(())
+                }?;
+                if ctx.signature().type_(member_type).parents.last().copied() != Some(parent_model)
+                {
+                    return Ok(());
+                }
             }
+            None => {}
         }
 
         let codomain_parents = ctx.signature().type_(codomain).parents.clone();

@@ -700,25 +700,28 @@ fn func_base_name(ctx: &FlattenCtx<'_>, func: FuncId) -> String {
         let suffix = if ids.dom == func { "dom" } else { "cod" };
         return format!("{model_name}_mor_{suffix}");
     }
-    if let Some((parent_model, member_type, _)) = ctx
+    match ctx
         .signature
         .iter_mor_app_funcs()
         .find(|(_, _, func0)| *func0 == func)
     {
-        // Match rust_gen identifiers: morphism companions are `{Model}Mor`,
-        // not the diagnostic `Mor<Model>` spelling.
-        let member_name = match ctx.signature.type_(member_type).kind {
-            TypeKind::Mor(model) => format!("{}Mor", ctx.signature.type_name(ctx.ast, model)),
-            TypeKind::Plain | TypeKind::Model | TypeKind::Enum => {
-                ctx.signature.type_name(ctx.ast, member_type)
+        Some((parent_model, member_type, _)) => {
+            // Match rust_gen identifiers: morphism companions are `{Model}Mor`,
+            // not the diagnostic `Mor<Model>` spelling.
+            let member_name = match ctx.signature.type_(member_type).kind {
+                TypeKind::Mor(model) => format!("{}Mor", ctx.signature.type_name(ctx.ast, model)),
+                TypeKind::Plain | TypeKind::Model | TypeKind::Enum => {
+                    ctx.signature.type_name(ctx.ast, member_type)
+                }
+            };
+            let immediate_parent = ctx.signature.type_(member_type).parents.last().copied();
+            if immediate_parent == Some(parent_model) {
+                return format!("{member_name}_mor_app");
             }
-        };
-        let immediate_parent = ctx.signature.type_(member_type).parents.last().copied();
-        if immediate_parent == Some(parent_model) {
-            return format!("{member_name}_mor_app");
+            let parent_name = ctx.signature.type_name(ctx.ast, parent_model);
+            return format!("{parent_name}_{member_name}_mor_app");
         }
-        let parent_name = ctx.signature.type_name(ctx.ast, parent_model);
-        return format!("{parent_name}_{member_name}_mor_app");
+        None => {}
     }
     format!("func_{}", func.as_usize())
 }

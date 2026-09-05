@@ -807,8 +807,9 @@ pub(crate) fn mor_type_path_component(
     receiver_typ: TypeId,
     names: &[&str],
 ) -> Option<TypeId> {
-    let TypeKind::Mor(mut model_tid) = signature.type_(receiver_typ).kind else {
-        return None;
+    let mut model_tid = match signature.type_(receiver_typ).kind {
+        TypeKind::Mor(model_tid) => model_tid,
+        TypeKind::Plain | TypeKind::Model | TypeKind::Enum => return None,
     };
     let mut resolved = None;
     for (index, name) in names.iter().enumerate() {
@@ -828,10 +829,10 @@ pub(crate) fn mor_type_path_component(
         };
         resolved = Some(typ);
         if index + 1 < names.len() {
-            if !matches!(signature.type_(typ).kind, TypeKind::Model) {
-                return None;
+            match signature.type_(typ).kind {
+                TypeKind::Model => model_tid = typ,
+                TypeKind::Plain | TypeKind::Enum | TypeKind::Mor(_) => return None,
             }
-            model_tid = typ;
         }
     }
     resolved
@@ -993,16 +994,19 @@ fn emit_app(
                 .map(|name| ast.ident_term(*name).name.as_str())
                 .collect();
             for ct in receiver_types {
-                let TypeKind::Mor(parent_model) = signature.type_(ct.typ).kind else {
-                    continue;
+                let parent_model = match signature.type_(ct.typ).kind {
+                    TypeKind::Mor(parent_model) => parent_model,
+                    TypeKind::Plain | TypeKind::Model | TypeKind::Enum => continue,
                 };
-                let Some(type_tid) =
-                    mor_type_path_component(scopes, signature, ct.typ, path_names.as_slice())
-                else {
-                    continue;
-                };
-                let Some(fid) = signature.mor_app_func(parent_model, type_tid) else {
-                    continue;
+                let type_tid =
+                    match mor_type_path_component(scopes, signature, ct.typ, path_names.as_slice())
+                    {
+                        Some(type_tid) => type_tid,
+                        None => continue,
+                    };
+                let fid = match signature.mor_app_func(parent_model, type_tid) {
+                    Some(fid) => fid,
+                    None => continue,
                 };
                 mor_candidates.insert((fid, ct.parents));
                 mor_el = Some(receiver_el);
@@ -1064,16 +1068,19 @@ fn emit_app(
                         | Some(Symbol::Var(_))
                         | None => None,
                     };
-                    if let Some(fid) = func_id {
-                        func_candidates.push((fid, parents));
+                    match func_id {
+                        Some(fid) => func_candidates.push((fid, parents)),
+                        None => {}
                     }
                 }
                 for ct in concrete_types_of_el(rule, current, receiver_el) {
-                    let Some(type_tid) = mor_type_component(scopes, signature, ct.typ, name) else {
-                        continue;
+                    let type_tid = match mor_type_component(scopes, signature, ct.typ, name) {
+                        Some(type_tid) => type_tid,
+                        None => continue,
                     };
-                    let Some(fid) = signature.mor_app_func_for_type(type_tid) else {
-                        continue;
+                    let fid = match signature.mor_app_func_for_type(type_tid) {
+                        Some(fid) => fid,
+                        None => continue,
                     };
                     mor_candidates.insert((fid, ct.parents));
                     mor_el = Some(receiver_el);

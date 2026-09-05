@@ -5,8 +5,7 @@
   Only if needed to test unicode support etc.
 - Most features should have tests.
   Prefer integration tests via eqlog-test-eval/ and eqlot-test-compile/ over unit tests.
-- Never fall through to a "default" when matching enum values.
-  Be explicit about every case and fail hard on unknown values rather than silently continuing in a potentially invalid state.
+- Check enums with exhaustive `match` expressions that explicitly list every variant; never use wildcard/default arms, `if let`, `let ... else`, or `matches!`.
 - You should almost never ignore errors:
   Prefer failing over continuing in degraded state in most cases.
   When an error is expected in normal operation, be as specific about the error as possible.
