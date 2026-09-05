@@ -928,13 +928,13 @@ fn emit_known_apps(
     result.map(|el| (el, changed))
 }
 
-/// Resolves the application of `head` to `arg_els` and emits the corresponding
-/// [`FuncApp`]s.
+/// Resolves a call such as `g(x)`, `m.c.g(x)`, or `f.N.T(x)` and records
+/// its [`FuncApp`]s in the current rule structure. Arguments are already
+/// represented by `arg_els`; receiver terms are populated here.
 ///
-/// Non-callee heads are still walked so nested terms are populated.
-///
-/// `expected` is the result el previously committed for this term, if any.
-/// Returns `(result_el, changed)`.
+/// `expected` is the previously assigned result element, if any.
+/// Returns `(result_el, changed)`, creating a placeholder result when the
+/// head cannot yet be resolved so later passes can add its applications.
 fn emit_app(
     app: AppTermId,
     head: AppHeadId,
@@ -997,6 +997,8 @@ fn emit_app(
                 .iter()
                 .map(|name| ast.ident_term(*name).name.as_str())
                 .collect();
+            // For `f: Mor(M)`, `f.N.T(x)` selects the action of `f` on
+            // the type `T` declared in the nested model `N` inside `M`.
             for ct in receiver_types {
                 let Some(type_tid) =
                     mor_type_path_component(scopes, signature, ct.typ, path_names.as_slice())
@@ -1012,6 +1014,9 @@ fn emit_app(
                 mor_candidates.insert((fid, ct.parents));
                 mor_el = Some(receiver_el);
             }
+            // For `m.c.g(x)`, follow constant `c` to find the receiver of `g`.
+            // Cache prefix results so later passes refine the same elements.
+            // Multi-part paths wait until the initial receiver's type is known.
             if mor_candidates.is_empty() && !unresolved_path {
                 for (index, &prefix_name) in
                     member.names[..member.names.len() - 1].iter().enumerate()
@@ -1091,6 +1096,8 @@ fn emit_app(
         }
     }
 
+    // All resolved candidates describe this one call, so they share a result
+    // element. Morphism actions also take the receiver as an argument.
     let mut result = expected;
     for (func_id, parents) in func_candidates {
         let func_data = signature.func(func_id);

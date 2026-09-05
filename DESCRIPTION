@@ -1,8 +1,8 @@
 Support nested morphism applications
 
 Allow an enclosing model morphism to act on members at any nesting depth
-through paths such as `f.X.T`. Explain path resolution with a surface
-syntax example.
+through paths such as `f.X.T`. Explain path resolution and application
+population with surface syntax examples.
 
 Name the morphism and member types in each application so their roles
 are explicit throughout signature lookup and code generation.
