@@ -4,6 +4,12 @@ Allow an enclosing model morphism to act on members at any nesting depth
 through paths such as `f.X.T`. Explain path resolution and application
 population with surface syntax examples.
 
+Infer nested application arguments and results from the morphism type,
+including their distinct parent chains. Reuse inferred parents across
+statements and later annotations without hiding concrete type conflicts.
+Exercise these cases through evaluation and compile-error integration
+tests.
+
 Name the morphism and member types in each application so their roles
 are explicit throughout signature lookup and code generation.
 

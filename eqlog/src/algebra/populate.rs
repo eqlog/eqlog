@@ -298,6 +298,10 @@ fn ensure_stmt_after(
         return (id, false);
     }
     let id = rule.clone_structure(src);
+    rule.cat.structures[id.0].allow_new_type_parents = match kind {
+        MorphismKind::If => true,
+        MorphismKind::SurjThen | MorphismKind::NonSurjThen | MorphismKind::Noop => false,
+    };
     rule.stmt_after.insert(stmt, id);
     rule.morphism_kinds.insert((src, id), kind);
     (id, true)
@@ -326,6 +330,7 @@ fn ensure_match_after_scrutinee(
         return (id, false);
     }
     let id = rule.clone_structure(src);
+    rule.cat.structures[id.0].allow_new_type_parents = true;
     rule.match_after_scrutinee.insert(match_id, id);
     (id, true)
 }

@@ -196,6 +196,11 @@ fn undetermined_mor_app_type() {
 }
 
 #[test]
+fn nested_mor_app_conflicting_parent() {
+    test_case(Path::new("nested-mor-app-conflicting-parent"));
+}
+
+#[test]
 fn conflicting_term_type_equality() {
     test_case(Path::new("conflicting-term-type-equality"));
 }

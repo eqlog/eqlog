@@ -245,6 +245,40 @@ fn outer_morphism_maps_deep_members() {
     assert!(model.a_member_b(a1, b1));
     assert!(model.b_member_c(a1, b1, c1));
     assert!(model.c_member_t(a1, b1, c1, y));
+    assert!(model.recognized_deep_mor_app(h));
+    assert!(model.recognized_deep_mor_app_from_source(h));
+    assert!(model.recognized_deep_mor_app_with_later_types(h));
+    assert!(model.recognized_deep_mor_app_in_branch(h));
+    assert!(!model.are_equal_t(x, y));
+    assert!(!model.are_equal_b(b0, b1));
+    assert!(!model.are_equal_c(c0, c1));
+}
+
+#[test]
+fn nested_morphism_inference_preserves_outer_parent() {
+    let mut model = Nested::new();
+    let a = model.new_a();
+    let b0 = model.new_b(a);
+    let b1 = model.new_b(a);
+    let c0 = model.new_c(a, b0);
+    let c1 = model.new_c(a, b1);
+    let x = model.new_t(a, b0, c0);
+    let y = model.new_t(a, b1, c1);
+    let f = model.new_b_mor(a);
+    model.insert_b_mor_dom(a, f, b0);
+    model.insert_b_mor_cod(a, f, b1);
+    model.insert_c_mor_app(a, f, c0, c1);
+    model.insert_b_t_mor_app(a, f, x, y);
+
+    let other_a = model.new_a();
+    let other_f = model.new_b_mor(other_a);
+    model.close();
+
+    assert!(model.recognized_mid_mor_app(a, f));
+    assert!(!model.recognized_mid_mor_app(other_a, other_f));
+    assert!(!model.are_equal_t(x, y));
+    assert!(model.c_member_t(a, b0, c0, x));
+    assert!(model.c_member_t(a, b1, c1, y));
 }
 
 #[test]
