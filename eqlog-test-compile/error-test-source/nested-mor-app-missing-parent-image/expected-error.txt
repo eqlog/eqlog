@@ -1,0 +1,6 @@
+Error: type of term undetermined
+  --> error-test-source/nested-mor-app-missing-parent-image/theory.eql:13
+   | 
+13 |     then h.N.T(x)!;
+   |          ^^^^^^^^  
+   | 

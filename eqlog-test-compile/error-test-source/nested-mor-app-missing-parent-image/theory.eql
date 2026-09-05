@@ -1,0 +1,14 @@
+model M {
+    model N {
+        type T;
+    }
+}
+
+rule {
+    if h: Mor(M);
+    if m = dom(h);
+    if n: m.N;
+    if x: n.T;
+    if cod(h)!;
+    then h.N.T(x)!;
+}
