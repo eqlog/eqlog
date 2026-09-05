@@ -226,12 +226,156 @@ fn membership_self_type(rel: FlatRel) -> Option<TypeId> {
     }
 }
 
+/// For `h.B.T(x)`, check that `x: b.T` with `b: dom(h).B`. Inserting
+/// an image also requires that it belongs to `h.B(b).T` inside `cod(h)`.
+fn display_nested_mor_app_type_checks<'a>(
+    func: FuncId,
+    types: MorphismMemberTypes,
+    rel_args: &'a [ElVar],
+    checked_len: usize,
+    ctx: &'a RustGenCtx<'_>,
+    index_selection: &'a IndexSelection,
+) -> impl Display + 'a {
+    FmtFn(move |f| {
+        let parent_types = &ctx.signature().type_(types.member_type).parents;
+        let outer_len = ctx.signature().func(func).parents.len();
+        let arg_pos = outer_len + 1;
+        let result_pos = arg_pos + 1;
+        if checked_len <= arg_pos {
+            return Ok(());
+        }
+
+        let model_ids = ctx
+            .signature()
+            .ids_for_model_type(types.model_type(ctx.signature()))
+            .expect("morphism type should have model ids");
+        let dom_func = display_func(model_ids.dom, ctx);
+        let cod_func = display_func(model_ids.cod, ctx);
+        let mor_args = rel_args[..=outer_len].iter().format(", ").to_string();
+        let arg = &rel_args[arg_pos];
+        let member_rel = FlatInRel::Rel(FlatRel::ModelMember(types.member_type));
+        let query = QuerySpec::member_parents(types.member_type, ctx.signature());
+        let indices = index_selection
+            .queries
+            .get(&(member_rel.clone(), query))
+            .expect("nested morphism checks need member-parent indices");
+
+        let parent_rows = indices
+            .iter()
+            .map(|index| {
+                let index_expr = display_index_expr(&member_rel, index, ctx);
+                assert_eq!(index.order[0], parent_types.len());
+                let unpack = index.order[1..]
+                    .iter()
+                    .map(|i| format!("parent{i}"))
+                    .format(", ");
+                let parents = parent_types
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &typ)| {
+                        let type_name = display_type(typ, ctx).to_string().to_case(UpperCamel);
+                        format!("{type_name}::from(parent{i})")
+                    })
+                    .format(", ");
+                formatdoc! {"
+                    .chain({index_expr}.get({arg}.0).into_iter()
+                        .flat_map(|rows| rows.iter())
+                        .map(|[{unpack}]| ({parents})))
+                "}
+            })
+            .format("\n");
+        let source_pattern = (0..=outer_len)
+            .map(|i| format!("parent{i}"))
+            .chain(once("..".to_string()))
+            .format(", ");
+        let source_checks = parent_types[..=outer_len]
+            .iter()
+            .enumerate()
+            .map(|(i, &typ)| {
+                let type_name = display_type(typ, ctx).to_string().to_case(Snake);
+                let expected = if i == outer_len {
+                    "dependent_domain".to_string()
+                } else {
+                    rel_args[i].to_string()
+                };
+                format!("self.root_{type_name}(parent{i}) == self.root_{type_name}({expected})")
+            })
+            .format(" && ");
+
+        writedoc! {f, "
+            {{
+                let dependent_domain = self.{dom_func}({mor_args})
+                    .expect(\"invalid dependent argument: morphism application requires a defined domain\");
+                let mut dependent_source_parents = [].into_iter()
+                    {parent_rows}
+                    .filter(|&({source_pattern})| {source_checks})
+                    .peekable();
+                assert!(
+                    dependent_source_parents.peek().is_some(),
+                    \"invalid dependent argument: morphism application argument is not a member of the morphism domain\"
+                );
+        "}?;
+
+        if checked_len > result_pos {
+            let mut result_parents: Vec<String> = rel_args[..outer_len]
+                .iter()
+                .map(ToString::to_string)
+                .collect();
+            result_parents.push("dependent_codomain".to_string());
+            let mut parent_images = String::new();
+            for (i, &typ) in parent_types.iter().enumerate().skip(outer_len + 1) {
+                let parent_func = ctx
+                    .signature()
+                    .mor_app_func(MorphismMemberTypes {
+                        morphism_type: types.morphism_type,
+                        member_type: typ,
+                    })
+                    .expect("nested parents should have morphism applications");
+                let parent_func = display_func(parent_func, ctx);
+                let parent_rel = display_rel(FlatRel::ModelMember(typ), ctx);
+                result_parents.push(format!("image_parent{i}"));
+                let parent_args = result_parents.iter().format(", ");
+                parent_images.push_str(&formatdoc! {"
+                    let Some(image_parent{i}) = self.{parent_func}({mor_args}, parent{i}) else {{
+                        return false;
+                    }};
+                    if !self.{parent_rel}({parent_args}) {{
+                        return false;
+                    }}
+                "});
+            }
+            let image_pattern = (0..parent_types.len())
+                .map(|i| {
+                    if i <= outer_len {
+                        "_".to_string()
+                    } else {
+                        format!("parent{i}")
+                    }
+                })
+                .format(", ");
+            let member_rel = display_rel(FlatRel::ModelMember(types.member_type), ctx);
+            let result = &rel_args[result_pos];
+            let result_parents = result_parents.iter().format(", ");
+            writedoc! {f, "
+                let dependent_codomain = self.{cod_func}({mor_args})
+                    .expect(\"invalid dependent argument: morphism application requires a defined codomain\");
+                assert!(dependent_source_parents.any(|({image_pattern})| {{
+                    {parent_images}
+                    self.{member_rel}({result_parents}, {result})
+                }}), \"invalid dependent argument: nested morphism application requires defined parent images and a result in the mapped parent models\");
+            "}?;
+        }
+        writeln!(f, "}}")
+    })
+}
+
 fn display_dependent_type_checks<'a>(
     rel: FlatRel,
     arity_types: &'a [TypeId],
     rel_args: &'a [ElVar],
     checked_len: usize,
     ctx: &'a RustGenCtx<'_>,
+    index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         assert!(checked_len <= arity_types.len());
@@ -247,9 +391,16 @@ fn display_dependent_type_checks<'a>(
         if let Some((func, types)) = mor_app {
             let parent_model_type = types.model_type(ctx.signature());
             let member_type = types.member_type;
-            if ctx.signature().type_(member_type).parents.last().copied() != Some(parent_model_type)
-            {
-                return Ok(());
+            if ctx.signature().type_(member_type).parents.last() != Some(&parent_model_type) {
+                let checks = display_nested_mor_app_type_checks(
+                    func,
+                    types,
+                    rel_args,
+                    checked_len,
+                    ctx,
+                    index_selection,
+                );
+                return write!(f, "{checks}");
             }
             let flat_dom_len = flat_domain(func, ctx.signature()).len();
             assert!(flat_dom_len >= 2);
@@ -364,8 +515,14 @@ fn display_pub_predicate_holds_fn<'a>(
                 name: format!("arg{i}").into(),
             })
             .collect();
-        let dependent_checks =
-            display_dependent_type_checks(rel, &arity_types, &rel_args, arity_types.len(), ctx);
+        let dependent_checks = display_dependent_type_checks(
+            rel,
+            &arity_types,
+            &rel_args,
+            arity_types.len(),
+            ctx,
+            index_selection,
+        );
 
         let rel_args_doc =
             (0..arity_types.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
@@ -455,8 +612,14 @@ fn display_pub_function_eval_fn<'a>(
             .collect();
         let mut arity_types = flat_dom.clone();
         arity_types.push(cod);
-        let dependent_checks =
-            display_dependent_type_checks(rel, &arity_types, &rel_args, flat_dom_len, ctx);
+        let dependent_checks = display_dependent_type_checks(
+            rel,
+            &arity_types,
+            &rel_args,
+            flat_dom_len,
+            ctx,
+            index_selection,
+        );
 
         let doc_args = (0..flat_dom.len())
             .map(|i| FmtFn(move |f| write!(f, "arg{i}")))
@@ -775,8 +938,14 @@ fn display_pub_insert_relation<'a>(
             })
             .format("\n");
 
-        let dependent_checks =
-            display_dependent_type_checks(rel, &arity_types, rel_args, arity_types.len(), ctx);
+        let dependent_checks = display_dependent_type_checks(
+            rel,
+            &arity_types,
+            rel_args,
+            arity_types.len(),
+            ctx,
+            index_selection,
+        );
 
         let unwrap_args = rel_args
             .iter()

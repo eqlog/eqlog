@@ -1,5 +1,189 @@
 use crate::nested::*;
 
+struct NestedMorphismFixture {
+    model: Nested,
+    h: AMor,
+    domain: A,
+    codomain: A,
+    target_b: B,
+    target_c: C,
+    x: T,
+    y: T,
+}
+
+fn nested_morphism_fixture() -> NestedMorphismFixture {
+    let mut model = Nested::new();
+    let domain = model.new_a();
+    let codomain = model.new_a();
+    let source_b = model.new_b(domain);
+    let source_c = model.new_c(domain, source_b);
+    let x = model.new_t(domain, source_b, source_c);
+    let target_b = model.new_b(codomain);
+    let target_c = model.new_c(codomain, target_b);
+    let y = model.new_t(codomain, target_b, target_c);
+    let h = model.new_a_mor();
+    model.insert_a_mor_dom(h, domain);
+    model.insert_a_mor_cod(h, codomain);
+    model.insert_b_mor_app(h, source_b, target_b);
+    model.insert_a_c_mor_app(h, source_c, target_c);
+    NestedMorphismFixture {
+        model,
+        h,
+        domain,
+        codomain,
+        target_b,
+        target_c,
+        x,
+        y,
+    }
+}
+
+#[test]
+#[should_panic(expected = "invalid dependent argument")]
+fn nested_mor_app_insert_rejects_wrong_domain() {
+    let mut fixture = nested_morphism_fixture();
+    fixture
+        .model
+        .insert_a_t_mor_app(fixture.h, fixture.y, fixture.y);
+}
+
+#[test]
+#[should_panic(expected = "invalid dependent argument")]
+fn nested_mor_app_insert_rejects_wrong_codomain() {
+    let mut fixture = nested_morphism_fixture();
+    fixture
+        .model
+        .insert_a_t_mor_app(fixture.h, fixture.x, fixture.x);
+}
+
+#[test]
+#[should_panic(expected = "invalid dependent argument")]
+fn nested_mor_app_insert_rejects_wrong_inner_parent() {
+    let mut fixture = nested_morphism_fixture();
+    let other_c = fixture.model.new_c(fixture.codomain, fixture.target_b);
+    let other_y = fixture
+        .model
+        .new_t(fixture.codomain, fixture.target_b, other_c);
+    fixture
+        .model
+        .insert_a_t_mor_app(fixture.h, fixture.x, other_y);
+}
+
+#[test]
+#[should_panic(expected = "invalid dependent argument")]
+fn nested_mor_app_insert_rejects_wrong_intermediate_parent() {
+    let mut fixture = nested_morphism_fixture();
+    let other_b = fixture.model.new_b(fixture.codomain);
+    fixture
+        .model
+        .insert_b_member_c(fixture.codomain, other_b, fixture.target_c);
+    let other_y = fixture
+        .model
+        .new_t(fixture.codomain, other_b, fixture.target_c);
+    fixture
+        .model
+        .insert_a_t_mor_app(fixture.h, fixture.x, other_y);
+}
+
+#[test]
+#[should_panic(expected = "morphism application requires a defined domain")]
+fn nested_mor_app_insert_requires_domain() {
+    let mut fixture = nested_morphism_fixture();
+    let h = fixture.model.new_a_mor();
+    fixture.model.insert_a_mor_cod(h, fixture.codomain);
+    fixture.model.insert_a_t_mor_app(h, fixture.x, fixture.y);
+}
+
+#[test]
+#[should_panic(expected = "morphism application requires a defined codomain")]
+fn nested_mor_app_insert_requires_codomain() {
+    let mut fixture = nested_morphism_fixture();
+    let h = fixture.model.new_a_mor();
+    fixture.model.insert_a_mor_dom(h, fixture.domain);
+    fixture.model.insert_a_t_mor_app(h, fixture.x, fixture.y);
+}
+
+#[test]
+#[should_panic(expected = "nested morphism application requires defined parent images")]
+fn nested_mor_app_insert_requires_parent_images() {
+    let mut fixture = nested_morphism_fixture();
+    let h = fixture.model.new_a_mor();
+    fixture.model.insert_a_mor_dom(h, fixture.domain);
+    fixture.model.insert_a_mor_cod(h, fixture.codomain);
+    fixture.model.insert_a_t_mor_app(h, fixture.x, fixture.y);
+}
+
+#[test]
+#[should_panic(expected = "invalid dependent argument")]
+fn nested_mor_app_insert_rejects_wrong_outer_parent() {
+    let mut fixture = nested_morphism_fixture();
+    let g = fixture.model.new_b_mor(fixture.codomain);
+    fixture
+        .model
+        .insert_b_t_mor_app(fixture.domain, g, fixture.x, fixture.y);
+}
+
+#[test]
+#[should_panic(expected = "morphism application argument is not a member of the morphism domain")]
+fn nested_mor_app_query_rejects_wrong_domain() {
+    let fixture = nested_morphism_fixture();
+    fixture.model.a_t_mor_app(fixture.h, fixture.y);
+}
+
+#[test]
+fn nested_mor_app_accepts_any_valid_source_membership() {
+    let mut fixture = nested_morphism_fixture();
+    let other_b = fixture.model.new_b(fixture.domain);
+    let other_c = fixture.model.new_c(fixture.domain, other_b);
+    fixture
+        .model
+        .insert_c_member_t(fixture.domain, other_b, other_c, fixture.x);
+
+    // The original source parents have no images under h, so validation must
+    // also consider the other membership of x.
+    let h = fixture.model.new_a_mor();
+    fixture.model.insert_a_mor_dom(h, fixture.domain);
+    fixture.model.insert_a_mor_cod(h, fixture.codomain);
+    fixture.model.insert_b_mor_app(h, other_b, fixture.target_b);
+    fixture
+        .model
+        .insert_a_c_mor_app(h, other_c, fixture.target_c);
+    assert_eq!(fixture.model.a_t_mor_app(h, fixture.x), None);
+    fixture.model.insert_a_t_mor_app(h, fixture.x, fixture.y);
+    assert_eq!(fixture.model.a_t_mor_app(h, fixture.x), Some(fixture.y));
+
+    fixture.model.close();
+    fixture.model.insert_a_t_mor_app(h, fixture.x, fixture.y);
+    assert_eq!(fixture.model.a_t_mor_app(h, fixture.x), Some(fixture.y));
+}
+
+#[test]
+fn nested_mor_app_accepts_inherited_source_membership() {
+    let mut fixture = nested_morphism_fixture();
+    fixture
+        .model
+        .insert_a_t_mor_app(fixture.h, fixture.x, fixture.y);
+    fixture.model.close();
+
+    // The first morphism supplies y's membership after closure. A second
+    // morphism must be able to use that inherited membership as its source.
+    let next_a = fixture.model.new_a();
+    let next_b = fixture.model.new_b(next_a);
+    let next_c = fixture.model.new_c(next_a, next_b);
+    let z = fixture.model.new_t(next_a, next_b, next_c);
+    let k = fixture.model.new_a_mor();
+    fixture.model.insert_a_mor_dom(k, fixture.codomain);
+    fixture.model.insert_a_mor_cod(k, next_a);
+    fixture.model.insert_b_mor_app(k, fixture.target_b, next_b);
+    fixture
+        .model
+        .insert_a_c_mor_app(k, fixture.target_c, next_c);
+    fixture.model.insert_a_t_mor_app(k, fixture.y, z);
+    assert_eq!(fixture.model.a_t_mor_app(k, fixture.y), Some(z));
+    fixture.model.close();
+    assert_eq!(fixture.model.a_t_mor_app(k, fixture.y), Some(z));
+}
+
 #[test]
 fn empty_model() {
     let mut model = Nested::new();

@@ -10,6 +10,11 @@ statements and later annotations without hiding concrete type conflicts.
 Exercise these cases through evaluation and compile-error integration
 tests, including missing codomains and parent images in conclusions.
 
+Reject invalid nested morphism applications through the Rust API before
+inserting them. Check the source membership and the full mapped parent
+chain, while accepting any valid membership of a shared element. Cover
+invalid insertions with expected-panic evaluation integration tests.
+
 Name the morphism and member types in each application so their roles
 are explicit throughout signature lookup and code generation.
 
