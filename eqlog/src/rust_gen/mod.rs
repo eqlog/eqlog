@@ -7,7 +7,7 @@ pub(crate) use context::RustGenCtx;
 pub use rule::*;
 pub use types::*;
 
-use crate::algebra::signature::{FuncId, TypeId, TypeKind};
+use crate::algebra::signature::{FuncId, MorphismMemberTypes, TypeId, TypeKind};
 use crate::ast::EnumDeclId;
 use crate::flat_eqlog::*;
 use crate::fmt_util::*;
@@ -241,10 +241,12 @@ fn display_dependent_type_checks<'a>(
             FlatRel::Func(func) => ctx
                 .signature()
                 .types_for_mor_app_func(func)
-                .map(|(parent_model, member)| (func, parent_model, member)),
+                .map(|types| (func, types)),
             FlatRel::ModelMember(_) | FlatRel::Pred(_) => None,
         };
-        if let Some((func, parent_model_type, member_type)) = mor_app {
+        if let Some((func, types)) = mor_app {
+            let parent_model_type = types.model_type(ctx.signature());
+            let member_type = types.member_type;
             if ctx.signature().type_(member_type).parents.last().copied() != Some(parent_model_type)
             {
                 return Ok(());
@@ -2074,9 +2076,17 @@ fn display_mor_app_map_expr<'a>(
     index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
+        let morphism_type = ctx
+            .signature()
+            .ids_for_model_type(parent_model_type)
+            .expect("morphism application requires a parent model type")
+            .mor;
         let mor_app_func = ctx
             .signature()
-            .mor_app_func(parent_model_type, typ)
+            .mor_app_func(MorphismMemberTypes {
+                morphism_type,
+                member_type: typ,
+            })
             .expect("mor_app_func should be defined for member types");
         let mor_app_rel = FlatInRel::Rel(FlatRel::Func(mor_app_func));
         let parent_len = ctx.signature().func(mor_app_func).parents.len();
@@ -2738,7 +2748,9 @@ fn display_define_fn<'a>(func: FuncId, ctx: &'a RustGenCtx<'a>) -> impl Display 
             .map(display_var)
             .format(", ");
 
-        if let Some((parent_model, member_type)) = ctx.signature().types_for_mor_app_func(func) {
+        if let Some(types) = ctx.signature().types_for_mor_app_func(func) {
+            let parent_model = types.model_type(ctx.signature());
+            let member_type = types.member_type;
             if ctx.signature().type_(member_type).parents.last().copied() != Some(parent_model) {
                 return writedoc! {f, "
                     /// Returns a nested morphism image that has already been derived by closure.

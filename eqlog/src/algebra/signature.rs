@@ -90,14 +90,31 @@ pub struct Func {
 /// The ids a `model` declaration produces: the model type itself, its
 /// auto-generated morphism-type companion, and the dom/cod projections
 /// that read the source/target model instance from a morphism. The
-/// per-member-type morphism-application functions live separately on
-/// [`Signature::mor_app_func_for_type`], keyed by member type.
+/// morphism-application functions live separately on
+/// [`Signature::mor_app_func`], with both type roles named explicitly.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct ModelIds {
     pub type_: TypeId,
     pub mor: TypeId,
     pub dom: FuncId,
     pub cod: FuncId,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct MorphismMemberTypes {
+    pub morphism_type: TypeId,
+    pub member_type: TypeId,
+}
+
+impl MorphismMemberTypes {
+    pub fn model_type(self, signature: &Signature) -> TypeId {
+        match signature.type_(self.morphism_type).kind {
+            TypeKind::Mor(model_type) => model_type,
+            TypeKind::Plain | TypeKind::Model | TypeKind::Enum => {
+                panic!("morphism application requires a morphism type")
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -112,10 +129,10 @@ pub struct Signature {
     func_decls: BTreeMap<FuncDeclId, FuncId>,
     const_decls: BTreeMap<ConstDeclId, FuncId>,
     ctor_decls: BTreeMap<CtorDeclId, FuncId>,
-    /// Morphism-application functions keyed by an enclosing model and a
+    /// Morphism-application functions keyed by a morphism type and a
     /// descendant member type. Each function takes `(Mor<M>, T)` and
     /// returns `T`, allowing the same morphism to act at every depth.
-    mor_app_funcs: BTreeMap<(TypeId, TypeId), FuncId>,
+    mor_app_funcs: BTreeMap<MorphismMemberTypes, FuncId>,
 }
 
 impl Signature {
@@ -171,10 +188,10 @@ impl Signature {
         self.ctor_decls.iter().map(|(&decl, &func)| (decl, func))
     }
 
-    pub fn iter_mor_app_funcs(&self) -> impl Iterator<Item = (TypeId, TypeId, FuncId)> + '_ {
+    pub fn iter_mor_app_funcs(&self) -> impl Iterator<Item = (MorphismMemberTypes, FuncId)> + '_ {
         self.mor_app_funcs
             .iter()
-            .map(|(&(parent_model, member_type), &func)| (parent_model, member_type, func))
+            .map(|(&types, &func)| (types, func))
     }
 
     pub fn type_for_type_decl(&self, id: TypeDeclId) -> TypeId {
@@ -212,23 +229,28 @@ impl Signature {
     /// The returned function has signature `(Mor<M>, T) -> T`, where
     /// `M` is the innermost enclosing model and `T = tid`.
     pub fn mor_app_func_for_type(&self, tid: TypeId) -> Option<FuncId> {
-        let parent = self.type_(tid).parents.last().copied()?;
-        self.mor_app_func(parent, tid)
+        let parent = self.type_(tid).parents.last()?;
+        let morphism_type = self.ids_for_model_type(*parent)?.mor;
+        self.mor_app_func(MorphismMemberTypes {
+            morphism_type,
+            member_type: tid,
+        })
     }
 
-    pub fn mor_app_func(&self, parent_model: TypeId, tid: TypeId) -> Option<FuncId> {
-        self.mor_app_funcs.get(&(parent_model, tid)).copied()
+    pub fn mor_app_func(&self, types: MorphismMemberTypes) -> Option<FuncId> {
+        self.mor_app_funcs.get(&types).copied()
     }
 
-    /// Returns the enclosing model and member type for a generated action.
-    pub fn types_for_mor_app_func(&self, fid: FuncId) -> Option<(TypeId, TypeId)> {
+    /// Returns the morphism and member types for a generated action.
+    pub fn types_for_mor_app_func(&self, fid: FuncId) -> Option<MorphismMemberTypes> {
         self.mor_app_funcs
             .iter()
             .find_map(|(types, f)| (*f == fid).then_some(*types))
     }
 
     pub fn type_for_mor_app_func(&self, fid: FuncId) -> Option<TypeId> {
-        self.types_for_mor_app_func(fid).map(|(_, member)| member)
+        self.types_for_mor_app_func(fid)
+            .map(|types| types.member_type)
     }
 
     /// Returns the [`ModelIds`] whose model-instance type is `tid`, or
@@ -419,9 +441,13 @@ impl<'a> Builder<'a> {
                 domain: vec![parent_mor, tid],
                 codomain: tid,
             });
-            self.signature
-                .mor_app_funcs
-                .insert((parent_model, tid), fid);
+            self.signature.mor_app_funcs.insert(
+                MorphismMemberTypes {
+                    morphism_type: parent_mor,
+                    member_type: tid,
+                },
+                fid,
+            );
         }
         tid
     }

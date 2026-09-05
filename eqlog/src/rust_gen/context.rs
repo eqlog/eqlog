@@ -84,11 +84,13 @@ impl<'a> RustGenCtx<'a> {
             return format!("{mor_name}_{suffix}");
         }
 
-        if let Some((parent_model, member_type, _)) = self
+        if let Some((types, _)) = self
             .signature
             .iter_mor_app_funcs()
-            .find(|(_, _, func0)| *func0 == func)
+            .find(|(_, func0)| *func0 == func)
         {
+            let parent_model = types.model_type(self.signature);
+            let member_type = types.member_type;
             let immediate_parent = self.signature.type_(member_type).parents.last().copied();
             if immediate_parent == Some(parent_model) {
                 return format!("{}_mor_app", self.type_name(member_type).to_case(Snake));

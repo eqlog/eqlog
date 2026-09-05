@@ -3,6 +3,9 @@ Support nested morphism applications
 Allow an enclosing model morphism to act on members at any nesting depth
 through paths such as `f.X.T`.
 
+Name the morphism and member types in each application so their roles
+are explicit throughout signature lookup and code generation.
+
 Keep complex enum checks exhaustive so new variants require an explicit
 decision, while allowing concise Option handling. Document this rule
 and the preference for fewer branches and shallow nesting in AGENTS.md.

@@ -373,10 +373,11 @@ impl Structure {
         let mut changed = false;
 
         for (app, result) in apps {
-            let Some((parent_model_tid, member_tid)) = signature.types_for_mor_app_func(app.func)
-            else {
+            let Some(types) = signature.types_for_mor_app_func(app.func) else {
                 continue;
             };
+            let parent_model_tid = types.model_type(signature);
+            let member_tid = types.member_type;
             let Some(model_ids) = signature.ids_for_model_type(parent_model_tid) else {
                 continue;
             };

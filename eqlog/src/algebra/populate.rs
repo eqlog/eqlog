@@ -15,7 +15,7 @@
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::algebra::signature::{FuncId, PredId, Signature, TypeId, TypeKind};
+use crate::algebra::signature::{FuncId, MorphismMemberTypes, PredId, Signature, TypeId, TypeKind};
 use crate::algebra::structure::{
     ConcreteType, ElId, ElMap, FuncApp, PredApp, Structure, StructureCat, StructureId,
 };
@@ -994,16 +994,15 @@ fn emit_app(
                 .map(|name| ast.ident_term(*name).name.as_str())
                 .collect();
             for ct in receiver_types {
-                let parent_model = match signature.type_(ct.typ).kind {
-                    TypeKind::Mor(parent_model) => parent_model,
-                    TypeKind::Plain | TypeKind::Model | TypeKind::Enum => continue,
-                };
                 let Some(type_tid) =
                     mor_type_path_component(scopes, signature, ct.typ, path_names.as_slice())
                 else {
                     continue;
                 };
-                let Some(fid) = signature.mor_app_func(parent_model, type_tid) else {
+                let Some(fid) = signature.mor_app_func(MorphismMemberTypes {
+                    morphism_type: ct.typ,
+                    member_type: type_tid,
+                }) else {
                     continue;
                 };
                 mor_candidates.insert((fid, ct.parents));
