@@ -1,0 +1,10 @@
+Create nested morphism images during closure
+
+Nested morphism definitions must allocate a result when a conclusion
+requires an image that does not yet exist. Recover a valid mapped parent
+chain using the same membership checks as insertion, then create the
+result in that chain instead of requiring closure to have created it.
+
+Reproduce the closure panic with an evaluation regression test. Cover
+deeper images, preserved outer parents, shared source membership, and
+noncanonical arguments so creation respects dependent types.
