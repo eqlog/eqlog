@@ -1,0 +1,41 @@
+model M {
+    model N {
+        type T;
+
+        model O {
+            type U;
+        }
+    }
+
+    rule create_mid_images {
+        if f: Mor(N);
+        if n = dom(f);
+        if o: n.O;
+        if x: o.U;
+        if cod(f)!;
+        then f.O(o)!;
+        then f.O.U(x)!;
+    }
+}
+
+rule create_images {
+    if h: Mor(M);
+    if m = dom(h);
+    if n: m.N;
+    if x: n.T;
+    if cod(h)!;
+    then h.N(n)!;
+    then h.N.T(x)!;
+}
+
+rule create_deep_images {
+    if h: Mor(M);
+    if m = dom(h);
+    if n: m.N;
+    if o: n.O;
+    if x: o.U;
+    if cod(h)!;
+    then h.N(n)!;
+    then h.N.O(o)!;
+    then h.N.O.U(x)!;
+}
