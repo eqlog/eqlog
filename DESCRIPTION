@@ -1,0 +1,6 @@
+Expose missing morphism closure guarantees
+
+Exercise incremental propagation, nested predicate preservation,
+outer-parent isolation, inherited objects, and self-morphisms in the
+existing evaluation test modules. Expect the current panics so the gaps
+remain covered until each case can pass without panicking.

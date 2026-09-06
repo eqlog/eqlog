@@ -559,3 +559,76 @@ fn bundle_morphism_maps_fibers() {
     assert!(model.bundle_member_fiber(bundle1, image));
     assert!(!model.are_equal_fiber(fiber, image));
 }
+
+#[test]
+// TODO: This should pass once outer morphisms preserve nested predicates.
+#[should_panic(expected = "assertion failed: model.marked(target, target_fiber, y)")]
+fn outer_morphism_preserves_nested_predicate() {
+    let mut model = Nested::new();
+    let source = model.new_bundle();
+    let target = model.new_bundle();
+    let source_fiber = model.new_fiber(source);
+    let target_fiber = model.new_fiber(target);
+    let x = model.new_el(source, source_fiber);
+    let y = model.new_el(target, target_fiber);
+    let h = model.new_bundle_mor();
+    model.insert_bundle_mor_dom(h, source);
+    model.insert_bundle_mor_cod(h, target);
+    model.insert_fiber_mor_app(h, source_fiber, target_fiber);
+    model.insert_bundle_el_mor_app(h, x, y);
+    model.insert_marked(source, source_fiber, x);
+
+    model.close();
+
+    assert!(model.marked(target, target_fiber, y));
+}
+
+#[test]
+// TODO: This should pass once propagation respects the morphism's outer parent.
+#[should_panic(expected = "assertion failed: !model.marked(other_bundle, target, y)")]
+fn nested_morphism_stays_in_its_outer_parent() {
+    let mut model = Nested::new();
+    let bundle = model.new_bundle();
+    let other_bundle = model.new_bundle();
+    let source = model.new_fiber(bundle);
+    let target = model.new_fiber(bundle);
+    model.insert_bundle_member_fiber(other_bundle, source);
+    model.insert_bundle_member_fiber(other_bundle, target);
+    let x = model.new_el(bundle, source);
+    let y = model.new_el(bundle, target);
+    model.insert_fiber_member_el(other_bundle, source, x);
+    model.insert_fiber_member_el(other_bundle, target, y);
+    let g = model.new_fiber_mor(bundle);
+    model.insert_fiber_mor_dom(bundle, g, source);
+    model.insert_fiber_mor_cod(bundle, g, target);
+    model.insert_el_mor_app(bundle, g, x, y);
+    model.insert_marked(other_bundle, source, x);
+
+    model.close();
+
+    assert!(model.marked(other_bundle, source, x));
+    assert!(!model.marked(other_bundle, target, y));
+}
+
+#[test]
+// TODO: This should pass once topological sorting includes inherited objects.
+#[should_panic(expected = "cycle being present in the morphism category: CycleDetected")]
+fn nested_morphism_can_use_inherited_objects() {
+    let mut model = Nested::new();
+    let source = model.new_bundle();
+    let target = model.new_bundle();
+    let source_fiber = model.new_fiber(source);
+    let target_fiber = model.new_fiber(target);
+    let next_fiber = model.new_fiber(target);
+    let h = model.new_bundle_mor();
+    model.insert_bundle_mor_dom(h, source);
+    model.insert_bundle_mor_cod(h, target);
+    model.insert_fiber_mor_app(h, source_fiber, target_fiber);
+    let g = model.new_fiber_mor(target);
+    model.insert_fiber_mor_dom(target, g, target_fiber);
+    model.insert_fiber_mor_cod(target, g, next_fiber);
+
+    model.close();
+
+    assert_eq!(model.fiber_mor_dom(target, g), Some(target_fiber));
+}
