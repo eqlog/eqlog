@@ -2284,34 +2284,6 @@ fn display_tree_prefix_slice(field: &str, parent_len: usize, leaf_dim: usize) ->
     format!("{expr}.unwrap_or_else(|| PrefixTree{leaf_dim}::empty())")
 }
 
-fn display_collect_parent_prefixes(field: &str, parent_len: usize) -> String {
-    let mut body = format!(
-        "prefixes.insert([{}]);",
-        (0..parent_len)
-            .map(|i| format!("p{i}"))
-            .collect::<Vec<_>>()
-            .join(", ")
-    );
-    for i in (0..parent_len).rev() {
-        let src = if i == 0 {
-            format!("self.{field}")
-        } else {
-            format!("t{}", i - 1)
-        };
-        let bind = if i + 1 == parent_len {
-            "_"
-        } else {
-            &format!("t{i}")
-        };
-        body = formatdoc! {"
-            for (p{i}, {bind}) in {src}.iter_restrictions() {{
-            {body}
-            }}
-        "};
-    }
-    body
-}
-
 fn display_mor_app_map_expr<'a>(
     parent_model_type: TypeId,
     typ: TypeId,
@@ -2430,11 +2402,9 @@ fn display_morphism_index_prefix_walk_from(
                 target_prefix,
             );
             formatdoc! {"
-                let {subtree} = match {source_tree}.get({source}) {{
-                    Some({subtree}) => {subtree},
-                    None => {{ continue; }},
-                }};
-                {body}
+                if let Some({subtree}) = {source_tree}.get({source}) {{
+                    {body}
+                }}
             "}
         }
         MorphismIndexColumnKind::Member(_) => {
@@ -2532,14 +2502,6 @@ fn index_with_order<'a>(
         .unwrap_or_else(|_| panic!("should have exactly one {age} index with order {order:?}"))
 }
 
-fn morphism_iter_pattern(parent_model_type: TypeId, ctx: &RustGenCtx<'_>) -> &'static str {
-    if ctx.signature().type_(parent_model_type).parents.is_empty() {
-        "MorphismWithSignature { morph, dom, cod }"
-    } else {
-        "(parents, MorphismWithSignature { morph, dom, cod })"
-    }
-}
-
 fn display_ordered_morphisms<'a>(
     typ: TypeId,
     ctx: &'a RustGenCtx<'a>,
@@ -2619,63 +2581,39 @@ fn display_ordered_morphisms<'a>(
 
         if parent_len == 0 {
             writedoc! {f, r#"
+                let objects = self.{obj_old}.union(&self.{obj_new});
                 let ordered_{type_snake}_mor: Vec<eqlog_runtime::MorphismWithSignature> =
                 eqlog_runtime::morphism_toposort(
                 &self.{dom_new},
                 &self.{dom_old},
                 &self.{cod_new},
                 &self.{cod_old},
-                &self.{obj_old},
-                &self.{obj_new},
+                &objects,
+                PrefixTree1::empty(),
                 )
                 .expect("TODO: Return error about a cycle being present in the morphism category");
             "#}
         } else {
-            let collect_new = display_collect_parent_prefixes(&obj_new, parent_len);
-            let collect_old = display_collect_parent_prefixes(&obj_old, parent_len);
             let dom_new_slice = display_tree_prefix_slice(&dom_new, parent_len, 2);
             let dom_old_slice = display_tree_prefix_slice(&dom_old, parent_len, 2);
             let cod_new_slice = display_tree_prefix_slice(&cod_new, parent_len, 2);
             let cod_old_slice = display_tree_prefix_slice(&cod_old, parent_len, 2);
             let obj_old_slice = display_tree_prefix_slice(&obj_old, parent_len, 1);
             let obj_new_slice = display_tree_prefix_slice(&obj_new, parent_len, 1);
-            // TODO: Do not materialize the parent tuples. Nested loops over
-            // the parent columns can walk each prefix once without a set.
             writedoc! {f, r#"
-                let mut prefixes: BTreeSet<[u32; {parent_len}]> = BTreeSet::new();
-                {collect_new}
-                {collect_old}
-                let mut ordered_{type_snake}_mor: Vec<([u32; {parent_len}], eqlog_runtime::MorphismWithSignature)> = Vec::new();
-                for parents in prefixes {{
-                    let part = eqlog_runtime::morphism_toposort(
-                        {dom_new_slice},
-                        {dom_old_slice},
-                        {cod_new_slice},
-                        {cod_old_slice},
-                        {obj_old_slice},
-                        {obj_new_slice},
-                    )
-                    .expect("TODO: Return error about a cycle being present in the morphism category");
-                    for m in part {{
-                        ordered_{type_snake}_mor.push((parents, m));
-                    }}
-                }}
+                let objects = {obj_old_slice}.union({obj_new_slice});
+                let ordered_{type_snake}_mor = eqlog_runtime::morphism_toposort(
+                    {dom_new_slice},
+                    {dom_old_slice},
+                    {cod_new_slice},
+                    {cod_old_slice},
+                    &objects,
+                    PrefixTree1::empty(),
+                )
+                .expect("TODO: Return error about a cycle being present in the morphism category");
             "#}
         }
     })
-}
-
-fn model_types_outer_first(ctx: &RustGenCtx<'_>) -> Vec<TypeId> {
-    let mut models: Vec<TypeId> = ctx
-        .signature()
-        .iter_types()
-        .filter(|&typ| match ctx.signature().type_(typ).kind {
-            TypeKind::Model => true,
-            TypeKind::Plain | TypeKind::Enum | TypeKind::Mor(_) => false,
-        })
-        .collect();
-    models.sort_by_key(|&typ| (ctx.signature().type_(typ).parents.len(), typ));
-    models
 }
 
 fn display_remap_parented_index<'a>(
@@ -2727,10 +2665,6 @@ fn display_remap_parented_index<'a>(
         let suffix_len = arity.len() - prefix_len;
         let prefix_columns = &columns[..prefix_len];
 
-        let parent_model_type_snake = display_type(parent_model_type, ctx)
-            .to_string()
-            .to_case(Snake);
-
         let member_maps = prefix_columns
             .iter()
             .copied()
@@ -2763,22 +2697,105 @@ fn display_remap_parented_index<'a>(
             suffix_len,
         );
         let suffix_type = display_prefix_tree_type(suffix_len);
-        let mor_pat = morphism_iter_pattern(parent_model_type, ctx);
 
         writedoc! {f, r#"
             let mut {index_field_name}_all = self.{index_field_name}_all.clone();
             let {index_field_name}_own = &mut self.{index_field_name}_own;
             let {old_index_field_name}_own = &mut self.{old_index_field_name}_own;
-            #[allow(unused)]
-            for {mor_pat} in ordered_{parent_model_type_snake}_mor.iter() {{
             {member_maps}
             let mut propagated: Vec<([u32; {prefix_len}], {suffix_type})> = Vec::new();
             {collect_propagated}
             {apply_propagated}
-            }}
-            changed |= !{index_field_name}_all.difference(&self.{index_field_name}_all).is_empty();
             self.{index_field_name}_all = {index_field_name}_all;
         "#}
+    })
+}
+
+fn display_propagate_model_morphisms_fn<'a>(
+    typ: TypeId,
+    ctx: &'a RustGenCtx<'a>,
+    index_selection: &'a IndexSelection,
+) -> impl Display + 'a {
+    FmtFn(move |f| {
+        let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
+        let parent_len = ctx.signature().type_(typ).parents.len();
+        let ordered = display_ordered_morphisms(typ, ctx, index_selection);
+        let remaps = index_selection
+            .indices
+            .iter()
+            .filter(|(rel, _)| {
+                rel.parent_model_type(ctx.signature())
+                    .is_some_and(|parent| {
+                        parent == typ || ctx.signature().type_(parent).parents.contains(&typ)
+                    })
+            })
+            .flat_map(|(rel, indices)| {
+                indices
+                    .iter()
+                    .filter(|index| index.age == IndexAge::New)
+                    .map(move |index| {
+                        display_remap_parented_index(
+                            rel.clone(),
+                            index.clone(),
+                            typ,
+                            ctx,
+                            index_selection,
+                        )
+                    })
+            })
+            .format("\n");
+
+        let child_parents = (0..parent_len)
+            .map(|i| format!("parents[{i}]"))
+            .chain(once("object".to_string()))
+            .format(", ")
+            .to_string();
+        let children = ctx
+            .signature()
+            .iter_model_decls()
+            .filter(|(_, ids)| ctx.signature().type_(ids.type_).parents.last() == Some(&typ))
+            .map(|(_, ids)| {
+                let child_snake = display_type(ids.type_, ctx).to_string().to_case(Snake);
+                format!("self.propagate_{child_snake}_morphisms([{child_parents}]);")
+            })
+            .format("\n")
+            .to_string();
+        let (visited, domain, remaining) = if children.is_empty() {
+            (String::new(), String::new(), String::new())
+        } else {
+            (
+                "let mut visited = BTreeSet::new();".to_string(),
+                formatdoc! {"
+                    if visited.insert(*dom) {{
+                        let object = *dom;
+                        {children}
+                    }}
+                "},
+                formatdoc! {"
+                    for [object] in objects.iter() {{
+                        if visited.insert(object) {{
+                            {children}
+                        }}
+                    }}
+                "},
+            )
+        };
+
+        // Topological order completes all incoming propagation before a
+        // source's interior is processed and its outgoing morphisms run.
+        writedoc! {f, "
+            #[allow(unused_variables)]
+            fn propagate_{type_snake}_morphisms(&mut self, parents: [u32; {parent_len}]) {{
+                {ordered}
+                {visited}
+                #[allow(unused)]
+                for MorphismWithSignature {{ morph, dom, cod }} in ordered_{type_snake}_mor.iter() {{
+                    {domain}
+                    {remaps}
+                }}
+                {remaining}
+            }}
+        "}
     })
 }
 
@@ -2833,59 +2850,26 @@ fn display_recompute_model_indices_fn<'a>(
             })
             .format("\n");
 
-        // Enclosing morphisms must supply inherited objects and morphism
-        // signatures before topological sorting inside those objects.
-        // Repeat the passes because inner actions can enable outer actions.
-        let body = model_types_outer_first(ctx)
-            .into_iter()
-            .map(|typ| {
-                FmtFn(move |f| {
-                    let ordered = display_ordered_morphisms(typ, ctx, index_selection);
-                    let remaps = index_selection
-                        .indices
-                        .iter()
-                        .flat_map(|(rel, indices)| {
-                            indices
-                                .iter()
-                                .map(move |index| (rel.clone(), index.clone()))
-                        })
-                        .filter(|(rel, index)| {
-                            let has_parent =
-                                rel.parent_model_type(ctx.signature())
-                                    .is_some_and(|parent| {
-                                        parent == typ
-                                            || ctx.signature().type_(parent).parents.contains(&typ)
-                                    });
-                            has_parent && index.age == IndexAge::New
-                        })
-                        .map(|(rel, index)| {
-                            display_remap_parented_index(rel, index, typ, ctx, index_selection)
-                        })
-                        .format("\n");
-                    writedoc! {f, "
-                        {ordered}
-                        {remaps}
-                    "}
-                })
+        let propagation_functions = ctx
+            .signature()
+            .iter_model_decls()
+            .map(|(_, ids)| display_propagate_model_morphisms_fn(ids.type_, ctx, index_selection))
+            .format("\n");
+        let propagate = ctx
+            .signature()
+            .iter_model_decls()
+            .filter(|(_, ids)| ctx.signature().type_(ids.type_).parents.is_empty())
+            .map(|(_, ids)| {
+                let type_snake = display_type(ids.type_, ctx).to_string().to_case(Snake);
+                format!("self.propagate_{type_snake}_morphisms([]);")
             })
             .format("\n");
-        if parented_indices.is_empty() {
-            return writedoc! {f, "
-                fn recompute_model_indices(&mut self) {{
-                    {body}
-                }}
-            "};
-        }
         writedoc! {f, "
+            {propagation_functions}
+
             fn recompute_model_indices(&mut self) {{
                 {initialize}
-                loop {{
-                    let mut changed = false;
-                    {body}
-                    if !changed {{
-                        break;
-                    }}
-                }}
+                {propagate}
                 {finish}
             }}
         "}

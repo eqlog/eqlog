@@ -782,3 +782,63 @@ fn outer_morphism_preserves_nested_morphism_functions() {
     assert!(model.marked(target, f3, x3));
     assert_eq!(model.next(target, f3, x3), Some(x3));
 }
+
+#[test]
+fn nested_morphisms_wait_for_all_incoming_outer_morphisms() {
+    let mut model = Nested::new();
+    let graph_source = model.new_bundle();
+    let fact_source = model.new_bundle();
+    let joint = model.new_bundle();
+    let target = model.new_bundle();
+    let graph_f0 = model.new_fiber(graph_source);
+    let graph_f1 = model.new_fiber(graph_source);
+    let fact_f = model.new_fiber(fact_source);
+    let joint_f0 = model.new_fiber(joint);
+    let joint_f1 = model.new_fiber(joint);
+    let target_f = model.new_fiber(target);
+    let graph_x0 = model.new_el(graph_source, graph_f0);
+    let graph_x1 = model.new_el(graph_source, graph_f1);
+    let fact_x = model.new_el(fact_source, fact_f);
+    let joint_x0 = model.new_el(joint, joint_f0);
+    let joint_x1 = model.new_el(joint, joint_f1);
+    let target_x = model.new_el(target, target_f);
+
+    // The graph and its source facts arrive independently, so the joint
+    // model's interior must wait for both incoming morphisms.
+    let g = model.new_fiber_mor(graph_source);
+    model.insert_fiber_mor_dom(graph_source, g, graph_f0);
+    model.insert_fiber_mor_cod(graph_source, g, graph_f1);
+    model.insert_el_mor_app(graph_source, g, graph_x0, graph_x1);
+    let joint_g = model.new_fiber_mor(joint);
+    let h = model.new_bundle_mor();
+    model.insert_bundle_mor_dom(h, graph_source);
+    model.insert_bundle_mor_cod(h, joint);
+    model.insert_fiber_mor_app(h, graph_f0, joint_f0);
+    model.insert_fiber_mor_app(h, graph_f1, joint_f1);
+    model.insert_bundle_el_mor_app(h, graph_x0, joint_x0);
+    model.insert_bundle_el_mor_app(h, graph_x1, joint_x1);
+    model.insert_fiber_mor_mor_app(h, g, joint_g);
+
+    let k = model.new_bundle_mor();
+    model.insert_bundle_mor_dom(k, fact_source);
+    model.insert_bundle_mor_cod(k, joint);
+    model.insert_fiber_mor_app(k, fact_f, joint_f0);
+    model.insert_bundle_el_mor_app(k, fact_x, joint_x0);
+    model.insert_marked(fact_source, fact_f, fact_x);
+    model.insert_next(fact_source, fact_f, fact_x, fact_x);
+
+    let l = model.new_bundle_mor();
+    model.insert_bundle_mor_dom(l, joint);
+    model.insert_bundle_mor_cod(l, target);
+    model.insert_fiber_mor_app(l, joint_f1, target_f);
+    model.insert_bundle_el_mor_app(l, joint_x1, target_x);
+
+    model.close();
+
+    assert!(model.marked(target, target_f, target_x));
+    assert_eq!(model.next(target, target_f, target_x), Some(target_x));
+    assert!(model.reached_marked_image(joint, joint_f1));
+    model.close();
+    assert!(model.marked(target, target_f, target_x));
+    assert_eq!(model.next(target, target_f, target_x), Some(target_x));
+}
