@@ -78,7 +78,7 @@ fn test_member_pred_rule_fires() {
 }
 
 #[test]
-fn test_member_pred_rule_doesnt_fire() {
+fn test_member_pred_rule_ignores_nonmembers() {
     let mut subset = SubsetRules::new();
 
     let a = subset.define_a();
@@ -95,9 +95,7 @@ fn test_member_pred_rule_doesnt_fire() {
 }
 
 #[test]
-// TODO: This should pass once newly inherited facts trigger rules.
-#[should_panic(expected = "assertion failed: model.ab_element(x)")]
-fn new_morphism_retriggers_rules_for_old_facts() {
+fn test_member_pred_rule_fires_for_newly_inherited_facts() {
     let mut model = SubsetRules::new();
     let a = model.define_a();
     let b = model.define_b();
@@ -112,4 +110,60 @@ fn new_morphism_retriggers_rules_for_old_facts() {
 
     assert!(model.element(b, x));
     assert!(model.ab_element(x));
+
+    model.close();
+    assert_eq!(model.iter_element().count(), 2);
+    assert_eq!(model.iter_ab_element().count(), 1);
+}
+
+#[test]
+fn test_member_pred_rule_fires_for_transitively_inherited_facts() {
+    let mut model = SubsetRules::new();
+    let a = model.define_a();
+    let b = model.define_b();
+    let c = model.define_c();
+    let b_c = model.new_subs_mor();
+    model.insert_subs_mor_dom(b_c, b);
+    model.insert_subs_mor_cod(b_c, c);
+    let x = model.new_carrier();
+    let y = model.new_carrier();
+    model.insert_element(a, x);
+    model.close();
+    assert!(!model.ab_element(x));
+    assert!(!model.abc_element(x));
+
+    model.define_a_b();
+    model.close();
+
+    assert!(model.element(b, x));
+    assert!(model.element(c, x));
+    assert!(model.ab_element(x));
+    assert!(model.abc_element(x));
+    assert!(!model.ab_element(y));
+    assert!(!model.abc_element(y));
+}
+
+#[test]
+fn test_member_pred_rule_resumes_after_inheritance_satisfies_close_until() {
+    let mut model = SubsetRules::new();
+    let a = model.define_a();
+    let b = model.define_b();
+    let c = model.define_c();
+    let x = model.new_carrier();
+    model.insert_element(a, x);
+    model.insert_element(b, x);
+    model.close();
+    assert!(model.ab_element(x));
+    assert!(!model.abc_element(x));
+
+    let b_c = model.new_subs_mor();
+    model.insert_subs_mor_dom(b_c, b);
+    model.insert_subs_mor_cod(b_c, c);
+    assert!(model.close_until(|model| model.element(c, x)));
+    assert!(!model.abc_element(x));
+
+    model.close();
+
+    assert!(model.abc_element(x));
+    assert_eq!(model.iter_element().count(), 3);
 }

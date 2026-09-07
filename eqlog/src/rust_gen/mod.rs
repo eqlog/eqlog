@@ -192,8 +192,8 @@ fn display_is_dirty_fn<'a>(
                         "Expected exactly one index for dirty tuples"
                     );
 
-                    let field_name = display_own_index_field_name(&rel, &index[0], ctx);
-                    write!(f, "|| !self.{field_name}.is_empty()")
+                    let index_expr = display_index_expr(&rel, &index[0], ctx);
+                    write!(f, "|| !{index_expr}.is_empty()")
                 })
             })
             .format("\n");
@@ -2124,6 +2124,31 @@ fn display_move_new_to_old_fn<'a>(
             })
             .format("\n");
 
+        let inherited = index_selection
+            .indices
+            .iter()
+            .filter(|(rel, _)| rel.parent_model_type(ctx.signature()).is_some())
+            .flat_map(|(rel, indices)| {
+                indices
+                    .iter()
+                    .filter(|index| index.age == IndexAge::New)
+                    .map(move |index| {
+                        FmtFn(move |f| {
+                            let old_index = IndexSpec {
+                                order: index.order.clone(),
+                                age: IndexAge::Old,
+                            };
+                            let new_field = display_index_field_name(rel, index, ctx);
+                            let old_field = display_index_field_name(rel, &old_index, ctx);
+                            writedoc! {f, "
+                                self.{old_field}_all = self.{old_field}_all.union(&self.{new_field}_all);
+                                self.{new_field}_all.clear();
+                            "}
+                        })
+                    })
+            })
+            .format("\n");
+
         let types = ctx
             .signature()
             .iter_types()
@@ -2165,6 +2190,8 @@ fn display_move_new_to_old_fn<'a>(
             self.empty_join_is_dirty = false;
 
             {relations}
+
+            {inherited}
 
             {types}
             }}
@@ -2439,6 +2466,7 @@ fn display_morphism_index_prefix_walk_from(
 
 fn display_apply_morphism_index_propagated<'a>(
     index_field_name: &'a str,
+    old_index_field_name: &'a str,
     arity_len: usize,
     prefix_len: usize,
     suffix_len: usize,
@@ -2469,6 +2497,7 @@ fn display_apply_morphism_index_propagated<'a>(
                 let mapped_dom_set: {suffix_type} = mapped_dom_set;
                 {wrap_suffix}
                 {index_field_name}_own.remove_restriction(el0, &mapped_dom_set);
+                {old_index_field_name}_own.remove_restriction(el0, &mapped_dom_set);
                 {index_field_name}_all.insert_restriction(el0, mapped_dom_set);
             }}
         "}
@@ -2649,6 +2678,12 @@ fn display_remap_parented_index<'a>(
 
         let index_field_name = display_index_field_name(&flat_in_rel, &index_spec, ctx).to_string();
         let index_field_name = index_field_name.as_str();
+        let old_index_spec = IndexSpec {
+            order: index_spec.order.clone(),
+            age: IndexAge::Old,
+        };
+        let old_index_field_name =
+            display_index_field_name(&flat_in_rel, &old_index_spec, ctx).to_string();
 
         let parent_cols = parent_prefix_len(&flat_in_rel, ctx);
         let columns: Vec<_> = index_spec
@@ -2701,6 +2736,7 @@ fn display_remap_parented_index<'a>(
         );
         let apply_propagated = display_apply_morphism_index_propagated(
             index_field_name,
+            &old_index_field_name,
             arity.len(),
             prefix_len,
             suffix_len,
@@ -2708,9 +2744,13 @@ fn display_remap_parented_index<'a>(
         let suffix_type = display_prefix_tree_type(suffix_len);
         let mor_pat = morphism_iter_pattern(parent_model_type, ctx);
 
+        // The old visible index records facts already offered to the rules.
+        // Recompute both source ages together because new morphisms or member
+        // maps can introduce facts even when every source tuple is old.
         writedoc! {f, r#"
-            let mut {index_field_name}_all = self.{index_field_name}_own.clone();
+            let mut {index_field_name}_all = self.{index_field_name}_own.union(&self.{old_index_field_name}_own);
             let {index_field_name}_own = &mut self.{index_field_name}_own;
+            let {old_index_field_name}_own = &mut self.{old_index_field_name}_own;
             #[allow(unused)]
             for {mor_pat} in ordered_{parent_model_type_snake}_mor.iter() {{
             {member_maps}
@@ -2718,7 +2758,8 @@ fn display_remap_parented_index<'a>(
             {collect_propagated}
             {apply_propagated}
             }}
-            self.{index_field_name}_all = {index_field_name}_all;
+            self.{index_field_name}_all = {index_field_name}_all.difference(&self.{old_index_field_name}_all);
+            self.{old_index_field_name}_all = {index_field_name}_all.difference(&self.{index_field_name}_all);
         "#}
     })
 }
@@ -2743,7 +2784,10 @@ fn display_recompute_model_indices_fn<'a>(
                                 .iter()
                                 .map(move |index| (rel.clone(), index.clone()))
                         })
-                        .filter(|(rel, _)| rel.parent_model_type(ctx.signature()) == Some(typ))
+                        .filter(|(rel, index)| {
+                            rel.parent_model_type(ctx.signature()) == Some(typ)
+                                && index.age == IndexAge::New
+                        })
                         .map(|(rel, index)| {
                             display_remap_parented_index(rel, index, typ, ctx, index_selection)
                         })

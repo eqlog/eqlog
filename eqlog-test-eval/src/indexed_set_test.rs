@@ -70,6 +70,26 @@ fn single_external_terminal_set() {
 }
 
 #[test]
+fn newly_inherited_nullary_predicate_triggers_member_rule() {
+    let mut model = IndexedSet::new();
+    let source = model.new_set();
+    let target = model.new_set();
+    model.insert_is_subterminal(source);
+    let x = model.new_s(target);
+    let y = model.new_s(target);
+    model.close();
+    assert!(!model.are_equal_s(x, y));
+
+    let morphism = model.new_set_mor();
+    model.insert_set_mor_dom(morphism, source);
+    model.insert_set_mor_cod(morphism, target);
+    model.close();
+
+    assert!(model.is_subterminal(target));
+    assert!(model.are_equal_s(x, y));
+}
+
+#[test]
 fn merge_non_empty_models() {
     let mut model = IndexedSet::new();
 

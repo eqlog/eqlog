@@ -1,0 +1,9 @@
+Let newly inherited facts trigger rules
+
+Classify member facts by when they become visible at their destination.
+This lets new morphisms activate rules whose source facts were already
+processed. Advance inherited facts with each closure iteration and keep
+closure dirty while any remain unprocessed.
+
+Replace the expected panic with a regression test and cover transitive
+inheritance, resumed closure, and nullary member predicates.

@@ -338,8 +338,22 @@ pub fn select_indices<'a>(
             .or_insert_with(Vec::new)
             .extend(index_specs.iter().cloned());
     }
-    // Deduplicate indices for each relation
-    for index_specs in indices.values_mut() {
+    for (rel, index_specs) in &mut indices {
+        // Inheritance can make old source tuples new at their destination, so
+        // both ages need the same column orders to partition the visible facts.
+        if rel.parent_model_type(signature).is_some() {
+            let other_ages: Vec<_> = index_specs
+                .iter()
+                .map(|index| IndexSpec {
+                    order: index.order.clone(),
+                    age: match index.age {
+                        IndexAge::New => IndexAge::Old,
+                        IndexAge::Old => IndexAge::New,
+                    },
+                })
+                .collect();
+            index_specs.extend(other_ages);
+        }
         index_specs.sort();
         index_specs.dedup();
     }
