@@ -93,3 +93,23 @@ fn test_member_pred_rule_doesnt_fire() {
 
     assert!(!subset.ab_element(y));
 }
+
+#[test]
+// TODO: This should pass once newly inherited facts trigger rules.
+#[should_panic(expected = "assertion failed: model.ab_element(x)")]
+fn new_morphism_retriggers_rules_for_old_facts() {
+    let mut model = SubsetRules::new();
+    let a = model.define_a();
+    let b = model.define_b();
+    let x = model.new_carrier();
+    model.insert_element(a, x);
+    model.close();
+    assert!(!model.element(b, x));
+    assert!(!model.ab_element(x));
+
+    model.define_a_b();
+    model.close();
+
+    assert!(model.element(b, x));
+    assert!(model.ab_element(x));
+}
