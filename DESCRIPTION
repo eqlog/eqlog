@@ -1,0 +1,15 @@
+Preserve nested relations across morphisms
+
+Propagate nested predicates and function graphs through every
+enclosing model. Restrict each morphism to its outer parents and
+saturate model indices so inner and outer actions can interact.
+Use inherited objects and morphism functions while keeping new
+facts visible to rule evaluation.
+
+Replace three expected-panic regressions with passing tests.
+Cover function arguments and results, late images, mixed-depth
+propagation, and inherited morphism functions.
+
+Validation:
+- cargo fmt --all --check
+- cargo test --workspace --locked

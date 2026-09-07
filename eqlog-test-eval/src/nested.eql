@@ -3,6 +3,7 @@ model Bundle {
         type El;
         pred marked(El);
         func tip() -> El;
+        func next(El) -> El;
 
         rule tip_total {
             then tip()!;
@@ -50,6 +51,7 @@ model A {
             type T;
             pred tagged(T);
             func apex() -> T;
+            func successor(T) -> T;
 
             rule apex_total {
                 then apex()!;

@@ -15,7 +15,6 @@ use crate::ram::*;
 use convert_case::{Case, Casing};
 use indoc::{formatdoc, writedoc};
 use itertools::Itertools;
-use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter, Result};
 use std::iter::once;
@@ -2201,6 +2200,7 @@ fn display_move_new_to_old_fn<'a>(
 
 #[derive(Copy, Clone)]
 enum MorphismIndexColumnKind {
+    OuterParent(usize),
     Parent,
     Member(TypeId),
     Copy,
@@ -2208,10 +2208,12 @@ enum MorphismIndexColumnKind {
 
 impl MorphismIndexColumnKind {
     fn needs_mapping(self) -> bool {
-        matches!(
-            self,
-            MorphismIndexColumnKind::Parent | MorphismIndexColumnKind::Member(_)
-        )
+        match self {
+            MorphismIndexColumnKind::OuterParent(_)
+            | MorphismIndexColumnKind::Parent
+            | MorphismIndexColumnKind::Member(_) => true,
+            MorphismIndexColumnKind::Copy => false,
+        }
     }
 }
 
@@ -2233,6 +2235,10 @@ fn morphism_index_column_kind(
     typ: TypeId,
     ctx: &RustGenCtx<'_>,
 ) -> MorphismIndexColumnKind {
+    if column_index < ctx.signature().type_(parent_model_type).parents.len() {
+        return MorphismIndexColumnKind::OuterParent(column_index);
+    }
+
     // Only the flattened enclosing-model prefix is rewritten from dom to
     // cod. An argument that happens to have the same type as a parent
     // model (e.g. tagged_by(Set, S)) must be copied.
@@ -2339,9 +2345,9 @@ fn display_mor_app_map_expr<'a>(
             index_with_order(mor_app_indices, IndexAge::Old, order.as_slice());
 
         let mor_app_eval_index_new_name =
-            display_own_index_field_name(&mor_app_rel, mor_app_eval_index_new, ctx);
+            display_all_index_field_name(&mor_app_rel, mor_app_eval_index_new, ctx);
         let mor_app_eval_index_old_name =
-            display_own_index_field_name(&mor_app_rel, mor_app_eval_index_old, ctx);
+            display_all_index_field_name(&mor_app_rel, mor_app_eval_index_old, ctx);
 
         let new_gets = display_parent_then_morph_gets(
             format!("self.{mor_app_eval_index_new_name}"),
@@ -2402,9 +2408,19 @@ fn display_morphism_index_prefix_walk_from(
     let subtree_is_ref = current_dim > 1;
 
     match columns[pos] {
-        MorphismIndexColumnKind::Parent => {
+        MorphismIndexColumnKind::OuterParent(_) | MorphismIndexColumnKind::Parent => {
+            let (source, target) = match columns[pos] {
+                MorphismIndexColumnKind::OuterParent(i) => {
+                    let parent = format!("parents[{i}]");
+                    (parent.clone(), parent)
+                }
+                MorphismIndexColumnKind::Parent => ("*dom".to_string(), "*cod".to_string()),
+                MorphismIndexColumnKind::Member(_) | MorphismIndexColumnKind::Copy => {
+                    unreachable!("only parent columns restrict the source model")
+                }
+            };
             let mut target_prefix = target_prefix;
-            target_prefix.push("*cod".to_string());
+            target_prefix.push(target);
             let body = display_morphism_index_prefix_walk_from(
                 columns,
                 pos + 1,
@@ -2414,7 +2430,7 @@ fn display_morphism_index_prefix_walk_from(
                 target_prefix,
             );
             formatdoc! {"
-                let {subtree} = match {source_tree}.get(*dom) {{
+                let {subtree} = match {source_tree}.get({source}) {{
                     Some({subtree}) => {subtree},
                     None => {{ continue; }},
                 }};
@@ -2564,37 +2580,37 @@ fn display_ordered_morphisms<'a>(
         let cod_order: Vec<usize> = (0..parent_len + 2).collect();
         let obj_order: Vec<usize> = (0..parent_len + 1).collect();
 
-        let dom_new = display_own_index_field_name(
+        let dom_new = display_all_index_field_name(
             &dom_rel,
             index_with_order(dom_indices, IndexAge::New, &dom_order),
             ctx,
         )
         .to_string();
-        let dom_old = display_own_index_field_name(
+        let dom_old = display_all_index_field_name(
             &dom_rel,
             index_with_order(dom_indices, IndexAge::Old, &dom_order),
             ctx,
         )
         .to_string();
-        let cod_new = display_own_index_field_name(
+        let cod_new = display_all_index_field_name(
             &cod_rel,
             index_with_order(cod_indices, IndexAge::New, &cod_order),
             ctx,
         )
         .to_string();
-        let cod_old = display_own_index_field_name(
+        let cod_old = display_all_index_field_name(
             &cod_rel,
             index_with_order(cod_indices, IndexAge::Old, &cod_order),
             ctx,
         )
         .to_string();
-        let obj_new = display_own_index_field_name(
+        let obj_new = display_all_index_field_name(
             &obj_rel,
             index_with_order(obj_indices, IndexAge::New, &obj_order),
             ctx,
         )
         .to_string();
-        let obj_old = display_own_index_field_name(
+        let obj_old = display_all_index_field_name(
             &obj_rel,
             index_with_order(obj_indices, IndexAge::Old, &obj_order),
             ctx,
@@ -2649,13 +2665,16 @@ fn display_ordered_morphisms<'a>(
     })
 }
 
-fn model_types_inner_first(ctx: &RustGenCtx<'_>) -> Vec<TypeId> {
+fn model_types_outer_first(ctx: &RustGenCtx<'_>) -> Vec<TypeId> {
     let mut models: Vec<TypeId> = ctx
         .signature()
         .iter_types()
-        .filter(|&typ| matches!(ctx.signature().type_(typ).kind, TypeKind::Model))
+        .filter(|&typ| match ctx.signature().type_(typ).kind {
+            TypeKind::Model => true,
+            TypeKind::Plain | TypeKind::Enum | TypeKind::Mor(_) => false,
+        })
         .collect();
-    models.sort_by_key(|&typ| (Reverse(ctx.signature().type_(typ).parents.len()), typ));
+    models.sort_by_key(|&typ| (ctx.signature().type_(typ).parents.len(), typ));
     models
 }
 
@@ -2724,7 +2743,9 @@ fn display_remap_parented_index<'a>(
                         let map_el{i} = {map};
                     "}
                 })),
-                MorphismIndexColumnKind::Parent | MorphismIndexColumnKind::Copy => None,
+                MorphismIndexColumnKind::OuterParent(_)
+                | MorphismIndexColumnKind::Parent
+                | MorphismIndexColumnKind::Copy => None,
             })
             .format("\n");
 
@@ -2744,11 +2765,8 @@ fn display_remap_parented_index<'a>(
         let suffix_type = display_prefix_tree_type(suffix_len);
         let mor_pat = morphism_iter_pattern(parent_model_type, ctx);
 
-        // The old visible index records facts already offered to the rules.
-        // Recompute both source ages together because new morphisms or member
-        // maps can introduce facts even when every source tuple is old.
         writedoc! {f, r#"
-            let mut {index_field_name}_all = self.{index_field_name}_own.union(&self.{old_index_field_name}_own);
+            let mut {index_field_name}_all = self.{index_field_name}_all.clone();
             let {index_field_name}_own = &mut self.{index_field_name}_own;
             let {old_index_field_name}_own = &mut self.{old_index_field_name}_own;
             #[allow(unused)]
@@ -2758,8 +2776,8 @@ fn display_remap_parented_index<'a>(
             {collect_propagated}
             {apply_propagated}
             }}
-            self.{index_field_name}_all = {index_field_name}_all.difference(&self.{old_index_field_name}_all);
-            self.{old_index_field_name}_all = {index_field_name}_all.difference(&self.{index_field_name}_all);
+            changed |= !{index_field_name}_all.difference(&self.{index_field_name}_all).is_empty();
+            self.{index_field_name}_all = {index_field_name}_all;
         "#}
     })
 }
@@ -2769,9 +2787,56 @@ fn display_recompute_model_indices_fn<'a>(
     index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        // Inner models first so their member indices are saturated before an
-        // enclosing model remaps those members along its own morphisms.
-        let body = model_types_inner_first(ctx)
+        let parented_indices: Vec<_> = index_selection
+            .indices
+            .iter()
+            .filter(|(rel, _)| rel.parent_model_type(ctx.signature()).is_some())
+            .flat_map(|(rel, indices)| {
+                indices
+                    .iter()
+                    .filter(|index| index.age == IndexAge::New)
+                    .map(|index| {
+                        let old_index = IndexSpec {
+                            order: index.order.clone(),
+                            age: IndexAge::Old,
+                        };
+                        let new = display_index_field_name(rel, index, ctx).to_string();
+                        let old = display_index_field_name(rel, &old_index, ctx).to_string();
+                        (new, old)
+                    })
+            })
+            .collect();
+        // Preserve the facts already offered to rules while rebuilding the
+        // visible closure from canonical owned tuples.
+        let initialize = parented_indices
+            .iter()
+            .map(|(new, old)| {
+                FmtFn(move |f| {
+                    writedoc! {f, "
+                        let {old}_seen = self.{old}_all.clone();
+                        self.{old}_all.clear();
+                        self.{new}_all = self.{new}_own.union(&self.{old}_own);
+                    "}
+                })
+            })
+            .format("\n");
+        let finish = parented_indices
+            .iter()
+            .map(|(new, old)| {
+                FmtFn(move |f| {
+                    writedoc! {f, "
+                        let {new}_unseen = self.{new}_all.difference(&{old}_seen);
+                        self.{old}_all = self.{new}_all.difference(&{new}_unseen);
+                        self.{new}_all = {new}_unseen;
+                    "}
+                })
+            })
+            .format("\n");
+
+        // Enclosing morphisms must supply inherited objects and morphism
+        // signatures before topological sorting inside those objects.
+        // Repeat the passes because inner actions can enable outer actions.
+        let body = model_types_outer_first(ctx)
             .into_iter()
             .map(|typ| {
                 FmtFn(move |f| {
@@ -2785,8 +2850,13 @@ fn display_recompute_model_indices_fn<'a>(
                                 .map(move |index| (rel.clone(), index.clone()))
                         })
                         .filter(|(rel, index)| {
-                            rel.parent_model_type(ctx.signature()) == Some(typ)
-                                && index.age == IndexAge::New
+                            let has_parent =
+                                rel.parent_model_type(ctx.signature())
+                                    .is_some_and(|parent| {
+                                        parent == typ
+                                            || ctx.signature().type_(parent).parents.contains(&typ)
+                                    });
+                            has_parent && index.age == IndexAge::New
                         })
                         .map(|(rel, index)| {
                             display_remap_parented_index(rel, index, typ, ctx, index_selection)
@@ -2799,9 +2869,24 @@ fn display_recompute_model_indices_fn<'a>(
                 })
             })
             .format("\n");
+        if parented_indices.is_empty() {
+            return writedoc! {f, "
+                fn recompute_model_indices(&mut self) {{
+                    {body}
+                }}
+            "};
+        }
         writedoc! {f, "
             fn recompute_model_indices(&mut self) {{
-            {body}
+                {initialize}
+                loop {{
+                    let mut changed = false;
+                    {body}
+                    if !changed {{
+                        break;
+                    }}
+                }}
+                {finish}
             }}
         "}
     })
@@ -3184,6 +3269,21 @@ fn display_index_expr<'a>(
         } else {
             let index_field = display_index_field_name(&flat_in_rel, &index, ctx);
             write!(f, "(&self.{index_field})")
+        }
+    })
+}
+
+fn display_all_index_field_name<'a>(
+    flat_in_rel: &'a FlatInRel,
+    index: &'a IndexSpec,
+    ctx: &'a RustGenCtx<'a>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let index_field = display_index_field_name(flat_in_rel, index, ctx);
+        if flat_in_rel.parent_model_type(ctx.signature()).is_some() {
+            write!(f, "{index_field}_all")
+        } else {
+            write!(f, "{index_field}")
         }
     })
 }
