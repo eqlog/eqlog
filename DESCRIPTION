@@ -8,10 +8,17 @@ runs, so propagation needs no additional fixed-point loop.
 Use inherited objects and morphism functions while keeping new facts
 visible to rule evaluation.
 
+Rebuild repeated-variable indices from full propagated tuples because
+mappings can create or break the required equalities. Keep their owned
+tuples and fact ages consistent with the full relations, and require
+all repeated-variable equalities when inserting tuples.
+
 Replace three expected-panic regressions with passing tests.
 Cover function arguments and results, late images, mixed-depth
 propagation, and inherited morphism functions. Check that an interior
 waits for facts from every incoming outer morphism.
+Cover repeated-variable predicates and function graphs, including
+late images that identify arguments and copied outer model arguments.
 
 Validation:
 - cargo fmt --all --check

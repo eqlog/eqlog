@@ -840,6 +840,20 @@ fn display_pub_iter_fn<'a>(
     })
 }
 
+fn display_diagonal_checks<'a>(args: &'a [ElVar], equalities: &'a [usize]) -> impl Display + 'a {
+    equalities
+        .iter()
+        .copied()
+        .enumerate()
+        .filter(|(i, j)| i != j)
+        .map(move |(i, j)| {
+            let argi = &args[i];
+            let argj = &args[j];
+            format!("{argi} == {argj}")
+        })
+        .format(" && ")
+}
+
 /// Displays a block of code that inserts the variable row into the indices for a Rel.
 fn display_insert_row_block<'a>(
     args: &'a [ElVar],
@@ -873,66 +887,43 @@ fn display_insert_row_block<'a>(
         .map(move |(flat_in_rel, index)| {
             FmtFn(move |f| {
                 let index_name = display_index_field_name(&flat_in_rel, &index, ctx);
-                if let FlatInRel::RelWithDiagonals { rel: _, equalities } = &flat_in_rel {
-                    let checks = equalities
-                        .iter()
-                        .copied()
-                        .enumerate()
-                        .filter(|(i, j)| i != j)
-                        .map(move |(i, j)| {
-                            FmtFn(move |f| {
-                                let argi = args[i].clone();
-                                let argj = args[j].clone();
-                                write!(f, "{argi} == {argj}")
-                            })
-                        })
-                        .format(" || ");
-                    let relevant_args: Vec<ElVar> = equalities
-                        .iter()
-                        .copied()
-                        .enumerate()
-                        .filter_map(|(i, j)| if i == j { Some(args[i].clone()) } else { None })
-                        .collect();
-                    let args = index
-                        .order
-                        .iter()
-                        .map(|i| relevant_args[*i].clone())
-                        .format(", ")
-                        .to_string();
-
-                    if flat_in_rel.parent_model_type(ctx.signature()).is_some() {
-                        writedoc! {f, "
-                            if {checks} {{
-                            self.{index_name}_own.insert([{args}]);
-                            self.{index_name}_all.insert([{args}]);
-                            }}
-                        "}
-                    } else {
-                        writedoc! {f, "
-                            if {checks} {{
-                            self.{index_name}.insert([{args}]);
-                            }}
-                        "}
+                let (checks, relevant_args) = match &flat_in_rel {
+                    FlatInRel::Rel(_) => (None, args.to_vec()),
+                    FlatInRel::RelWithDiagonals { rel: _, equalities } => {
+                        let checks = display_diagonal_checks(args, equalities).to_string();
+                        let relevant_args = equalities
+                            .iter()
+                            .copied()
+                            .enumerate()
+                            .filter_map(|(i, j)| if i == j { Some(args[i].clone()) } else { None })
+                            .collect();
+                        (Some(checks), relevant_args)
                     }
-                } else {
-                    // No diagonals.
-                    let args = index
-                        .order
-                        .iter()
-                        .map(|i| args[*i].clone())
-                        .format(", ")
-                        .to_string();
-                    if flat_in_rel.parent_model_type(ctx.signature()).is_some() {
-                        writedoc! {f, "
-                            self.{index_name}_own.insert([{args}]);
-                            self.{index_name}_all.insert([{args}]);
-                        "}
-                    } else {
-                        writedoc! {f, "
-                            self.{index_name}.insert([{args}]);
-                        "}
+                    FlatInRel::Equality(_) | FlatInRel::TypeSet(_) => {
+                        unreachable!("only relation indices are selected")
                     }
+                };
+                let args = index
+                    .order
+                    .iter()
+                    .map(|i| relevant_args[*i].clone())
+                    .format(", ")
+                    .to_string();
+                if let Some(checks) = &checks {
+                    writeln!(f, "if {checks} {{")?;
                 }
+                if flat_in_rel.parent_model_type(ctx.signature()).is_some() {
+                    writedoc! {f, "
+                        self.{index_name}_own.insert([{args}]);
+                        self.{index_name}_all.insert([{args}]);
+                    "}?;
+                } else {
+                    writeln!(f, "self.{index_name}.insert([{args}]);")?;
+                }
+                if checks.is_some() {
+                    writeln!(f, "}}")?;
+                }
+                Ok(())
             })
         })
         .format("\n")
@@ -2723,11 +2714,16 @@ fn display_propagate_model_morphisms_fn<'a>(
         let remaps = index_selection
             .indices
             .iter()
-            .filter(|(rel, _)| {
-                rel.parent_model_type(ctx.signature())
-                    .is_some_and(|parent| {
-                        parent == typ || ctx.signature().type_(parent).parents.contains(&typ)
-                    })
+            .filter(|(rel, _)| match rel {
+                FlatInRel::Rel(rel) => {
+                    rel.parent_model_type(ctx.signature())
+                        .is_some_and(|parent| {
+                            parent == typ || ctx.signature().type_(parent).parents.contains(&typ)
+                        })
+                }
+                FlatInRel::RelWithDiagonals { .. }
+                | FlatInRel::Equality(_)
+                | FlatInRel::TypeSet(_) => false,
             })
             .flat_map(|(rel, indices)| {
                 indices
@@ -2799,6 +2795,103 @@ fn display_propagate_model_morphisms_fn<'a>(
     })
 }
 
+fn display_rebuild_model_diagonals<'a>(
+    ctx: &'a RustGenCtx<'a>,
+    index_selection: &'a IndexSelection,
+) -> impl Display + 'a {
+    FmtFn(move |f| {
+        let mut diagonals_by_rel = BTreeMap::new();
+        for (diagonal, indices) in &index_selection.indices {
+            match diagonal {
+                FlatInRel::RelWithDiagonals { rel, equalities } => {
+                    if rel.parent_model_type(ctx.signature()).is_some() {
+                        diagonals_by_rel
+                            .entry(*rel)
+                            .or_insert_with(Vec::new)
+                            .push((diagonal, equalities, indices));
+                    }
+                }
+                FlatInRel::Rel(_) | FlatInRel::Equality(_) | FlatInRel::TypeSet(_) => {}
+            }
+        }
+
+        // Mapping can both create and break repeated-variable equalities, so
+        // diagonal indices must be selected from complete propagated tuples.
+        // Rebuild owned indices too, since propagation can remove owned tuples.
+        for (rel, diagonals) in diagonals_by_rel {
+            let args: Vec<ElVar> = (0..rel.arity(ctx.signature()).len())
+                .map(ElVar::from)
+                .collect();
+            let full_rel = FlatInRel::Rel(rel);
+            for (age, suffix) in [
+                (IndexAge::New, "all"),
+                (IndexAge::New, "own"),
+                (IndexAge::Old, "own"),
+            ] {
+                let query = match age {
+                    IndexAge::New => QuerySpec::all_new(),
+                    IndexAge::Old => QuerySpec::all_old(),
+                };
+                let source_index = index_selection
+                    .queries
+                    .get(&(full_rel.clone(), query))
+                    .expect("full relation should have primary indices")
+                    .iter()
+                    .exactly_one()
+                    .expect("full relation should have one primary index per age");
+                let source = display_index_field_name(&full_rel, source_index, ctx);
+                let unpack = source_index.order.iter().map(|i| &args[*i]).format(", ");
+                let clear = diagonals
+                    .iter()
+                    .flat_map(|(diagonal, _, indices)| {
+                        indices
+                            .iter()
+                            .filter(|index| index.age == age)
+                            .map(|index| {
+                                let field = display_index_field_name(diagonal, index, ctx);
+                                format!("self.{field}_{suffix}.clear();")
+                            })
+                    })
+                    .format("\n");
+                let insert = diagonals
+                    .iter()
+                    .map(|(diagonal, equalities, indices)| {
+                        let checks = display_diagonal_checks(&args, equalities);
+                        let relevant_args: Vec<_> = equalities
+                            .iter()
+                            .copied()
+                            .enumerate()
+                            .filter_map(|(i, j)| if i == j { Some(&args[i]) } else { None })
+                            .collect();
+                        let inserts = indices
+                            .iter()
+                            .filter(|index| index.age == age)
+                            .map(|index| {
+                                let field = display_index_field_name(diagonal, index, ctx);
+                                let row =
+                                    index.order.iter().map(|i| relevant_args[*i]).format(", ");
+                                format!("self.{field}_{suffix}.insert([{row}]);")
+                            })
+                            .format("\n");
+                        formatdoc! {"
+                            if {checks} {{
+                                {inserts}
+                            }}
+                        "}
+                    })
+                    .format("\n");
+                writedoc! {f, "
+                    {clear}
+                    for [{unpack}] in self.{source}_{suffix}.iter() {{
+                        {insert}
+                    }}
+                "}?;
+            }
+        }
+        Ok(())
+    })
+}
+
 fn display_recompute_model_indices_fn<'a>(
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
@@ -2864,12 +2957,14 @@ fn display_recompute_model_indices_fn<'a>(
                 format!("self.propagate_{type_snake}_morphisms([]);")
             })
             .format("\n");
+        let rebuild_diagonals = display_rebuild_model_diagonals(ctx, index_selection);
         writedoc! {f, "
             {propagation_functions}
 
             fn recompute_model_indices(&mut self) {{
                 {initialize}
                 {propagate}
+                {rebuild_diagonals}
                 {finish}
             }}
         "}

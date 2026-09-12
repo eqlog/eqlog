@@ -30,6 +30,7 @@ eqlog_mod!(subset_rules);
 eqlog_mod!(consts);
 eqlog_mod!(mor_head_forms);
 eqlog_mod!(nested);
+eqlog_mod!(nested_diagonals);
 eqlog_mod!(nested_image_creation);
 
 mod category_mod;
@@ -69,6 +70,8 @@ mod matches_test;
 mod mor_head_forms_test;
 #[cfg(test)]
 mod nat_test;
+#[cfg(test)]
+mod nested_diagonals_test;
 #[cfg(test)]
 mod nested_image_creation_test;
 #[cfg(test)]
