@@ -1486,6 +1486,11 @@ fn display_remove_from_index_expr<'a>(
             FlatInRel::Equality(_) | FlatInRel::TypeSet(_) => None,
         };
 
+        // Off-diagonal tuples can share the projection of a valid diagonal
+        // tuple, so only remove rows that actually belong to this index.
+        let checks =
+            equalities.map(|equalities| display_diagonal_checks(row_args, equalities).to_string());
+
         let row_args: Vec<ElVar> = match equalities {
             Some(equalities) => row_args
                 .iter()
@@ -1510,7 +1515,11 @@ fn display_remove_from_index_expr<'a>(
 
         let field_name = display_own_index_field_name(&rel, &index, ctx);
 
-        write!(f, "self.{field_name}.remove([{permuted_row_args}])")
+        let remove = format!("self.{field_name}.remove([{permuted_row_args}])");
+        match checks {
+            Some(checks) => write!(f, "if {checks} {{ {remove} }} else {{ false }}"),
+            None => write!(f, "{remove}"),
+        }
     })
 }
 
@@ -2752,7 +2761,7 @@ fn display_propagate_model_morphisms_fn<'a>(
             .filter(|(_, ids)| ctx.signature().type_(ids.type_).parents.last() == Some(&typ))
             .map(|(_, ids)| {
                 let child_snake = display_type(ids.type_, ctx).to_string().to_case(Snake);
-                format!("self.propagate_{child_snake}_morphisms([{child_parents}]);")
+                format!("self.__propagate_{child_snake}_morphisms([{child_parents}]);")
             })
             .format("\n")
             .to_string();
@@ -2779,9 +2788,11 @@ fn display_propagate_model_morphisms_fn<'a>(
 
         // Topological order completes all incoming propagation before a
         // source's interior is processed and its outgoing morphisms run.
+        // Eqlog identifiers start with a letter, so leading underscores keep
+        // these helpers distinct from public relation methods.
         writedoc! {f, "
             #[allow(unused_variables)]
-            fn propagate_{type_snake}_morphisms(&mut self, parents: [u32; {parent_len}]) {{
+            fn __propagate_{type_snake}_morphisms(&mut self, parents: [u32; {parent_len}]) {{
                 {ordered}
                 {visited}
                 #[allow(unused)]
@@ -2954,7 +2965,7 @@ fn display_recompute_model_indices_fn<'a>(
             .filter(|(_, ids)| ctx.signature().type_(ids.type_).parents.is_empty())
             .map(|(_, ids)| {
                 let type_snake = display_type(ids.type_, ctx).to_string().to_case(Snake);
-                format!("self.propagate_{type_snake}_morphisms([]);")
+                format!("self.__propagate_{type_snake}_morphisms([]);")
             })
             .format("\n");
         let rebuild_diagonals = display_rebuild_model_diagonals(ctx, index_selection);

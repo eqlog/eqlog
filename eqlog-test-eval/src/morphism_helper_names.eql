@@ -1,0 +1,6 @@
+model Item {
+    model Child {}
+}
+
+pred propagate_item_morphisms();
+func propagate_child_morphisms() -> Item;

@@ -11,7 +11,8 @@ visible to rule evaluation.
 Rebuild repeated-variable indices from full propagated tuples because
 mappings can create or break the required equalities. Keep their owned
 tuples and fact ages consistent with the full relations, and require
-all repeated-variable equalities when inserting tuples.
+all repeated-variable equalities when inserting or removing tuples.
+Keep traversal helpers outside the namespace of user relation names.
 
 Replace three expected-panic regressions with passing tests.
 Cover function arguments and results, late images, mixed-depth
@@ -19,6 +20,8 @@ propagation, and inherited morphism functions. Check that an interior
 waits for facts from every incoming outer morphism.
 Cover repeated-variable predicates and function graphs, including
 late images that identify arguments and copied outer model arguments.
+Check equality merges preserve global predicate and function matches
+and public relation names cannot collide with traversal helpers.
 
 Validation:
 - cargo fmt --all --check
