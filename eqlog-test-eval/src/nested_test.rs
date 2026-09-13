@@ -5,6 +5,8 @@ struct NestedMorphismFixture {
     h: AMor,
     domain: A,
     codomain: A,
+    source_b: B,
+    source_c: C,
     target_b: B,
     target_c: C,
     x: T,
@@ -31,6 +33,8 @@ fn nested_morphism_fixture() -> NestedMorphismFixture {
         h,
         domain,
         codomain,
+        source_b,
+        source_c,
         target_b,
         target_c,
         x,
@@ -561,8 +565,6 @@ fn bundle_morphism_maps_fibers() {
 }
 
 #[test]
-// TODO: This should pass once outer morphisms preserve nested predicates.
-#[should_panic(expected = "assertion failed: model.marked(target, target_fiber, y)")]
 fn outer_morphism_preserves_nested_predicate() {
     let mut model = Nested::new();
     let source = model.new_bundle();
@@ -584,8 +586,67 @@ fn outer_morphism_preserves_nested_predicate() {
 }
 
 #[test]
-// TODO: This should pass once propagation respects the morphism's outer parent.
-#[should_panic(expected = "assertion failed: !model.marked(other_bundle, target, y)")]
+fn outer_morphism_preserves_nested_function() {
+    let mut model = Nested::new();
+    let source = model.new_bundle();
+    let target = model.new_bundle();
+    let source_fiber = model.new_fiber(source);
+    let target_fiber = model.new_fiber(target);
+    let x = model.new_el(source, source_fiber);
+    let next_x = model.new_el(source, source_fiber);
+    let y = model.new_el(target, target_fiber);
+    let next_y = model.new_el(target, target_fiber);
+    let h = model.new_bundle_mor();
+    model.insert_bundle_mor_dom(h, source);
+    model.insert_bundle_mor_cod(h, target);
+    model.insert_fiber_mor_app(h, source_fiber, target_fiber);
+    model.insert_bundle_el_mor_app(h, x, y);
+    model.insert_bundle_el_mor_app(h, next_x, next_y);
+    model.insert_tip(source, source_fiber, x);
+    model.insert_next(source, source_fiber, x, next_x);
+
+    model.close();
+
+    assert_eq!(model.tip(target, target_fiber), Some(y));
+    assert_eq!(model.next(target, target_fiber, y), Some(next_y));
+    assert!(!model.are_equal_el(x, y));
+    assert!(!model.are_equal_el(next_x, next_y));
+}
+
+#[test]
+fn outer_morphism_preserves_deep_relations_with_late_images() {
+    let NestedMorphismFixture {
+        mut model,
+        h,
+        domain,
+        codomain,
+        source_b,
+        source_c,
+        target_b,
+        target_c,
+        x,
+        y,
+    } = nested_morphism_fixture();
+    model.insert_tagged(domain, source_b, source_c, x);
+    model.insert_apex(domain, source_b, source_c, x);
+    model.insert_successor(domain, source_b, source_c, x, x);
+    model.close();
+    assert!(!model.tagged(codomain, target_b, target_c, y));
+    assert_eq!(model.successor(codomain, target_b, target_c, y), None);
+
+    model.insert_a_t_mor_app(h, x, y);
+    model.close();
+
+    assert!(model.tagged(codomain, target_b, target_c, y));
+    let apex = model.apex(codomain, target_b, target_c).unwrap();
+    assert!(model.are_equal_t(apex, y));
+    let successor = model.successor(codomain, target_b, target_c, y).unwrap();
+    assert!(model.are_equal_t(successor, y));
+    model.close();
+    assert!(model.tagged(codomain, target_b, target_c, y));
+}
+
+#[test]
 fn nested_morphism_stays_in_its_outer_parent() {
     let mut model = Nested::new();
     let bundle = model.new_bundle();
@@ -603,16 +664,25 @@ fn nested_morphism_stays_in_its_outer_parent() {
     model.insert_fiber_mor_cod(bundle, g, target);
     model.insert_el_mor_app(bundle, g, x, y);
     model.insert_marked(other_bundle, source, x);
+    model.insert_next(other_bundle, source, x, x);
 
     model.close();
 
     assert!(model.marked(other_bundle, source, x));
     assert!(!model.marked(other_bundle, target, y));
+    assert_eq!(model.next(other_bundle, target, y), None);
+
+    model.insert_marked(bundle, source, x);
+    model.insert_next(bundle, source, x, x);
+    model.close();
+
+    assert!(model.marked(bundle, target, y));
+    assert_eq!(model.next(bundle, target, y), Some(y));
+    assert!(!model.marked(other_bundle, target, y));
+    assert_eq!(model.next(other_bundle, target, y), None);
 }
 
 #[test]
-// TODO: This should pass once topological sorting includes inherited objects.
-#[should_panic(expected = "cycle being present in the morphism category: CycleDetected")]
 fn nested_morphism_can_use_inherited_objects() {
     let mut model = Nested::new();
     let source = model.new_bundle();
@@ -631,4 +701,144 @@ fn nested_morphism_can_use_inherited_objects() {
     model.close();
 
     assert_eq!(model.fiber_mor_dom(target, g), Some(target_fiber));
+}
+
+#[test]
+fn nested_relations_follow_inner_and_outer_morphisms() {
+    let mut model = Nested::new();
+    let source = model.new_bundle();
+    let target = model.new_bundle();
+    let f0 = model.new_fiber(source);
+    let f1 = model.new_fiber(source);
+    let f2 = model.new_fiber(target);
+    let f3 = model.new_fiber(target);
+    let x0 = model.new_el(source, f0);
+    let x1 = model.new_el(source, f1);
+    let x2 = model.new_el(target, f2);
+    let x3 = model.new_el(target, f3);
+    let g = model.new_fiber_mor(source);
+    model.insert_fiber_mor_dom(source, g, f0);
+    model.insert_fiber_mor_cod(source, g, f1);
+    model.insert_el_mor_app(source, g, x0, x1);
+    let h = model.new_bundle_mor();
+    model.insert_bundle_mor_dom(h, source);
+    model.insert_bundle_mor_cod(h, target);
+    model.insert_fiber_mor_app(h, f1, f2);
+    model.insert_bundle_el_mor_app(h, x1, x2);
+    let k = model.new_fiber_mor(target);
+    model.insert_fiber_mor_dom(target, k, f2);
+    model.insert_fiber_mor_cod(target, k, f3);
+    model.insert_el_mor_app(target, k, x2, x3);
+    model.close();
+
+    model.insert_marked(source, f0, x0);
+    model.insert_next(source, f0, x0, x0);
+    model.close();
+
+    assert!(model.marked(target, f3, x3));
+    assert_eq!(model.next(target, f3, x3), Some(x3));
+    assert!(model.reached_marked_image(target, f3));
+    model.close();
+    assert!(model.marked(target, f3, x3));
+    assert_eq!(model.next(target, f3, x3), Some(x3));
+}
+
+#[test]
+fn outer_morphism_preserves_nested_morphism_functions() {
+    let mut model = Nested::new();
+    let source = model.new_bundle();
+    let target = model.new_bundle();
+    let f0 = model.new_fiber(source);
+    let f1 = model.new_fiber(source);
+    let f2 = model.new_fiber(target);
+    let f3 = model.new_fiber(target);
+    let x0 = model.new_el(source, f0);
+    let x1 = model.new_el(source, f1);
+    let x2 = model.new_el(target, f2);
+    let x3 = model.new_el(target, f3);
+    let g = model.new_fiber_mor(source);
+    model.insert_fiber_mor_dom(source, g, f0);
+    model.insert_fiber_mor_cod(source, g, f1);
+    model.insert_el_mor_app(source, g, x0, x1);
+    let image_g = model.new_fiber_mor(target);
+    let h = model.new_bundle_mor();
+    model.insert_bundle_mor_dom(h, source);
+    model.insert_bundle_mor_cod(h, target);
+    model.insert_fiber_mor_app(h, f0, f2);
+    model.insert_fiber_mor_app(h, f1, f3);
+    model.insert_bundle_el_mor_app(h, x0, x2);
+    model.insert_bundle_el_mor_app(h, x1, x3);
+    model.insert_fiber_mor_mor_app(h, g, image_g);
+    model.close();
+
+    assert_eq!(model.fiber_mor_dom(target, image_g), Some(f2));
+    assert_eq!(model.fiber_mor_cod(target, image_g), Some(f3));
+    assert_eq!(model.el_mor_app(target, image_g, x2), Some(x3));
+
+    model.insert_marked(target, f2, x2);
+    model.insert_next(target, f2, x2, x2);
+    model.close();
+
+    assert!(model.marked(target, f3, x3));
+    assert_eq!(model.next(target, f3, x3), Some(x3));
+}
+
+#[test]
+fn nested_morphisms_wait_for_all_incoming_outer_morphisms() {
+    let mut model = Nested::new();
+    let graph_source = model.new_bundle();
+    let fact_source = model.new_bundle();
+    let joint = model.new_bundle();
+    let target = model.new_bundle();
+    let graph_f0 = model.new_fiber(graph_source);
+    let graph_f1 = model.new_fiber(graph_source);
+    let fact_f = model.new_fiber(fact_source);
+    let joint_f0 = model.new_fiber(joint);
+    let joint_f1 = model.new_fiber(joint);
+    let target_f = model.new_fiber(target);
+    let graph_x0 = model.new_el(graph_source, graph_f0);
+    let graph_x1 = model.new_el(graph_source, graph_f1);
+    let fact_x = model.new_el(fact_source, fact_f);
+    let joint_x0 = model.new_el(joint, joint_f0);
+    let joint_x1 = model.new_el(joint, joint_f1);
+    let target_x = model.new_el(target, target_f);
+
+    // The graph and its source facts arrive independently, so the joint
+    // model's interior must wait for both incoming morphisms.
+    let g = model.new_fiber_mor(graph_source);
+    model.insert_fiber_mor_dom(graph_source, g, graph_f0);
+    model.insert_fiber_mor_cod(graph_source, g, graph_f1);
+    model.insert_el_mor_app(graph_source, g, graph_x0, graph_x1);
+    let joint_g = model.new_fiber_mor(joint);
+    let h = model.new_bundle_mor();
+    model.insert_bundle_mor_dom(h, graph_source);
+    model.insert_bundle_mor_cod(h, joint);
+    model.insert_fiber_mor_app(h, graph_f0, joint_f0);
+    model.insert_fiber_mor_app(h, graph_f1, joint_f1);
+    model.insert_bundle_el_mor_app(h, graph_x0, joint_x0);
+    model.insert_bundle_el_mor_app(h, graph_x1, joint_x1);
+    model.insert_fiber_mor_mor_app(h, g, joint_g);
+
+    let k = model.new_bundle_mor();
+    model.insert_bundle_mor_dom(k, fact_source);
+    model.insert_bundle_mor_cod(k, joint);
+    model.insert_fiber_mor_app(k, fact_f, joint_f0);
+    model.insert_bundle_el_mor_app(k, fact_x, joint_x0);
+    model.insert_marked(fact_source, fact_f, fact_x);
+    model.insert_next(fact_source, fact_f, fact_x, fact_x);
+
+    let l = model.new_bundle_mor();
+    model.insert_bundle_mor_dom(l, joint);
+    model.insert_bundle_mor_cod(l, target);
+    model.insert_fiber_mor_app(l, joint_f1, target_f);
+    model.insert_bundle_el_mor_app(l, joint_x1, target_x);
+
+    model.close();
+
+    assert!(model.marked(target, target_f, target_x));
+    assert_eq!(model.next(target, target_f, target_x), Some(target_x));
+    assert!(model.reached_marked_image(joint, joint_f1));
+    model.close();
+    assert!(model.marked(target, target_f, target_x));
+    assert_eq!(model.next(target, target_f, target_x), Some(target_x));
 }

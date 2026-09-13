@@ -30,9 +30,14 @@ eqlog_mod!(subset_rules);
 eqlog_mod!(consts);
 eqlog_mod!(mor_head_forms);
 eqlog_mod!(nested);
+eqlog_mod!(nested_diagonals);
 eqlog_mod!(nested_image_creation);
+eqlog_mod!(diagonal_canonicalization);
+eqlog_mod!(morphism_helper_names);
 
 mod category_mod;
+#[cfg(test)]
+mod diagonal_canonicalization_test;
 #[cfg(test)]
 mod distr_lattice_test;
 #[cfg(test)]
@@ -68,7 +73,11 @@ mod matches_test;
 #[cfg(test)]
 mod mor_head_forms_test;
 #[cfg(test)]
+mod morphism_helper_names_test;
+#[cfg(test)]
 mod nat_test;
+#[cfg(test)]
+mod nested_diagonals_test;
 #[cfg(test)]
 mod nested_image_creation_test;
 #[cfg(test)]

@@ -1,0 +1,65 @@
+model Bundle {
+    model Fiber {
+        type El;
+        pred tagged_by(Bundle, El);
+        func selected(Bundle) -> El;
+        pred pair(El, El);
+        func next(El) -> El;
+        pred two_pairs(El, El, El, El);
+    }
+}
+
+pred self_tagged(Bundle);
+rule detect_self_tagged {
+    if b: Bundle;
+    if f: b.Fiber;
+    if f.tagged_by(b, x);
+    then x = x;
+    then self_tagged(b);
+}
+
+pred self_selected(Bundle);
+rule detect_self_selected {
+    if b: Bundle;
+    if f: b.Fiber;
+    if x = f.selected(b);
+    then x = x;
+    then self_selected(b);
+}
+
+pred diagonal_pair(Bundle);
+rule detect_diagonal_pair {
+    if b: Bundle;
+    if f: b.Fiber;
+    if f.pair(x, x);
+    then x = x;
+    then diagonal_pair(b);
+}
+
+pred fixed_point(Bundle);
+rule detect_fixed_point {
+    if b: Bundle;
+    if f: b.Fiber;
+    if x = f.next(x);
+    then x = x;
+    then fixed_point(b);
+}
+
+pred two_diagonal_pairs(Bundle);
+rule detect_two_diagonal_pairs {
+    if b: Bundle;
+    if f: b.Fiber;
+    if f.two_pairs(x, x, y, y);
+    then x = x;
+    then y = y;
+    then two_diagonal_pairs(b);
+}
+
+pred global_two_pairs(Bundle, Bundle, Bundle, Bundle);
+pred global_two_diagonal_pairs();
+rule detect_global_two_diagonal_pairs {
+    if global_two_pairs(x, x, y, y);
+    then x = x;
+    then y = y;
+    then global_two_diagonal_pairs();
+}

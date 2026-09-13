@@ -1,0 +1,18 @@
+type T;
+pred pair(T, T, T, T);
+func value(T, T, T) -> T;
+pred gate();
+pred matched_pair(T, T);
+pred matched_value(T, T);
+
+rule match_pair {
+    if gate();
+    if pair(x, x, y, y);
+    then matched_pair(x, y);
+}
+
+rule match_value {
+    if gate();
+    if y = value(x, x, y);
+    then matched_value(x, y);
+}
