@@ -11,6 +11,7 @@ use crate::algebra::signature::{FuncId, MorphismMemberTypes, TypeId, TypeKind};
 use crate::ast::EnumDeclId;
 use crate::flat_eqlog::*;
 use crate::fmt_util::*;
+use crate::options::ModelMode;
 use crate::ram::*;
 use convert_case::{Case, Casing};
 use indoc::{formatdoc, writedoc};
@@ -912,7 +913,7 @@ fn display_insert_row_block<'a>(
                 if let Some(checks) = &checks {
                     writeln!(f, "if {checks} {{")?;
                 }
-                if flat_in_rel.parent_model_type(ctx.signature()).is_some() {
+                if ctx.has_shared_indices(&flat_in_rel) {
                     writedoc! {f, "
                         self.{index_name}_own.insert([{args}]);
                         self.{index_name}_all.insert([{args}]);
@@ -955,7 +956,8 @@ fn display_pub_insert_relation<'a>(
             .map(|(arg, typ_camel)| {
                 FmtFn(move |f: &mut Formatter| -> Result { write!(f, "{arg}: {typ_camel}") })
             })
-            .format(", ");
+            .format(", ")
+            .to_string();
 
         let canonicalize = rel_args
             .iter()
@@ -967,7 +969,8 @@ fn display_pub_insert_relation<'a>(
                     write!(f, "let {arg} = self.root_{type_snake}({arg});")
                 })
             })
-            .format("\n");
+            .format("\n")
+            .to_string();
 
         let dependent_checks = display_dependent_type_checks(
             rel,
@@ -1092,12 +1095,35 @@ fn display_pub_insert_relation<'a>(
             })
             .format("\n");
 
+        let internal_insert = ctx.internal_insert_name(rel);
+        let begin_insert = match ctx.model_mode() {
+            ModelMode::Native => formatdoc! {"
+                {docstring}
+                #[allow(dead_code)]
+                pub fn insert_{rel_snake}(&mut self, {rel_fn_args}) {{
+                    {canonicalize}
+                    {dependent_checks}
+            "},
+            ModelMode::Desugared => {
+                // Rule conclusions and their typing facts can arrive in separate
+                // rounds. Validate external inputs, not intermediate derived rows.
+                let args = rel_args.iter().format(", ");
+                formatdoc! {"
+                    {docstring}
+                    #[allow(dead_code)]
+                    pub fn insert_{rel_snake}(&mut self, {rel_fn_args}) {{
+                        {canonicalize}
+                        {dependent_checks}
+                        self.{internal_insert}({args});
+                    }}
+
+                    fn {internal_insert}(&mut self, {rel_fn_args}) {{
+                        {canonicalize}
+                "}
+            }
+        };
         writedoc! {f, "
-            {docstring}
-            #[allow(dead_code)]
-            pub fn insert_{rel_snake}(&mut self, {rel_fn_args}) {{
-                {canonicalize}
-                {dependent_checks}
+            {begin_insert}
                 {unwrap_args}
 
                 {contains_checks}
@@ -1529,7 +1555,7 @@ fn display_canonicalize_rel_block<'a>(
     index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
-        let rel_snake = display_rel(rel, ctx).to_string().to_case(Snake);
+        let internal_insert = ctx.internal_insert_name(rel);
 
         let arity = rel.arity(ctx.signature());
         let arity_len = arity.len();
@@ -1689,7 +1715,7 @@ fn display_canonicalize_rel_block<'a>(
 
             {reduce_weights}
 
-            self.insert_{rel_snake}({insert_row_args});
+            self.{internal_insert}({insert_row_args});
             }}
         "}
     })
@@ -1937,6 +1963,7 @@ fn display_model_delta_apply_tuples_fn<'a>(ctx: &'a RustGenCtx<'a>) -> impl 'a +
                 FmtFn(move |f| {
                     let arity = rel.arity(ctx.signature());
                     let rel_snake = display_rel(rel, ctx).to_string().to_case(Snake);
+                    let internal_insert = ctx.internal_insert_name(rel);
                     let args_destructure = (0..arity.len())
                         .map(ElVar::from)
                         .map(display_var)
@@ -1952,7 +1979,7 @@ fn display_model_delta_apply_tuples_fn<'a>(ctx: &'a RustGenCtx<'a>) -> impl 'a +
 
                     writedoc! {f, "
                     for [{args_destructure}] in self.new_{rel_snake}.drain(..) {{
-                        model.insert_{rel_snake}({insert_args});
+                        model.{internal_insert}({insert_args});
                     }}
                 "}
                 })
@@ -2126,7 +2153,7 @@ fn display_move_new_to_old_fn<'a>(
         let inherited = index_selection
             .indices
             .iter()
-            .filter(|(rel, _)| rel.parent_model_type(ctx.signature()).is_some())
+            .filter(|(rel, _)| ctx.has_shared_indices(rel))
             .flat_map(|(rel, indices)| {
                 indices
                     .iter()
@@ -2911,7 +2938,7 @@ fn display_recompute_model_indices_fn<'a>(
         let parented_indices: Vec<_> = index_selection
             .indices
             .iter()
-            .filter(|(rel, _)| rel.parent_model_type(ctx.signature()).is_some())
+            .filter(|(rel, _)| ctx.has_shared_indices(rel))
             .flat_map(|(rel, indices)| {
                 indices
                     .iter()
@@ -2993,7 +3020,7 @@ fn display_module_env_var<'a>(
             .map(|(flat_in_rel, index)| {
                 FmtFn(move |f| {
                     let field_name = display_index_field_name(&flat_in_rel, &index, ctx);
-                    if flat_in_rel.parent_model_type(ctx.signature()).is_some() {
+                    if ctx.has_shared_indices(&flat_in_rel) {
                         write!(f, "{field_name}: &self.{field_name}_all,")
                     } else {
                         write!(f, "{field_name}: &self.{field_name},")
@@ -3041,6 +3068,10 @@ fn display_close_until_fn<'a>(
             })
             .format("\n");
 
+        let propagate = match ctx.model_mode() {
+            ModelMode::Native => "self.recompute_model_indices();",
+            ModelMode::Desugared => "",
+        };
         writedoc! {f, "
             /// Closes the model under all axioms until `condition` is satisfied.
             /// Depending on the axioms and `condition`, this may run indefinitely.
@@ -3050,7 +3081,7 @@ fn display_close_until_fn<'a>(
             pub fn close_until(&mut self, condition: impl Fn(&Self) -> bool) -> bool
             {{
             self.canonicalize();
-            self.recompute_model_indices();
+            {propagate}
             if condition(self) {{
             return true;
             }}
@@ -3066,7 +3097,7 @@ fn display_close_until_fn<'a>(
             delta.apply_equalities(self);
             self.canonicalize();
             delta.apply_tuples(self);
-            self.recompute_model_indices();
+            {propagate}
 
             if condition(self) {{
             return true;
@@ -3116,7 +3147,7 @@ fn display_new_fn<'a>(
             for index in indices {
                 let field_name = display_index_field_name(&flat_rel, &index, ctx);
                 let index_type = display_index_type(&flat_rel, ctx);
-                if flat_rel.parent_model_type(ctx.signature()).is_some() {
+                if ctx.has_shared_indices(&flat_rel) {
                     writeln!(f, "{field_name}_own: {index_type}::new(),").unwrap();
                     writeln!(f, "{field_name}_all: {index_type}::new(),").unwrap();
                 } else {
@@ -3339,7 +3370,7 @@ fn display_own_index_field_name<'a>(
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let index_field = display_index_field_name(&flat_in_rel, &index, ctx);
-        if flat_in_rel.parent_model_type(ctx.signature()).is_some() {
+        if ctx.has_shared_indices(&flat_in_rel) {
             write!(f, "{index_field}_own")
         } else {
             write!(f, "{index_field}")
@@ -3354,7 +3385,7 @@ fn display_index_expr<'a>(
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let index_field = display_index_field_name(&flat_in_rel, &index, ctx);
-        if flat_in_rel.parent_model_type(ctx.signature()).is_some() {
+        if ctx.has_shared_indices(&flat_in_rel) {
             write!(f, "(&self.{index_field}_all)")
         } else {
             let index_field = display_index_field_name(&flat_in_rel, &index, ctx);
@@ -3370,7 +3401,7 @@ fn display_all_index_field_name<'a>(
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let index_field = display_index_field_name(flat_in_rel, index, ctx);
-        if flat_in_rel.parent_model_type(ctx.signature()).is_some() {
+        if ctx.has_shared_indices(&flat_in_rel) {
             write!(f, "{index_field}_all")
         } else {
             write!(f, "{index_field}")
@@ -3484,7 +3515,7 @@ fn display_theory_struct<'a>(
                 FmtFn(move |f| {
                     let index_name = display_index_field_name(&rel, &index, ctx);
                     let index_type = display_index_type(&rel, ctx);
-                    if rel.parent_model_type(ctx.signature()).is_some() {
+                    if ctx.has_shared_indices(&rel) {
                         writedoc! {f, "
                             {index_name}_own: {index_type},
                             {index_name}_all: {index_type},
@@ -3644,8 +3675,14 @@ fn display_theory_impl<'a>(
 
         writeln!(f, "")?;
 
-        let recompute_model_indices_fn = display_recompute_model_indices_fn(ctx, index_selection);
-        write!(f, "{}", recompute_model_indices_fn)?;
+        match ctx.model_mode() {
+            ModelMode::Native => {
+                let recompute_model_indices_fn =
+                    display_recompute_model_indices_fn(ctx, index_selection);
+                write!(f, "{recompute_model_indices_fn}")?;
+            }
+            ModelMode::Desugared => {}
+        }
 
         let move_new_to_old_fn = display_move_new_to_old_fn(ctx, index_selection);
         write!(f, "{move_new_to_old_fn}")?;

@@ -22,6 +22,10 @@ fn display_imports<'a>() -> impl 'a + Display {
 
 pub fn display_module_env_struct_name<'a>(ram_module: &'a RamModule) -> impl 'a + Display {
     FmtFn(move |f| {
+        // Keep internal environments distinct from user rules after case conversion.
+        if ram_module.name.starts_with("__") {
+            write!(f, "__")?;
+        }
         let name_camel = &ram_module.name.to_case(UpperCamel);
         write!(f, "{name_camel}Env")
     })
@@ -327,6 +331,7 @@ fn display_module_main_fn<'a>(
             })
             .format("\n");
         writedoc! {f, r#"
+            #[allow(non_snake_case)]
             #[unsafe(no_mangle)]
             pub fn {symbol_prefix}_{fn_name}(mut env: {env_name}) {{
             {calls}

@@ -161,3 +161,61 @@ fn evaluation_mode_changes_invalidate_cache() {
         );
     }
 }
+
+#[test]
+fn model_mode_changes_invalidate_cache() {
+    let src = indoc! {"
+        model Set {
+            type El;
+            pred marked(El);
+        }
+    "};
+    let in_dir = TempDir::new("model-mode-in").expect("Failed to create input directory");
+    let out_dir = TempDir::new("model-mode-out").expect("Failed to create output directory");
+    let mut config = Config {
+        in_dir: in_dir.path().to_path_buf(),
+        out_dir: out_dir.path().to_path_buf(),
+        component_build: None,
+        options: CompileOptions::default(),
+    };
+    let out_file = config.out_dir.join("theory.eql.rs");
+    fs::write(config.in_dir.join("theory.eql"), src).expect("Failed to write source file");
+
+    for evaluation_mode in [EvaluationMode::SemiNaive, EvaluationMode::Naive] {
+        config.options.evaluation_mode = evaluation_mode;
+        process(&config).expect("Native compilation failed");
+        let native_output = fs::read_to_string(&out_file).expect("Failed to read generated code");
+        assert!(native_output.contains("morphism_toposort"));
+
+        for model_mode in [ModelMode::Desugared, ModelMode::Native] {
+            let sentinel = pin_modified(&out_file);
+            config.options.model_mode = model_mode;
+            process(&config).expect("Compilation after changing model mode failed");
+            assert_ne!(read_modified(&out_file), sentinel);
+
+            let output = fs::read_to_string(&out_file).expect("Failed to read generated code");
+            match model_mode {
+                ModelMode::Native => assert_eq!(output, native_output),
+                ModelMode::Desugared => {
+                    assert!(output.contains("__preserve_"));
+                    assert!(!output.contains("morphism_toposort"));
+                    assert!(!output.contains("recompute_model_indices"));
+                    assert!(!output.contains("__propagate_"));
+                    assert!(!output.contains("_own"));
+                    match evaluation_mode {
+                        EvaluationMode::SemiNaive => assert!(output.contains("[new]")),
+                        EvaluationMode::Naive => {
+                            assert!(output.contains("[all]"));
+                            assert!(!output.contains("[new]"));
+                            assert!(!output.contains("[old]"));
+                        }
+                    }
+                }
+            }
+
+            let sentinel = pin_modified(&out_file);
+            process(&config).expect("Repeated compilation failed");
+            assert_eq!(read_modified(&out_file), sentinel);
+        }
+    }
+}

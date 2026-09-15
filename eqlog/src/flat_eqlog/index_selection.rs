@@ -5,6 +5,7 @@ use std::{
 
 use super::ast::*;
 use crate::algebra::signature::{FuncId, Signature, TypeId};
+use crate::options::ModelMode;
 use itertools::Itertools as _;
 use maplit::btreeset;
 use std::sync::Arc;
@@ -182,6 +183,7 @@ pub fn iter_flat_rels(signature: &Signature) -> impl Iterator<Item = FlatRel> + 
 pub fn select_indices<'a>(
     rules: impl IntoIterator<Item = &'a FlatRule>,
     signature: &Signature,
+    model_mode: ModelMode,
 ) -> IndexSelection {
     let mut query_specs: BTreeSet<(FlatInRel, QuerySpec)> = BTreeSet::new();
 
@@ -243,59 +245,61 @@ pub fn select_indices<'a>(
         ))
     }));
 
-    // The query specs needed for topological sorting of the model morphism graph.
-    query_specs.extend(signature.iter_model_decls().flat_map(|(_decl, ids)| {
-        let mor_type = FlatInRel::TypeSet(ids.mor);
-        let dom = FlatInRel::Rel(FlatRel::Func(ids.dom));
-        let cod = FlatInRel::Rel(FlatRel::Func(ids.cod));
-        // `dom`/`cod` flatten as (parents..., mor, obj). Toposort needs
-        // "given parents+object, outgoing mors" and "given parents+mor, obj".
-        let parent_len = signature.func(ids.dom).parents.len();
-        let mut dom_projections = (0..parent_len).collect::<BTreeSet<_>>();
-        dom_projections.insert(parent_len + 1);
-        let cod_projections = (0..=parent_len).collect::<BTreeSet<_>>();
+    if model_mode == ModelMode::Native {
+        // The query specs needed for topological sorting of the model morphism graph.
+        query_specs.extend(signature.iter_model_decls().flat_map(|(_decl, ids)| {
+            let mor_type = FlatInRel::TypeSet(ids.mor);
+            let dom = FlatInRel::Rel(FlatRel::Func(ids.dom));
+            let cod = FlatInRel::Rel(FlatRel::Func(ids.cod));
+            // `dom`/`cod` flatten as (parents..., mor, obj). Toposort needs
+            // "given parents+object, outgoing mors" and "given parents+mor, obj".
+            let parent_len = signature.func(ids.dom).parents.len();
+            let mut dom_projections = (0..parent_len).collect::<BTreeSet<_>>();
+            dom_projections.insert(parent_len + 1);
+            let cod_projections = (0..=parent_len).collect::<BTreeSet<_>>();
 
-        [
-            // Given an object (and parent, when nested), look up outgoing morphisms.
-            (
-                dom,
-                QuerySpec {
-                    age: QueryAge::All,
-                    projections: dom_projections,
-                },
-            ),
-            // Given a morphism (and parent, when nested), look up the codomain.
-            (
-                cod,
-                QuerySpec {
-                    age: QueryAge::All,
-                    projections: cod_projections,
-                },
-            ),
-            (
-                mor_type,
-                QuerySpec {
-                    age: QueryAge::All,
-                    projections: btreeset! {0},
-                },
-            ),
-        ]
-    }));
+            [
+                // Given an object (and parent, when nested), look up outgoing morphisms.
+                (
+                    dom,
+                    QuerySpec {
+                        age: QueryAge::All,
+                        projections: dom_projections,
+                    },
+                ),
+                // Given a morphism (and parent, when nested), look up the codomain.
+                (
+                    cod,
+                    QuerySpec {
+                        age: QueryAge::All,
+                        projections: cod_projections,
+                    },
+                ),
+                (
+                    mor_type,
+                    QuerySpec {
+                        age: QueryAge::All,
+                        projections: btreeset! {0},
+                    },
+                ),
+            ]
+        }));
 
-    // Topological sorting groups model objects by their enclosing parents.
-    // Preserve that prefix order even when membership also needs a reverse index.
-    query_specs.extend(signature.iter_model_decls().flat_map(|(_, ids)| {
-        let rel = FlatInRel::Rel(FlatRel::ModelMember(ids.type_));
-        (1..=signature.type_(ids.type_).parents.len()).map(move |prefix_len| {
-            (
-                rel.clone(),
-                QuerySpec {
-                    age: QueryAge::All,
-                    projections: (0..prefix_len).collect(),
-                },
-            )
-        })
-    }));
+        // Topological sorting groups model objects by their enclosing parents.
+        // Preserve that prefix order even when membership also needs a reverse index.
+        query_specs.extend(signature.iter_model_decls().flat_map(|(_, ids)| {
+            let rel = FlatInRel::Rel(FlatRel::ModelMember(ids.type_));
+            (1..=signature.type_(ids.type_).parents.len()).map(move |prefix_len| {
+                (
+                    rel.clone(),
+                    QuerySpec {
+                        age: QueryAge::All,
+                        projections: (0..prefix_len).collect(),
+                    },
+                )
+            })
+        }));
+    }
 
     let queries: BTreeMap<(FlatInRel, QuerySpec), Vec<IndexSpec>> = query_specs
         .into_iter()
@@ -341,7 +345,7 @@ pub fn select_indices<'a>(
     for (rel, index_specs) in &mut indices {
         // Inheritance can make old source tuples new at their destination, so
         // both ages need the same column orders to partition the visible facts.
-        if rel.parent_model_type(signature).is_some() {
+        if model_mode == ModelMode::Native && rel.parent_model_type(signature).is_some() {
             let other_ages: Vec<_> = index_specs
                 .iter()
                 .map(|index| IndexSpec {

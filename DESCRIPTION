@@ -1,0 +1,16 @@
+Desugar models to check native propagation
+
+Offer model desugaring independently of naive or seminaive matching so
+the specialized propagation engine can be compared with ordinary rules.
+Preservation materializes member facts at every nesting depth only when
+the required morphism applications are defined. Existing membership
+semantics and public APIs remain available in both modes.
+
+Keep public input validation separate from derived tuple insertion so
+preserved facts can arrive independently of their typing facts.
+
+Desugared models use ordinary relation indices and fixed-point
+evaluation, allowing cyclic morphism graphs without a topological
+propagation phase. Include model mode in compiler cache keys and
+exercise both evaluation strategies with partial applications,
+nested relations, and cycles.

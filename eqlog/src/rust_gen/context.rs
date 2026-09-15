@@ -2,16 +2,41 @@ use convert_case::{Case::Snake, Casing as _};
 
 use crate::algebra::signature::{FuncId, Signature, TypeId, TypeKind};
 use crate::ast::Ast;
-use crate::flat_eqlog::FlatRel;
+use crate::flat_eqlog::{FlatInRel, FlatRel};
+use crate::options::ModelMode;
 
 pub(crate) struct RustGenCtx<'a> {
     ast: &'a Ast,
     signature: &'a Signature,
+    model_mode: ModelMode,
 }
 
 impl<'a> RustGenCtx<'a> {
-    pub(crate) fn new(ast: &'a Ast, signature: &'a Signature) -> Self {
-        Self { ast, signature }
+    pub(crate) fn new(ast: &'a Ast, signature: &'a Signature, model_mode: ModelMode) -> Self {
+        Self {
+            ast,
+            signature,
+            model_mode,
+        }
+    }
+
+    pub(crate) fn model_mode(&self) -> ModelMode {
+        self.model_mode
+    }
+
+    pub(crate) fn has_shared_indices(&self, rel: &FlatInRel) -> bool {
+        match self.model_mode {
+            ModelMode::Native => rel.parent_model_type(self.signature).is_some(),
+            ModelMode::Desugared => false,
+        }
+    }
+
+    pub(crate) fn internal_insert_name(&self, rel: FlatRel) -> String {
+        let name = self.rel_name(rel).to_case(Snake);
+        match self.model_mode {
+            ModelMode::Native => format!("insert_{name}"),
+            ModelMode::Desugared => format!("__insert_{name}"),
+        }
     }
 
     pub(crate) fn ast(&self) -> &Ast {

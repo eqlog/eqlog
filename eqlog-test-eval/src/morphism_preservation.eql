@@ -1,0 +1,21 @@
+type Ambient;
+
+model World {
+    type El;
+    pred ready();
+    pred seen(Ambient);
+    pred tagged(El, Ambient);
+    func edge(El) -> El;
+
+    model Inner {
+        type Item;
+        pred marked(Item);
+    }
+}
+
+pred observed(World);
+rule preserve_0_0 {
+    if w: World;
+    if w.ready();
+    then observed(w);
+}

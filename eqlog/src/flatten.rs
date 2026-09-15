@@ -8,7 +8,7 @@ use crate::algebra::signature::{FuncId, Signature, TypeKind};
 use crate::algebra::structure::{ConcreteType, ElId, FuncApp, PredApp, Structure, StructureId};
 use crate::ast::*;
 use crate::flat_eqlog::*;
-use crate::options::EvaluationMode;
+use crate::options::{CompileOptions, EvaluationMode, ModelMode};
 
 type FlatElKey = (StructureId, ElId);
 
@@ -639,7 +639,8 @@ fn flatten_rule(
     FlatRuleGroup { name, rules }
 }
 
-pub fn flatten(ctx: &FlattenCtx<'_>, evaluation_mode: EvaluationMode) -> Vec<FlatRuleGroup> {
+pub fn flatten(ctx: &FlattenCtx<'_>, options: &CompileOptions) -> Vec<FlatRuleGroup> {
+    let evaluation_mode = options.evaluation_mode;
     let mut groups: Vec<FlatRuleGroup> = Vec::new();
 
     groups.extend(ctx.signature.iter_funcs().map(|func_id| {
@@ -669,6 +670,25 @@ pub fn flatten(ctx: &FlattenCtx<'_>, evaluation_mode: EvaluationMode) -> Vec<Fla
                 )
             }),
     );
+
+    match options.model_mode {
+        ModelMode::Native => {}
+        ModelMode::Desugared => {
+            groups.extend(
+                morphism_preservation_rules(ctx.signature)
+                    .into_iter()
+                    .map(|rule| {
+                        postprocess_rule_group(
+                            FlatRuleGroup {
+                                name: rule.name.clone(),
+                                rules: vec![rule],
+                            },
+                            evaluation_mode,
+                        )
+                    }),
+            );
+        }
+    }
 
     groups
 }

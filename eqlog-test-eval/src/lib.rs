@@ -34,6 +34,7 @@ eqlog_mod!(nested_diagonals);
 eqlog_mod!(nested_image_creation);
 eqlog_mod!(diagonal_canonicalization);
 eqlog_mod!(morphism_helper_names);
+eqlog_mod!(morphism_preservation);
 
 mod category_mod;
 #[cfg(test)]
@@ -74,6 +75,8 @@ mod matches_test;
 mod mor_head_forms_test;
 #[cfg(test)]
 mod morphism_helper_names_test;
+#[cfg(test)]
+mod morphism_preservation_test;
 #[cfg(test)]
 mod nat_test;
 #[cfg(test)]
