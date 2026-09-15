@@ -43,6 +43,7 @@ fn unchanged_file_detected() {
         in_dir: PathBuf::from(in_dir.path()),
         out_dir: PathBuf::from(out_dir.path()),
         component_build: None,
+        options: CompileOptions::default(),
     };
 
     let in_file_path = config.in_dir.join("theory.eql");
@@ -80,6 +81,7 @@ fn changed_file_detected() {
         in_dir: PathBuf::from(in_dir.path()),
         out_dir: PathBuf::from(out_dir.path()),
         component_build: None,
+        options: CompileOptions::default(),
     };
 
     let in_file_path = config.in_dir.join("theory.eql");
@@ -99,4 +101,63 @@ fn changed_file_detected() {
         first_out, second_out,
         "The output file should have changed when the input file changed"
     );
+}
+
+#[test]
+fn evaluation_mode_changes_invalidate_cache() {
+    let src = indoc! {"
+        type Foo;
+        func identity(Foo) -> Foo;
+        pred edge(Foo, Foo);
+
+        rule transitivity {
+            if edge(x, y);
+            if edge(y, z);
+            then edge(x, z);
+        }
+    "};
+    let in_dir = TempDir::new("evaluation-mode-in").expect("Failed to create input directory");
+    let out_dir = TempDir::new("evaluation-mode-out").expect("Failed to create output directory");
+    let mut config = Config {
+        in_dir: in_dir.path().to_path_buf(),
+        out_dir: out_dir.path().to_path_buf(),
+        component_build: None,
+        options: CompileOptions::default(),
+    };
+    let out_file = config.out_dir.join("theory.eql.rs");
+    fs::write(config.in_dir.join("theory.eql"), src).expect("Failed to write source file");
+
+    process(&config).expect("Default compilation failed");
+    let default_output = fs::read_to_string(&out_file).expect("Failed to read generated code");
+    assert!(default_output.contains("[new]"));
+    assert!(default_output.contains("[old]"));
+
+    for evaluation_mode in [EvaluationMode::Naive, EvaluationMode::SemiNaive] {
+        let sentinel = pin_modified(&out_file);
+        config.options.evaluation_mode = evaluation_mode;
+        process(&config).expect("Compilation after changing evaluation mode failed");
+        assert_ne!(
+            read_modified(&out_file),
+            sentinel,
+            "Changing evaluation mode must invalidate cached output"
+        );
+
+        let output = fs::read_to_string(&out_file).expect("Failed to read generated code");
+        match evaluation_mode {
+            EvaluationMode::Naive => {
+                assert!(output.contains("[all]"));
+                assert!(!output.contains("[new]"));
+                assert!(!output.contains("[old]"));
+            }
+            EvaluationMode::SemiNaive => assert_eq!(output, default_output),
+        }
+
+        let sentinel = pin_modified(&out_file);
+        process(&config).expect("Repeated compilation failed");
+        assert_eq!(
+            read_modified(&out_file),
+            sentinel,
+            "Unchanged options must preserve cached output"
+        );
+    }
 }

@@ -3,6 +3,9 @@ name = "eqlog-test-eval"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+naive = []
+
 [dependencies]
 eqlog-runtime = { path = "../eqlog-runtime" }
 maplit = ">= 0"

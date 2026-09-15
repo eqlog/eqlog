@@ -8,6 +8,7 @@ use crate::algebra::signature::{FuncId, Signature, TypeKind};
 use crate::algebra::structure::{ConcreteType, ElId, FuncApp, PredApp, Structure, StructureId};
 use crate::ast::*;
 use crate::flat_eqlog::*;
+use crate::options::EvaluationMode;
 
 type FlatElKey = (StructureId, ElId);
 
@@ -638,13 +639,13 @@ fn flatten_rule(
     FlatRuleGroup { name, rules }
 }
 
-pub fn flatten(ctx: &FlattenCtx<'_>) -> Vec<FlatRuleGroup> {
+pub fn flatten(ctx: &FlattenCtx<'_>, evaluation_mode: EvaluationMode) -> Vec<FlatRuleGroup> {
     let mut groups: Vec<FlatRuleGroup> = Vec::new();
 
     groups.extend(ctx.signature.iter_funcs().map(|func_id| {
         let rel_snake = func_base_name(ctx, func_id).to_case(Snake);
         let rule_name = format!("functionality_{rel_snake}");
-        let rule = semi_naive_functionality(func_id, ctx.signature, rule_name.clone());
+        let rule = functionality_rule(func_id, ctx.signature, rule_name.clone(), evaluation_mode);
         FlatRuleGroup {
             name: rule_name,
             rules: vec![rule],
@@ -662,7 +663,10 @@ pub fn flatten(ctx: &FlattenCtx<'_>) -> Vec<FlatRuleGroup> {
                     .rule_structures
                     .get(&rule_id)
                     .expect("rule structure should be built for every rule");
-                postprocess_rule_group(flatten_rule(ctx, rule_id, anonymous_index, rule))
+                postprocess_rule_group(
+                    flatten_rule(ctx, rule_id, anonymous_index, rule),
+                    evaluation_mode,
+                )
             }),
     );
 
@@ -735,11 +739,20 @@ fn collect_rule_ids(ast: &Ast, decls: &[DeclId], out: &mut Vec<RuleDeclId>) {
     }
 }
 
-fn postprocess_rule_group(mut group: FlatRuleGroup) -> FlatRuleGroup {
+fn postprocess_rule_group(
+    mut group: FlatRuleGroup,
+    evaluation_mode: EvaluationMode,
+) -> FlatRuleGroup {
     group.rules = group
         .rules
         .iter()
-        .flat_map(|rule| to_semi_naive(&eliminate_equalities_ifs(rule)))
+        .flat_map(|rule| {
+            let rule = eliminate_equalities_ifs(rule);
+            match evaluation_mode {
+                EvaluationMode::Naive => vec![rule],
+                EvaluationMode::SemiNaive => to_semi_naive(&rule),
+            }
+        })
         .map(|mut rule| {
             use_rels_with_diagonals(&mut rule);
             sort_premise(&mut rule);

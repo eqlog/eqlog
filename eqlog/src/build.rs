@@ -7,6 +7,7 @@ use crate::error::*;
 use crate::flat_eqlog::*;
 use crate::flatten::*;
 use crate::grammar::*;
+use crate::options::{CompileOptions, EvaluationMode};
 use crate::ram::*;
 use crate::rust_gen::*;
 use crate::scope_checks::{check_bindings, check_occurrences};
@@ -136,6 +137,18 @@ fn digest_source(theory_name: &str, src: &str) -> Digest {
         .chain_update(src.as_bytes())
         .finalize_into((&mut digest).into());
     digest
+}
+
+fn digest_program(theory_name: &str, src: &str, options: &CompileOptions) -> Digest {
+    let evaluation_mode = match options.evaluation_mode {
+        EvaluationMode::Naive => "naive",
+        EvaluationMode::SemiNaive => "semi-naive",
+    };
+    Sha256::new()
+        .chain_update(digest_source(theory_name, src))
+        .chain_update(evaluation_mode.as_bytes())
+        .finalize()
+        .into()
 }
 
 fn component_out_dir(in_file: &Path, config: &ComponentConfig) -> PathBuf {
@@ -420,7 +433,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
         .with_context(|| format!("Reading file {}", in_file.display()))?;
 
     // TODO: Build type should contribute to the source digest.
-    let src_digest = digest_source(theory_name.as_str(), source.as_str());
+    let src_digest = digest_program(theory_name.as_str(), source.as_str(), &config.options);
     let out_digest = read_digest(in_file, config)?;
 
     if out_digest.as_ref().map(|od| od.as_slice()) == Some(src_digest.as_slice()) {
@@ -493,7 +506,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
         .into());
     }
     let flatten_ctx = FlattenCtx::new(&ast, module, &signature, &rule_structures);
-    let flat_rule_groups = flatten(&flatten_ctx);
+    let flat_rule_groups = flatten(&flatten_ctx, config.options.evaluation_mode);
     let flat_rules_iter = flat_rule_groups.iter().flat_map(|group| group.rules.iter());
     let index_selection = select_indices(flat_rules_iter, &signature);
 
@@ -570,12 +583,12 @@ pub struct ComponentConfig {
     pub opt_level: String,
 }
 
-/// [Config] and [process] are public for testing only, they shouldn't be used by third parties.
-#[doc(hidden)]
+/// Configuration for compiling Eqlog files with [`process`].
 pub struct Config {
     pub in_dir: PathBuf,
     pub out_dir: PathBuf,
     pub component_build: Option<ComponentConfig>,
+    pub options: CompileOptions,
 }
 
 fn find_eqlog_runtime_rlib_path() -> Result<PathBuf> {
@@ -686,6 +699,7 @@ impl Config {
         Ok(Config {
             in_dir,
             out_dir: final_out_dir,
+            options: CompileOptions::default(),
             component_build: Some(ComponentConfig {
                 component_out_dir,
                 rustc_path,
@@ -726,7 +740,10 @@ fn create_mod_dirs(in_dir: &Path, out_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-#[doc(hidden)]
+/// Compile the Eqlog files under [`Config::in_dir`] using the supplied options.
+///
+/// For Cargo build scripts, use [`process_root`] or [`process_root_with_options`]
+/// to also set up module inclusion.
 pub fn process(config: &Config) -> Result<()> {
     fs::create_dir_all(config.out_dir.as_path()).context("Creating out dir")?;
     if let Some(component_build) = &config.component_build {
@@ -748,16 +765,33 @@ pub fn process(config: &Config) -> Result<()> {
 ///
 /// Must be called from a `build.rs` script via cargo.
 /// Output rust files are written to the cargo target out directory.
-/// Exits the process on compilation failure.
+/// Uses seminaive evaluation. See [`process_root_with_options`] to select naive evaluation.
 ///
 /// # Examples
-/// ```
-/// fn main() {
-///     eqlog::process_root();
+/// ```no_run
+/// fn main() -> eqlog::Result<()> {
+///     eqlog::process_root()
 /// }
 /// ```
 pub fn process_root() -> Result<()> {
-    let config = Config::from_cargo_env()?;
+    process_root_with_options(&CompileOptions::default())
+}
+
+/// Compile all Eqlog files in `src` with explicit evaluator options.
+///
+/// Must be called from a `build.rs` script via Cargo, like [`process_root`].
+///
+/// # Examples
+/// ```no_run
+/// fn main() -> eqlog::Result<()> {
+///     eqlog::process_root_with_options(&eqlog::CompileOptions {
+///         evaluation_mode: eqlog::EvaluationMode::Naive,
+///     })
+/// }
+/// ```
+pub fn process_root_with_options(options: &CompileOptions) -> Result<()> {
+    let mut config = Config::from_cargo_env()?;
+    config.options = *options;
 
     create_mod_dirs(&config.in_dir, &config.out_dir).with_context(|| {
         format!(

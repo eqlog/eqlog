@@ -10,6 +10,7 @@ mod error;
 mod flat_eqlog;
 mod flatten;
 mod fmt_util;
+mod options;
 mod ram;
 mod rust_gen;
 mod scope_checks;
@@ -19,4 +20,7 @@ mod syntactic;
 mod to_ram;
 mod unification;
 
-pub use crate::build::{process, process_root, ComponentConfig, Config, Error, Result};
+pub use crate::build::{
+    process, process_root, process_root_with_options, ComponentConfig, Config, Error, Result,
+};
+pub use crate::options::{CompileOptions, EvaluationMode};
