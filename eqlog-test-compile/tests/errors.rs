@@ -1,4 +1,4 @@
-use eqlog::{process, Config};
+use eqlog::{process, CompileOptions, Config};
 use indoc::formatdoc;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -35,6 +35,7 @@ fn test_case(case_src: &Path) {
         in_dir,
         out_dir: PathBuf::from(out_dir.path()),
         component_build: None,
+        options: CompileOptions::default(),
     };
 
     let actual_error = match process(&config) {

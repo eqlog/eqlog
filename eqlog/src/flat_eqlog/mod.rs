@@ -7,6 +7,7 @@ mod sort;
 use std::{iter::once, sync::Arc};
 
 use crate::algebra::signature::{FuncId, Signature};
+use crate::options::EvaluationMode;
 
 pub use ast::*;
 pub use diagonals::*;
@@ -14,10 +15,11 @@ pub use index_selection::*;
 pub use semi_naive::*;
 pub use sort::*;
 
-pub fn semi_naive_functionality(
+pub fn functionality_rule(
     func: FuncId,
     signature: &Signature,
     rule_name: impl Into<String>,
+    evaluation_mode: EvaluationMode,
 ) -> FlatRule {
     let domain = flat_domain(func, signature);
     let codomain = signature.func(func).codomain;
@@ -52,7 +54,10 @@ pub fn semi_naive_functionality(
         FlatIfStmt {
             rel: func_rel.clone(),
             args: rel_args0,
-            age: QueryAge::New,
+            age: match evaluation_mode {
+                EvaluationMode::Naive => QueryAge::All,
+                EvaluationMode::SemiNaive => QueryAge::New,
+            },
         },
         FlatIfStmt {
             rel: func_rel.clone(),

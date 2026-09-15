@@ -1,5 +1,5 @@
 use clap::{Parser, ValueEnum};
-use eqlog::{process, ComponentConfig, Config};
+use eqlog::{process, CompileOptions, ComponentConfig, Config, EvaluationMode};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -32,6 +32,10 @@ struct Cli {
     /// Build type (module or component)
     #[arg(long, value_enum, default_value_t = BuildType::Module)]
     build_type: BuildType,
+
+    /// Rule evaluation strategy
+    #[arg(long, value_enum, default_value = "semi-naive")]
+    evaluation_mode: EvaluationMode,
 
     /// Output directory for component libraries (required for component build)
     #[arg(
@@ -96,6 +100,9 @@ fn main() -> ExitCode {
         in_dir: cli.src,
         out_dir: cli.out,
         component_build,
+        options: CompileOptions {
+            evaluation_mode: cli.evaluation_mode,
+        },
     };
 
     match process(&config) {

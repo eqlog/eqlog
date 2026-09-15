@@ -1,0 +1,11 @@
+Allow naive evaluation to check seminaive matching
+
+Expose the evaluation strategy through compiler options, a Cargo
+build-script helper, and the CLI while keeping seminaive evaluation
+as the default. Naive evaluation matches all facts in user and
+functionality rules.
+
+Include the strategy in cache keys so switching modes cannot
+reuse stale code. Run the existing evaluation suite in either
+mode to compare behavior across equality, definedness, and
+morphism propagation.
