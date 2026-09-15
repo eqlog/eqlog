@@ -129,27 +129,6 @@ eqlog_mod!(<filename without extension>);
 ```
 Note that a special invocation that specifies the full path is needed for eqlog files in nested subdirectories of `src`.
 
-### Evaluation mode
-
-Generated evaluators use seminaive evaluation by default, which avoids repeating
-rule matches that involve only old facts. To use naive evaluation, which matches
-all facts on every iteration, select it in `build.rs`:
-
-```rust
-fn main() -> eqlog::Result<()> {
-    eqlog::process_root_with_options(&eqlog::CompileOptions {
-        evaluation_mode: eqlog::EvaluationMode::Naive,
-    })
-}
-```
-
-For direct compiler use, set `Config::options` and call `eqlog::process(&config)`.
-The command-line compiler accepts `--evaluation-mode naive` or
-`--evaluation-mode semi-naive`. Changing the mode invalidates cached generated
-output. Naive mode retains indexed storage, equality maintenance, and morphism
-propagation, so it can be used to check seminaive matching independently of those
-optimizations.
-
 ## Language
 
 Each eqlog file consists of a sequence of type, predicate, function, constant and rule declarations.
