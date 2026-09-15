@@ -145,8 +145,6 @@ fn evaluation_mode_changes_invalidate_cache() {
         let output = fs::read_to_string(&out_file).expect("Failed to read generated code");
         match evaluation_mode {
             EvaluationMode::Naive => {
-                // Functionality rules must also match all facts, so no rule
-                // premise may retain an old-only or new-only restriction.
                 assert!(output.contains("[all]"));
                 assert!(!output.contains("[new]"));
                 assert!(!output.contains("[old]"));
