@@ -185,6 +185,10 @@ pub fn select_indices<'a>(
     signature: &Signature,
     model_mode: ModelMode,
 ) -> IndexSelection {
+    let native_propagation = match model_mode {
+        ModelMode::Native => true,
+        ModelMode::Desugared => false,
+    };
     let mut query_specs: BTreeSet<(FlatInRel, QuerySpec)> = BTreeSet::new();
 
     query_specs.extend(
@@ -245,7 +249,7 @@ pub fn select_indices<'a>(
         ))
     }));
 
-    if model_mode == ModelMode::Native {
+    if native_propagation {
         // The query specs needed for topological sorting of the model morphism graph.
         query_specs.extend(signature.iter_model_decls().flat_map(|(_decl, ids)| {
             let mor_type = FlatInRel::TypeSet(ids.mor);
@@ -345,7 +349,7 @@ pub fn select_indices<'a>(
     for (rel, index_specs) in &mut indices {
         // Inheritance can make old source tuples new at their destination, so
         // both ages need the same column orders to partition the visible facts.
-        if model_mode == ModelMode::Native && rel.parent_model_type(signature).is_some() {
+        if native_propagation && rel.parent_model_type(signature).is_some() {
             let other_ages: Vec<_> = index_specs
                 .iter()
                 .map(|index| IndexSpec {
