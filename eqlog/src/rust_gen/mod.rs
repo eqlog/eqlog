@@ -1096,34 +1096,19 @@ fn display_pub_insert_relation<'a>(
             .format("\n");
 
         let internal_insert = ctx.internal_insert_name(rel);
-        let begin_insert = match ctx.model_mode() {
-            ModelMode::Native => formatdoc! {"
-                {docstring}
-                #[allow(dead_code)]
-                pub fn insert_{rel_snake}(&mut self, {rel_fn_args}) {{
-                    {canonicalize}
-                    {dependent_checks}
-            "},
-            ModelMode::Desugared => {
-                // Rule conclusions and their typing facts can arrive in separate
-                // rounds. Validate external inputs, not intermediate derived rows.
-                let args = rel_args.iter().format(", ");
-                formatdoc! {"
-                    {docstring}
-                    #[allow(dead_code)]
-                    pub fn insert_{rel_snake}(&mut self, {rel_fn_args}) {{
-                        {canonicalize}
-                        {dependent_checks}
-                        self.{internal_insert}({args});
-                    }}
-
-                    fn {internal_insert}(&mut self, {rel_fn_args}) {{
-                        {canonicalize}
-                "}
-            }
-        };
+        let args = rel_args.iter().format(", ");
+        // Derived rows may precede their typing facts or endpoint equalities.
         writedoc! {f, "
-            {begin_insert}
+            {docstring}
+            #[allow(dead_code)]
+            pub fn insert_{rel_snake}(&mut self, {rel_fn_args}) {{
+                {canonicalize}
+                {dependent_checks}
+                self.{internal_insert}({args});
+            }}
+
+            fn {internal_insert}(&mut self, {rel_fn_args}) {{
+                {canonicalize}
                 {unwrap_args}
 
                 {contains_checks}

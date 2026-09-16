@@ -1,6 +1,36 @@
 use crate::morphism_preservation::*;
 
 #[test]
+fn rule_insertions_can_precede_endpoint_equalities() {
+    let mut model = MorphismPreservation::new();
+    let world = model.new_world();
+    let source0 = model.new_inner(world);
+    let source1 = model.new_inner(world);
+    let target = model.new_inner(world);
+    let x0 = model.new_item(world, source0);
+    let x1 = model.new_item(world, source1);
+    let y = model.new_item(world, target);
+    let f = model.new_inner_mor(world);
+    model.insert_requested_map(world, f, source0, target);
+    model.insert_requested_source(world, source0, f, x0);
+    model.insert_requested_map(world, f, source1, target);
+    model.insert_requested_source(world, source1, f, x1);
+    model.insert_requested_target(world, target, f, y);
+
+    model.close();
+
+    assert!(model.are_equal_inner(source0, source1));
+    assert_eq!(model.item_mor_app(world, f, x0), Some(y));
+    assert_eq!(model.item_mor_app(world, f, x1), Some(y));
+    assert_eq!(model.iter_item_mor_app().count(), 2);
+
+    model.equate_item(x0, x1);
+    model.close();
+    assert_eq!(model.item_mor_app(world, f, x0), Some(y));
+    assert_eq!(model.iter_item_mor_app().count(), 1);
+}
+
+#[test]
 fn preservation_waits_for_endpoints_and_images() {
     let mut model = MorphismPreservation::new();
     let source = model.new_world();

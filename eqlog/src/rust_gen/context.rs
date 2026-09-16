@@ -33,10 +33,7 @@ impl<'a> RustGenCtx<'a> {
 
     pub(crate) fn internal_insert_name(&self, rel: FlatRel) -> String {
         let name = self.rel_name(rel).to_case(Snake);
-        match self.model_mode {
-            ModelMode::Native => format!("insert_{name}"),
-            ModelMode::Desugared => format!("__insert_{name}"),
-        }
+        format!("__insert_{name}")
     }
 
     pub(crate) fn ast(&self) -> &Ast {

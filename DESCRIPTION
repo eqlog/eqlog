@@ -6,8 +6,9 @@ Preservation materializes member facts at every nesting depth only when
 the required morphism applications are defined. Existing membership
 semantics and public APIs remain available in both modes.
 
-Keep public input validation separate from derived tuple insertion so
-preserved facts can arrive independently of their typing facts.
+Use the same private tuple insertion in both modes so public input
+checks do not depend on intermediate closure state. Derived facts can
+arrive before their typing facts or endpoint equalities are derived.
 
 Desugared models use ordinary relation indices and fixed-point
 evaluation, allowing cyclic morphism graphs without a topological
