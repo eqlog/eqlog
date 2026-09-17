@@ -1,0 +1,164 @@
+use crate::member_parents::*;
+use std::panic::{catch_unwind, AssertUnwindSafe};
+
+#[test]
+fn membership_rejects_other_parents_before_and_after_closure() {
+    for closed in [false, true] {
+        let mut model = MemberParents::new();
+        let a = model.new_outer();
+        let b = model.new_outer();
+        let i = model.new_inner(a);
+        let j = model.new_inner(a);
+        let x = model.new_el(a, i);
+        let f = model.new_inner_mor(a);
+        let label = model.define_label_value(a, i);
+        if closed {
+            model.close();
+        }
+
+        assert!(catch_unwind(AssertUnwindSafe(|| model.insert_outer_member_inner(b, i))).is_err());
+        assert!(catch_unwind(AssertUnwindSafe(|| model.insert_inner_member_el(a, j, x))).is_err());
+        assert!(catch_unwind(AssertUnwindSafe(
+            || model.insert_outer_member_inner_mor(b, f)
+        ))
+        .is_err());
+        assert!(catch_unwind(AssertUnwindSafe(
+            || model.insert_inner_member_label(a, j, label)
+        ))
+        .is_err());
+        model.close();
+        assert_eq!(model.iter_outer_member_inner().count(), 2);
+        assert_eq!(
+            model.iter_inner_member_el().collect::<Vec<_>>(),
+            vec![(a, i, x)]
+        );
+        assert_eq!(
+            model.iter_outer_member_inner_mor().collect::<Vec<_>>(),
+            vec![(a, f)]
+        );
+        assert_eq!(
+            model.iter_inner_member_label().collect::<Vec<_>>(),
+            vec![(a, i, label)]
+        );
+    }
+}
+
+#[test]
+fn equality_rejects_other_parents_before_and_after_closure() {
+    for closed in [false, true] {
+        let mut model = MemberParents::new();
+        let a = model.new_outer();
+        let b = model.new_outer();
+        let i = model.new_inner(a);
+        let j = model.new_inner(b);
+        let x = model.new_el(a, i);
+        let y = model.new_el(b, j);
+        let f = model.new_inner_mor(a);
+        let g = model.new_inner_mor(b);
+        let label0 = model.define_label_value(a, i);
+        let label1 = model.define_label_value(b, j);
+        if closed {
+            model.close();
+        }
+
+        assert!(catch_unwind(AssertUnwindSafe(|| model.equate_inner(i, j))).is_err());
+        assert!(catch_unwind(AssertUnwindSafe(|| model.equate_el(x, y))).is_err());
+        assert!(catch_unwind(AssertUnwindSafe(|| model.equate_inner_mor(f, g))).is_err());
+        assert!(catch_unwind(AssertUnwindSafe(|| model.equate_label(label0, label1))).is_err());
+        assert!(!model.are_equal_inner(i, j));
+        assert!(!model.are_equal_el(x, y));
+        assert!(!model.are_equal_inner_mor(f, g));
+        assert!(!model.are_equal_label(label0, label1));
+        model.close();
+    }
+}
+
+#[test]
+fn invalid_constructor_does_not_allocate_an_element() {
+    let mut model = MemberParents::new();
+    let a = model.new_outer();
+    let b = model.new_outer();
+    let i = model.new_inner(a);
+    assert!(catch_unwind(AssertUnwindSafe(|| model.new_el(b, i))).is_err());
+    assert_eq!(model.iter_el().count(), 0);
+    model.close();
+}
+
+#[test]
+fn parent_equalities_take_effect_before_indices_are_rebuilt() {
+    let mut model = MemberParents::new();
+    let a = model.new_outer();
+    let b = model.new_outer();
+    let i = model.new_inner(a);
+    let j = model.new_inner(b);
+    let x = model.new_el(a, i);
+    let y = model.new_el(b, j);
+    model.close();
+
+    model.equate_outer(a, b);
+    assert!(catch_unwind(AssertUnwindSafe(|| model.equate_el(x, y))).is_err());
+    model.equate_inner(i, j);
+    model.equate_el(x, y);
+    model.insert_outer_member_inner(b, j);
+    model.insert_inner_member_el(b, j, y);
+    model.new_el(b, j);
+    model.close();
+    assert_eq!(model.iter_outer_member_inner().count(), 1);
+    assert_eq!(model.iter_inner_member_el().count(), 2);
+}
+
+#[test]
+fn rule_equalities_merge_parents_before_members() {
+    let mut model = MemberParents::new();
+    let a = model.new_outer();
+    let b = model.new_outer();
+    let i = model.new_inner(a);
+    let j = model.new_inner(b);
+    let x = model.new_el(a, i);
+    let y = model.new_el(b, j);
+    model.insert_merge(a, b);
+    model.close();
+    assert!(model.are_equal_outer(a, b));
+    assert!(model.are_equal_inner(i, j));
+    assert!(model.are_equal_el(x, y));
+    assert_eq!(model.iter_inner_member_el().count(), 1);
+}
+
+#[test]
+fn morphism_congruence_preserves_unique_ownership_during_closure() {
+    let mut model = MemberParents::new();
+    let source = model.new_outer();
+    let other_target = model.new_outer();
+    let target = model.new_outer();
+    let i0 = model.new_inner(source);
+    let i1 = model.new_inner(source);
+    let j0 = model.new_inner(target);
+    let j1 = model.new_inner(target);
+    let g = model.new_inner_mor(source);
+    model.insert_inner_mor_dom(source, g, i0);
+    model.insert_inner_mor_cod(source, g, i1);
+    let image_g = model.new_inner_mor(target);
+    let h = model.new_outer_mor();
+    model.insert_outer_mor_dom(h, source);
+    model.insert_outer_mor_cod(h, target);
+    model.insert_inner_mor_app(h, i0, j0);
+    model.insert_inner_mor_app(h, i1, j1);
+    model.insert_inner_mor_mor_app(h, g, image_g);
+    model.close();
+
+    model.insert_outer_mor_cod(h, other_target);
+    model.close_until(|model| {
+        assert_eq!(
+            model.iter_outer_member_inner().count(),
+            model.iter_inner().count()
+        );
+        assert_eq!(
+            model.iter_outer_member_inner_mor().count(),
+            model.iter_inner_mor().count()
+        );
+        false
+    });
+    assert!(model.are_equal_outer(target, other_target));
+    assert_eq!(model.inner_mor_dom(target, image_g), Some(j0));
+    assert_eq!(model.inner_mor_cod(target, image_g), Some(j1));
+}

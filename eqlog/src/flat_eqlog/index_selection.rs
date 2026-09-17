@@ -235,8 +235,8 @@ pub fn select_indices<'a>(
         )
     }));
 
-    // Nested morphism checks recover parent chains from membership, including
-    // inherited tuples, without scanning every member in the model.
+    // Nested morphism checks recover parent chains without scanning every
+    // member in the model.
     query_specs.extend(signature.iter_mor_app_funcs().filter_map(|(types, _)| {
         let parent_len = signature.type_(types.member_type).parents.len();
         let outer_len = signature.type_(types.morphism_type).parents.len();

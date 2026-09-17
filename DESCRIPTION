@@ -1,0 +1,17 @@
+Keep member elements in one parent chain
+
+Reject membership insertion and equality across distinct parent models
+so the public API cannot create ill-typed member elements. Remember
+allocation parents separately from relation indices so checks respect
+equalities even before closure, and validate nested parents before
+allocating an element.
+
+Do not propagate membership: every image receives its parent chain at
+allocation, and propagation can otherwise expose extra parents before
+functionality equalities settle. Include pending morphism endpoints in
+the temporary traversal graph without adding membership facts.
+
+Cover rejection for plain, model, morphism and enum members, valid
+parent merges, and ownership throughout incremental morphism closure.
+Replace fixtures that depended on multiple memberships with valid cases.
+Verify that rules assigning multiple parents remain compile errors.

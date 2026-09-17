@@ -77,29 +77,6 @@ fn conclusion_preserves_outer_parent() {
 }
 
 #[test]
-fn define_uses_membership_with_defined_parent_image() {
-    let mut model = NestedImageCreation::new();
-    let source = model.new_m();
-    let target = model.new_m();
-    let unmapped_n = model.new_n(source);
-    let mapped_n = model.new_n(source);
-    let image_n = model.new_n(target);
-    let x = model.new_t(source, unmapped_n);
-    model.insert_n_member_t(source, mapped_n, x);
-    let h = model.new_m_mor();
-    model.insert_m_mor_dom(h, source);
-    model.insert_m_mor_cod(h, target);
-    model.insert_n_mor_app(h, mapped_n, image_n);
-
-    let image_x = model.define_m_t_mor_app(h, x);
-
-    assert!(model.n_member_t(target, image_n, image_x));
-    assert_eq!(model.n_mor_app(h, unmapped_n), None);
-    assert_eq!(model.define_m_t_mor_app(h, x), image_x);
-    assert_eq!(model.iter_t().count(), 2);
-}
-
-#[test]
 fn define_accepts_noncanonical_argument() {
     let mut model = NestedImageCreation::new();
     let source = model.new_m();

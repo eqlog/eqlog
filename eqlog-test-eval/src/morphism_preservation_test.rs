@@ -153,7 +153,7 @@ fn cyclic_morphisms_reach_a_fixed_point() {
 }
 
 #[test]
-fn preservation_derives_additional_membership_and_facts() {
+fn preservation_respects_merged_parents() {
     let mut model = MorphismPreservation::new();
     let source = model.new_world();
     let target = model.new_world();
@@ -162,6 +162,7 @@ fn preservation_derives_additional_membership_and_facts() {
     let image_first = model.new_inner(target);
     let image_second = model.new_inner(target);
     let x = model.new_item(source, first);
+    model.equate_inner(first, second);
     model.insert_inner_member_item(source, second, x);
     model.insert_marked(source, second, x);
     let image_x = model.new_item(target, image_first);
@@ -176,24 +177,22 @@ fn preservation_derives_additional_membership_and_facts() {
     model.close();
     assert!(model.inner_member_item(target, image_second, image_x));
     assert!(model.marked(target, image_second, image_x));
-    assert!(!model.are_equal_inner(image_first, image_second));
+    assert!(model.are_equal_inner(image_first, image_second));
 }
 
 #[test]
-fn nested_application_preservation_keeps_endpoints_partial() {
+fn nested_application_preservation_waits_for_parent_images() {
     let mut model = MorphismPreservation::new();
     let a = model.new_world();
     let b = model.new_world();
     let source = model.new_inner(a);
     let target = model.new_inner(a);
-    let alternate = model.new_inner(a);
-    let image_alternate = model.new_inner(b);
+    let image_source = model.new_inner(b);
+    let image_target = model.new_inner(b);
     let x = model.new_item(a, source);
     let y = model.new_item(a, target);
-    model.insert_inner_member_item(a, alternate, x);
-    model.insert_inner_member_item(a, alternate, y);
-    let image_x = model.new_item(b, image_alternate);
-    let image_y = model.new_item(b, image_alternate);
+    let image_x = model.new_item(b, image_source);
+    let image_y = model.new_item(b, image_target);
     let g = model.new_inner_mor(a);
     model.insert_inner_mor_dom(a, g, source);
     model.insert_inner_mor_cod(a, g, target);
@@ -202,26 +201,20 @@ fn nested_application_preservation_keeps_endpoints_partial() {
     let h = model.new_world_mor();
     model.insert_world_mor_dom(h, a);
     model.insert_world_mor_cod(h, b);
-    model.insert_inner_mor_app(h, alternate, image_alternate);
     model.insert_inner_mor_mor_app(h, g, image_g);
-    model.insert_world_item_mor_app(h, x, image_x);
-    model.insert_world_item_mor_app(h, y, image_y);
 
     model.close();
-    assert_eq!(model.inner_mor_dom(b, image_g), None);
-    assert_eq!(model.inner_mor_cod(b, image_g), None);
-    assert!(model
-        .iter_item_mor_app()
-        .any(|row| row == (b, image_g, image_x, image_y)));
-
-    model.equate_item(image_x, image_y);
-    model.close();
-    let image = model.root_item(image_x);
-    assert!(model
-        .iter_item_mor_app()
-        .any(|row| row == (b, image_g, image, image)));
     assert_eq!(model.inner_mor_dom(b, image_g), None);
     assert_eq!(model.inner_mor_cod(b, image_g), None);
     assert_eq!(model.inner_mor_app(h, source), None);
     assert_eq!(model.inner_mor_app(h, target), None);
+
+    model.insert_inner_mor_app(h, source, image_source);
+    model.insert_inner_mor_app(h, target, image_target);
+    model.insert_world_item_mor_app(h, x, image_x);
+    model.insert_world_item_mor_app(h, y, image_y);
+    model.close();
+    assert_eq!(model.inner_mor_dom(b, image_g), Some(image_source));
+    assert_eq!(model.inner_mor_cod(b, image_g), Some(image_target));
+    assert_eq!(model.item_mor_app(b, image_g, image_x), Some(image_y));
 }

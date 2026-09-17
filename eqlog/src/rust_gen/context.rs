@@ -26,7 +26,13 @@ impl<'a> RustGenCtx<'a> {
 
     pub(crate) fn has_shared_indices(&self, rel: &FlatInRel) -> bool {
         match self.model_mode {
-            ModelMode::Native => rel.parent_model_type(self.signature).is_some(),
+            ModelMode::Native => match rel {
+                FlatInRel::Rel(rel) | FlatInRel::RelWithDiagonals { rel, .. } => {
+                    !rel.is_model_membership_relation()
+                        && rel.parent_model_type(self.signature).is_some()
+                }
+                FlatInRel::Equality(_) | FlatInRel::TypeSet(_) => false,
+            },
             ModelMode::Desugared => false,
         }
     }

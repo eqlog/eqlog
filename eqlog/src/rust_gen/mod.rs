@@ -159,6 +159,12 @@ fn display_func_args_struct<'a>(func: FuncId, ctx: &'a RustGenCtx<'a>) -> impl '
 
 fn display_type_fields<'a>(typ: TypeId, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
     FmtFn(move |f| {
+        let parents = &ctx.signature().type_(typ).parents;
+        if !parents.is_empty() {
+            let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
+            let parent_types = parents.iter().map(|&p| display_type(p, ctx)).format(", ");
+            writeln!(f, "{type_snake}_parents: Vec<({parent_types},)>,")?;
+        }
         let typ = display_type(typ, ctx).to_string();
         let type_snake = typ.to_case(Snake);
         writedoc! {f, "
@@ -224,6 +230,31 @@ fn membership_self_type(rel: FlatRel) -> Option<TypeId> {
         FlatRel::ModelMember(typ) => Some(typ),
         FlatRel::Pred(_) | FlatRel::Func(_) => None,
     }
+}
+
+// Parent indices can be stale between an equality and the next close(). Keep
+// allocation parents separately and compare their current representatives.
+fn display_member_parent_checks<'a>(
+    typ: TypeId,
+    member: &'a str,
+    expected: Vec<String>,
+    ctx: &'a RustGenCtx<'a>,
+) -> impl Display + 'a {
+    FmtFn(move |f| {
+        let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
+        for (i, &parent) in ctx.signature().type_(typ).parents.iter().enumerate() {
+            let parent_snake = display_type(parent, ctx).to_string().to_case(Snake);
+            let expected = &expected[i];
+            writedoc! {f, "
+                assert_eq!(
+                    self.root_{parent_snake}(self.{type_snake}_parents[{member}.0 as usize].{i}),
+                    self.root_{parent_snake}({expected}),
+                    \"invalid dependent argument: member element has a different parent model\"
+                );
+            "}?;
+        }
+        Ok(())
+    })
 }
 
 fn display_nested_mor_app_source_parents<'a>(
@@ -508,17 +539,13 @@ fn display_dependent_type_checks<'a>(
                 continue;
             }
 
-            let member_rel = display_rel(FlatRel::ModelMember(typ), ctx);
-            let member_args = rel_args[..parents.len()]
+            let member = rel_args[pos].to_string();
+            let parents = rel_args[..parents.len()]
                 .iter()
-                .chain(once(&rel_args[pos]))
-                .format(", ");
-            writedoc! {f, "
-                assert!(
-                    self.{member_rel}({member_args}),
-                    \"invalid dependent argument: element is not a member of the supplied parent model\"
-                );
-            "}?;
+                .map(ToString::to_string)
+                .collect();
+            let checks = display_member_parent_checks(typ, &member, parents, ctx);
+            write!(f, "{checks}")?;
         }
 
         Ok(())
@@ -1097,6 +1124,16 @@ fn display_pub_insert_relation<'a>(
 
         let internal_insert = ctx.internal_insert_name(rel);
         let args = rel_args.iter().format(", ");
+        let parent_checks = FmtFn(|f| match rel {
+            FlatRel::ModelMember(typ) => {
+                let (member, parents) = rel_args.split_last().unwrap();
+                let member = member.to_string();
+                let parents = parents.iter().map(ToString::to_string).collect();
+                let checks = display_member_parent_checks(typ, &member, parents, ctx);
+                write!(f, "{checks}")
+            }
+            FlatRel::Pred(_) | FlatRel::Func(_) => Ok(()),
+        });
         // Derived rows may precede their typing facts or endpoint equalities.
         writedoc! {f, "
             {docstring}
@@ -1109,6 +1146,7 @@ fn display_pub_insert_relation<'a>(
 
             fn {internal_insert}(&mut self, {rel_fn_args}) {{
                 {canonicalize}
+                {parent_checks}
                 {unwrap_args}
 
                 {contains_checks}
@@ -1159,7 +1197,21 @@ fn display_new_element_fn_internal<'a>(
                 .map(|i| format!("parent{i}"))
                 .collect::<Vec<_>>()
                 .join(", ");
-            write!(f, "self.insert_{parent_pred}({parent_args}, el.into());")
+            writedoc! {f, "
+                self.{type_snake}_parents.push(({parent_args},));
+                self.insert_{parent_pred}({parent_args}, el.into());
+            "}
+        });
+
+        let parent_checks = FmtFn(move |f| {
+            for (i, &parent) in ctx.signature().type_(typ).parents.iter().enumerate() {
+                let parent_snake = display_type(parent, ctx).to_string().to_case(Snake);
+                let member = format!("self.root_{parent_snake}(parent{i})");
+                let expected = (0..i).map(|j| format!("parent{j}")).collect();
+                let checks = display_member_parent_checks(parent, &member, expected, ctx);
+                write!(f, "{checks}")?;
+            }
+            Ok(())
         });
 
         let type_set_rel = FlatInRel::TypeSet(typ);
@@ -1178,6 +1230,7 @@ fn display_new_element_fn_internal<'a>(
             /// Adjoins a new element of type [{type_camel}].
             #[allow(dead_code)]
             fn new_{type_snake}_internal(&mut self, {parent_param}) -> {type_camel} {{
+                {parent_checks}
                 let old_len = self.{type_snake}_equalities.len();
                 self.{type_snake}_equalities.increase_size_to(old_len + 1);
                 let el = u32::try_from(old_len).unwrap();
@@ -1382,6 +1435,15 @@ fn display_equate_elements<'a>(
 
         let index_new = display_index_field_name(&type_set_rel, index_new, ctx);
         let index_old = display_index_field_name(&type_set_rel, index_old, ctx);
+        let parent_args = ctx
+            .signature()
+            .type_(typ)
+            .parents
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("self.{type_snake}_parents[rhs.0 as usize].{i}"))
+            .collect();
+        let parent_checks = display_member_parent_checks(typ, "lhs", parent_args, ctx);
 
         writedoc! {f, "
             /// Enforces the equality `lhs = rhs`.
@@ -1392,6 +1454,8 @@ fn display_equate_elements<'a>(
                 if lhs == rhs {{
                     return;
                 }}
+
+                {parent_checks}
 
                 let lhs_weight = self.{type_snake}_weights[lhs.0 as usize];
                 let rhs_weight = self.{type_snake}_weights[rhs.0 as usize];
@@ -2613,7 +2677,15 @@ fn display_ordered_morphisms<'a>(
             let obj_old_slice = display_tree_prefix_slice(&obj_old, parent_len, 1);
             let obj_new_slice = display_tree_prefix_slice(&obj_new, parent_len, 1);
             writedoc! {f, r#"
-                let objects = {obj_old_slice}.union({obj_new_slice});
+                let mut objects = {obj_old_slice}.union({obj_new_slice});
+                // Propagated endpoints can precede parent equalities. Include
+                // them in the graph without asserting additional membership.
+                for [object, _] in {dom_new_slice}.iter().chain({dom_old_slice}.iter()) {{
+                    objects.insert([object]);
+                }}
+                for [_, object] in {cod_new_slice}.iter().chain({cod_old_slice}.iter()) {{
+                    objects.insert([object]);
+                }}
                 let ordered_{type_snake}_mor = eqlog_runtime::morphism_toposort(
                     {dom_new_slice},
                     {dom_old_slice},
@@ -2735,6 +2807,7 @@ fn display_propagate_model_morphisms_fn<'a>(
         let remaps = index_selection
             .indices
             .iter()
+            .filter(|(rel, _)| ctx.has_shared_indices(rel))
             .filter(|(rel, _)| match rel {
                 FlatInRel::Rel(rel) => {
                     rel.parent_model_type(ctx.signature())
@@ -2827,7 +2900,7 @@ fn display_rebuild_model_diagonals<'a>(
         for (diagonal, indices) in &index_selection.indices {
             match diagonal {
                 FlatInRel::RelWithDiagonals { rel, equalities } => {
-                    if rel.parent_model_type(ctx.signature()).is_some() {
+                    if ctx.has_shared_indices(diagonal) {
                         diagonals_by_rel
                             .entry(*rel)
                             .or_insert_with(Vec::new)
@@ -3124,6 +3197,9 @@ fn display_new_fn<'a>(
         writeln!(f, "Self {{").unwrap();
         for typ in ctx.signature().iter_types() {
             let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
+            if !ctx.signature().type_(typ).parents.is_empty() {
+                writeln!(f, "{type_snake}_parents: Vec::new(),")?;
+            }
             writeln!(f, "{type_snake}_equalities: Unification::new(),").unwrap();
             writeln!(f, "{type_snake}_weights: Vec::new(),").unwrap();
             writeln!(f, "{type_snake}_uprooted: Vec::new(),").unwrap();
