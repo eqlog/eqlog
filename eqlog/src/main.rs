@@ -1,5 +1,5 @@
 use clap::{Parser, ValueEnum};
-use eqlog::{process, CompileOptions, ComponentConfig, Config, EvaluationMode};
+use eqlog::{process, CompileOptions, ComponentConfig, Config, EvaluationMode, ModelMode};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -36,6 +36,10 @@ struct Cli {
     /// Rule evaluation strategy
     #[arg(long, value_enum, default_value = "semi-naive")]
     evaluation_mode: EvaluationMode,
+
+    /// Model and morphism evaluation strategy
+    #[arg(long, value_enum, default_value = "native")]
+    model_mode: ModelMode,
 
     /// Output directory for component libraries (required for component build)
     #[arg(
@@ -102,6 +106,7 @@ fn main() -> ExitCode {
         component_build,
         options: CompileOptions {
             evaluation_mode: cli.evaluation_mode,
+            model_mode: cli.model_mode,
         },
     };
 

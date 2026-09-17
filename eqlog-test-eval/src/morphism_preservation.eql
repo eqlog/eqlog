@@ -1,0 +1,33 @@
+type Ambient;
+
+model World {
+    type El;
+    pred ready();
+    pred seen(Ambient);
+    pred tagged(El, Ambient);
+    func edge(El) -> El;
+
+    model Inner {
+        type Item;
+        pred marked(Item);
+        pred requested_source(Mor(Inner), Item);
+        pred requested_target(Mor(Inner), Item);
+    }
+
+    pred requested_map(Mor(Inner), Inner, Inner);
+    rule install_requested_map {
+        if requested_map(f, s, t);
+        if s.requested_source(f, x);
+        if t.requested_target(f, y);
+        then dom(f) = s;
+        then cod(f) = t;
+        then f.Item(x) = y;
+    }
+}
+
+pred observed(World);
+rule preserve_0_0 {
+    if w: World;
+    if w.ready();
+    then observed(w);
+}

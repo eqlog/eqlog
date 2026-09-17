@@ -23,4 +23,4 @@ mod unification;
 pub use crate::build::{
     process, process_root, process_root_with_options, ComponentConfig, Config, Error, Result,
 };
-pub use crate::options::{CompileOptions, EvaluationMode};
+pub use crate::options::{CompileOptions, EvaluationMode, ModelMode};

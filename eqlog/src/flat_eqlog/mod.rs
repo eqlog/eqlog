@@ -1,6 +1,7 @@
 mod ast;
 mod diagonals;
 mod index_selection;
+mod morphisms;
 mod semi_naive;
 mod sort;
 
@@ -12,6 +13,7 @@ use crate::options::EvaluationMode;
 pub use ast::*;
 pub use diagonals::*;
 pub use index_selection::*;
+pub use morphisms::*;
 pub use semi_naive::*;
 pub use sort::*;
 

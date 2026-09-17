@@ -158,8 +158,10 @@ fn test_transitive() {
 }
 
 #[test]
-// TODO: This should pass once closure supports self-morphisms.
-#[should_panic(expected = "cycle being present in the morphism category: CycleDetected")]
+#[cfg_attr(
+    not(feature = "desugared"),
+    should_panic(expected = "cycle being present in the morphism category: CycleDetected")
+)]
 fn self_morphism_can_be_closed() {
     let mut model = Subset::new();
     let object = model.new_subs();
