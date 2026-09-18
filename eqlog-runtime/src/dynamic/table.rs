@@ -4,8 +4,7 @@ use crate::{
     PrefixTree7, PrefixTree8, PrefixTree9,
 };
 
-// Runtime arity dispatch keeps the compiled and dynamic storage implementations
-// shared. Larger arities extend the same prefix layout with runtime-sized nodes.
+// Reuse compiled storage for fixed arities; extend its layout for larger tuples.
 macro_rules! table {
     ($($variant:ident($tree:ident, $arity:literal)),* $(,)?) => {
         #[derive(Clone, Debug)]

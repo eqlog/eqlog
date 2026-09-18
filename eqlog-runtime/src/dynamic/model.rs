@@ -13,10 +13,10 @@ struct Carrier {
 
 /// A mutable, unsaturated structure with canonical relation tuples.
 ///
-/// Equality only identifies explicitly equated elements. In particular, inserting
-/// conflicting function results does not derive equality, and enum elements may
-/// temporarily lack constructors. Dependent relation constraints may be pending,
-/// just as they can be between iterations in a compiled evaluator.
+/// Mutations check carrier sorts, arities, and unique parent chains. Functionality,
+/// dependent relation constraints, enum coverage, and morphism preservation may
+/// remain unsatisfied. No operation runs rules; errors leave the structure unchanged.
+/// Element handles remain valid after equality merges, but representatives may change.
 #[derive(Clone, Debug)]
 pub struct DynamicModel {
     signature: Arc<Signature>,
@@ -25,6 +25,7 @@ pub struct DynamicModel {
 }
 
 impl DynamicModel {
+    /// Creates empty carriers and relations over a shared, validated signature.
     pub fn new(signature: Arc<Signature>) -> Self {
         Self {
             carriers: signature
@@ -42,11 +43,16 @@ impl DynamicModel {
         }
     }
 
+    /// Returns the immutable signature, which can be shared with other structures.
     pub fn signature(&self) -> &Arc<Signature> {
         &self.signature
     }
 
     /// Allocates an element and its membership tuple, without adding other facts.
+    ///
+    /// `parents` must instantiate the sort's complete outermost-first parent chain;
+    /// aliases are accepted. Returns an error for invalid sorts or handles, wrong
+    /// argument sorts or counts, inconsistent ownership, or exhausted element IDs.
     pub fn new_element(&mut self, sort: SortId, parents: &[Element]) -> Result<Element, Error> {
         let parent_sorts = &self.signature.sort(sort)?.parents;
         let parents = self.check_tuple(parent_sorts, parents)?;
@@ -74,7 +80,8 @@ impl DynamicModel {
         Ok(element)
     }
 
-    /// Includes aliases, so callers can preserve handles across conversions.
+    /// Enumerates every allocated handle, including aliases, in allocation order.
+    /// Returns [`Error::UnknownSort`] for an invalid sort ID.
     pub fn handles(&self, sort: SortId) -> Result<impl Iterator<Item = Element> + '_, Error> {
         self.signature.sort(sort)?;
         Ok(
@@ -86,12 +93,15 @@ impl DynamicModel {
     }
 
     /// Enumerates one representative of each equality class.
+    /// Returns [`Error::UnknownSort`] for an invalid sort ID.
     pub fn elements(&self, sort: SortId) -> Result<impl Iterator<Item = Element> + '_, Error> {
         Ok(self
             .handles(sort)?
             .filter(|&element| self.root_unchecked(element) == element))
     }
 
+    /// Resolves a handle to its current equality representative.
+    /// Returns [`Error::UnknownSort`] or [`Error::UnknownElement`] for invalid handles.
     pub fn root(&self, element: Element) -> Result<Element, Error> {
         self.signature.sort(element.sort)?;
         if element.index as usize >= self.carriers[element.sort.0].equalities.len() {
@@ -100,6 +110,9 @@ impl DynamicModel {
         Ok(self.root_unchecked(element))
     }
 
+    /// Returns the owning parent chain as current representatives, outermost first.
+    /// Top-level elements have no parents. Invalid handles return the same errors
+    /// as [`Self::root`].
     pub fn parents(&self, element: Element) -> Result<Vec<Element>, Error> {
         let element = self.root(element)?;
         Ok(
@@ -110,7 +123,12 @@ impl DynamicModel {
         )
     }
 
-    /// Returns whether the two equality classes were distinct.
+    /// Merges two equality classes and canonicalizes relation tuples immediately.
+    ///
+    /// Returns `true` if the classes were distinct. Both elements must have the
+    /// same sort and equal parent chains; otherwise returns an invalid-handle,
+    /// [`Error::SortMismatch`], or [`Error::ParentMismatch`] error. Function conflicts
+    /// created by the merge do not derive further equalities.
     pub fn equate(&mut self, lhs: Element, rhs: Element) -> Result<bool, Error> {
         let lhs = self.root(lhs)?;
         let rhs = self.root(rhs)?;
@@ -134,7 +152,6 @@ impl DynamicModel {
         self.carriers[root.sort.0]
             .equalities
             .union_roots_into(child.index, root.index);
-        // Eager normalization keeps readers independent of an evaluator's schedule.
         for i in 0..self.relations.len() {
             let arity = &self
                 .signature
@@ -154,6 +171,9 @@ impl DynamicModel {
         Ok(true)
     }
 
+    /// Enumerates distinct tuples using current representatives in schema column order.
+    /// A true nullary predicate has one empty tuple; a false one has none.
+    /// Returns [`Error::UnknownRelation`] for an invalid relation ID.
     pub fn tuples(
         &self,
         relation: RelationId,
@@ -168,14 +188,19 @@ impl DynamicModel {
         }))
     }
 
+    /// Tests tuple membership modulo explicit equality.
+    /// Returns an error for an invalid relation, arity, carrier sort, or element handle.
     pub fn contains(&self, relation: RelationId, tuple: &[Element]) -> Result<bool, Error> {
         let tuple = self.check_tuple(&self.signature.relation(relation)?.arity, tuple)?;
         Ok(self.relations[relation.0]
             .contains(&tuple.iter().map(|el| el.index).collect::<Vec<_>>()))
     }
 
-    /// Adds a well-sorted tuple, without checking or executing theory rules.
-    /// Membership cannot assign an element to a second parent chain.
+    /// Inserts a tuple modulo explicit equality; returns whether it was new.
+    ///
+    /// Returns an error for an invalid relation, arity, carrier sort, or element
+    /// handle. Membership rows must agree with the element's parent chain.
+    /// Function graphs may retain multiple results for the same arguments.
     pub fn insert(&mut self, relation: RelationId, tuple: &[Element]) -> Result<bool, Error> {
         let descriptor = self.signature.relation(relation)?;
         let tuple = self.check_tuple(&descriptor.arity, tuple)?;

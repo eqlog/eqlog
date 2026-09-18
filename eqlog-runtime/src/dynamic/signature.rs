@@ -10,6 +10,7 @@ pub struct SortId(pub usize);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RelationId(pub usize);
 
+/// The declaration that supplies a carrier; this does not enforce its axioms.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SortKind {
     Plain,
@@ -18,27 +19,32 @@ pub enum SortKind {
     Morphism(SortId),
 }
 
+/// A named carrier with its enclosing model sorts.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Sort {
+    /// Unique within the signature's sort namespace.
     pub name: String,
     pub kind: SortKind,
     /// Enclosing model sorts, outermost first.
     pub parents: Vec<SortId>,
 }
 
+/// Semantic roles retained when functions are represented by graph relations.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FunctionKind {
+    /// A user-declared function or constant.
     Ordinary,
+    /// An enum constructor whose last graph column has the enum sort.
     Constructor,
     /// The argument is a morphism between instances of this model sort.
     MorphismDomain(SortId),
+    /// The result is an instance of the specified model sort.
     MorphismCodomain(SortId),
-    MorphismApplication {
-        morphism: SortId,
-        member: SortId,
-    },
+    /// Transport of a member, possibly nested, along this morphism sort.
+    MorphismApplication { morphism: SortId, member: SortId },
 }
 
+/// The interpretation of a relation's columns.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RelationKind {
     Predicate,
@@ -48,8 +54,10 @@ pub enum RelationKind {
     Membership(SortId),
 }
 
+/// A named relation, with enclosing model parameters as leading columns.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Relation {
+    /// Unique within the signature's relation namespace.
     pub name: String,
     pub kind: RelationKind,
     /// Includes enclosing model parameters and, for functions, the result.
@@ -70,6 +78,17 @@ pub struct Signature {
 }
 
 impl Signature {
+    /// Validates descriptors and assigns IDs by their positions in the input vectors.
+    ///
+    /// Names must be nonempty and unique in each namespace. Parent chains must
+    /// consist of consistently nested model sorts. Every dependent sort requires
+    /// exactly one membership relation with its parent chain followed by the sort
+    /// itself. Function graphs need a result column; constructor and morphism
+    /// roles impose additional shape constraints.
+    ///
+    /// A failed sort lookup returns [`Error::UnknownSort`]; invalid descriptor
+    /// shapes return [`Error::InvalidSignature`]. This validates storage shape,
+    /// not completeness of an Eqlog theory.
     pub fn new(sorts: Vec<Sort>, relations: Vec<Relation>) -> Result<Self, Error> {
         let mut signature = Self {
             memberships: vec![None; sorts.len()],
@@ -156,6 +175,7 @@ impl Signature {
         Ok(signature)
     }
 
+    /// Enumerates sorts in ID order.
     pub fn sorts(&self) -> impl ExactSizeIterator<Item = (SortId, &Sort)> {
         self.sorts
             .iter()
@@ -163,6 +183,7 @@ impl Signature {
             .map(|(i, sort)| (SortId(i), sort))
     }
 
+    /// Enumerates relations in ID order.
     pub fn relations(&self) -> impl ExactSizeIterator<Item = (RelationId, &Relation)> {
         self.relations
             .iter()
@@ -170,19 +191,23 @@ impl Signature {
             .map(|(i, relation)| (RelationId(i), relation))
     }
 
+    /// Looks up a descriptor, returning [`Error::UnknownSort`] for an invalid ID.
     pub fn sort(&self, id: SortId) -> Result<&Sort, Error> {
         self.sorts.get(id.0).ok_or(Error::UnknownSort(id))
     }
 
+    /// Looks up a descriptor, returning [`Error::UnknownRelation`] for an invalid ID.
     pub fn relation(&self, id: RelationId) -> Result<&Relation, Error> {
         self.relations.get(id.0).ok_or(Error::UnknownRelation(id))
     }
 
+    /// Looks up the exact, case-sensitive sort name, including any model qualification.
     pub fn sort_named(&self, name: &str) -> Option<SortId> {
         self.sorts()
             .find_map(|(id, sort)| (sort.name == name).then_some(id))
     }
 
+    /// Looks up the exact, case-sensitive relation name, including model qualification.
     pub fn relation_named(&self, name: &str) -> Option<RelationId> {
         self.relations()
             .find_map(|(id, relation)| (relation.name == name).then_some(id))

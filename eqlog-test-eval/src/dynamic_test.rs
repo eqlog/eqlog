@@ -1,8 +1,10 @@
 use std::collections::BTreeSet;
 
 use eqlog_runtime::dynamic::{
-    CompiledModel, DynamicModel, Element, ElementMap, Error, FunctionKind, RelationKind, SortKind,
+    CompiledModel, DynamicModel, Element, ElementMap, Error, FunctionKind, RelationKind, Signature,
+    SortKind,
 };
+use std::sync::Arc;
 
 use crate::consts::Consts;
 use crate::empty::Empty;
@@ -273,4 +275,67 @@ fn dynamic_checks_parent_chains_before_mutation() {
     let (restored, _) = MemberParents::from_dynamic(&model).unwrap();
     assert_eq!(restored.iter_el().count(), 1);
     round_trip(&restored);
+}
+
+#[test]
+fn dynamic_import_preserves_enum_elements_without_constructors() {
+    let signature = Nat::dynamic_signature();
+    let sort = signature.sort_named("N").unwrap();
+    let mut dynamic = DynamicModel::new(signature);
+    let element = dynamic.new_element(sort, &[]).unwrap();
+    let (compiled, map) = Nat::from_dynamic(&dynamic).unwrap();
+    assert_eq!(compiled.iter_n().count(), 1);
+    assert_eq!(compiled.iter_zero().count(), 0);
+    assert_eq!(compiled.iter_succ().count(), 0);
+    let (exported, export) = compiled.to_dynamic();
+    assert_eq!(
+        exported.elements(sort).unwrap().collect::<Vec<_>>(),
+        vec![export[&map[&element]]]
+    );
+    round_trip(&compiled);
+}
+
+#[test]
+fn dynamic_import_preserves_applications_without_endpoints() {
+    let signature = MorphismPreservation::dynamic_signature();
+    let world = signature.sort_named("World").unwrap();
+    let el = signature.sort_named("World::El").unwrap();
+    let mor = signature.sort_named("WorldMor").unwrap();
+    let application = signature.relation_named("el_mor_app").unwrap();
+    let mut dynamic = DynamicModel::new(signature);
+    let a = dynamic.new_element(world, &[]).unwrap();
+    let b = dynamic.new_element(world, &[]).unwrap();
+    let x = dynamic.new_element(el, &[a]).unwrap();
+    let y = dynamic.new_element(el, &[b]).unwrap();
+    let h = dynamic.new_element(mor, &[]).unwrap();
+    dynamic.insert(application, &[h, x, y]).unwrap();
+    let (compiled, map) = MorphismPreservation::from_dynamic(&dynamic).unwrap();
+    assert_eq!(compiled.iter_world_mor_dom().count(), 0);
+    assert_eq!(compiled.iter_world_mor_cod().count(), 0);
+    assert_eq!(compiled.iter_el_mor_app().count(), 1);
+    let (exported, export) = compiled.to_dynamic();
+    assert!(exported
+        .contains(
+            application,
+            &[export[&map[&h]], export[&map[&x]], export[&map[&y]]]
+        )
+        .unwrap());
+    round_trip(&compiled);
+}
+
+#[test]
+fn dynamic_import_requires_the_same_descriptor_order() {
+    let signature = Logic::dynamic_signature();
+    let sorts = signature.sorts().map(|(_, sort)| sort.clone()).collect();
+    let mut relations: Vec<_> = signature
+        .relations()
+        .map(|(_, relation)| relation.clone())
+        .collect();
+    relations.reverse();
+    let reordered = Signature::new(sorts, relations).unwrap();
+    let dynamic = DynamicModel::new(Arc::new(reordered));
+    assert_eq!(
+        Logic::from_dynamic(&dynamic).err(),
+        Some(Error::SignatureMismatch)
+    );
 }
