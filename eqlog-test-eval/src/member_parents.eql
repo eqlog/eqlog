@@ -1,0 +1,20 @@
+model Outer {
+    model Inner {
+        type El;
+        enum Label {
+            LabelValue()
+        }
+    }
+}
+
+pred merge(Outer, Outer);
+rule merge_members {
+    if merge(a, b);
+    if i: a.Inner;
+    if j: b.Inner;
+    if x: i.El;
+    if y: j.El;
+    then a = b;
+    then i = j;
+    then x = y;
+}

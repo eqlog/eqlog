@@ -13,7 +13,8 @@ pub fn morphism_preservation_rules(signature: &Signature) -> Vec<FlatRule> {
         let parents = match rel {
             FlatRel::Pred(pred) => &signature.pred(pred).parents,
             FlatRel::Func(func) => &signature.func(func).parents,
-            FlatRel::ModelMember(typ) => &signature.type_(typ).parents,
+            // Allocation already assigns every image its unique parent chain.
+            FlatRel::ModelMember(_) => continue,
         };
         let source: Vec<_> = rel
             .arity(signature)

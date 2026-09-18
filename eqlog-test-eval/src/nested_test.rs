@@ -78,12 +78,8 @@ fn nested_mor_app_insert_rejects_wrong_inner_parent() {
 fn nested_mor_app_insert_rejects_wrong_intermediate_parent() {
     let mut fixture = nested_morphism_fixture();
     let other_b = fixture.model.new_b(fixture.codomain);
-    fixture
-        .model
-        .insert_b_member_c(fixture.codomain, other_b, fixture.target_c);
-    let other_y = fixture
-        .model
-        .new_t(fixture.codomain, other_b, fixture.target_c);
+    let other_c = fixture.model.new_c(fixture.codomain, other_b);
+    let other_y = fixture.model.new_t(fixture.codomain, other_b, other_c);
     fixture
         .model
         .insert_a_t_mor_app(fixture.h, fixture.x, other_y);
@@ -135,42 +131,14 @@ fn nested_mor_app_query_rejects_wrong_domain() {
 }
 
 #[test]
-fn nested_mor_app_accepts_any_valid_source_membership() {
-    let mut fixture = nested_morphism_fixture();
-    let other_b = fixture.model.new_b(fixture.domain);
-    let other_c = fixture.model.new_c(fixture.domain, other_b);
-    fixture
-        .model
-        .insert_c_member_t(fixture.domain, other_b, other_c, fixture.x);
-
-    // The original source parents have no images under h, so validation must
-    // also consider the other membership of x.
-    let h = fixture.model.new_a_mor();
-    fixture.model.insert_a_mor_dom(h, fixture.domain);
-    fixture.model.insert_a_mor_cod(h, fixture.codomain);
-    fixture.model.insert_b_mor_app(h, other_b, fixture.target_b);
-    fixture
-        .model
-        .insert_a_c_mor_app(h, other_c, fixture.target_c);
-    assert_eq!(fixture.model.a_t_mor_app(h, fixture.x), None);
-    fixture.model.insert_a_t_mor_app(h, fixture.x, fixture.y);
-    assert_eq!(fixture.model.a_t_mor_app(h, fixture.x), Some(fixture.y));
-
-    fixture.model.close();
-    fixture.model.insert_a_t_mor_app(h, fixture.x, fixture.y);
-    assert_eq!(fixture.model.a_t_mor_app(h, fixture.x), Some(fixture.y));
-}
-
-#[test]
-fn nested_mor_app_accepts_inherited_source_membership() {
+fn nested_mor_app_accepts_target_as_next_source() {
     let mut fixture = nested_morphism_fixture();
     fixture
         .model
         .insert_a_t_mor_app(fixture.h, fixture.x, fixture.y);
     fixture.model.close();
 
-    // The first morphism supplies y's membership after closure. A second
-    // morphism must be able to use that inherited membership as its source.
+    // A morphism image must remain usable as the source of another morphism.
     let next_a = fixture.model.new_a();
     let next_b = fixture.model.new_b(next_a);
     let next_c = fixture.model.new_c(next_a, next_b);
@@ -653,24 +621,25 @@ fn nested_morphism_stays_in_its_outer_parent() {
     let other_bundle = model.new_bundle();
     let source = model.new_fiber(bundle);
     let target = model.new_fiber(bundle);
-    model.insert_bundle_member_fiber(other_bundle, source);
-    model.insert_bundle_member_fiber(other_bundle, target);
+    let other_source = model.new_fiber(other_bundle);
+    let other_target = model.new_fiber(other_bundle);
     let x = model.new_el(bundle, source);
     let y = model.new_el(bundle, target);
-    model.insert_fiber_member_el(other_bundle, source, x);
-    model.insert_fiber_member_el(other_bundle, target, y);
+    let other_x = model.new_el(other_bundle, other_source);
+    let other_y = model.new_el(other_bundle, other_target);
     let g = model.new_fiber_mor(bundle);
     model.insert_fiber_mor_dom(bundle, g, source);
     model.insert_fiber_mor_cod(bundle, g, target);
     model.insert_el_mor_app(bundle, g, x, y);
-    model.insert_marked(other_bundle, source, x);
-    model.insert_next(other_bundle, source, x, x);
+    model.insert_marked(other_bundle, other_source, other_x);
+    model.insert_next(other_bundle, other_source, other_x, other_x);
 
     model.close();
 
-    assert!(model.marked(other_bundle, source, x));
-    assert!(!model.marked(other_bundle, target, y));
-    assert_eq!(model.next(other_bundle, target, y), None);
+    assert!(model.marked(other_bundle, other_source, other_x));
+    assert!(!model.marked(bundle, target, y));
+    assert_eq!(model.next(bundle, target, y), None);
+    assert!(!model.marked(other_bundle, other_target, other_y));
 
     model.insert_marked(bundle, source, x);
     model.insert_next(bundle, source, x, x);
@@ -678,12 +647,12 @@ fn nested_morphism_stays_in_its_outer_parent() {
 
     assert!(model.marked(bundle, target, y));
     assert_eq!(model.next(bundle, target, y), Some(y));
-    assert!(!model.marked(other_bundle, target, y));
-    assert_eq!(model.next(other_bundle, target, y), None);
+    assert!(!model.marked(other_bundle, other_target, other_y));
+    assert_eq!(model.next(other_bundle, other_target, other_y), None);
 }
 
 #[test]
-fn nested_morphism_can_use_inherited_objects() {
+fn nested_morphism_can_use_outer_morphism_images() {
     let mut model = Nested::new();
     let source = model.new_bundle();
     let target = model.new_bundle();

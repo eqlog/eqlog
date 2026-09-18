@@ -231,6 +231,11 @@ fn conflicting_term_type_member_annotation() {
 }
 
 #[test]
+fn member_multiple_parents() {
+    test_case(Path::new("member-multiple-parents"));
+}
+
+#[test]
 fn variable_introduced_in_then_statement() {
     test_case(Path::new("variable-introduced-in-then-statement"));
 }

@@ -1,0 +1,8 @@
+Error: term has conflicting types:
+ --> error-test-source/member-multiple-parents/theory.eql:8
+  | 
+8 |     if x: a.T;
+  |        ^      
+  | 
+- Could be a.T
+- Could be b.T

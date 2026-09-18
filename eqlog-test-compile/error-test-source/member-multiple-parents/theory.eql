@@ -1,0 +1,11 @@
+model M {
+    type T;
+}
+
+rule {
+    if a: M;
+    if b: M;
+    if x: a.T;
+    if x: b.T;
+    then x = x;
+}
