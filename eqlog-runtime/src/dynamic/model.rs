@@ -11,11 +11,12 @@ struct Carrier {
     parents: Vec<Vec<Element>>,
 }
 
-/// A mutable, unsaturated structure with canonical relation tuples.
+/// Elements, equalities, and relation tuples for a runtime signature.
 ///
-/// Mutations check carrier sorts, arities, and unique parent chains. Functionality,
-/// dependent relation constraints, enum coverage, and morphism preservation may
-/// remain unsatisfied. No operation runs rules; errors leave the structure unchanged.
+/// Operations check sorts, arities, and parent chains. They do not run rules or
+/// enforce functionality, dependent relation constraints, enum coverage, or
+/// morphism preservation. Failed operations leave the structure unchanged.
+///
 /// Element handles remain valid after equality merges, but representatives may change.
 #[derive(Clone, Debug)]
 pub struct DynamicModel {
@@ -25,7 +26,7 @@ pub struct DynamicModel {
 }
 
 impl DynamicModel {
-    /// Creates empty carriers and relations over a shared, validated signature.
+    /// Creates a structure with no elements or facts.
     pub fn new(signature: Arc<Signature>) -> Self {
         Self {
             carriers: signature
@@ -43,15 +44,15 @@ impl DynamicModel {
         }
     }
 
-    /// Returns the immutable signature, which can be shared with other structures.
+    /// Returns the shared signature.
     pub fn signature(&self) -> &Arc<Signature> {
         &self.signature
     }
 
     /// Allocates an element and its membership tuple, without adding other facts.
     ///
-    /// `parents` must instantiate the sort's complete outermost-first parent chain;
-    /// aliases are accepted. Returns an error for invalid sorts or handles, wrong
+    /// `parents` must contain the sort's full parent chain, outermost first.
+    /// Aliases are accepted. Returns an error for invalid sorts or handles, wrong
     /// argument sorts or counts, inconsistent ownership, or exhausted element IDs.
     pub fn new_element(&mut self, sort: SortId, parents: &[Element]) -> Result<Element, Error> {
         let parent_sorts = &self.signature.sort(sort)?.parents;
@@ -125,10 +126,10 @@ impl DynamicModel {
 
     /// Merges two equality classes and canonicalizes relation tuples immediately.
     ///
-    /// Returns `true` if the classes were distinct. Both elements must have the
-    /// same sort and equal parent chains; otherwise returns an invalid-handle,
-    /// [`Error::SortMismatch`], or [`Error::ParentMismatch`] error. Function conflicts
-    /// created by the merge do not derive further equalities.
+    /// Returns `true` if the classes were distinct. Both handles must be valid,
+    /// have the same sort, and have equal parent chains. Otherwise returns a
+    /// handle error, [`Error::SortMismatch`], or [`Error::ParentMismatch`].
+    /// Function conflicts created by the merge do not derive further equalities.
     pub fn equate(&mut self, lhs: Element, rhs: Element) -> Result<bool, Error> {
         let lhs = self.root(lhs)?;
         let rhs = self.root(rhs)?;
@@ -171,8 +172,8 @@ impl DynamicModel {
         Ok(true)
     }
 
-    /// Enumerates distinct tuples using current representatives in schema column order.
-    /// A true nullary predicate has one empty tuple; a false one has none.
+    /// Enumerates distinct tuples using current representatives in relation column order.
+    /// A nullary predicate has one empty tuple when true and no tuples when false.
     /// Returns [`Error::UnknownRelation`] for an invalid relation ID.
     pub fn tuples(
         &self,
@@ -196,7 +197,7 @@ impl DynamicModel {
             .contains(&tuple.iter().map(|el| el.index).collect::<Vec<_>>()))
     }
 
-    /// Inserts a tuple modulo explicit equality; returns whether it was new.
+    /// Inserts a tuple modulo explicit equality. Returns whether it was new.
     ///
     /// Returns an error for an invalid relation, arity, carrier sort, or element
     /// handle. Membership rows must agree with the element's parent chain.

@@ -43,21 +43,23 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 
-/// An element handle, local to one structure and its signature.
+/// An element handle within one structure.
 ///
-/// Equal numeric IDs in different structures have no implied correspondence.
-/// Use [`ElementMap`] when transferring handles through a conversion.
+/// The same ID can refer to different elements in different structures.
+/// Use [`ElementMap`] to find an element's handle after conversion.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Element {
     pub sort: SortId,
     pub index: u32,
 }
 
-/// Maps source handles to target handles, including noncanonical aliases.
+/// Maps each source handle to its target handle after conversion.
 ///
-/// Compiled handles use the sort ID in the generated dynamic signature and the
-/// integer wrapped by their generated Rust type. Target handles may be shared
-/// when source elements are equal. Numeric IDs need not survive conversion.
+/// Includes aliases created by equality merges. Equal source elements map to
+/// the same target handle. Conversion can change numeric IDs.
+///
+/// For a compiled handle, use the sort ID from [`CompiledModel::dynamic_signature`]
+/// and the integer wrapped by the generated Rust type.
 pub type ElementMap = BTreeMap<Element, Element>;
 
 /// Implemented by generated models to transfer data without running rules.
@@ -70,18 +72,17 @@ pub trait CompiledModel: Sized {
 
     /// Exports the current facts and a map from compiled to dynamic handles.
     ///
-    /// Equal elements share a target handle, including aliases retained by the
-    /// caller. Inherited facts are included as currently represented; pending
-    /// morphism propagation and functionality are not evaluated. The source is
-    /// unchanged. See [`ElementMap`] for encoding compiled handles.
+    /// Includes inherited facts already present in the model. Export does not
+    /// propagate morphisms or resolve function conflicts. The source is unchanged.
+    /// See [`ElementMap`] for looking up compiled handles, including aliases.
     fn to_dynamic(&self) -> (DynamicModel, ElementMap);
 
     /// Imports data and returns a map from dynamic to compiled handles.
     ///
-    /// Equal elements share a target handle. All imported facts become explicit,
-    /// and evaluation progress is reset for subsequent evaluation. Import does not
-    /// establish theory axioms or guarantee that closure repairs unsatisfied
-    /// constraints. An enum element without a constructor still has no case.
+    /// All imported facts become explicit and are treated as new by evaluation.
+    /// Import does not check theory axioms. Calling `close` afterward may still
+    /// leave some axioms unsatisfied. For example, an enum element created without
+    /// a constructor may still have no case.
     ///
     /// Returns [`Error::SignatureMismatch`] if sort or relation descriptors differ
     /// from [`Self::dynamic_signature`], including their order and names.

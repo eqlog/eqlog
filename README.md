@@ -393,10 +393,9 @@ let snapshot_x = exported[&Element { sort: el_sort, index: compiled_x.0 }];
 assert_eq!(snapshot.root(snapshot_x).unwrap(), snapshot_x);
 ```
 
-Conversions preserve represented facts and explicit equality without running
-rules. The maps retain caller handles when IDs change. Import requires matching
-ordered signatures and resets evaluation progress; pending constraints remain
-pending.
+Conversions copy the current facts and equalities without running rules.
+The returned maps let callers translate handles when IDs change. Import requires
+matching ordered signatures and treats all imported facts as new for evaluation.
 
 The [`dynamic` module](eqlog-runtime/src/dynamic/mod.rs) documents the public API,
 including constructing a signature without the compiler, parent chains, and

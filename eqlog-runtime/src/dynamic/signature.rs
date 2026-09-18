@@ -10,7 +10,7 @@ pub struct SortId(pub usize);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RelationId(pub usize);
 
-/// The declaration that supplies a carrier; this does not enforce its axioms.
+/// How a sort was declared.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SortKind {
     Plain,
@@ -29,7 +29,7 @@ pub struct Sort {
     pub parents: Vec<SortId>,
 }
 
-/// Semantic roles retained when functions are represented by graph relations.
+/// The kind of function stored in a graph relation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FunctionKind {
     /// A user-declared function or constant.
@@ -40,7 +40,7 @@ pub enum FunctionKind {
     MorphismDomain(SortId),
     /// The result is an instance of the specified model sort.
     MorphismCodomain(SortId),
-    /// Transport of a member, possibly nested, along this morphism sort.
+    /// Applies a morphism to a member, which may belong to a nested model.
     MorphismApplication { morphism: SortId, member: SortId },
 }
 
@@ -83,12 +83,12 @@ impl Signature {
     /// Names must be nonempty and unique in each namespace. Parent chains must
     /// consist of consistently nested model sorts. Every dependent sort requires
     /// exactly one membership relation with its parent chain followed by the sort
-    /// itself. Function graphs need a result column; constructor and morphism
-    /// roles impose additional shape constraints.
+    /// itself. Function graphs need a result column. Constructors must return an
+    /// enum. Morphism functions must have the expected argument and result sorts.
     ///
-    /// A failed sort lookup returns [`Error::UnknownSort`]; invalid descriptor
-    /// shapes return [`Error::InvalidSignature`]. This validates storage shape,
-    /// not completeness of an Eqlog theory.
+    /// Enum constructors and morphism functions may be omitted.
+    /// Returns [`Error::UnknownSort`] or [`Error::InvalidSignature`] for invalid
+    /// descriptors.
     pub fn new(sorts: Vec<Sort>, relations: Vec<Relation>) -> Result<Self, Error> {
         let mut signature = Self {
             memberships: vec![None; sorts.len()],
