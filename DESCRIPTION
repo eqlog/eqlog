@@ -1,0 +1,11 @@
+Share model data with future interpreters
+
+Introduce runtime signatures and dynamic structures so callers can
+inspect and construct Eqlog data without generating Rust or running
+saturation. Preserve explicit equality, dependent ownership, and pending
+function graph conflicts. Reuse the runtime union-find and prefix trees
+behind runtime arity dispatch.
+
+Generate conversions with element correspondences so models can move
+between representations without losing caller handles or implicitly
+executing rules.

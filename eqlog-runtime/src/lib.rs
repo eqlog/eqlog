@@ -21,6 +21,8 @@
 #[used]
 static TAG: &'static str = concat!("EQLOG_RUNTIME_TAG_", env!("OUT_DIR"));
 
+pub mod dynamic;
+
 mod prefix_tree;
 mod toposort;
 mod unification;

@@ -1,4 +1,5 @@
 mod context;
+mod dynamic;
 mod flat_eqlog;
 mod rule;
 mod types;
@@ -3847,6 +3848,9 @@ pub fn display_module<'a>(
 
         let theory_impl = display_theory_impl(name, ram_modules, ctx, index_selection);
         write!(f, "{}", theory_impl)?;
+
+        let dynamic_impl = dynamic::display_dynamic_impl(name, ctx);
+        write!(f, "{dynamic_impl}")?;
 
         Ok(())
     })
