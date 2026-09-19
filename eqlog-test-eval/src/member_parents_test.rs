@@ -115,6 +115,109 @@ fn parent_equalities_take_effect_before_indices_are_rebuilt() {
 }
 
 #[test]
+fn membership_checks_follow_either_representative_without_rewriting_rows() {
+    for closed in [false, true] {
+        for reverse in [false, true] {
+            let mut model = MemberParents::new();
+            let a = model.new_outer();
+            let b = model.new_outer();
+            let i = model.new_inner(a);
+            let j = model.new_inner(b);
+            let x = model.new_el(a, i);
+            let y = model.new_el(b, j);
+            if closed {
+                model.close();
+            }
+            let rows: Vec<_> = model.iter_inner_member_el().collect();
+            let (outer, other_outer, inner, other_inner, el, other_el) = if reverse {
+                (b, a, j, i, y, x)
+            } else {
+                (a, b, i, j, x, y)
+            };
+
+            model.equate_outer(outer, other_outer);
+            assert_eq!(model.root_outer(a), outer);
+            assert!(model.outer_member_inner(a, j));
+            assert!(model.outer_member_inner(b, i));
+            model.equate_inner(other_outer, inner, other_inner);
+            assert_eq!(model.root_inner(i), inner);
+            assert!(model.inner_member_el(a, i, y));
+            assert!(model.inner_member_el(b, j, x));
+            model.equate_el(other_outer, other_inner, el, other_el);
+            assert_eq!(model.root_el(x), el);
+            assert!(model.inner_member_el(a, i, y));
+            assert!(model.inner_member_el(b, j, x));
+            assert_eq!(model.iter_inner_member_el().collect::<Vec<_>>(), rows);
+
+            model.close();
+            assert_eq!(
+                model.iter_inner_member_el().collect::<Vec<_>>(),
+                vec![(outer, inner, el)]
+            );
+        }
+    }
+}
+
+#[test]
+fn stale_membership_index_rows_do_not_allow_other_owners() {
+    let mut model = MemberParents::new();
+    let a = model.new_outer();
+    let b = model.new_outer();
+    let c = model.new_outer();
+    let i = model.new_inner(a);
+    let j = model.new_inner(b);
+    let k = model.new_inner(c);
+    let x = model.new_el(a, i);
+    let y = model.new_el(b, j);
+    let z = model.new_el(c, k);
+    model.close();
+
+    model.equate_outer(b, a);
+    model.equate_inner(a, j, i);
+    model.equate_el(a, i, y, x);
+    model.close();
+    model.equate_outer(c, b);
+    model.equate_inner(b, k, j);
+    model.equate_el(b, j, z, y);
+
+    let unrelated = model.new_outer();
+    let other_inner = model.new_inner(c);
+    let before: Vec<_> = model.iter_inner_member_el().collect();
+    assert!(catch_unwind(AssertUnwindSafe(|| model.new_el(unrelated, i))).is_err());
+    for (outer, inner) in [(unrelated, i), (c, other_inner)] {
+        assert!(catch_unwind(AssertUnwindSafe(|| {
+            model.insert_inner_member_el(outer, inner, x);
+        }))
+        .is_err());
+    }
+    assert_eq!(model.iter_inner_member_el().collect::<Vec<_>>(), before);
+    assert_eq!(model.iter_el().count(), 1);
+    assert!(model.inner_member_el(a, i, x));
+    assert!(model.inner_member_el(b, j, y));
+    assert!(model.inner_member_el(c, k, z));
+    model.close();
+    assert_eq!(model.iter_inner_member_el().count(), 1);
+}
+
+#[test]
+fn membership_insertion_rejects_unallocated_members_before_mutation() {
+    let mut model = MemberParents::new();
+    let a = model.new_outer();
+    let i = model.new_inner(a);
+    let x = model.new_el(a, i);
+    assert!(catch_unwind(AssertUnwindSafe(|| {
+        model.insert_inner_member_el(a, i, El(x.0 + 1));
+    }))
+    .is_err());
+    model.close();
+    assert_eq!(model.iter_el().collect::<Vec<_>>(), vec![x]);
+    assert_eq!(
+        model.iter_inner_member_el().collect::<Vec<_>>(),
+        vec![(a, i, x)]
+    );
+}
+
+#[test]
 fn equality_checks_both_members_against_the_supplied_parents() {
     for closed in [false, true] {
         let mut model = MemberParents::new();
