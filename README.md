@@ -316,6 +316,9 @@ The model structure has the following member functions:
     Adjoins a new element to the model structure.
   - `fn equate_<sort_name>(&mut self, lhs: <TypeName>, rhs: <TypeName>)`  
     Enforces the equality `lhs = rhs` in the model structure.
+    For member sorts, supply all enclosing model instances before `lhs` and `rhs`,
+    outermost first, for example `equate_el(outer, inner, lhs, rhs)`.
+    Both elements must belong to that model chain, even if they are already equal.
   - `fn are_equal_<sort_name>(&self, lhs: <TypeName>, rhs: <TypeName>) -> bool`  
     Returns true if `lhs` and `rhs` represent the same element.
   - `fn root_<sort_name>(&self, el: <TypeName>) -> <TypeName>`    

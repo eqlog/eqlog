@@ -1,0 +1,9 @@
+Require parent arguments for member equalities
+
+Require the full enclosing model chain when equating member elements
+through the generated Rust API. Check both operands against that chain
+before merging, including equal operands and aliases. Keep rule-derived
+equalities on the compiler's internal path.
+
+Cover incorrect parent arguments and membership canonicalization after
+parent and member merges in integration tests.

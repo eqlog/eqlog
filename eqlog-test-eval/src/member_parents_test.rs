@@ -61,10 +61,12 @@ fn equality_rejects_other_parents_before_and_after_closure() {
             model.close();
         }
 
-        assert!(catch_unwind(AssertUnwindSafe(|| model.equate_inner(i, j))).is_err());
-        assert!(catch_unwind(AssertUnwindSafe(|| model.equate_el(x, y))).is_err());
-        assert!(catch_unwind(AssertUnwindSafe(|| model.equate_inner_mor(f, g))).is_err());
-        assert!(catch_unwind(AssertUnwindSafe(|| model.equate_label(label0, label1))).is_err());
+        assert!(catch_unwind(AssertUnwindSafe(|| model.equate_inner(a, i, j))).is_err());
+        assert!(catch_unwind(AssertUnwindSafe(|| model.equate_el(a, i, x, y))).is_err());
+        assert!(catch_unwind(AssertUnwindSafe(|| model.equate_inner_mor(a, f, g))).is_err());
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| model.equate_label(a, i, label0, label1))).is_err()
+        );
         assert!(!model.are_equal_inner(i, j));
         assert!(!model.are_equal_el(x, y));
         assert!(!model.are_equal_inner_mor(f, g));
@@ -96,15 +98,60 @@ fn parent_equalities_take_effect_before_indices_are_rebuilt() {
     model.close();
 
     model.equate_outer(a, b);
-    assert!(catch_unwind(AssertUnwindSafe(|| model.equate_el(x, y))).is_err());
-    model.equate_inner(i, j);
-    model.equate_el(x, y);
+    assert!(catch_unwind(AssertUnwindSafe(|| model.equate_el(a, i, x, y))).is_err());
+    model.equate_inner(b, i, j);
+    model.equate_el(b, j, x, y);
     model.insert_outer_member_inner(b, j);
     model.insert_inner_member_el(b, j, y);
     model.new_el(b, j);
     model.close();
     assert_eq!(model.iter_outer_member_inner().count(), 1);
     assert_eq!(model.iter_inner_member_el().count(), 2);
+    for (outer, inner, el) in model.iter_inner_member_el() {
+        assert_eq!(outer, model.root_outer(a));
+        assert_eq!(inner, model.root_inner(i));
+        assert_eq!(el, model.root_el(el));
+    }
+}
+
+#[test]
+fn equality_checks_both_members_against_the_supplied_parents() {
+    for closed in [false, true] {
+        let mut model = MemberParents::new();
+        let a = model.new_outer();
+        let b = model.new_outer();
+        let i = model.new_inner(a);
+        let j = model.new_inner(a);
+        let x = model.new_el(a, i);
+        let y = model.new_el(a, i);
+        let z = model.new_el(a, j);
+        if closed {
+            model.close();
+        }
+
+        for (outer, inner, lhs, rhs) in [
+            (b, i, x, y),
+            (a, j, x, y),
+            (a, i, x, z),
+            (a, i, z, x),
+            (b, i, x, x),
+        ] {
+            assert!(catch_unwind(AssertUnwindSafe(|| {
+                model.equate_el(outer, inner, lhs, rhs);
+            }))
+            .is_err());
+            assert_eq!(model.iter_el().count(), 3);
+            assert!(!model.are_equal_el(x, y));
+            assert!(!model.are_equal_el(x, z));
+        }
+
+        model.equate_el(a, i, x, y);
+        assert!(model.are_equal_el(x, y));
+        assert!(catch_unwind(AssertUnwindSafe(|| model.equate_el(a, j, x, y))).is_err());
+        assert_eq!(model.iter_el().count(), 2);
+        model.close();
+        assert_eq!(model.iter_inner_member_el().count(), 2);
+    }
 }
 
 #[test]

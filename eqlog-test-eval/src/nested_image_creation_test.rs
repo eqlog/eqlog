@@ -84,7 +84,7 @@ fn define_accepts_noncanonical_argument() {
     let n = model.new_n(source);
     let x0 = model.new_t(source, n);
     let x1 = model.new_t(source, n);
-    model.equate_t(x0, x1);
+    model.equate_t(source, n, x0, x1);
     model.close();
 
     let h = model.new_m_mor();

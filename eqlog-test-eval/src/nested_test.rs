@@ -216,7 +216,7 @@ fn merge_fibers_merges_tips() {
     assert_eq!(model.iter_fiber().count(), 2);
     assert_eq!(model.iter_el().count(), 2);
 
-    model.equate_fiber(fiber0, fiber1);
+    model.equate_fiber(bundle, fiber0, fiber1);
     model.close();
 
     assert_eq!(model.iter_fiber().count(), 1);
