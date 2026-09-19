@@ -26,7 +26,7 @@ fn single_z2() {
 
     let a_squared = model.define_mul(z2, a, a);
     let id = model.define_id(z2);
-    model.equate_el(a_squared, id);
+    model.equate_el(z2, a_squared, id);
 
     model.close();
 
@@ -157,7 +157,7 @@ fn id_on_z2() {
 
     let a_squared = model.define_mul(z2, a, a);
     let id = model.define_id(z2);
-    model.equate_el(a_squared, id);
+    model.equate_el(z2, a_squared, id);
 
     let z2_copy = model.new_abelian_group();
 
@@ -187,11 +187,11 @@ fn z2_times_z2_coproduct() {
     // Z/2Z relations: a^2 = id, b^2 = id
     let a_squared = model.define_mul(z2_1, a, a);
     let id1 = model.define_id(z2_1);
-    model.equate_el(a_squared, id1);
+    model.equate_el(z2_1, a_squared, id1);
 
     let b_squared = model.define_mul(z2_2, b, b);
     let id2 = model.define_id(z2_2);
-    model.equate_el(b_squared, id2);
+    model.equate_el(z2_2, b_squared, id2);
 
     // Create morphisms from both Z/2Z groups to the product
     let f1 = model.new_abelian_group_mor();
@@ -252,14 +252,14 @@ fn z2_plus_z3_equals_z6_coproduct() {
     let a = model.new_el(z2);
     let a_squared = model.define_mul(z2, a, a);
     let id2 = model.define_id(z2);
-    model.equate_el(a_squared, id2);
+    model.equate_el(z2, a_squared, id2);
 
     // Create generator for Z/3Z
     let b = model.new_el(z3);
     let b_squared = model.define_mul(z3, b, b);
     let b_cubed = model.define_mul(z3, b_squared, b);
     let id3 = model.define_id(z3);
-    model.equate_el(b_cubed, id3);
+    model.equate_el(z3, b_cubed, id3);
 
     // Create morphisms from Z/2Z and Z/3Z to Z/6Z
     let f = model.new_abelian_group_mor();
@@ -340,7 +340,7 @@ fn morphism_composition() {
     let x = model.new_el(g1);
     let x_squared = model.define_mul(g1, x, x);
     let id = model.define_id(g1);
-    model.equate_el(x_squared, id);
+    model.equate_el(g1, x_squared, id);
 
     model.close();
 

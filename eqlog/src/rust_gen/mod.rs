@@ -1435,28 +1435,42 @@ fn display_equate_elements<'a>(
 
         let index_new = display_index_field_name(&type_set_rel, index_new, ctx);
         let index_old = display_index_field_name(&type_set_rel, index_old, ctx);
-        let parent_args = ctx
-            .signature()
-            .type_(typ)
-            .parents
+        let parents = &ctx.signature().type_(typ).parents;
+        let parent_params = parents
             .iter()
             .enumerate()
-            .map(|(i, _)| format!("self.{type_snake}_parents[rhs.0 as usize].{i}"))
-            .collect();
-        let parent_checks = display_member_parent_checks(typ, "lhs", parent_args, ctx);
+            .map(|(i, &parent)| {
+                let parent_camel = display_type(parent, ctx).to_string().to_case(UpperCamel);
+                format!("parent{i}: {parent_camel}, ")
+            })
+            .join("");
+        let parent_args: Vec<_> = (0..parents.len()).map(|i| format!("parent{i}")).collect();
+        let lhs_checks = display_member_parent_checks(typ, "lhs", parent_args.clone(), ctx);
+        let rhs_checks = display_member_parent_checks(typ, "rhs", parent_args, ctx);
+        let parent_doc = if parents.is_empty() {
+            ""
+        } else {
+            "/// Both elements must belong to the supplied enclosing models, outermost first."
+        };
 
         writedoc! {f, "
             /// Enforces the equality `lhs = rhs`.
+            {parent_doc}
             #[allow(dead_code)]
-            pub fn equate_{type_snake}(&mut self, mut lhs: {type_camel}, mut rhs: {type_camel}) {{
+            pub fn equate_{type_snake}(&mut self, {parent_params}lhs: {type_camel}, rhs: {type_camel}) {{
+                let lhs = self.root_{type_snake}(lhs);
+                let rhs = self.root_{type_snake}(rhs);
+                {lhs_checks}
+                {rhs_checks}
+                self.__equate_{type_snake}(lhs, rhs);
+            }}
+
+            fn __equate_{type_snake}(&mut self, mut lhs: {type_camel}, mut rhs: {type_camel}) {{
                 lhs = self.{type_snake}_equalities.root(lhs);
                 rhs = self.{type_snake}_equalities.root(rhs);
                 if lhs == rhs {{
                     return;
                 }}
-
-                {parent_checks}
-
                 let lhs_weight = self.{type_snake}_weights[lhs.0 as usize];
                 let rhs_weight = self.{type_snake}_weights[rhs.0 as usize];
                 let (root, child) =
@@ -1989,7 +2003,7 @@ fn display_model_delta_apply_equalities_fn<'a>(ctx: &'a RustGenCtx<'a>) -> impl 
 
                     writedoc! {f, "
                         for [lhs, rhs] in self.new_{type_snake}_equalities.drain(..) {{
-                            model.equate_{type_snake}(lhs.into(), rhs.into());
+                            model.__equate_{type_snake}(lhs.into(), rhs.into());
                         }}
                     "}
                 })
