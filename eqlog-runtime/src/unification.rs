@@ -46,6 +46,14 @@ impl<T: Copy + PartialEq + From<u32> + Into<u32>> Unification<T> {
     pub fn len(&self) -> usize {
         self.parents.len()
     }
+
+    /// Copies the forest using another handle type, preserving all numeric IDs.
+    pub fn retype<U: From<u32>>(&self) -> Unification<U> {
+        Unification {
+            parents: self.parents.iter().map(|&el| U::from(el.into())).collect(),
+            sizes: self.sizes.clone(),
+        }
+    }
 }
 
 impl<T: Copy + PartialEq + From<u32> + Into<u32> + PartialOrd + Ord> Unification<T> {

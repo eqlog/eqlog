@@ -2,8 +2,8 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use eqlog_runtime::dynamic::{
-    DynamicModel, Element, Error, FunctionKind, Relation, RelationId, RelationKind, Signature,
-    Sort, SortId, SortKind,
+    DynamicModel, Element, Error, FunctionKind, Relation, RelationData, RelationId, RelationIndex,
+    RelationKind, Signature, Sort, SortData, SortId, SortKind, Table,
 };
 
 fn signature(arity: usize, kind: RelationKind) -> Signature {
@@ -24,7 +24,7 @@ fn signature(arity: usize, kind: RelationKind) -> Signature {
 }
 
 #[test]
-fn arbitrary_arities_share_set_semantics_and_normalize_equalities() {
+fn arbitrary_arities_keep_stored_rows_after_equality() {
     for arity in 0..=12 {
         let mut model = DynamicModel::new(Arc::new(signature(arity, RelationKind::Predicate)));
         let x = model.new_element(SortId(0), &[]).unwrap();
@@ -35,11 +35,15 @@ fn arbitrary_arities_share_set_semantics_and_normalize_equalities() {
         assert!(!model.insert(RelationId(0), &left).unwrap());
         model.insert(RelationId(0), &right).unwrap();
         let original = model.clone();
-        model.equate(x, y).unwrap();
+        model.equate(&[], x, y).unwrap();
         assert!(model.contains(RelationId(0), &right).unwrap());
         assert_eq!(
             model.tuples(RelationId(0)).unwrap().collect::<Vec<_>>(),
-            vec![left]
+            if arity == 0 {
+                vec![left]
+            } else {
+                vec![left, right]
+            }
         );
         assert_eq!(original.elements(SortId(0)).unwrap().count(), 2);
         assert_eq!(
@@ -59,7 +63,7 @@ fn mixed_columns_survive_prefix_boundaries_and_equality() {
         let forward = elements[..arity].to_vec();
         let reverse: Vec<_> = forward.iter().rev().copied().collect();
         let shifted = elements[1..].to_vec();
-        let mut expected = BTreeSet::from([forward, reverse, shifted]);
+        let expected = BTreeSet::from([forward, reverse, shifted]);
         for tuple in &expected {
             assert!(model.insert(RelationId(0), tuple).unwrap());
             assert!(model.contains(RelationId(0), tuple).unwrap());
@@ -79,22 +83,11 @@ fn mixed_columns_survive_prefix_boundaries_and_equality() {
             model.contains(RelationId(0), &absent).unwrap(),
             expected.contains(&absent)
         );
-        model.equate(elements[0], elements[arity]).unwrap();
-        expected = expected
-            .into_iter()
-            .map(|tuple| {
-                tuple
-                    .into_iter()
-                    .map(|el| {
-                        if el == elements[arity] {
-                            elements[0]
-                        } else {
-                            el
-                        }
-                    })
-                    .collect()
-            })
-            .collect();
+        model.equate(&[], elements[0], elements[arity]).unwrap();
+        assert_eq!(
+            model.root(elements[0]).unwrap(),
+            model.root(elements[arity]).unwrap()
+        );
         assert_eq!(
             model
                 .tuples(RelationId(0))
@@ -125,7 +118,7 @@ fn invalid_operations_return_errors_without_adding_data() {
         Err(Error::UnknownElement(invalid))
     );
     assert_eq!(
-        model.equate(x, invalid),
+        model.equate(&[], x, invalid),
         Err(Error::UnknownElement(invalid))
     );
     assert_eq!(
@@ -152,8 +145,8 @@ fn function_conflicts_are_data_until_an_evaluator_processes_them() {
     model.insert(RelationId(0), &[y]).unwrap();
     assert_ne!(model.root(x).unwrap(), model.root(y).unwrap());
     assert_eq!(model.tuples(RelationId(0)).unwrap().count(), 2);
-    model.equate(x, y).unwrap();
-    assert_eq!(model.tuples(RelationId(0)).unwrap().count(), 1);
+    model.equate(&[], x, y).unwrap();
+    assert_eq!(model.tuples(RelationId(0)).unwrap().count(), 2);
 }
 
 #[test]
@@ -258,7 +251,7 @@ fn descriptors_support_forward_references_but_reject_invalid_roles() {
     let item = model.new_element(SortId(0), &[world]).unwrap();
     assert!(model.contains(RelationId(0), &[world, item]).unwrap());
     assert_eq!(
-        model.equate(world, item),
+        model.equate(&[], world, item),
         Err(Error::SortMismatch {
             expected: SortId(2),
             actual: SortId(0)
@@ -303,4 +296,114 @@ fn descriptors_support_forward_references_but_reject_invalid_roles() {
     let mut bad = relations;
     bad[3].kind = RelationKind::Function(FunctionKind::Constructor);
     assert!(Signature::new(sorts, bad).is_err());
+}
+
+#[test]
+fn reindex_combines_permuted_partitions_and_projects_raw_diagonals() {
+    let mut data = RelationData::new(3);
+    data.new.order = vec![2, 0, 1];
+    data.old.order = vec![1, 2, 0];
+    for row in [[9, 1, 1], [8, 1, 2]] {
+        data.new.table.insert(&row);
+    }
+    for row in [[1, 9, 1], [2, 7, 2]] {
+        data.old.table.insert(&row);
+    }
+    let all = data.reindex(&[0, 1, 2], &[]).unwrap();
+    assert_eq!(
+        all.iter().collect::<BTreeSet<_>>(),
+        BTreeSet::from([vec![1, 1, 9], vec![1, 2, 8], vec![2, 2, 7],])
+    );
+    let diagonal = data.reindex(&[1, 0], &[0, 0, 2]).unwrap();
+    assert_eq!(
+        diagonal.iter().collect::<BTreeSet<_>>(),
+        BTreeSet::from([vec![9, 1], vec![7, 2],])
+    );
+    assert!(data.reindex(&[0, 0], &[0, 0, 2]).is_err());
+    assert!(data.reindex(&[0, 1], &[1, 0, 2]).is_err());
+}
+
+#[test]
+fn table_copies_and_unions_are_independent_at_every_arity() {
+    for arity in [0, 1, 9, 10, 12] {
+        let mut source = Table::new(arity);
+        let mut copy = source.clone();
+        source.insert(&vec![1; arity]);
+        assert_eq!(copy.iter().count(), 0);
+        copy.insert(&vec![2; arity]);
+        let mut union = source.union(&copy);
+        assert!(union.contains(&vec![1; arity]));
+        assert!(union.contains(&vec![2; arity]));
+        union.insert(&vec![3; arity]);
+        assert_eq!(source.iter().collect::<Vec<_>>(), vec![vec![1; arity]]);
+        assert_eq!(copy.iter().collect::<Vec<_>>(), vec![vec![2; arity]]);
+        let mut data = RelationData::new(arity);
+        data.new.table = source;
+        data.old.table = copy;
+        let result = data
+            .reindex(&(0..arity).rev().collect::<Vec<_>>(), &[])
+            .unwrap();
+        assert_eq!(result.iter().count(), if arity == 0 { 1 } else { 2 });
+    }
+}
+
+#[test]
+fn raw_storage_rejects_inconsistent_indices_and_handles() {
+    let signature = Arc::new(signature(2, RelationKind::Predicate));
+    let mut sort = SortData::new();
+    sort.equalities.increase_size_to(2);
+    sort.equalities.union_roots_into(0, 1);
+    sort.new.insert([1]);
+    sort.weights = vec![0; 2];
+    sort.uprooted.push(0);
+    let mut relation = RelationData::new(2);
+    relation.new.table.insert(&[0, 1]);
+    let model = DynamicModel::from_parts(
+        signature.clone(),
+        vec![sort.clone()],
+        vec![relation.clone()],
+    )
+    .unwrap();
+    assert_eq!(
+        model.tuples(RelationId(0)).unwrap().next().unwrap()[0].index,
+        0
+    );
+    let mut bad_sort = sort.clone();
+    bad_sort.new.insert([0]);
+    assert!(
+        DynamicModel::from_parts(signature.clone(), vec![bad_sort], vec![relation.clone()])
+            .is_err()
+    );
+    let mut bad_sort = sort.clone();
+    bad_sort.new.remove([1]);
+    assert!(
+        DynamicModel::from_parts(signature.clone(), vec![bad_sort], vec![relation.clone()])
+            .is_err()
+    );
+    let mut bad_sort = sort.clone();
+    bad_sort.weights.pop();
+    assert!(
+        DynamicModel::from_parts(signature.clone(), vec![bad_sort], vec![relation.clone()])
+            .is_err()
+    );
+    let mut bad_relation = relation.clone();
+    bad_relation.new.order = vec![0, 0];
+    assert!(
+        DynamicModel::from_parts(signature.clone(), vec![sort.clone()], vec![bad_relation])
+            .is_err()
+    );
+    let mut bad_relation = relation.clone();
+    bad_relation.old = RelationIndex::new(1);
+    assert!(
+        DynamicModel::from_parts(signature.clone(), vec![sort.clone()], vec![bad_relation])
+            .is_err()
+    );
+    relation.new.table.insert(&[0, 2]);
+    assert_eq!(
+        DynamicModel::from_parts(signature, vec![sort], vec![relation]).err(),
+        Some(Error::UnknownElement(Element {
+            sort: SortId(0),
+            index: 2
+        }))
+    );
 }

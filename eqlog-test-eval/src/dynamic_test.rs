@@ -1,18 +1,19 @@
 use std::collections::BTreeSet;
 
 use eqlog_runtime::dynamic::{
-    CompiledModel, DynamicModel, Element, ElementMap, Error, FunctionKind, RelationKind, Signature,
-    SortKind,
+    CompiledModel, DynamicModel, Element, Error, FunctionKind, RelationIndex, RelationKind,
+    Signature, SortKind,
 };
 use std::sync::Arc;
 
 use crate::consts::Consts;
+use crate::diagonal_canonicalization::DiagonalCanonicalization;
 use crate::empty::Empty;
 use crate::logic::Logic;
 use crate::member_parents::MemberParents;
 use crate::morphism_preservation::MorphismPreservation;
 use crate::nat::Nat;
-use crate::partial_magma::{El, PartialMagma};
+use crate::partial_magma::PartialMagma;
 use crate::trans_refl::{TransRefl, V};
 
 fn handle<M: CompiledModel>(sort: &str, index: u32) -> Element {
@@ -22,35 +23,31 @@ fn handle<M: CompiledModel>(sort: &str, index: u32) -> Element {
     }
 }
 
-fn round_trip<M: CompiledModel>(source: &M) -> (M, ElementMap) {
-    let (before, export) = source.to_dynamic();
-    let (restored, import) = M::from_dynamic(&before).unwrap();
-    let (after, second_export) = restored.to_dynamic();
+fn round_trip<M: CompiledModel>(source: &M) -> M {
+    let before = source.to_dynamic();
+    let restored = M::from_dynamic(&before).unwrap();
+    let after = restored.to_dynamic();
     assert_eq!(before.signature(), after.signature());
-    let map = |el: &Element| second_export[&import[el]];
     for (sort, _) in before.signature().sorts() {
-        let expected: BTreeSet<_> = before.elements(sort).unwrap().map(|el| map(&el)).collect();
-        let actual: BTreeSet<_> = after.elements(sort).unwrap().collect();
-        assert_eq!(expected, actual);
-        for el in before.elements(sort).unwrap() {
-            let parents: Vec<_> = before.parents(el).unwrap().iter().map(map).collect();
-            assert_eq!(parents, after.parents(map(&el)).unwrap());
-        }
+        assert_eq!(
+            before.sort_data(sort).unwrap().equalities,
+            after.sort_data(sort).unwrap().equalities
+        );
+        assert_eq!(
+            before.handles(sort).unwrap().collect::<Vec<_>>(),
+            after.handles(sort).unwrap().collect::<Vec<_>>()
+        );
+        assert_eq!(
+            before.elements(sort).unwrap().collect::<BTreeSet<_>>(),
+            after.elements(sort).unwrap().collect::<BTreeSet<_>>()
+        );
     }
     for (relation, _) in before.signature().relations() {
-        let expected: BTreeSet<Vec<_>> = before
-            .tuples(relation)
-            .unwrap()
-            .map(|tuple| tuple.iter().map(map).collect())
-            .collect();
+        let expected: BTreeSet<_> = before.tuples(relation).unwrap().collect();
         let actual: BTreeSet<_> = after.tuples(relation).unwrap().collect();
         assert_eq!(expected, actual);
     }
-    let correspondence = export
-        .into_iter()
-        .map(|(source, dynamic)| (source, import[&dynamic]))
-        .collect();
-    (restored, correspondence)
+    restored
 }
 
 #[test]
@@ -62,10 +59,7 @@ fn dynamic_round_trip_does_not_run_rules() {
     let isolated = model.new_v();
     model.insert_edge(x, y);
     model.insert_edge(y, z);
-    let (mut restored, map) = round_trip(&model);
-    let x = V(map[&handle::<TransRefl>("V", x.0)].index);
-    let z = V(map[&handle::<TransRefl>("V", z.0)].index);
-    let isolated = V(map[&handle::<TransRefl>("V", isolated.0)].index);
+    let mut restored = round_trip(&model);
     assert_eq!(restored.iter_v().count(), 4);
     assert_eq!(restored.iter_edge().count(), 2);
     assert!(!restored.edge(x, z));
@@ -86,13 +80,8 @@ fn dynamic_export_tracks_pending_equalities_and_function_conflicts() {
     model.insert_mul(x, x, y);
     model.insert_mul(alias, alias, z);
     model.equate_el(x, alias);
-    let (mut restored, map) = round_trip(&model);
-    assert_eq!(
-        map[&handle::<PartialMagma>("El", x.0)],
-        map[&handle::<PartialMagma>("El", alias.0)]
-    );
-    let y = El(map[&handle::<PartialMagma>("El", y.0)].index);
-    let z = El(map[&handle::<PartialMagma>("El", z.0)].index);
+    let mut restored = round_trip(&model);
+    assert!(restored.are_equal_el(x, alias));
     assert!(!restored.are_equal_el(y, z));
     assert_eq!(restored.iter_mul().count(), 2);
     restored.close();
@@ -110,12 +99,12 @@ fn dynamic_construction_and_aliases_survive_import() {
     let alias = model.new_element(sort, &[]).unwrap();
     let y = model.new_element(sort, &[]).unwrap();
     model.insert(edge, &[alias, y]).unwrap();
-    model.equate(alias, x).unwrap();
-    let (mut compiled, map) = TransRefl::from_dynamic(&model).unwrap();
-    assert_eq!(map[&x], map[&alias]);
-    let x = V(map[&x].index);
-    let y = V(map[&y].index);
-    assert!(compiled.edge(x, y));
+    model.equate(&[], alias, x).unwrap();
+    let mut compiled = TransRefl::from_dynamic(&model).unwrap();
+    assert!(compiled.are_equal_v(V(x.index), V(alias.index)));
+    let x = V(x.index);
+    let y = V(y.index);
+    assert!(compiled.edge(compiled.root_v(x), y));
     assert!(!compiled.edge(y, y));
     compiled.close();
     assert!(compiled.edge(y, y));
@@ -145,7 +134,7 @@ fn dynamic_nested_ownership_survives_pending_parent_equalities() {
             model.equate_outer(a, b);
             model.equate_inner(b, i, j);
             model.equate_el(b, j, x, y);
-            let (mut restored, _) = round_trip(&model);
+            let mut restored = round_trip(&model);
             assert_eq!(restored.iter_outer().count(), 1);
             assert_eq!(restored.iter_inner().count(), 1);
             assert_eq!(restored.iter_el().count(), 1);
@@ -171,14 +160,14 @@ fn dynamic_morphism_export_preserves_inherited_and_pending_facts() {
     model.insert_el_mor_app(h, x, y);
     model.insert_ready(a);
     model.insert_tagged(a, x, label);
-    let (before, _) = round_trip(&model);
+    let before = round_trip(&model);
     assert_eq!(before.iter_tagged().count(), 1);
     assert_eq!(before.iter_ready().count(), 1);
     model.close();
     assert!(model.tagged(b, y, label));
     let late_label = model.new_ambient();
     model.insert_tagged(a, x, late_label);
-    let (mut restored, _) = round_trip(&model);
+    let mut restored = round_trip(&model);
     assert_eq!(restored.iter_tagged().count(), 3);
     restored.close();
     assert_eq!(restored.iter_tagged().count(), 4);
@@ -192,10 +181,10 @@ fn dynamic_enum_graphs_allow_recursive_values_and_multiple_cases() {
     let one = model.define_succ(zero);
     model.insert_succ(one, one);
     model.equate_n(zero, one);
-    let (restored, _) = round_trip(&model);
+    let restored = round_trip(&model);
     assert_eq!(restored.iter_n().count(), 1);
     assert_eq!(restored.iter_zero().count(), 1);
-    assert_eq!(restored.iter_succ().count(), 1);
+    assert_eq!(restored.iter_succ().count(), 2);
     let signature = Nat::dynamic_signature();
     let zero = signature.relation_named("Zero").unwrap();
     assert_eq!(
@@ -207,7 +196,7 @@ fn dynamic_enum_graphs_allow_recursive_values_and_multiple_cases() {
 #[test]
 fn dynamic_empty_structures_do_not_define_constants() {
     round_trip(&Empty::new());
-    let (mut restored, _) = round_trip(&Consts::new());
+    let mut restored = round_trip(&Consts::new());
     assert!(restored.foo().is_none());
     assert!(restored.main_container().is_none());
     restored.close();
@@ -219,7 +208,7 @@ fn dynamic_empty_structures_do_not_define_constants() {
 fn dynamic_nullary_predicates_preserve_truth_without_saturation() {
     let mut model = Logic::new();
     model.insert_absurd();
-    let (mut restored, _) = round_trip(&model);
+    let mut restored = round_trip(&model);
     assert!(restored.absurd());
     assert!(!restored.truth());
     assert!(!restored.undetermined());
@@ -274,16 +263,14 @@ fn dynamic_checks_parent_chains_before_mutation() {
         model.insert(membership, &[b, j, x]),
         Err(Error::ParentMismatch)
     );
-    assert_eq!(model.equate(x, y), Err(Error::ParentMismatch));
+    assert_eq!(model.equate(&[a, i], x, y), Err(Error::ParentMismatch));
+    assert_eq!(model.equate(&[b, j], x, x), Err(Error::ParentMismatch));
     assert_eq!(model.elements(el).unwrap().count(), 2);
-    model.equate(a, b).unwrap();
-    model.equate(i, j).unwrap();
-    model.equate(x, y).unwrap();
-    assert_eq!(
-        model.parents(y).unwrap(),
-        vec![model.root(a).unwrap(), model.root(i).unwrap()]
-    );
-    let (restored, _) = MemberParents::from_dynamic(&model).unwrap();
+    model.equate(&[], a, b).unwrap();
+    model.equate(&[b], i, j).unwrap();
+    model.equate(&[b, j], x, y).unwrap();
+    assert!(model.contains(membership, &[a, i, y]).unwrap());
+    let restored = MemberParents::from_dynamic(&model).unwrap();
     assert_eq!(restored.iter_el().count(), 1);
     round_trip(&restored);
 }
@@ -294,14 +281,14 @@ fn dynamic_import_preserves_enum_elements_without_constructors() {
     let sort = signature.sort_named("N").unwrap();
     let mut dynamic = DynamicModel::new(signature);
     let element = dynamic.new_element(sort, &[]).unwrap();
-    let (compiled, map) = Nat::from_dynamic(&dynamic).unwrap();
+    let compiled = Nat::from_dynamic(&dynamic).unwrap();
     assert_eq!(compiled.iter_n().count(), 1);
     assert_eq!(compiled.iter_zero().count(), 0);
     assert_eq!(compiled.iter_succ().count(), 0);
-    let (exported, export) = compiled.to_dynamic();
+    let exported = compiled.to_dynamic();
     assert_eq!(
         exported.elements(sort).unwrap().collect::<Vec<_>>(),
-        vec![export[&map[&element]]]
+        vec![element]
     );
     round_trip(&compiled);
 }
@@ -320,17 +307,12 @@ fn dynamic_import_preserves_applications_without_endpoints() {
     let y = dynamic.new_element(el, &[b]).unwrap();
     let h = dynamic.new_element(mor, &[]).unwrap();
     dynamic.insert(application, &[h, x, y]).unwrap();
-    let (compiled, map) = MorphismPreservation::from_dynamic(&dynamic).unwrap();
+    let compiled = MorphismPreservation::from_dynamic(&dynamic).unwrap();
     assert_eq!(compiled.iter_world_mor_dom().count(), 0);
     assert_eq!(compiled.iter_world_mor_cod().count(), 0);
     assert_eq!(compiled.iter_el_mor_app().count(), 1);
-    let (exported, export) = compiled.to_dynamic();
-    assert!(exported
-        .contains(
-            application,
-            &[export[&map[&h]], export[&map[&x]], export[&map[&y]]]
-        )
-        .unwrap());
+    let exported = compiled.to_dynamic();
+    assert!(exported.contains(application, &[h, x, y]).unwrap());
     round_trip(&compiled);
 }
 
@@ -349,4 +331,151 @@ fn dynamic_import_requires_the_same_descriptor_order() {
         Logic::from_dynamic(&dynamic).err(),
         Some(Error::SignatureMismatch)
     );
+}
+
+#[test]
+fn conversions_preserve_ids_and_mutate_independently() {
+    let mut compiled = PartialMagma::new();
+    let alias = compiled.new_el();
+    let root = compiled.new_el();
+    let isolated = compiled.new_el();
+    compiled.insert_mul(root, root, alias);
+    compiled.equate_el(alias, root);
+    assert_eq!(compiled.root_el(alias), root);
+    let mut dynamic = compiled.to_dynamic();
+    let sort = dynamic.signature().sort_named("El").unwrap();
+    let mul = dynamic.signature().relation_named("mul").unwrap();
+    let alias_handle = handle::<PartialMagma>("El", alias.0);
+    let root_handle = handle::<PartialMagma>("El", root.0);
+    let isolated_handle = handle::<PartialMagma>("El", isolated.0);
+    assert_eq!(dynamic.root(alias_handle).unwrap(), root_handle);
+    assert_eq!(
+        dynamic
+            .handles(sort)
+            .unwrap()
+            .map(|el| el.index)
+            .collect::<Vec<_>>(),
+        vec![0, 1, 2]
+    );
+    assert_eq!(
+        dynamic.tuples(mul).unwrap().collect::<Vec<_>>(),
+        vec![vec![root_handle, root_handle, alias_handle]]
+    );
+    let mut restored = round_trip(&compiled);
+    assert_eq!(restored.root_el(alias), root);
+    assert_eq!(restored.root_el(isolated), isolated);
+    assert_eq!(restored.new_el().0, 3);
+
+    compiled.insert_mul(root, isolated, isolated);
+    assert_eq!(dynamic.tuples(mul).unwrap().count(), 1);
+    dynamic
+        .insert(mul, &[isolated_handle, isolated_handle, root_handle])
+        .unwrap();
+    assert_eq!(restored.iter_mul().count(), 1);
+    dynamic.equate(&[], root_handle, isolated_handle).unwrap();
+    assert_eq!(restored.root_el(isolated), isolated);
+    restored.insert_mul(isolated, root, root);
+    assert_eq!(dynamic.tuples(mul).unwrap().count(), 2);
+    assert_eq!(dynamic.new_element(sort, &[]).unwrap().index, 3);
+}
+
+#[test]
+fn import_keeps_alias_only_membership_visible_before_closure() {
+    let mut source = MemberParents::new();
+    let a = source.new_outer();
+    let i = source.new_inner(a);
+    let x = source.new_el(a, i);
+    let y = source.new_el(a, i);
+    source.equate_el(a, i, x, y);
+    let snapshot = source.to_dynamic();
+    let signature = snapshot.signature().clone();
+    let membership = signature
+        .relation_named("Outer::Inner::inner_member_el")
+        .unwrap();
+    let sorts = signature
+        .sorts()
+        .map(|(id, _)| snapshot.sort_data(id).unwrap().clone())
+        .collect();
+    let mut relations: Vec<_> = signature
+        .relations()
+        .map(|(id, _)| snapshot.relation_data(id).unwrap().clone())
+        .collect();
+    relations[membership.0].new = RelationIndex::new(3);
+    relations[membership.0].new.table.insert(&[a.0, i.0, y.0]);
+    let dynamic = DynamicModel::from_parts(signature, sorts, relations).unwrap();
+    let tuple = [
+        handle::<MemberParents>("Outer", a.0),
+        handle::<MemberParents>("Outer::Inner", i.0),
+        handle::<MemberParents>("Outer::Inner::El", x.0),
+    ];
+    assert!(dynamic.contains(membership, &tuple).unwrap());
+    let mut restored = MemberParents::from_dynamic(&dynamic).unwrap();
+    assert!(restored.inner_member_el(a, i, x));
+    assert_eq!(
+        restored.iter_inner_member_el().collect::<Vec<_>>(),
+        vec![(a, i, y)]
+    );
+    restored.close();
+    assert!(restored.inner_member_el(a, i, x));
+    assert_eq!(
+        restored.iter_inner_member_el().collect::<Vec<_>>(),
+        vec![(a, i, x)]
+    );
+}
+
+#[test]
+fn import_rebuilds_diagonals_before_pending_equalities_are_processed() {
+    for closed in [false, true] {
+        let mut source = DiagonalCanonicalization::new();
+        let x = source.new_t();
+        let y = source.new_t();
+        let a = source.new_t();
+        let b = source.new_t();
+        source.insert_pair(x, x, y, y);
+        source.insert_pair(x, a, y, y);
+        source.insert_pair(b, b, b, b);
+        source.insert_value(x, x, y, y);
+        source.insert_value(x, a, y, y);
+        source.insert_value(b, b, b, b);
+        if closed {
+            source.close();
+        }
+        source.equate_t(b, a);
+        let mut restored = round_trip(&source);
+        restored.insert_gate();
+        restored.close();
+        assert!(restored.matched_pair(x, y));
+        assert!(restored.matched_value(x, y));
+        assert!(restored.pair(x, b, y, y));
+        assert_eq!(restored.value(x, b, y), Some(y));
+    }
+}
+
+#[test]
+fn export_preserves_old_new_partitions_and_pending_equalities() {
+    let mut source = TransRefl::new();
+    let x = source.new_v();
+    let y = source.new_v();
+    source.close();
+    let z = source.new_v();
+    source.insert_edge(x, z);
+    source.equate_v(x, y);
+    let dynamic = source.to_dynamic();
+    let sort = dynamic.signature().sort_named("V").unwrap();
+    let edge = dynamic.signature().relation_named("edge").unwrap();
+    let data = dynamic.sort_data(sort).unwrap();
+    assert_eq!(data.new.iter().collect::<Vec<_>>(), vec![[z.0]]);
+    assert_eq!(data.old.iter().collect::<Vec<_>>(), vec![[x.0]]);
+    assert_eq!(data.uprooted, vec![y.0]);
+    assert_eq!(data.equalities.root_const(y.0), x.0);
+    let data = dynamic.relation_data(edge).unwrap();
+    assert_eq!(data.new.tuples().collect::<Vec<_>>(), vec![vec![x.0, z.0]]);
+    assert_eq!(
+        data.old.tuples().collect::<BTreeSet<_>>(),
+        BTreeSet::from([vec![x.0, x.0], vec![y.0, y.0],])
+    );
+    let restored = TransRefl::from_dynamic(&dynamic).unwrap().to_dynamic();
+    let data = restored.relation_data(edge).unwrap();
+    assert_eq!(data.old.tuples().count(), 0);
+    assert_eq!(data.new.tuples().count(), 3);
 }

@@ -23,44 +23,38 @@
 //! let x = model.new_element(el, &[])?;
 //! let y = model.new_element(el, &[])?;
 //! model.insert(edge, &[x, y])?;
-//! model.equate(x, y)?;
-//! assert!(model.contains(edge, &[x, x])?);
+//! model.equate(&[], x, y)?;
+//! assert_eq!(model.tuples(edge)?.collect::<Vec<_>>(), vec![vec![x, y]]);
+//! assert_eq!(model.root(y)?, x);
 //! assert_eq!(model.elements(el)?.count(), 1);
 //! assert_eq!(model.handles(el)?.count(), 2);
 //! # Ok::<(), eqlog_runtime::dynamic::Error>(())
 //! ```
 
+mod data;
 mod model;
 mod signature;
 mod table;
 
+pub use data::{RelationData, RelationIndex, SortData};
 pub use model::DynamicModel;
 pub use signature::{
     FunctionKind, Relation, RelationId, RelationKind, Signature, Sort, SortId, SortKind,
 };
+pub use table::Table;
 
-use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 
 /// An element handle within one structure.
 ///
 /// The same ID can refer to different elements in different structures.
-/// Use [`ElementMap`] to find an element's handle after conversion.
+/// Conversions preserve the sort ID and numeric index, including aliases.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Element {
     pub sort: SortId,
     pub index: u32,
 }
-
-/// Maps each source handle to its target handle after conversion.
-///
-/// Includes aliases created by equality merges. Equal source elements map to
-/// the same target handle. Conversion can change numeric IDs.
-///
-/// For a compiled handle, use the sort ID from [`CompiledModel::dynamic_signature`]
-/// and the integer wrapped by the generated Rust type.
-pub type ElementMap = BTreeMap<Element, Element>;
 
 /// Implemented by generated models to transfer data without running rules.
 pub trait CompiledModel: Sized {
@@ -70,23 +64,26 @@ pub trait CompiledModel: Sized {
     /// Rules are not part of the signature.
     fn dynamic_signature() -> Arc<Signature>;
 
-    /// Exports the current facts and a map from compiled to dynamic handles.
+    /// Copies stored data, preserving IDs, equality representatives, and raw rows.
     ///
     /// Includes inherited facts already present in the model. Export does not
     /// propagate morphisms or resolve function conflicts. The source is unchanged.
-    /// See [`ElementMap`] for looking up compiled handles, including aliases.
-    fn to_dynamic(&self) -> (DynamicModel, ElementMap);
+    /// Relation trees share their nodes with the source. Export validates stored
+    /// handles and deeply copies union-find and weight vectors. For a compiled
+    /// handle, use its wrapped integer and the sort ID from [`Self::dynamic_signature`].
+    fn to_dynamic(&self) -> DynamicModel;
 
-    /// Imports data and returns a map from dynamic to compiled handles.
+    /// Imports data without changing IDs, equality representatives, or raw rows.
     ///
     /// All imported facts become explicit and are treated as new by evaluation.
+    /// Compatible indices share tree nodes. Other indices are rebuilt as needed.
     /// Import does not check theory axioms. Calling `close` afterward may still
     /// leave some axioms unsatisfied. For example, an enum element created without
     /// a constructor may still have no case.
     ///
     /// Returns [`Error::SignatureMismatch`] if sort or relation descriptors differ
     /// from [`Self::dynamic_signature`], including their order and names.
-    fn from_dynamic(model: &DynamicModel) -> Result<(Self, ElementMap), Error>;
+    fn from_dynamic(model: &DynamicModel) -> Result<Self, Error>;
 }
 
 /// Invalid descriptors, handles, or mutations. An error leaves model data unchanged.
@@ -94,6 +91,8 @@ pub trait CompiledModel: Sized {
 pub enum Error {
     /// Descriptors violate the structural requirements of [`Signature::new`].
     InvalidSignature(String),
+    /// Stored indices or vector dimensions are inconsistent.
+    InvalidModel(String),
     /// The sort ID is outside this signature.
     UnknownSort(SortId),
     /// The relation ID is outside this signature.
@@ -104,7 +103,7 @@ pub enum Error {
     SortMismatch { expected: SortId, actual: SortId },
     /// A tuple or parent chain has the wrong length.
     ArityMismatch { expected: usize, actual: usize },
-    /// An element would acquire a different parent chain, modulo equality.
+    /// A member does not belong to the supplied enclosing models.
     ParentMismatch,
     /// Import requires the same ordered signature as the generated model.
     SignatureMismatch,
@@ -116,6 +115,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidSignature(message) => write!(f, "invalid signature: {message}"),
+            Self::InvalidModel(message) => write!(f, "invalid model: {message}"),
             Self::UnknownSort(sort) => write!(f, "unknown sort {sort:?}"),
             Self::UnknownRelation(relation) => write!(f, "unknown relation {relation:?}"),
             Self::UnknownElement(element) => write!(f, "unknown element {element:?}"),
@@ -125,7 +125,7 @@ impl fmt::Display for Error {
             Self::ArityMismatch { expected, actual } => {
                 write!(f, "expected {expected} arguments, got {actual}")
             }
-            Self::ParentMismatch => write!(f, "element has a different parent chain"),
+            Self::ParentMismatch => write!(f, "member does not belong to the supplied models"),
             Self::SignatureMismatch => write!(f, "dynamic and compiled signatures differ"),
             Self::ElementLimit => write!(f, "element ID space exhausted"),
         }

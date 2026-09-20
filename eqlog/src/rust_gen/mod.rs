@@ -3898,7 +3898,7 @@ pub fn display_module<'a>(
         let theory_impl = display_theory_impl(name, ram_modules, ctx, index_selection);
         write!(f, "{}", theory_impl)?;
 
-        let dynamic_impl = dynamic::display_dynamic_impl(name, ctx);
+        let dynamic_impl = dynamic::display_dynamic_impl(name, ctx, index_selection);
         write!(f, "{dynamic_impl}")?;
 
         Ok(())

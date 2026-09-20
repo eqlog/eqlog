@@ -2,14 +2,14 @@ Share model data with future interpreters
 
 Introduce runtime signatures and dynamic structures so callers can
 inspect and construct Eqlog data without generating Rust or running
-saturation. Preserve explicit equality, dependent ownership, and pending
-function graph conflicts. Reuse the runtime union-find and prefix trees
-behind runtime arity dispatch.
+saturation. Keep old/new partitions, union-find state, and membership
+relations in the same storage types used by compiled models. Select
+relation arities and column orders at runtime.
 
-Generate conversions with element correspondences so models can move
-between representations without losing caller handles or implicitly
-executing rules. Recover enclosing model instances from membership
-indices when exporting pending equalities.
+Preserve element IDs, equality aliases, and raw relation rows through
+conversion. Share prefix-tree nodes where index layouts agree and copy
+union-find vectors deeply. Rebuild compiled lookup indices on import
+without resolving pending equalities or executing rules.
 
-Document the public contracts and exercise incomplete structures,
-descriptor validation, and relation column order in integration tests.
+Test incomplete structures, descriptor validation, column permutations,
+copy independence, and continued evaluation after conversion.

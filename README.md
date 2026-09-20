@@ -373,12 +373,14 @@ impl Semilattice {
 
 `eqlog_runtime::dynamic` holds structures whose signature is known at runtime.
 It uses the same union-find and prefix-tree storage as compiled models, with
-runtime arity dispatch for relation tables. It does not evaluate rules.
+runtime arity dispatch for relation tables. It keeps old/new partitions and
+records ownership in membership relations. It does not evaluate rules or rewrite
+relation rows when elements are equated.
 
 Every generated model implements `eqlog_runtime::dynamic::CompiledModel`:
 
 ```rust,ignore
-use eqlog_runtime::dynamic::{CompiledModel, DynamicModel, Element};
+use eqlog_runtime::dynamic::{CompiledModel, DynamicModel};
 
 let signature = Semilattice::dynamic_signature();
 let el_sort = signature.sort_named("El").unwrap();
@@ -388,17 +390,18 @@ let x = dynamic.new_element(el_sort, &[]).unwrap();
 let y = dynamic.new_element(el_sort, &[]).unwrap();
 dynamic.insert(le, &[x, y]).unwrap();
 
-let (mut compiled, imported) = Semilattice::from_dynamic(&dynamic).unwrap();
-let compiled_x = El(imported[&x].index);
+let mut compiled = Semilattice::from_dynamic(&dynamic).unwrap();
+let compiled_x = El(x.index);
 compiled.close();
-let (snapshot, exported) = compiled.to_dynamic();
-let snapshot_x = exported[&Element { sort: el_sort, index: compiled_x.0 }];
-assert_eq!(snapshot.root(snapshot_x).unwrap(), snapshot_x);
+let snapshot = compiled.to_dynamic();
+assert_eq!(snapshot.root(x).unwrap().index, compiled.root_el(compiled_x).0);
 ```
 
-Conversions copy the current facts and equalities without running rules.
-The returned maps let callers translate handles when IDs change. Import requires
-matching ordered signatures and treats all imported facts as new for evaluation.
+Conversions preserve element IDs, union-find representatives, and stored rows.
+Export shares prefix-tree nodes and deeply copies union-find and weight vectors.
+Import requires matching ordered signatures and treats all imported facts as new
+and explicit for evaluation. Compatible indices share tree nodes, and other
+indices are rebuilt in the column order required by the compiler.
 
 The [`dynamic` module](eqlog-runtime/src/dynamic/mod.rs) documents the public API,
 including constructing a signature without the compiler, parent chains, and
