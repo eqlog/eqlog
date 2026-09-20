@@ -5,5 +5,5 @@ only source of ownership data. Check supplied parents against those
 relations, using existing element-to-row indices when equalities have
 left aliases in stored tuples.
 
-Preserve ownership checks on public and rule-generated insertions while
-allowing allocation to insert an element's first membership row.
+Validate ownership on public insertion. Allocation, rule evaluation and
+canonicalization insert rows directly without repeating those checks.

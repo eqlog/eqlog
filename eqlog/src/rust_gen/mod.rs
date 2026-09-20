@@ -591,7 +591,7 @@ fn display_pub_predicate_holds_fn<'a>(
 
         // A representative keeps an ownership row in its element index even
         // while the relation's parent columns await canonicalization.
-        let membership_fallback = FmtFn(move |f| match rel {
+        let membership_lookup = FmtFn(move |f| match rel {
             FlatRel::ModelMember(typ) => {
                 let arity = rel.arity(ctx.signature());
                 let member_pos = arity.len() - 1;
@@ -606,7 +606,7 @@ fn display_pub_predicate_holds_fn<'a>(
                     })
                     .format(" && ");
                 writedoc! {f, "
-                    || self.{element_index}.get(&arg{member_pos}.0)
+                    self.{element_index}.get(&arg{member_pos}.0)
                         .is_some_and(|rows| rows.iter().any(|row| {checks}))
                 "}
             }
@@ -650,9 +650,7 @@ fn display_pub_predicate_holds_fn<'a>(
             writedoc! {f, "
                 fn __contains_{relation_snake}(&self{rel_fn_args}) -> bool {{
                     {canonicalize}
-                    false
-                    {checks}
-                    {membership_fallback}
+                    {membership_lookup}
                 }}
             "}
         });
@@ -1175,19 +1173,6 @@ fn display_pub_insert_relation<'a>(
             }
             FlatRel::Pred(_) | FlatRel::Func(_) => Ok(()),
         });
-        let existing_member_checks = FmtFn(|f| match rel {
-            FlatRel::ModelMember(typ) => {
-                let member = rel_args.last().unwrap();
-                let element_index = display_element_index_field_name(rel, typ, ctx);
-                // Allocation uses this path to insert the first ownership row.
-                writedoc! {f, "
-                    if self.{element_index}.contains_key(&{member}.0) {{
-                        {parent_checks}
-                    }}
-                "}
-            }
-            FlatRel::Pred(_) | FlatRel::Func(_) => Ok(()),
-        });
         // Derived rows may precede their typing facts or endpoint equalities.
         writedoc! {f, "
             {docstring}
@@ -1201,7 +1186,6 @@ fn display_pub_insert_relation<'a>(
 
             fn {internal_insert}(&mut self, {rel_fn_args}) {{
                 {canonicalize}
-                {existing_member_checks}
                 {unwrap_args}
 
                 {contains_checks}
