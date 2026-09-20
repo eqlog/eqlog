@@ -64,7 +64,7 @@ fn late_images_can_create_predicate_and_function_diagonals() {
     assert!(model.diagonal_pair(target));
     assert!(model.fixed_point(target));
 
-    model.equate_el(x0, x1);
+    model.equate_el(source, f, x0, x1);
     model.close();
     assert!(model.diagonal_pair(source));
     assert!(model.fixed_point(source));

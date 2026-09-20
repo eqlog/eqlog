@@ -9,7 +9,7 @@ use crate::algebra::signature::{FuncId, TypeId, TypeKind};
 use crate::flat_eqlog::{iter_flat_rels, FlatRel};
 use crate::fmt_util::FmtFn;
 
-use super::RustGenCtx;
+use super::{display_element_index_field_name, RustGenCtx};
 
 struct DynamicContext<'a> {
     ctx: &'a RustGenCtx<'a>,
@@ -152,23 +152,30 @@ impl DynamicContext<'_> {
                 let source = self.element(typ, "el.0");
                 let alias = self.element(typ, "index");
                 let root = self.element(typ, &format!("self.root_{snake}({camel}(index)).0"));
-                let parents = self
-                    .ctx
-                    .signature()
-                    .type_(typ)
-                    .parents
+                let parent_sorts = &self.ctx.signature().type_(typ).parents;
+                let parent_binding = FmtFn(|f| {
+                    if parent_sorts.is_empty() {
+                        return Ok(());
+                    }
+                    let index =
+                        display_element_index_field_name(FlatRel::ModelMember(typ), typ, self.ctx);
+                    writedoc! {f, "
+                        let parents = self.{index}.get(&el.0)
+                            .and_then(|rows| rows.first())
+                            .expect(\"a member representative has a membership row\");
+                    "}
+                });
+                let parents = parent_sorts
                     .iter()
                     .enumerate()
                     .map(|(i, &parent)| {
-                        let element = self.element(
-                            parent,
-                            &format!("self.{snake}_parents[el.0 as usize].{i}.0"),
-                        );
+                        let element = self.element(parent, &format!("parents[{i}]"));
                         format!("elements[&{element}]")
                     })
                     .join(", ");
                 writedoc! {f, "
                     for el in self.iter_{snake}() {{
+                        {parent_binding}
                         let target = model.new_element({sort}, &[{parents}])
                             .expect(\"compiled elements have valid parent chains\");
                         elements.insert({source}, target);

@@ -24,7 +24,7 @@ fn rule_insertions_can_precede_endpoint_equalities() {
     assert_eq!(model.item_mor_app(world, f, x1), Some(y));
     assert_eq!(model.iter_item_mor_app().count(), 2);
 
-    model.equate_item(x0, x1);
+    model.equate_item(world, source0, x0, x1);
     model.close();
     assert_eq!(model.item_mor_app(world, f, x0), Some(y));
     assert_eq!(model.iter_item_mor_app().count(), 1);
@@ -162,7 +162,7 @@ fn preservation_respects_merged_parents() {
     let image_first = model.new_inner(target);
     let image_second = model.new_inner(target);
     let x = model.new_item(source, first);
-    model.equate_inner(first, second);
+    model.equate_inner(source, first, second);
     model.insert_inner_member_item(source, second, x);
     model.insert_marked(source, second, x);
     let image_x = model.new_item(target, image_first);

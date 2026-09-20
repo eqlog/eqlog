@@ -123,27 +123,38 @@ fn dynamic_construction_and_aliases_survive_import() {
 
 #[test]
 fn dynamic_nested_ownership_survives_pending_parent_equalities() {
-    let mut model = MemberParents::new();
-    let a = model.new_outer();
-    let b = model.new_outer();
-    let i = model.new_inner(a);
-    let j = model.new_inner(b);
-    let x = model.new_el(a, i);
-    let y = model.new_el(b, j);
-    model.define_label_value(a, i);
-    model.define_label_value(b, j);
-    model.close();
-    model.equate_outer(a, b);
-    model.equate_inner(i, j);
-    model.equate_el(x, y);
-    let (mut restored, _) = round_trip(&model);
-    assert_eq!(restored.iter_outer().count(), 1);
-    assert_eq!(restored.iter_inner().count(), 1);
-    assert_eq!(restored.iter_el().count(), 1);
-    assert_eq!(restored.iter_label().count(), 2);
-    restored.close();
-    assert_eq!(restored.iter_label().count(), 1);
-    round_trip(&restored);
+    for closed in [false, true] {
+        for reverse in [false, true] {
+            let mut model = MemberParents::new();
+            let a = model.new_outer();
+            let b = model.new_outer();
+            let i = model.new_inner(a);
+            let j = model.new_inner(b);
+            let x = model.new_el(a, i);
+            let y = model.new_el(b, j);
+            model.define_label_value(a, i);
+            model.define_label_value(b, j);
+            if closed {
+                model.close();
+            }
+            let (a, b, i, j, x, y) = if reverse {
+                (b, a, j, i, y, x)
+            } else {
+                (a, b, i, j, x, y)
+            };
+            model.equate_outer(a, b);
+            model.equate_inner(b, i, j);
+            model.equate_el(b, j, x, y);
+            let (mut restored, _) = round_trip(&model);
+            assert_eq!(restored.iter_outer().count(), 1);
+            assert_eq!(restored.iter_inner().count(), 1);
+            assert_eq!(restored.iter_el().count(), 1);
+            assert_eq!(restored.iter_label().count(), 2);
+            restored.close();
+            assert_eq!(restored.iter_label().count(), 1);
+            round_trip(&restored);
+        }
+    }
 }
 
 #[test]

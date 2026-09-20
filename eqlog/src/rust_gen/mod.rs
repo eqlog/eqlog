@@ -160,12 +160,6 @@ fn display_func_args_struct<'a>(func: FuncId, ctx: &'a RustGenCtx<'a>) -> impl '
 
 fn display_type_fields<'a>(typ: TypeId, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
     FmtFn(move |f| {
-        let parents = &ctx.signature().type_(typ).parents;
-        if !parents.is_empty() {
-            let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
-            let parent_types = parents.iter().map(|&p| display_type(p, ctx)).format(", ");
-            writeln!(f, "{type_snake}_parents: Vec<({parent_types},)>,")?;
-        }
         let typ = display_type(typ, ctx).to_string();
         let type_snake = typ.to_case(Snake);
         writedoc! {f, "
@@ -233,8 +227,6 @@ fn membership_self_type(rel: FlatRel) -> Option<TypeId> {
     }
 }
 
-// Parent indices can be stale between an equality and the next close(). Keep
-// allocation parents separately and compare their current representatives.
 fn display_member_parent_checks<'a>(
     typ: TypeId,
     member: &'a str,
@@ -242,19 +234,17 @@ fn display_member_parent_checks<'a>(
     ctx: &'a RustGenCtx<'a>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
-        for (i, &parent) in ctx.signature().type_(typ).parents.iter().enumerate() {
-            let parent_snake = display_type(parent, ctx).to_string().to_case(Snake);
-            let expected = &expected[i];
-            writedoc! {f, "
-                assert_eq!(
-                    self.root_{parent_snake}(self.{type_snake}_parents[{member}.0 as usize].{i}),
-                    self.root_{parent_snake}({expected}),
-                    \"invalid dependent argument: member element has a different parent model\"
-                );
-            "}?;
+        if ctx.signature().type_(typ).parents.is_empty() {
+            return Ok(());
         }
-        Ok(())
+        let relation = display_rel(FlatRel::ModelMember(typ), ctx);
+        let parents = expected.iter().format(", ");
+        writedoc! {f, "
+            assert!(
+                self.__contains_{relation}({parents}, {member}),
+                \"invalid dependent argument: member element has a different parent model\"
+            );
+        "}
     })
 }
 
@@ -559,6 +549,7 @@ fn display_pub_predicate_holds_fn<'a>(
     index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
+        let is_membership = membership_self_type(rel).is_some();
         let relation_snake = display_rel(rel, ctx).to_string().to_case(Snake);
         let arity_types = rel.arity(ctx.signature());
         let arity_camel: Vec<String> = arity_types
@@ -569,7 +560,8 @@ fn display_pub_predicate_holds_fn<'a>(
         let rel_fn_args = arity_camel
             .iter()
             .enumerate()
-            .format_with("", |(i, s), f| f(&format_args!(", mut arg{i}: {s}")));
+            .format_with("", |(i, s), f| f(&format_args!(", mut arg{i}: {s}")))
+            .to_string();
 
         let canonicalize = arity_camel
             .iter()
@@ -577,7 +569,8 @@ fn display_pub_predicate_holds_fn<'a>(
             .format_with("\n", |(i, s), f| {
                 let type_snake = s.to_case(Snake);
                 f(&format_args!("arg{i} = self.root_{type_snake}(arg{i});"))
-            });
+            })
+            .to_string();
 
         let rel_args: Vec<ElVar> = (0..arity_types.len())
             .map(|i| ElVar {
@@ -593,8 +586,33 @@ fn display_pub_predicate_holds_fn<'a>(
             index_selection,
         );
 
-        let rel_args_doc =
-            (0..arity_types.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
+        let rel_args_doc = (0..arity_types.len())
+            .format_with(", ", |i, f| f(&format_args!("arg{i}")))
+            .to_string();
+
+        // A representative keeps an ownership row in its element index even
+        // while the relation's parent columns await canonicalization.
+        let membership_lookup = FmtFn(move |f| match rel {
+            FlatRel::ModelMember(typ) => {
+                let arity = rel.arity(ctx.signature());
+                let member_pos = arity.len() - 1;
+                let element_index = display_element_index_field_name(rel, typ, ctx);
+                let checks = arity
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &typ)| {
+                        let camel = display_type(typ, ctx).to_string().to_case(UpperCamel);
+                        let snake = camel.to_case(Snake);
+                        format!("self.root_{snake}({camel}(row[{i}])) == arg{i}")
+                    })
+                    .format(" && ");
+                writedoc! {f, "
+                    self.{element_index}.get(&arg{member_pos}.0)
+                        .is_some_and(|rows| rows.iter().any(|row| {checks}))
+                "}
+            }
+            FlatRel::Pred(_) | FlatRel::Func(_) => Ok(()),
+        });
 
         let rel = FlatInRel::Rel(rel);
         let query = QuerySpec::one(rel.clone(), ctx.signature());
@@ -618,6 +636,26 @@ fn display_pub_predicate_holds_fn<'a>(
             })
             .format("\n");
 
+        let contains = if is_membership {
+            format!("self.__contains_{relation_snake}({rel_args_doc})")
+        } else {
+            formatdoc! {"
+                false
+                {checks}
+            "}
+        };
+        let membership_check = FmtFn(|f| {
+            if !is_membership {
+                return Ok(());
+            }
+            writedoc! {f, "
+                fn __contains_{relation_snake}(&self{rel_fn_args}) -> bool {{
+                    {canonicalize}
+                    {membership_lookup}
+                }}
+            "}
+        });
+
         writedoc! {f, "
             /// Returns `true` if `{relation_snake}({rel_args_doc})` holds.
             #[allow(dead_code)]
@@ -625,9 +663,10 @@ fn display_pub_predicate_holds_fn<'a>(
             {canonicalize}
             {dependent_checks}
 
-            false
-            {checks}
+            {contains}
             }}
+
+            {membership_check}
         "}
     })
 }
@@ -1142,12 +1181,12 @@ fn display_pub_insert_relation<'a>(
             pub fn insert_{rel_snake}(&mut self, {rel_fn_args}) {{
                 {canonicalize}
                 {dependent_checks}
+                {parent_checks}
                 self.{internal_insert}({args});
             }}
 
             fn {internal_insert}(&mut self, {rel_fn_args}) {{
                 {canonicalize}
-                {parent_checks}
                 {unwrap_args}
 
                 {contains_checks}
@@ -1193,14 +1232,13 @@ fn display_new_element_fn_internal<'a>(
             if ctx.signature().type_(typ).parents.is_empty() {
                 return Ok(());
             }
-            let parent_pred = display_rel(FlatRel::ModelMember(typ), ctx);
+            let insert = ctx.internal_insert_name(FlatRel::ModelMember(typ));
             let parent_args = (0..ctx.signature().type_(typ).parents.len())
                 .map(|i| format!("parent{i}"))
                 .collect::<Vec<_>>()
                 .join(", ");
             writedoc! {f, "
-                self.{type_snake}_parents.push(({parent_args},));
-                self.insert_{parent_pred}({parent_args}, el.into());
+                self.{insert}({parent_args}, el.into());
             "}
         });
 
@@ -1436,28 +1474,42 @@ fn display_equate_elements<'a>(
 
         let index_new = display_index_field_name(&type_set_rel, index_new, ctx);
         let index_old = display_index_field_name(&type_set_rel, index_old, ctx);
-        let parent_args = ctx
-            .signature()
-            .type_(typ)
-            .parents
+        let parents = &ctx.signature().type_(typ).parents;
+        let parent_params = parents
             .iter()
             .enumerate()
-            .map(|(i, _)| format!("self.{type_snake}_parents[rhs.0 as usize].{i}"))
-            .collect();
-        let parent_checks = display_member_parent_checks(typ, "lhs", parent_args, ctx);
+            .map(|(i, &parent)| {
+                let parent_camel = display_type(parent, ctx).to_string().to_case(UpperCamel);
+                format!("parent{i}: {parent_camel}, ")
+            })
+            .join("");
+        let parent_args: Vec<_> = (0..parents.len()).map(|i| format!("parent{i}")).collect();
+        let lhs_checks = display_member_parent_checks(typ, "lhs", parent_args.clone(), ctx);
+        let rhs_checks = display_member_parent_checks(typ, "rhs", parent_args, ctx);
+        let parent_doc = if parents.is_empty() {
+            ""
+        } else {
+            "/// Both elements must belong to the supplied enclosing models, outermost first."
+        };
 
         writedoc! {f, "
             /// Enforces the equality `lhs = rhs`.
+            {parent_doc}
             #[allow(dead_code)]
-            pub fn equate_{type_snake}(&mut self, mut lhs: {type_camel}, mut rhs: {type_camel}) {{
+            pub fn equate_{type_snake}(&mut self, {parent_params}lhs: {type_camel}, rhs: {type_camel}) {{
+                let lhs = self.root_{type_snake}(lhs);
+                let rhs = self.root_{type_snake}(rhs);
+                {lhs_checks}
+                {rhs_checks}
+                self.__equate_{type_snake}(lhs, rhs);
+            }}
+
+            fn __equate_{type_snake}(&mut self, mut lhs: {type_camel}, mut rhs: {type_camel}) {{
                 lhs = self.{type_snake}_equalities.root(lhs);
                 rhs = self.{type_snake}_equalities.root(rhs);
                 if lhs == rhs {{
                     return;
                 }}
-
-                {parent_checks}
-
                 let lhs_weight = self.{type_snake}_weights[lhs.0 as usize];
                 let rhs_weight = self.{type_snake}_weights[rhs.0 as usize];
                 let (root, child) =
@@ -1990,7 +2042,7 @@ fn display_model_delta_apply_equalities_fn<'a>(ctx: &'a RustGenCtx<'a>) -> impl 
 
                     writedoc! {f, "
                         for [lhs, rhs] in self.new_{type_snake}_equalities.drain(..) {{
-                            model.equate_{type_snake}(lhs.into(), rhs.into());
+                            model.__equate_{type_snake}(lhs.into(), rhs.into());
                         }}
                     "}
                 })
@@ -3198,9 +3250,6 @@ fn display_new_fn<'a>(
         writeln!(f, "Self {{").unwrap();
         for typ in ctx.signature().iter_types() {
             let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
-            if !ctx.signature().type_(typ).parents.is_empty() {
-                writeln!(f, "{type_snake}_parents: Vec::new(),")?;
-            }
             writeln!(f, "{type_snake}_equalities: Unification::new(),").unwrap();
             writeln!(f, "{type_snake}_weights: Vec::new(),").unwrap();
             writeln!(f, "{type_snake}_uprooted: Vec::new(),").unwrap();

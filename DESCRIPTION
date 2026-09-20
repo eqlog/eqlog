@@ -8,7 +8,8 @@ behind runtime arity dispatch.
 
 Generate conversions with element correspondences so models can move
 between representations without losing caller handles or implicitly
-executing rules.
+executing rules. Recover enclosing model instances from membership
+indices when exporting pending equalities.
 
 Document the public contracts and exercise incomplete structures,
 descriptor validation, and relation column order in integration tests.
