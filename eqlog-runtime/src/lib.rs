@@ -72,7 +72,6 @@ use std::sync::Arc;
 /// An element handle within one structure.
 ///
 /// The same ID can refer to different elements in different structures.
-/// Conversions preserve the type ID and numeric index, including aliases.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Element {
     pub type_: TypeId,
