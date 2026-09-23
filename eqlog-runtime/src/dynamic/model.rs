@@ -5,9 +5,6 @@ use super::data::{RelationData, TypeData};
 use super::{Element, Error, RelationId, RelationKind, Signature, TypeId};
 
 /// Elements, equalities, and relation tables for a runtime signature.
-///
-/// Equality merges leave stored rows untouched. Ownership is recorded by
-/// membership relations. No operation evaluates rules or enforces functionality.
 #[derive(Clone, Debug)]
 pub struct DynamicModel {
     signature: Arc<Signature>,
