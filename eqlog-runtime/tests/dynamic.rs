@@ -2,8 +2,8 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use eqlog_runtime::{
-    Element, Error, FunctionKind, Model, Relation, RelationId, RelationKind, Signature, Type,
-    TypeId, TypeKind,
+    Element, EnumCase, Error, FunctionKind, Model, Relation, RelationId, RelationKind, Signature,
+    Type, TypeId, TypeKind,
 };
 
 fn signature(arity: usize, kind: RelationKind) -> Signature {
@@ -296,4 +296,254 @@ fn descriptors_support_forward_references_but_reject_invalid_roles() {
     let mut bad = relations;
     bad[3].kind = RelationKind::Function(FunctionKind::Constructor);
     assert!(Signature::new(types, bad).is_err());
+}
+
+#[test]
+fn signatures_reject_ambiguous_morphism_functions() {
+    let (types, relations) = nested_signature();
+    for index in [1, 2, 3] {
+        let mut duplicated = relations.clone();
+        duplicated.push(Relation {
+            name: "duplicate".into(),
+            ..relations[index].clone()
+        });
+        assert_eq!(
+            Signature::new(types.clone(), duplicated).err(),
+            Some(Error::InvalidSignature(
+                "duplicate morphism function role".into()
+            ))
+        );
+    }
+}
+
+#[test]
+fn endpoint_lookup_distinguishes_morphism_types_for_the_same_model() {
+    let (mut types, mut relations) = nested_signature();
+    types.push(Type {
+        name: "OtherMap".into(),
+        kind: TypeKind::Morphism(TypeId(2)),
+        parents: vec![],
+    });
+    for index in [1, 2, 3] {
+        let mut relation = relations[index].clone();
+        let name = &relation.name;
+        relation.name = format!("other_{name}");
+        relation.arity[0] = TypeId(3);
+        if index == 3 {
+            relation.kind = RelationKind::Function(FunctionKind::MorphismApplication {
+                morphism: TypeId(3),
+                member: TypeId(0),
+            });
+        }
+        relations.push(relation);
+    }
+    let mut model = Model::new(Arc::new(Signature::new(types, relations).unwrap()));
+    let a = model.new_element(TypeId(2), &[]).unwrap();
+    let b = model.new_element(TypeId(2), &[]).unwrap();
+    let x = model.new_element(TypeId(0), &[a]).unwrap();
+    let y = model.new_element(TypeId(0), &[b]).unwrap();
+    let morphism = model.new_element(TypeId(3), &[]).unwrap();
+    model.insert(RelationId(4), &[morphism, a]).unwrap();
+    model.insert(RelationId(5), &[morphism, b]).unwrap();
+    assert!(model.insert(RelationId(6), &[morphism, x, y]).unwrap());
+    assert_eq!(model.eval(RelationId(6), &[morphism, x]).unwrap(), Some(y));
+    assert_eq!(model.define(RelationId(6), &[morphism, x]).unwrap(), y);
+}
+
+#[test]
+fn missing_domain_declarations_are_reported_when_applications_are_used() {
+    let (types, mut relations) = nested_signature();
+    relations.remove(1);
+    let mut model = Model::new(Arc::new(Signature::new(types, relations).unwrap()));
+    let world = model.new_element(TypeId(2), &[]).unwrap();
+    let item = model.new_element(TypeId(0), &[world]).unwrap();
+    let morphism = model.new_element(TypeId(1), &[]).unwrap();
+    let error = Error::InvalidSignature(
+        "missing morphism function MorphismDomain(TypeId(2)) for TypeId(1)".into(),
+    );
+    assert_eq!(
+        model.eval(RelationId(2), &[morphism, item]),
+        Err(error.clone())
+    );
+    assert_eq!(model.define(RelationId(2), &[morphism, item]), Err(error));
+    assert_eq!(model.elements(TypeId(0)).unwrap().count(), 1);
+    assert_eq!(model.tuples(RelationId(2)).unwrap().count(), 0);
+}
+
+#[test]
+fn missing_codomain_declarations_do_not_prevent_reading_applications() {
+    let (types, mut relations) = nested_signature();
+    relations.remove(2);
+    let mut model = Model::new(Arc::new(Signature::new(types, relations).unwrap()));
+    let world = model.new_element(TypeId(2), &[]).unwrap();
+    let item = model.new_element(TypeId(0), &[world]).unwrap();
+    let morphism = model.new_element(TypeId(1), &[]).unwrap();
+    model.insert(RelationId(1), &[morphism, world]).unwrap();
+    assert_eq!(model.eval(RelationId(2), &[morphism, item]), Ok(None));
+    let error = Error::InvalidSignature(
+        "missing morphism function MorphismCodomain(TypeId(2)) for TypeId(1)".into(),
+    );
+    assert_eq!(
+        model.insert(RelationId(2), &[morphism, item, item]),
+        Err(error.clone())
+    );
+    assert_eq!(model.define(RelationId(2), &[morphism, item]), Err(error));
+    assert_eq!(model.elements(TypeId(0)).unwrap().count(), 1);
+    assert_eq!(model.elements(TypeId(2)).unwrap().count(), 1);
+    assert_eq!(model.tuples(RelationId(2)).unwrap().count(), 0);
+}
+
+#[test]
+fn nested_applications_report_missing_parent_image_declarations_or_values() {
+    for declare_parent_application in [false, true] {
+        let (mut types, mut relations) = nested_signature();
+        types.push(Type {
+            name: "Inner".into(),
+            kind: TypeKind::Model,
+            parents: vec![TypeId(2)],
+        });
+        types[0].parents.push(TypeId(3));
+        relations[0].parents.push(TypeId(3));
+        relations[0].arity = vec![TypeId(2), TypeId(3), TypeId(0)];
+        relations.push(Relation {
+            name: "inner_member".into(),
+            kind: RelationKind::Membership(TypeId(3)),
+            arity: vec![TypeId(2), TypeId(3)],
+            parents: vec![TypeId(2)],
+        });
+        if declare_parent_application {
+            relations.push(Relation {
+                name: "parent_application".into(),
+                kind: RelationKind::Function(FunctionKind::MorphismApplication {
+                    morphism: TypeId(1),
+                    member: TypeId(3),
+                }),
+                arity: vec![TypeId(1), TypeId(3), TypeId(3)],
+                parents: vec![],
+            });
+        }
+        let mut model = Model::new(Arc::new(Signature::new(types, relations).unwrap()));
+        let a = model.new_element(TypeId(2), &[]).unwrap();
+        let b = model.new_element(TypeId(2), &[]).unwrap();
+        let i = model.new_element(TypeId(3), &[a]).unwrap();
+        let j = model.new_element(TypeId(3), &[b]).unwrap();
+        let x = model.new_element(TypeId(0), &[a, i]).unwrap();
+        let y = model.new_element(TypeId(0), &[b, j]).unwrap();
+        let morphism = model.new_element(TypeId(1), &[]).unwrap();
+        model.insert(RelationId(1), &[morphism, a]).unwrap();
+        model.insert(RelationId(2), &[morphism, b]).unwrap();
+        assert_eq!(model.eval(RelationId(3), &[morphism, x]), Ok(None));
+        let error = if declare_parent_application {
+            Error::UndefinedFunction(RelationId(5))
+        } else {
+            Error::InvalidSignature(
+                "missing morphism function MorphismApplication { morphism: TypeId(1), member: TypeId(3) } for TypeId(1)".into(),
+            )
+        };
+        assert_eq!(
+            model.insert(RelationId(3), &[morphism, x, y]),
+            Err(error.clone())
+        );
+        assert_eq!(model.define(RelationId(3), &[morphism, x]), Err(error));
+        assert_eq!(model.elements(TypeId(0)).unwrap().count(), 2);
+        assert_eq!(model.tuples(RelationId(3)).unwrap().count(), 0);
+    }
+}
+
+#[test]
+fn enum_and_function_helpers_check_arguments_before_allocating() {
+    let signature = Signature::new(
+        vec![
+            Type {
+                name: "El".into(),
+                kind: TypeKind::Plain,
+                parents: vec![],
+            },
+            Type {
+                name: "Choice".into(),
+                kind: TypeKind::Enum,
+                parents: vec![],
+            },
+        ],
+        vec![
+            Relation {
+                name: "predicate".into(),
+                kind: RelationKind::Predicate,
+                arity: vec![TypeId(0)],
+                parents: vec![],
+            },
+            Relation {
+                name: "Wrap".into(),
+                kind: RelationKind::Function(FunctionKind::Constructor),
+                arity: vec![TypeId(0), TypeId(1)],
+                parents: vec![],
+            },
+            Relation {
+                name: "choice".into(),
+                kind: RelationKind::Function(FunctionKind::Ordinary),
+                arity: vec![TypeId(0), TypeId(1)],
+                parents: vec![],
+            },
+        ],
+    )
+    .unwrap();
+    let mut model = Model::new(Arc::new(signature));
+    let x = model.new_element(TypeId(0), &[]).unwrap();
+    assert_eq!(
+        model.new_element(TypeId(1), &[]),
+        Err(Error::ConstructorRequired(TypeId(1)))
+    );
+    assert_eq!(
+        model.eval(RelationId(0), &[x]),
+        Err(Error::ExpectedFunction(RelationId(0)))
+    );
+    assert_eq!(
+        model.define(RelationId(0), &[x]),
+        Err(Error::ExpectedFunction(RelationId(0)))
+    );
+    assert_eq!(
+        model.new_enum(EnumCase {
+            constructor: RelationId(0),
+            arguments: vec![x]
+        }),
+        Err(Error::ExpectedConstructor(RelationId(0)))
+    );
+    assert_eq!(
+        model.define(RelationId(2), &[x]),
+        Err(Error::ConstructorRequired(TypeId(1)))
+    );
+    assert_eq!(
+        model.new_enum(EnumCase {
+            constructor: RelationId(1),
+            arguments: vec![]
+        }),
+        Err(Error::ArityMismatch {
+            expected: 1,
+            actual: 0
+        })
+    );
+    assert_eq!(model.cases(x).err(), Some(Error::ExpectedEnum(TypeId(0))));
+    assert_eq!(model.case(x), Err(Error::ExpectedEnum(TypeId(0))));
+    assert_eq!(model.elements(TypeId(1)).unwrap().count(), 0);
+
+    let value = EnumCase {
+        constructor: RelationId(1),
+        arguments: vec![x],
+    };
+    let element = model.new_enum(value.clone()).unwrap();
+    assert_eq!(model.new_enum(value.clone()).unwrap(), element);
+    assert_eq!(model.eval(RelationId(1), &[x]), Ok(Some(element)));
+    assert_eq!(
+        model.cases(element).unwrap().collect::<Vec<_>>(),
+        vec![value.clone()]
+    );
+    assert_eq!(model.case(element).unwrap(), value);
+    assert_eq!(model.elements(TypeId(1)).unwrap().count(), 1);
+    assert_eq!(
+        model.are_equal(x, element),
+        Err(Error::TypeMismatch {
+            expected: TypeId(0),
+            actual: TypeId(1)
+        })
+    );
 }

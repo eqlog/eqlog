@@ -79,6 +79,14 @@ pub struct Element {
     pub index: u32,
 }
 
+/// A way to construct or destructure an enum element.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct EnumCase {
+    pub constructor: RelationId,
+    /// Constructor arguments, including enclosing model parameters.
+    pub arguments: Vec<Element>,
+}
+
 /// Implemented by generated models to transfer data without running rules.
 pub trait CompiledModel: Sized {
     /// Returns the shared signature, independent of evaluation mode.
@@ -100,9 +108,7 @@ pub trait CompiledModel: Sized {
     ///
     /// All imported facts become explicit and are treated as new by evaluation.
     /// Compatible indices share tree nodes. Other indices are rebuilt as needed.
-    /// Import does not check theory axioms. Calling `close` afterward may still
-    /// leave some axioms unsatisfied. For example, an enum element created without
-    /// a constructor may still have no case.
+    /// Import does not check theory axioms.
     ///
     /// Returns [`Error::SignatureMismatch`] if type or relation descriptors differ
     /// from [`Self::dynamic_signature`], including their order and names.
@@ -128,6 +134,18 @@ pub enum Error {
     ArityMismatch { expected: usize, actual: usize },
     /// A member does not belong to the supplied enclosing models.
     ParentMismatch,
+    /// The relation is not a function.
+    ExpectedFunction(RelationId),
+    /// The relation is not an enum constructor.
+    ExpectedConstructor(RelationId),
+    /// The type is not an enum.
+    ExpectedEnum(TypeId),
+    /// Enum elements must be created through a constructor.
+    ConstructorRequired(TypeId),
+    /// A required morphism endpoint or parent image is undefined.
+    UndefinedFunction(RelationId),
+    /// No stored constructor case was found for the element.
+    NoEnumCase(Element),
     /// Import requires the same ordered signature as the generated model.
     SignatureMismatch,
     /// Allocation would exceed the union-find's supported element count.
@@ -149,6 +167,18 @@ impl fmt::Display for Error {
                 write!(f, "expected {expected} arguments, got {actual}")
             }
             Self::ParentMismatch => write!(f, "member does not belong to the supplied models"),
+            Self::ExpectedFunction(relation) => write!(f, "expected a function: {relation:?}"),
+            Self::ExpectedConstructor(relation) => {
+                write!(f, "expected an enum constructor: {relation:?}")
+            }
+            Self::ExpectedEnum(type_) => write!(f, "expected an enum type: {type_:?}"),
+            Self::ConstructorRequired(type_) => {
+                write!(f, "creating an element of {type_:?} requires a constructor")
+            }
+            Self::UndefinedFunction(relation) => {
+                write!(f, "required function is undefined: {relation:?}")
+            }
+            Self::NoEnumCase(element) => write!(f, "no enum case found for {element:?}"),
             Self::SignatureMismatch => write!(f, "dynamic and compiled signatures differ"),
             Self::ElementLimit => write!(f, "element ID space exhausted"),
         }

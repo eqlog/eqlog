@@ -2,7 +2,10 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use super::data::{RelationData, TypeData};
-use super::{Element, Error, RelationId, RelationKind, Signature, TypeId};
+use super::{
+    Element, EnumCase, Error, FunctionKind, Relation, RelationId, RelationKind, Signature, TypeId,
+    TypeKind,
+};
 
 /// A model with a runtime signature.
 #[derive(Clone, Debug)]
@@ -111,17 +114,47 @@ impl Model {
 
     /// Adjoins a new element of type `type_`.
     /// `parents` lists the enclosing model instances, outermost first.
-    /// Enum elements are allocated without choosing a constructor.
+    /// For enum types, use [`Self::new_enum`] instead.
     pub fn new_element(&mut self, type_: TypeId, parents: &[Element]) -> Result<Element, Error> {
+        match self.signature.type_(type_)?.kind {
+            TypeKind::Enum => return Err(Error::ConstructorRequired(type_)),
+            TypeKind::Plain | TypeKind::Model | TypeKind::Morphism(_) => {}
+        }
+        self.allocate(type_, parents)
+    }
+
+    /// Adjoins an enum element with the given constructor and arguments.
+    pub fn new_enum(&mut self, value: EnumCase) -> Result<Element, Error> {
+        match self.signature.relation(value.constructor)?.kind {
+            RelationKind::Function(FunctionKind::Constructor) => {
+                self.define(value.constructor, &value.arguments)
+            }
+            RelationKind::Predicate
+            | RelationKind::Membership(_)
+            | RelationKind::Function(
+                FunctionKind::Ordinary
+                | FunctionKind::MorphismDomain(_)
+                | FunctionKind::MorphismCodomain(_)
+                | FunctionKind::MorphismApplication { .. },
+            ) => Err(Error::ExpectedConstructor(value.constructor)),
+        }
+    }
+
+    fn check_capacity(&self, type_: TypeId) -> Result<(), Error> {
+        if self.types[type_.0].equalities.len() >= (u32::MAX - 1) as usize {
+            return Err(Error::ElementLimit);
+        }
+        Ok(())
+    }
+
+    fn allocate(&mut self, type_: TypeId, parents: &[Element]) -> Result<Element, Error> {
         let parents = self.check_tuple(&self.signature.type_(type_)?.parents, parents)?;
         for (i, &parent) in parents.iter().enumerate() {
             self.check_membership(parent, &parents[..i])?;
         }
+        self.check_capacity(type_)?;
         let data = &mut self.types[type_.0];
         let len = data.equalities.len();
-        if len >= (u32::MAX - 1) as usize {
-            return Err(Error::ElementLimit);
-        }
         let element = Element {
             type_,
             index: len as u32,
@@ -155,6 +188,19 @@ impl Model {
             return Err(Error::UnknownElement(element));
         }
         Ok(self.root_unchecked(element))
+    }
+
+    /// Returns `true` if `lhs` and `rhs` are in the same equivalence class.
+    pub fn are_equal(&self, lhs: Element, rhs: Element) -> Result<bool, Error> {
+        let lhs = self.root(lhs)?;
+        let rhs = self.root(rhs)?;
+        if lhs.type_ != rhs.type_ {
+            return Err(Error::TypeMismatch {
+                expected: lhs.type_,
+                actual: rhs.type_,
+            });
+        }
+        Ok(lhs == rhs)
     }
 
     /// Enforces the equality `lhs = rhs`.
@@ -215,10 +261,10 @@ impl Model {
 
     /// Returns `true` if `relation` holds for `tuple`.
     /// As with compiled predicates, pending equalities can make this lookup miss facts.
-    /// Predicate and function arguments are checked for type, but not model membership.
     pub fn contains(&self, relation: RelationId, tuple: &[Element]) -> Result<bool, Error> {
         let descriptor = self.signature.relation(relation)?;
         let tuple = self.check_tuple(&descriptor.arity, tuple)?;
+        self.check_arguments(descriptor, &tuple)?;
         match descriptor.kind {
             RelationKind::Membership(_) => Ok(self.contains_membership(relation, &tuple)),
             RelationKind::Predicate | RelationKind::Function(_) => {
@@ -231,10 +277,10 @@ impl Model {
 
     /// Makes `relation` hold for `tuple`.
     /// Returns `true` if a tuple was added.
-    /// Predicate and function arguments are checked for type, but not model membership.
     pub fn insert(&mut self, relation: RelationId, tuple: &[Element]) -> Result<bool, Error> {
         let descriptor = self.signature.relation(relation)?;
         let tuple = self.check_tuple(&descriptor.arity, tuple)?;
+        self.check_arguments(descriptor, &tuple)?;
         match descriptor.kind {
             RelationKind::Membership(_) => {
                 let (element, parents) =
@@ -244,6 +290,299 @@ impl Model {
             RelationKind::Predicate | RelationKind::Function(_) => {}
         }
         Ok(self.insert_row(relation, &tuple))
+    }
+
+    /// Evaluates `function(arguments)`.
+    /// Returns `None` if no result is stored for these arguments.
+    pub fn eval(
+        &self,
+        function: RelationId,
+        arguments: &[Element],
+    ) -> Result<Option<Element>, Error> {
+        let (descriptor, _) = self.function(function)?;
+        let (result_type, domain) = descriptor
+            .arity
+            .split_last()
+            .expect("function has a result");
+        let arguments = self.check_tuple(domain, arguments)?;
+        self.check_arguments(descriptor, &arguments)?;
+        let data = &self.relations[function.0];
+        for index in [&data.new, &data.old] {
+            let result = index
+                .tuples()
+                .filter(|row| row.iter().zip(&arguments).all(|(&i, el)| i == el.index))
+                .map(|row| *row.last().expect("function has a result"))
+                .min()
+                .map(|index| Element {
+                    type_: *result_type,
+                    index,
+                });
+            if result.is_some() {
+                return Ok(result);
+            }
+        }
+        Ok(None)
+    }
+
+    /// Enforces that `function(arguments)` is defined, adjoining a new element if necessary.
+    /// Functions returning enums must be constructors.
+    pub fn define(
+        &mut self,
+        function: RelationId,
+        arguments: &[Element],
+    ) -> Result<Element, Error> {
+        let (descriptor, kind) = self.function(function)?;
+        let (result_type, domain) = descriptor
+            .arity
+            .split_last()
+            .expect("function has a result");
+        let result_type = *result_type;
+        let outer_len = descriptor.parents.len();
+        let result_parents = &self.signature.type_(result_type)?.parents;
+        match self.signature.type_(result_type)?.kind {
+            TypeKind::Enum => match kind {
+                FunctionKind::Constructor => {}
+                FunctionKind::Ordinary
+                | FunctionKind::MorphismDomain(_)
+                | FunctionKind::MorphismCodomain(_)
+                | FunctionKind::MorphismApplication { .. } => {
+                    return Err(Error::ConstructorRequired(result_type));
+                }
+            },
+            TypeKind::Plain | TypeKind::Model | TypeKind::Morphism(_) => {}
+        }
+        let arguments = self.check_tuple(domain, arguments)?;
+        if let Some(result) = self.eval(function, &arguments)? {
+            return Ok(result);
+        }
+        self.check_capacity(result_type)?;
+        let parents = match kind {
+            FunctionKind::MorphismApplication { morphism, member } => {
+                if result_parents.len() == outer_len + 1 {
+                    let codomain = self.signature.morphism_codomain(morphism)?;
+                    let parent = self.define(codomain, &arguments[..=outer_len])?;
+                    let mut parents = arguments[..outer_len].to_vec();
+                    parents.push(parent);
+                    parents
+                } else {
+                    let sources =
+                        self.morphism_source_parents(descriptor, morphism, member, &arguments)?;
+                    self.morphism_image_parents(descriptor, morphism, member, &arguments, sources)?
+                }
+            }
+            FunctionKind::Ordinary
+            | FunctionKind::Constructor
+            | FunctionKind::MorphismDomain(_)
+            | FunctionKind::MorphismCodomain(_) => {
+                if !result_parents.is_empty() && result_parents != &descriptor.parents {
+                    return Err(Error::InvalidSignature(
+                        "function result has different enclosing models".into(),
+                    ));
+                }
+                arguments[..result_parents.len()].to_vec()
+            }
+        };
+        let result = self.allocate(result_type, &parents)?;
+        let mut tuple = arguments;
+        tuple.push(result);
+        self.insert_row(function, &tuple);
+        Ok(result)
+    }
+
+    /// Returns an iterator over ways to destructure an enum element.
+    pub fn cases(&self, element: Element) -> Result<impl Iterator<Item = EnumCase> + '_, Error> {
+        let element = self.root(element)?;
+        match self.signature.type_(element.type_)?.kind {
+            TypeKind::Enum => {}
+            TypeKind::Plain | TypeKind::Model | TypeKind::Morphism(_) => {
+                return Err(Error::ExpectedEnum(element.type_));
+            }
+        }
+        Ok(self
+            .signature
+            .relations()
+            .filter_map(move |(id, relation)| match relation.kind {
+                RelationKind::Function(FunctionKind::Constructor) => {
+                    (relation.arity.last() == Some(&element.type_)).then_some((id, relation))
+                }
+                RelationKind::Predicate
+                | RelationKind::Membership(_)
+                | RelationKind::Function(
+                    FunctionKind::Ordinary
+                    | FunctionKind::MorphismDomain(_)
+                    | FunctionKind::MorphismCodomain(_)
+                    | FunctionKind::MorphismApplication { .. },
+                ) => None,
+            })
+            .flat_map(move |(constructor, relation)| {
+                self.relations[constructor.0]
+                    .tuples()
+                    .filter_map(move |mut row| {
+                        if row.pop() != Some(element.index) {
+                            return None;
+                        }
+                        let arguments = row
+                            .into_iter()
+                            .zip(&relation.arity)
+                            .map(|(index, &type_)| Element { type_, index })
+                            .collect();
+                        Some(EnumCase {
+                            constructor,
+                            arguments,
+                        })
+                    })
+            }))
+    }
+
+    /// Returns the first way to destructure an enum element.
+    pub fn case(&self, element: Element) -> Result<EnumCase, Error> {
+        self.cases(element)?
+            .next()
+            .ok_or(Error::NoEnumCase(element))
+    }
+
+    fn function(&self, relation: RelationId) -> Result<(&Relation, FunctionKind), Error> {
+        let descriptor = self.signature.relation(relation)?;
+        match descriptor.kind {
+            RelationKind::Function(kind) => Ok((descriptor, kind)),
+            RelationKind::Predicate | RelationKind::Membership(_) => {
+                Err(Error::ExpectedFunction(relation))
+            }
+        }
+    }
+
+    fn check_arguments(&self, relation: &Relation, tuple: &[Element]) -> Result<(), Error> {
+        let membership = match relation.kind {
+            RelationKind::Function(FunctionKind::MorphismApplication { morphism, member }) => {
+                let sources = self.morphism_source_parents(relation, morphism, member, tuple)?;
+                if tuple.len() == relation.arity.len() {
+                    self.morphism_image_parents(relation, morphism, member, tuple, sources)?;
+                }
+                return Ok(());
+            }
+            RelationKind::Membership(member) => Some(member),
+            RelationKind::Predicate
+            | RelationKind::Function(
+                FunctionKind::Ordinary
+                | FunctionKind::Constructor
+                | FunctionKind::MorphismDomain(_)
+                | FunctionKind::MorphismCodomain(_),
+            ) => None,
+        };
+        for &element in tuple {
+            let parents = &self.signature.type_(element.type_)?.parents;
+            if membership != Some(element.type_)
+                && !parents.is_empty()
+                && relation.arity.starts_with(parents)
+            {
+                self.check_membership(element, &tuple[..parents.len()])?;
+            }
+        }
+        Ok(())
+    }
+
+    fn morphism_source_parents(
+        &self,
+        relation: &Relation,
+        morphism: TypeId,
+        member: TypeId,
+        tuple: &[Element],
+    ) -> Result<Vec<Vec<Element>>, Error> {
+        let outer_len = relation.parents.len();
+        let domain = self.signature.morphism_domain(morphism)?;
+        let domain_value = self
+            .eval(domain, &tuple[..=outer_len])?
+            .ok_or(Error::UndefinedFunction(domain))?;
+        let mut prefix = tuple[..outer_len].to_vec();
+        prefix.push(self.root_unchecked(domain_value));
+        let source = tuple[outer_len + 1];
+        let membership = self
+            .signature
+            .membership(member)
+            .expect("member has parents");
+        let parent_types = &self.signature.type_(member)?.parents;
+        if parent_types.len() == prefix.len() {
+            let mut row = prefix.clone();
+            row.push(source);
+            if !self.contains(membership, &row)? {
+                return Err(Error::ParentMismatch);
+            }
+            return Ok(vec![prefix]);
+        }
+        let parents: Vec<_> = self.relations[membership.0]
+            .tuples()
+            .filter(|row| row.last() == Some(&source.index))
+            .map(|row| {
+                row.into_iter()
+                    .zip(parent_types)
+                    .map(|(index, &type_)| self.root_unchecked(Element { type_, index }))
+                    .collect::<Vec<_>>()
+            })
+            .filter(|parents| parents.starts_with(&prefix))
+            .collect();
+        if parents.is_empty() {
+            return Err(Error::ParentMismatch);
+        }
+        Ok(parents)
+    }
+
+    fn morphism_image_parents(
+        &self,
+        relation: &Relation,
+        morphism: TypeId,
+        member: TypeId,
+        tuple: &[Element],
+        sources: Vec<Vec<Element>>,
+    ) -> Result<Vec<Element>, Error> {
+        let outer_len = relation.parents.len();
+        let codomain = self.signature.morphism_codomain(morphism)?;
+        let codomain_value = self
+            .eval(codomain, &tuple[..=outer_len])?
+            .ok_or(Error::UndefinedFunction(codomain))?;
+        let mut prefix = tuple[..outer_len].to_vec();
+        prefix.push(self.root_unchecked(codomain_value));
+        let mut missing = None;
+        for source in sources {
+            let mut parents = prefix.clone();
+            for &parent in &source[prefix.len()..] {
+                let application = self
+                    .signature
+                    .morphism_application(morphism, parent.type_)?;
+                let mut arguments = tuple[..=outer_len].to_vec();
+                arguments.push(parent);
+                let Some(image) = self.eval(application, &arguments)? else {
+                    missing = Some(application);
+                    break;
+                };
+                parents.push(self.root_unchecked(image));
+                let membership = self
+                    .signature
+                    .membership(parent.type_)
+                    .expect("nested parent has parents");
+                if !self.contains(membership, &parents)? {
+                    parents.pop();
+                    break;
+                }
+            }
+            if parents.len() == self.signature.type_(member)?.parents.len() {
+                if let Some(&result) = tuple.get(outer_len + 2) {
+                    let membership = self
+                        .signature
+                        .membership(member)
+                        .expect("member has parents");
+                    let mut row = parents.clone();
+                    row.push(result);
+                    if !self.contains(membership, &row)? {
+                        continue;
+                    }
+                }
+                return Ok(parents);
+            }
+        }
+        Err(match missing {
+            Some(function) => Error::UndefinedFunction(function),
+            None => Error::ParentMismatch,
+        })
     }
 
     fn insert_row(&mut self, relation: RelationId, tuple: &[Element]) -> bool {

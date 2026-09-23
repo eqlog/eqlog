@@ -86,7 +86,9 @@ impl Signature {
     /// itself. Function relations must include a result. Constructors must return
     /// an enum. Morphism functions must have the expected argument and result types.
     ///
-    /// Enum constructors and morphism functions may be omitted.
+    /// Enum constructors and morphism functions may be omitted. A morphism type
+    /// has at most one domain function, one codomain function, and one application
+    /// for each member type.
     /// Returns [`Error::UnknownType`] or [`Error::InvalidSignature`] for invalid
     /// descriptors.
     pub fn new(types: Vec<Type>, relations: Vec<Relation>) -> Result<Self, Error> {
@@ -122,6 +124,9 @@ impl Signature {
             }
         }
         let mut names = BTreeSet::new();
+        let mut domains = BTreeSet::new();
+        let mut codomains = BTreeSet::new();
+        let mut applications = BTreeSet::new();
         for (index, relation) in signature.relations.iter().enumerate() {
             let name = &relation.name;
             if name.is_empty() || !names.insert(name) {
@@ -140,7 +145,26 @@ impl Signature {
             }
             match relation.kind {
                 RelationKind::Predicate => {}
-                RelationKind::Function(kind) => signature.check_function(relation, kind)?,
+                RelationKind::Function(kind) => {
+                    signature.check_function(relation, kind)?;
+                    let unique = match kind {
+                        FunctionKind::Ordinary | FunctionKind::Constructor => true,
+                        FunctionKind::MorphismDomain(_) => {
+                            domains.insert(relation.arity[relation.parents.len()])
+                        }
+                        FunctionKind::MorphismCodomain(_) => {
+                            codomains.insert(relation.arity[relation.parents.len()])
+                        }
+                        FunctionKind::MorphismApplication { morphism, member } => {
+                            applications.insert((morphism, member))
+                        }
+                    };
+                    if !unique {
+                        return Err(Error::InvalidSignature(
+                            "duplicate morphism function role".into(),
+                        ));
+                    }
+                }
                 RelationKind::Membership(member) => {
                     let type_ = signature.type_(member)?;
                     let mut expected = type_.parents.clone();
@@ -215,6 +239,53 @@ impl Signature {
 
     pub(super) fn membership(&self, type_: TypeId) -> Option<RelationId> {
         self.memberships[type_.0]
+    }
+
+    pub(super) fn morphism_domain(&self, morphism: TypeId) -> Result<RelationId, Error> {
+        let model = self.morphism_model(morphism)?;
+        self.morphism_function(morphism, FunctionKind::MorphismDomain(model))
+    }
+
+    pub(super) fn morphism_codomain(&self, morphism: TypeId) -> Result<RelationId, Error> {
+        let model = self.morphism_model(morphism)?;
+        self.morphism_function(morphism, FunctionKind::MorphismCodomain(model))
+    }
+
+    pub(super) fn morphism_application(
+        &self,
+        morphism: TypeId,
+        member: TypeId,
+    ) -> Result<RelationId, Error> {
+        self.morphism_model(morphism)?;
+        self.type_(member)?;
+        self.morphism_function(
+            morphism,
+            FunctionKind::MorphismApplication { morphism, member },
+        )
+    }
+
+    fn morphism_model(&self, morphism: TypeId) -> Result<TypeId, Error> {
+        match self.type_(morphism)?.kind {
+            TypeKind::Morphism(model) => Ok(model),
+            TypeKind::Plain | TypeKind::Model | TypeKind::Enum => Err(Error::InvalidSignature(
+                format!("expected a morphism type: {morphism:?}"),
+            )),
+        }
+    }
+
+    fn morphism_function(&self, morphism: TypeId, kind: FunctionKind) -> Result<RelationId, Error> {
+        self.relations()
+            .find_map(|(id, relation)| match relation.kind {
+                RelationKind::Predicate | RelationKind::Membership(_) => None,
+                RelationKind::Function(candidate) => (candidate == kind
+                    && relation.arity[relation.parents.len()] == morphism)
+                    .then_some(id),
+            })
+            .ok_or_else(|| {
+                Error::InvalidSignature(format!(
+                    "missing morphism function {kind:?} for {morphism:?}"
+                ))
+            })
     }
 
     fn check_model(&self, id: TypeId) -> Result<(), Error> {

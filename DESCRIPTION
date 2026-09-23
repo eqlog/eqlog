@@ -17,6 +17,9 @@ Describe functions and their results directly in API docs.
 Use the compiler's type terminology throughout the dynamic API.
 Keep its public operations analogous to compiled models.
 Expose Model and signature descriptors at the runtime crate root.
+Match compiled membership and morphism checks, function evaluation and
+definition, enum construction and case inspection, and equality queries.
 
-Test incomplete structures, descriptor validation, copy independence,
-and continued evaluation after conversion through public APIs.
+Test descriptor validation, copy independence, API behavior against
+compiled models, and continued evaluation after conversion through
+public APIs.

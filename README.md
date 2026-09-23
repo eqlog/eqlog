@@ -377,6 +377,12 @@ runtime arity dispatch for relation tables. It keeps old/new partitions and
 records ownership in membership relations. It does not evaluate rules or rewrite
 relation rows when elements are equated.
 
+Use `eval` and `define` for function evaluation and definition, and `are_equal`
+to compare elements. Create enum elements with `new_enum` and an `EnumCase`, or
+with `define` on a constructor. Inspect their constructors with `cases` or `case`.
+Relation operations enforce the same dependent argument checks as compiled
+models and return errors for invalid arguments.
+
 Every generated model implements `eqlog_runtime::CompiledModel`:
 
 ```rust,ignore
