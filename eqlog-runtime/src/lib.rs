@@ -1,7 +1,7 @@
 //! Runtime signatures, structures, and conversions to generated models.
 //!
 //! Create a [`Model`] from a [`Signature`], or use [`CompiledModel`] to
-//! exchange data with generated Rust models. Dynamic structures do not run rules.
+//! exchange data with generated Rust models.
 //!
 //! ```
 //! use std::sync::Arc;
