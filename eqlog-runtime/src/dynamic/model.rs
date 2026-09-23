@@ -135,15 +135,6 @@ impl DynamicModel {
         Ok(element)
     }
 
-    /// Enumerates all allocated handles, including aliases, in allocation order.
-    pub fn handles(&self, type_: TypeId) -> Result<impl Iterator<Item = Element> + '_, Error> {
-        let count = self.type_data(type_)?.equalities.len();
-        Ok((0..count).map(move |index| Element {
-            type_,
-            index: index as u32,
-        }))
-    }
-
     /// Enumerates current representatives.
     pub fn elements(&self, type_: TypeId) -> Result<impl Iterator<Item = Element> + '_, Error> {
         let data = self.type_data(type_)?;

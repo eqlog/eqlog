@@ -27,7 +27,6 @@
 //! assert_eq!(model.tuples(edge)?.collect::<Vec<_>>(), vec![vec![x, y]]);
 //! assert_eq!(model.root(y)?, x);
 //! assert_eq!(model.elements(el)?.count(), 1);
-//! assert_eq!(model.handles(el)?.count(), 2);
 //! # Ok::<(), eqlog_runtime::dynamic::Error>(())
 //! ```
 

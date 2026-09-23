@@ -34,10 +34,6 @@ fn round_trip<M: CompiledModel>(source: &M) -> M {
             __private::type_data(&after, type_).unwrap().equalities
         );
         assert_eq!(
-            before.handles(type_).unwrap().collect::<Vec<_>>(),
-            after.handles(type_).unwrap().collect::<Vec<_>>()
-        );
-        assert_eq!(
             before.elements(type_).unwrap().collect::<BTreeSet<_>>(),
             after.elements(type_).unwrap().collect::<BTreeSet<_>>()
         );
@@ -350,12 +346,11 @@ fn conversions_preserve_ids_and_mutate_independently() {
     let isolated_handle = handle::<PartialMagma>("El", isolated.0);
     assert_eq!(dynamic.root(alias_handle).unwrap(), root_handle);
     assert_eq!(
-        dynamic
-            .handles(type_)
+        __private::type_data(&dynamic, type_)
             .unwrap()
-            .map(|el| el.index)
-            .collect::<Vec<_>>(),
-        vec![0, 1, 2]
+            .equalities
+            .len(),
+        3
     );
     assert_eq!(
         dynamic.tuples(mul).unwrap().collect::<Vec<_>>(),
