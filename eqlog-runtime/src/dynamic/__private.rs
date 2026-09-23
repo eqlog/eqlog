@@ -2,20 +2,20 @@
 
 use std::sync::Arc;
 
-pub use super::data::{RelationData, RelationIndex, SortData};
+pub use super::data::{RelationData, RelationIndex, TypeData};
 pub use super::table::Table;
-use super::{DynamicModel, Error, RelationId, Signature, SortId};
+use super::{DynamicModel, Error, RelationId, Signature, TypeId};
 
 pub fn from_parts(
     signature: Arc<Signature>,
-    sorts: Vec<SortData>,
+    types: Vec<TypeData>,
     relations: Vec<RelationData>,
 ) -> Result<DynamicModel, Error> {
-    DynamicModel::from_parts(signature, sorts, relations)
+    DynamicModel::from_parts(signature, types, relations)
 }
 
-pub fn sort_data(model: &DynamicModel, sort: SortId) -> Result<&SortData, Error> {
-    model.sort_data(sort)
+pub fn type_data(model: &DynamicModel, type_: TypeId) -> Result<&TypeData, Error> {
+    model.type_data(type_)
 }
 
 pub fn relation_data(model: &DynamicModel, relation: RelationId) -> Result<&RelationData, Error> {

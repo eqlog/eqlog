@@ -2,56 +2,56 @@ use std::collections::BTreeSet;
 
 use super::Error;
 
-/// A sort's position in a signature.
+/// A type's position in a signature.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct SortId(pub usize);
+pub struct TypeId(pub usize);
 
 /// A relation's position in a signature.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RelationId(pub usize);
 
-/// How a sort was declared.
+/// How a type was declared.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SortKind {
+pub enum TypeKind {
     Plain,
     Model,
     Enum,
-    Morphism(SortId),
+    Morphism(TypeId),
 }
 
-/// A named carrier with its enclosing model sorts.
+/// A named Eqlog type with its enclosing model types.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Sort {
-    /// Unique within the signature's sort namespace.
+pub struct Type {
+    /// Unique within the signature's type namespace.
     pub name: String,
-    pub kind: SortKind,
-    /// Enclosing model sorts, outermost first.
-    pub parents: Vec<SortId>,
+    pub kind: TypeKind,
+    /// Enclosing model types, outermost first.
+    pub parents: Vec<TypeId>,
 }
 
-/// The kind of function stored in a graph relation.
+/// The kind of function represented by a relation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FunctionKind {
     /// A user-declared function or constant.
     Ordinary,
-    /// An enum constructor whose last graph column has the enum sort.
+    /// A constructor that returns a value of an enum type.
     Constructor,
-    /// The argument is a morphism between instances of this model sort.
-    MorphismDomain(SortId),
-    /// The result is an instance of the specified model sort.
-    MorphismCodomain(SortId),
+    /// The argument is a morphism between instances of this model type.
+    MorphismDomain(TypeId),
+    /// The result is an instance of the specified model type.
+    MorphismCodomain(TypeId),
     /// Applies a morphism to a member, which may belong to a nested model.
-    MorphismApplication { morphism: SortId, member: SortId },
+    MorphismApplication { morphism: TypeId, member: TypeId },
 }
 
 /// The interpretation of a relation's columns.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RelationKind {
     Predicate,
-    /// Function graphs store the result in the last column.
+    /// A function, with its arguments followed by its result.
     Function(FunctionKind),
-    /// The owning parent chain followed by an element of this sort.
-    Membership(SortId),
+    /// The owning parent chain followed by an element of this type.
+    Membership(TypeId),
 }
 
 /// A named relation, with enclosing model parameters as leading columns.
@@ -61,18 +61,18 @@ pub struct Relation {
     pub name: String,
     pub kind: RelationKind,
     /// Includes enclosing model parameters and, for functions, the result.
-    pub arity: Vec<SortId>,
+    pub arity: Vec<TypeId>,
     /// Enclosing model parameters form a prefix of `arity`.
-    pub parents: Vec<SortId>,
+    pub parents: Vec<TypeId>,
 }
 
 /// A validated, ordered signature without rules or compiler-specific IDs.
 ///
-/// Names identify symbols within each of the sort and relation namespaces.
+/// Names identify symbols within each of the type and relation namespaces.
 /// Generated signatures qualify names with their enclosing model names.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Signature {
-    sorts: Vec<Sort>,
+    types: Vec<Type>,
     relations: Vec<Relation>,
     memberships: Vec<Option<RelationId>>,
 }
@@ -81,39 +81,39 @@ impl Signature {
     /// Validates descriptors and assigns IDs by their positions in the input vectors.
     ///
     /// Names must be nonempty and unique in each namespace. Parent chains must
-    /// consist of consistently nested model sorts. Every dependent sort requires
-    /// exactly one membership relation with its parent chain followed by the sort
-    /// itself. Function graphs need a result column. Constructors must return an
-    /// enum. Morphism functions must have the expected argument and result sorts.
+    /// consist of consistently nested model types. Every dependent type requires
+    /// exactly one membership relation with its parent chain followed by the type
+    /// itself. Function relations must include a result. Constructors must return
+    /// an enum. Morphism functions must have the expected argument and result types.
     ///
     /// Enum constructors and morphism functions may be omitted.
-    /// Returns [`Error::UnknownSort`] or [`Error::InvalidSignature`] for invalid
+    /// Returns [`Error::UnknownType`] or [`Error::InvalidSignature`] for invalid
     /// descriptors.
-    pub fn new(sorts: Vec<Sort>, relations: Vec<Relation>) -> Result<Self, Error> {
+    pub fn new(types: Vec<Type>, relations: Vec<Relation>) -> Result<Self, Error> {
         let mut signature = Self {
-            memberships: vec![None; sorts.len()],
-            sorts,
+            memberships: vec![None; types.len()],
+            types,
             relations,
         };
         let mut names = BTreeSet::new();
-        for (id, sort) in signature.sorts() {
-            let name = &sort.name;
+        for (id, type_) in signature.types() {
+            let name = &type_.name;
             if name.is_empty() || !names.insert(name) {
                 return Err(Error::InvalidSignature(format!(
-                    "duplicate or empty sort name: {name:?}"
+                    "duplicate or empty type name: {name:?}"
                 )));
             }
-            signature.check_parents(&sort.parents)?;
-            if sort.parents.contains(&id) {
+            signature.check_parents(&type_.parents)?;
+            if type_.parents.contains(&id) {
                 return Err(Error::InvalidSignature(format!(
-                    "sort {name:?} owns itself"
+                    "type {name:?} owns itself"
                 )));
             }
-            match sort.kind {
-                SortKind::Plain | SortKind::Model | SortKind::Enum => {}
-                SortKind::Morphism(model) => {
+            match type_.kind {
+                TypeKind::Plain | TypeKind::Model | TypeKind::Enum => {}
+                TypeKind::Morphism(model) => {
                     signature.check_model(model)?;
-                    if signature.sort(model)?.parents != sort.parents {
+                    if signature.type_(model)?.parents != type_.parents {
                         return Err(Error::InvalidSignature(
                             "morphism and model parents differ".into(),
                         ));
@@ -135,18 +135,18 @@ impl Signature {
                     "relation parameters are not an arity prefix".into(),
                 ));
             }
-            for &sort in &relation.arity {
-                signature.sort(sort)?;
+            for &type_ in &relation.arity {
+                signature.type_(type_)?;
             }
             match relation.kind {
                 RelationKind::Predicate => {}
                 RelationKind::Function(kind) => signature.check_function(relation, kind)?,
                 RelationKind::Membership(member) => {
-                    let sort = signature.sort(member)?;
-                    let mut expected = sort.parents.clone();
+                    let type_ = signature.type_(member)?;
+                    let mut expected = type_.parents.clone();
                     expected.push(member);
-                    if sort.parents.is_empty()
-                        || relation.parents != sort.parents
+                    if type_.parents.is_empty()
+                        || relation.parents != type_.parents
                         || relation.arity != expected
                     {
                         return Err(Error::InvalidSignature(
@@ -158,15 +158,15 @@ impl Signature {
                         .is_some()
                     {
                         return Err(Error::InvalidSignature(
-                            "multiple membership relations for a sort".into(),
+                            "multiple membership relations for a type".into(),
                         ));
                     }
                 }
             }
         }
-        for (id, sort) in signature.sorts() {
-            if !sort.parents.is_empty() && signature.memberships[id.0].is_none() {
-                let name = &sort.name;
+        for (id, type_) in signature.types() {
+            if !type_.parents.is_empty() && signature.memberships[id.0].is_none() {
+                let name = &type_.name;
                 return Err(Error::InvalidSignature(format!(
                     "missing membership relation for {name:?}"
                 )));
@@ -175,12 +175,12 @@ impl Signature {
         Ok(signature)
     }
 
-    /// Enumerates sorts in ID order.
-    pub fn sorts(&self) -> impl ExactSizeIterator<Item = (SortId, &Sort)> {
-        self.sorts
+    /// Enumerates types in ID order.
+    pub fn types(&self) -> impl ExactSizeIterator<Item = (TypeId, &Type)> {
+        self.types
             .iter()
             .enumerate()
-            .map(|(i, sort)| (SortId(i), sort))
+            .map(|(i, type_)| (TypeId(i), type_))
     }
 
     /// Enumerates relations in ID order.
@@ -191,9 +191,9 @@ impl Signature {
             .map(|(i, relation)| (RelationId(i), relation))
     }
 
-    /// Looks up a descriptor, returning [`Error::UnknownSort`] for an invalid ID.
-    pub fn sort(&self, id: SortId) -> Result<&Sort, Error> {
-        self.sorts.get(id.0).ok_or(Error::UnknownSort(id))
+    /// Looks up a descriptor, returning [`Error::UnknownType`] for an invalid ID.
+    pub fn type_(&self, id: TypeId) -> Result<&Type, Error> {
+        self.types.get(id.0).ok_or(Error::UnknownType(id))
     }
 
     /// Looks up a descriptor, returning [`Error::UnknownRelation`] for an invalid ID.
@@ -201,10 +201,10 @@ impl Signature {
         self.relations.get(id.0).ok_or(Error::UnknownRelation(id))
     }
 
-    /// Looks up the exact, case-sensitive sort name, including any model qualification.
-    pub fn sort_named(&self, name: &str) -> Option<SortId> {
-        self.sorts()
-            .find_map(|(id, sort)| (sort.name == name).then_some(id))
+    /// Looks up the exact, case-sensitive type name, including any model qualification.
+    pub fn type_named(&self, name: &str) -> Option<TypeId> {
+        self.types()
+            .find_map(|(id, type_)| (type_.name == name).then_some(id))
     }
 
     /// Looks up the exact, case-sensitive relation name, including model qualification.
@@ -213,23 +213,23 @@ impl Signature {
             .find_map(|(id, relation)| (relation.name == name).then_some(id))
     }
 
-    pub(super) fn membership(&self, sort: SortId) -> Option<RelationId> {
-        self.memberships[sort.0]
+    pub(super) fn membership(&self, type_: TypeId) -> Option<RelationId> {
+        self.memberships[type_.0]
     }
 
-    fn check_model(&self, id: SortId) -> Result<(), Error> {
-        match self.sort(id)?.kind {
-            SortKind::Model => Ok(()),
-            SortKind::Plain | SortKind::Enum | SortKind::Morphism(_) => Err(
-                Error::InvalidSignature(format!("expected a model sort: {id:?}")),
+    fn check_model(&self, id: TypeId) -> Result<(), Error> {
+        match self.type_(id)?.kind {
+            TypeKind::Model => Ok(()),
+            TypeKind::Plain | TypeKind::Enum | TypeKind::Morphism(_) => Err(
+                Error::InvalidSignature(format!("expected a model type: {id:?}")),
             ),
         }
     }
 
-    fn check_parents(&self, parents: &[SortId]) -> Result<(), Error> {
+    fn check_parents(&self, parents: &[TypeId]) -> Result<(), Error> {
         for (i, &parent) in parents.iter().enumerate() {
             self.check_model(parent)?;
-            if self.sort(parent)?.parents != parents[..i] {
+            if self.type_(parent)?.parents != parents[..i] {
                 return Err(Error::InvalidSignature("inconsistent parent chain".into()));
             }
         }
@@ -238,15 +238,14 @@ impl Signature {
 
     fn check_function(&self, relation: &Relation, kind: FunctionKind) -> Result<(), Error> {
         let args = &relation.arity[relation.parents.len()..];
-        let result = args
-            .last()
-            .copied()
-            .ok_or_else(|| Error::InvalidSignature("function graph has no result column".into()))?;
+        let result = args.last().copied().ok_or_else(|| {
+            Error::InvalidSignature("function relation has no result column".into())
+        })?;
         match kind {
             FunctionKind::Ordinary => {}
-            FunctionKind::Constructor => match self.sort(result)?.kind {
-                SortKind::Enum => {}
-                SortKind::Plain | SortKind::Model | SortKind::Morphism(_) => {
+            FunctionKind::Constructor => match self.type_(result)?.kind {
+                TypeKind::Enum => {}
+                TypeKind::Plain | TypeKind::Model | TypeKind::Morphism(_) => {
                     return Err(Error::InvalidSignature(
                         "constructor result is not an enum".into(),
                     ));
@@ -256,38 +255,38 @@ impl Signature {
                 self.check_model(model)?;
                 if args.len() != 2
                     || result != model
-                    || relation.parents != self.sort(model)?.parents
+                    || relation.parents != self.type_(model)?.parents
                 {
                     return Err(Error::InvalidSignature(
                         "invalid morphism endpoint signature".into(),
                     ));
                 }
-                let argument_model = match self.sort(args[0])?.kind {
-                    SortKind::Morphism(model) => model,
-                    SortKind::Plain | SortKind::Model | SortKind::Enum => {
+                let argument_model = match self.type_(args[0])?.kind {
+                    TypeKind::Morphism(model) => model,
+                    TypeKind::Plain | TypeKind::Model | TypeKind::Enum => {
                         return Err(Error::InvalidSignature(
-                            "endpoint argument is not a morphism sort".into(),
+                            "endpoint argument is not a morphism type".into(),
                         ));
                     }
                 };
                 if argument_model != model {
                     return Err(Error::InvalidSignature(
-                        "endpoint argument is not the model's morphism sort".into(),
+                        "endpoint argument is not the model's morphism type".into(),
                     ));
                 }
             }
             FunctionKind::MorphismApplication { morphism, member } => {
-                let model = match self.sort(morphism)?.kind {
-                    SortKind::Morphism(model) => model,
-                    SortKind::Plain | SortKind::Model | SortKind::Enum => {
+                let model = match self.type_(morphism)?.kind {
+                    TypeKind::Morphism(model) => model,
+                    TypeKind::Plain | TypeKind::Model | TypeKind::Enum => {
                         return Err(Error::InvalidSignature(
-                            "application requires a morphism sort".into(),
+                            "application requires a morphism type".into(),
                         ));
                     }
                 };
                 if args != [morphism, member, member]
-                    || relation.parents != self.sort(morphism)?.parents
-                    || !self.sort(member)?.parents.contains(&model)
+                    || relation.parents != self.type_(morphism)?.parents
+                    || !self.type_(member)?.parents.contains(&model)
                 {
                     return Err(Error::InvalidSignature(
                         "invalid morphism application signature".into(),

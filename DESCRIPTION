@@ -13,6 +13,8 @@ without resolving pending equalities or executing rules.
 
 Keep storage access behind a doc-hidden interface for generated code so
 evaluation bookkeeping stays out of the public model API.
+Describe functions and their results directly in API docs.
+Use the compiler's type terminology throughout the dynamic API.
 
 Test incomplete structures, descriptor validation, column permutations,
 copy independence, and continued evaluation after conversion.

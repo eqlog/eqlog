@@ -1,23 +1,23 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use eqlog_runtime::dynamic::__private::{self, RelationData, RelationIndex, SortData, Table};
+use eqlog_runtime::dynamic::__private::{self, RelationData, RelationIndex, Table, TypeData};
 use eqlog_runtime::dynamic::{
     DynamicModel, Element, Error, FunctionKind, Relation, RelationId, RelationKind, Signature,
-    Sort, SortId, SortKind,
+    Type, TypeId, TypeKind,
 };
 
 fn signature(arity: usize, kind: RelationKind) -> Signature {
     Signature::new(
-        vec![Sort {
+        vec![Type {
             name: "El".into(),
-            kind: SortKind::Plain,
+            kind: TypeKind::Plain,
             parents: vec![],
         }],
         vec![Relation {
             name: "r".into(),
             kind,
-            arity: vec![SortId(0); arity],
+            arity: vec![TypeId(0); arity],
             parents: vec![],
         }],
     )
@@ -28,8 +28,8 @@ fn signature(arity: usize, kind: RelationKind) -> Signature {
 fn arbitrary_arities_keep_stored_rows_after_equality() {
     for arity in 0..=12 {
         let mut model = DynamicModel::new(Arc::new(signature(arity, RelationKind::Predicate)));
-        let x = model.new_element(SortId(0), &[]).unwrap();
-        let y = model.new_element(SortId(0), &[]).unwrap();
+        let x = model.new_element(TypeId(0), &[]).unwrap();
+        let y = model.new_element(TypeId(0), &[]).unwrap();
         let left = vec![x; arity];
         let right = vec![y; arity];
         assert!(model.insert(RelationId(0), &left).unwrap());
@@ -46,7 +46,7 @@ fn arbitrary_arities_keep_stored_rows_after_equality() {
                 vec![left, right]
             }
         );
-        assert_eq!(original.elements(SortId(0)).unwrap().count(), 2);
+        assert_eq!(original.elements(TypeId(0)).unwrap().count(), 2);
         assert_eq!(
             original.tuples(RelationId(0)).unwrap().count(),
             if arity == 0 { 1 } else { 2 }
@@ -59,7 +59,7 @@ fn mixed_columns_survive_prefix_boundaries_and_equality() {
     for arity in [0, 1, 9, 10, 12] {
         let mut model = DynamicModel::new(Arc::new(signature(arity, RelationKind::Predicate)));
         let elements: Vec<_> = (0..=arity)
-            .map(|_| model.new_element(SortId(0), &[]).unwrap())
+            .map(|_| model.new_element(TypeId(0), &[]).unwrap())
             .collect();
         let forward = elements[..arity].to_vec();
         let reverse: Vec<_> = forward.iter().rev().copied().collect();
@@ -102,9 +102,9 @@ fn mixed_columns_survive_prefix_boundaries_and_equality() {
 #[test]
 fn invalid_operations_return_errors_without_adding_data() {
     let mut model = DynamicModel::new(Arc::new(signature(1, RelationKind::Predicate)));
-    let x = model.new_element(SortId(0), &[]).unwrap();
+    let x = model.new_element(TypeId(0), &[]).unwrap();
     let invalid = Element {
-        sort: SortId(0),
+        type_: TypeId(0),
         index: 1,
     };
     assert_eq!(
@@ -123,15 +123,15 @@ fn invalid_operations_return_errors_without_adding_data() {
         Err(Error::UnknownElement(invalid))
     );
     assert_eq!(
-        model.new_element(SortId(1), &[]),
-        Err(Error::UnknownSort(SortId(1)))
+        model.new_element(TypeId(1), &[]),
+        Err(Error::UnknownType(TypeId(1)))
     );
     assert_eq!(
         model.insert(RelationId(1), &[x]),
         Err(Error::UnknownRelation(RelationId(1)))
     );
     assert_eq!(model.tuples(RelationId(0)).unwrap().count(), 0);
-    assert_eq!(model.elements(SortId(0)).unwrap().count(), 1);
+    assert_eq!(model.elements(TypeId(0)).unwrap().count(), 1);
 }
 
 #[test]
@@ -140,8 +140,8 @@ fn function_conflicts_are_data_until_an_evaluator_processes_them() {
         1,
         RelationKind::Function(FunctionKind::Ordinary),
     )));
-    let x = model.new_element(SortId(0), &[]).unwrap();
-    let y = model.new_element(SortId(0), &[]).unwrap();
+    let x = model.new_element(TypeId(0), &[]).unwrap();
+    let y = model.new_element(TypeId(0), &[]).unwrap();
     model.insert(RelationId(0), &[x]).unwrap();
     model.insert(RelationId(0), &[y]).unwrap();
     assert_ne!(model.root(x).unwrap(), model.root(y).unwrap());
@@ -152,151 +152,151 @@ fn function_conflicts_are_data_until_an_evaluator_processes_them() {
 
 #[test]
 fn signatures_reject_invalid_shapes() {
-    let sort = Sort {
+    let type_ = Type {
         name: "El".into(),
-        kind: SortKind::Plain,
+        kind: TypeKind::Plain,
         parents: vec![],
     };
     let relation = Relation {
         name: "r".into(),
         kind: RelationKind::Predicate,
         parents: vec![],
-        arity: vec![SortId(1)],
+        arity: vec![TypeId(1)],
     };
     assert_eq!(
-        Signature::new(vec![sort.clone()], vec![relation]),
-        Err(Error::UnknownSort(SortId(1)))
+        Signature::new(vec![type_.clone()], vec![relation]),
+        Err(Error::UnknownType(TypeId(1)))
     );
-    assert!(Signature::new(vec![sort.clone(), sort.clone()], vec![]).is_err());
+    assert!(Signature::new(vec![type_.clone(), type_.clone()], vec![]).is_err());
     let relation = Relation {
         name: "f".into(),
         kind: RelationKind::Function(FunctionKind::Ordinary),
         parents: vec![],
         arity: vec![],
     };
-    assert!(Signature::new(vec![sort], vec![relation]).is_err());
-    let parent = Sort {
+    assert!(Signature::new(vec![type_], vec![relation]).is_err());
+    let parent = Type {
         name: "Parent".into(),
-        kind: SortKind::Model,
+        kind: TypeKind::Model,
         parents: vec![],
     };
-    let member = Sort {
+    let member = Type {
         name: "Member".into(),
-        kind: SortKind::Plain,
-        parents: vec![SortId(0)],
+        kind: TypeKind::Plain,
+        parents: vec![TypeId(0)],
     };
     assert!(Signature::new(vec![parent.clone(), member], vec![]).is_err());
-    let recursive = Sort {
-        parents: vec![SortId(0)],
+    let recursive = Type {
+        parents: vec![TypeId(0)],
         ..parent
     };
     assert!(Signature::new(vec![recursive], vec![]).is_err());
 }
 
-fn nested_signature() -> (Vec<Sort>, Vec<Relation>) {
-    let sorts = vec![
-        Sort {
+fn nested_signature() -> (Vec<Type>, Vec<Relation>) {
+    let types = vec![
+        Type {
             name: "Item".into(),
-            kind: SortKind::Plain,
-            parents: vec![SortId(2)],
+            kind: TypeKind::Plain,
+            parents: vec![TypeId(2)],
         },
-        Sort {
+        Type {
             name: "Map".into(),
-            kind: SortKind::Morphism(SortId(2)),
+            kind: TypeKind::Morphism(TypeId(2)),
             parents: vec![],
         },
-        Sort {
+        Type {
             name: "World".into(),
-            kind: SortKind::Model,
+            kind: TypeKind::Model,
             parents: vec![],
         },
     ];
     let relations = vec![
         Relation {
             name: "member".into(),
-            kind: RelationKind::Membership(SortId(0)),
-            arity: vec![SortId(2), SortId(0)],
-            parents: vec![SortId(2)],
+            kind: RelationKind::Membership(TypeId(0)),
+            arity: vec![TypeId(2), TypeId(0)],
+            parents: vec![TypeId(2)],
         },
         Relation {
             name: "dom".into(),
-            kind: RelationKind::Function(FunctionKind::MorphismDomain(SortId(2))),
-            arity: vec![SortId(1), SortId(2)],
+            kind: RelationKind::Function(FunctionKind::MorphismDomain(TypeId(2))),
+            arity: vec![TypeId(1), TypeId(2)],
             parents: vec![],
         },
         Relation {
             name: "cod".into(),
-            kind: RelationKind::Function(FunctionKind::MorphismCodomain(SortId(2))),
-            arity: vec![SortId(1), SortId(2)],
+            kind: RelationKind::Function(FunctionKind::MorphismCodomain(TypeId(2))),
+            arity: vec![TypeId(1), TypeId(2)],
             parents: vec![],
         },
         Relation {
             name: "apply".into(),
             kind: RelationKind::Function(FunctionKind::MorphismApplication {
-                morphism: SortId(1),
-                member: SortId(0),
+                morphism: TypeId(1),
+                member: TypeId(0),
             }),
-            arity: vec![SortId(1), SortId(0), SortId(0)],
+            arity: vec![TypeId(1), TypeId(0), TypeId(0)],
             parents: vec![],
         },
     ];
-    (sorts, relations)
+    (types, relations)
 }
 
 #[test]
 fn descriptors_support_forward_references_but_reject_invalid_roles() {
-    let (sorts, relations) = nested_signature();
-    let signature = Signature::new(sorts.clone(), relations.clone()).unwrap();
+    let (types, relations) = nested_signature();
+    let signature = Signature::new(types.clone(), relations.clone()).unwrap();
     let mut model = DynamicModel::new(Arc::new(signature));
-    let world = model.new_element(SortId(2), &[]).unwrap();
-    let item = model.new_element(SortId(0), &[world]).unwrap();
+    let world = model.new_element(TypeId(2), &[]).unwrap();
+    let item = model.new_element(TypeId(0), &[world]).unwrap();
     assert!(model.contains(RelationId(0), &[world, item]).unwrap());
     assert_eq!(
         model.equate(&[], world, item),
-        Err(Error::SortMismatch {
-            expected: SortId(2),
-            actual: SortId(0)
+        Err(Error::TypeMismatch {
+            expected: TypeId(2),
+            actual: TypeId(0)
         })
     );
     assert_eq!(
         model.insert(RelationId(0), &[item, world]),
-        Err(Error::SortMismatch {
-            expected: SortId(2),
-            actual: SortId(0)
+        Err(Error::TypeMismatch {
+            expected: TypeId(2),
+            actual: TypeId(0)
         })
     );
 
     for endpoint in [1, 2] {
         let mut bad = relations.clone();
-        bad[endpoint].arity[0] = SortId(0);
-        assert!(Signature::new(sorts.clone(), bad).is_err());
+        bad[endpoint].arity[0] = TypeId(0);
+        assert!(Signature::new(types.clone(), bad).is_err());
     }
     let mut bad = relations.clone();
-    bad[3].arity[2] = SortId(2);
-    assert!(Signature::new(sorts.clone(), bad).is_err());
+    bad[3].arity[2] = TypeId(2);
+    assert!(Signature::new(types.clone(), bad).is_err());
     let mut bad = relations.clone();
     bad[3].kind = RelationKind::Function(FunctionKind::MorphismApplication {
-        morphism: SortId(2),
-        member: SortId(0),
+        morphism: TypeId(2),
+        member: TypeId(0),
     });
-    assert!(Signature::new(sorts.clone(), bad).is_err());
+    assert!(Signature::new(types.clone(), bad).is_err());
 
     let mut bad = relations.clone();
     bad[0].arity.swap(0, 1);
-    assert!(Signature::new(sorts.clone(), bad).is_err());
+    assert!(Signature::new(types.clone(), bad).is_err());
     let mut bad = relations.clone();
     let duplicate = Relation {
         name: "second_membership".into(),
         ..bad[0].clone()
     };
     bad.push(duplicate);
-    assert!(Signature::new(sorts.clone(), bad).is_err());
-    let mut bad = sorts.clone();
-    bad[0].parents = vec![SortId(2), SortId(2)];
+    assert!(Signature::new(types.clone(), bad).is_err());
+    let mut bad = types.clone();
+    bad[0].parents = vec![TypeId(2), TypeId(2)];
     assert!(Signature::new(bad, relations.clone()).is_err());
     let mut bad = relations;
     bad[3].kind = RelationKind::Function(FunctionKind::Constructor);
-    assert!(Signature::new(sorts, bad).is_err());
+    assert!(Signature::new(types, bad).is_err());
 }
 
 #[test]
@@ -351,17 +351,17 @@ fn table_copies_and_unions_are_independent_at_every_arity() {
 #[test]
 fn raw_storage_rejects_inconsistent_indices_and_handles() {
     let signature = Arc::new(signature(2, RelationKind::Predicate));
-    let mut sort = SortData::new();
-    sort.equalities.increase_size_to(2);
-    sort.equalities.union_roots_into(0, 1);
-    sort.new.insert([1]);
-    sort.weights = vec![0; 2];
-    sort.uprooted.push(0);
+    let mut type_ = TypeData::new();
+    type_.equalities.increase_size_to(2);
+    type_.equalities.union_roots_into(0, 1);
+    type_.new.insert([1]);
+    type_.weights = vec![0; 2];
+    type_.uprooted.push(0);
     let mut relation = RelationData::new(2);
     relation.new.table.insert(&[0, 1]);
     let model = __private::from_parts(
         signature.clone(),
-        vec![sort.clone()],
+        vec![type_.clone()],
         vec![relation.clone()],
     )
     .unwrap();
@@ -369,36 +369,36 @@ fn raw_storage_rejects_inconsistent_indices_and_handles() {
         model.tuples(RelationId(0)).unwrap().next().unwrap()[0].index,
         0
     );
-    let mut bad_sort = sort.clone();
-    bad_sort.new.insert([0]);
+    let mut bad_type = type_.clone();
+    bad_type.new.insert([0]);
     assert!(
-        __private::from_parts(signature.clone(), vec![bad_sort], vec![relation.clone()]).is_err()
+        __private::from_parts(signature.clone(), vec![bad_type], vec![relation.clone()]).is_err()
     );
-    let mut bad_sort = sort.clone();
-    bad_sort.new.remove([1]);
+    let mut bad_type = type_.clone();
+    bad_type.new.remove([1]);
     assert!(
-        __private::from_parts(signature.clone(), vec![bad_sort], vec![relation.clone()]).is_err()
+        __private::from_parts(signature.clone(), vec![bad_type], vec![relation.clone()]).is_err()
     );
-    let mut bad_sort = sort.clone();
-    bad_sort.weights.pop();
+    let mut bad_type = type_.clone();
+    bad_type.weights.pop();
     assert!(
-        __private::from_parts(signature.clone(), vec![bad_sort], vec![relation.clone()]).is_err()
+        __private::from_parts(signature.clone(), vec![bad_type], vec![relation.clone()]).is_err()
     );
     let mut bad_relation = relation.clone();
     bad_relation.new.order = vec![0, 0];
     assert!(
-        __private::from_parts(signature.clone(), vec![sort.clone()], vec![bad_relation]).is_err()
+        __private::from_parts(signature.clone(), vec![type_.clone()], vec![bad_relation]).is_err()
     );
     let mut bad_relation = relation.clone();
     bad_relation.old = RelationIndex::new(1);
     assert!(
-        __private::from_parts(signature.clone(), vec![sort.clone()], vec![bad_relation]).is_err()
+        __private::from_parts(signature.clone(), vec![type_.clone()], vec![bad_relation]).is_err()
     );
     relation.new.table.insert(&[0, 2]);
     assert_eq!(
-        __private::from_parts(signature, vec![sort], vec![relation]).err(),
+        __private::from_parts(signature, vec![type_], vec![relation]).err(),
         Some(Error::UnknownElement(Element {
-            sort: SortId(0),
+            type_: TypeId(0),
             index: 2
         }))
     );

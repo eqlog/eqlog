@@ -4,9 +4,9 @@ use super::table::Table;
 use super::Error;
 use crate::{PrefixTree1, Unification};
 
-/// Stored equality and evaluation state for one sort.
+/// Stored equality and evaluation state for one type.
 #[derive(Clone, Debug)]
-pub struct SortData {
+pub struct TypeData {
     pub equalities: Unification<u32>,
     /// Representatives allocated since the last evaluation step.
     pub new: PrefixTree1,
@@ -17,7 +17,7 @@ pub struct SortData {
     pub uprooted: Vec<u32>,
 }
 
-impl SortData {
+impl TypeData {
     pub fn new() -> Self {
         Self {
             equalities: Unification::new(),

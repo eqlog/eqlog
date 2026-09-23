@@ -312,16 +312,16 @@ The model structure has the following member functions:
   Close the model under all rules until a condition is satisfied.
   Returns false if the model could be closed under all rules but the condition still does not hold.
 * For each type:
-  - `fn new_<sort_name>(&mut self) -> <TypeName>`  
+  - `fn new_<type_name>(&mut self) -> <TypeName>`\
     Adjoins a new element to the model structure.
-  - `fn equate_<sort_name>(&mut self, lhs: <TypeName>, rhs: <TypeName>)`  
+  - `fn equate_<type_name>(&mut self, lhs: <TypeName>, rhs: <TypeName>)`\
     Enforces the equality `lhs = rhs` in the model structure.
-    For member sorts, supply all enclosing model instances before `lhs` and `rhs`,
+    For member types, supply all enclosing model instances before `lhs` and `rhs`,
     outermost first, for example `equate_el(outer, inner, lhs, rhs)`.
     Both elements must belong to that model chain, even if they are already equal.
-  - `fn are_equal_<sort_name>(&self, lhs: <TypeName>, rhs: <TypeName>) -> bool`  
+  - `fn are_equal_<type_name>(&self, lhs: <TypeName>, rhs: <TypeName>) -> bool`\
     Returns true if `lhs` and `rhs` represent the same element.
-  - `fn root_<sort_name>(&self, el: <TypeName>) -> <TypeName>`    
+  - `fn root_<type_name>(&self, el: <TypeName>) -> <TypeName>`\
     Returns the canonical/root element of the equivalence class of an element.
 * For each predicate:
   - `fn <pred_name>(&self, arg_1: <Type_1>, ..., arg_n: <Type_n>)`  
@@ -383,11 +383,11 @@ Every generated model implements `eqlog_runtime::dynamic::CompiledModel`:
 use eqlog_runtime::dynamic::{CompiledModel, DynamicModel};
 
 let signature = Semilattice::dynamic_signature();
-let el_sort = signature.sort_named("El").unwrap();
+let el_type = signature.type_named("El").unwrap();
 let le = signature.relation_named("le").unwrap();
 let mut dynamic = DynamicModel::new(signature);
-let x = dynamic.new_element(el_sort, &[]).unwrap();
-let y = dynamic.new_element(el_sort, &[]).unwrap();
+let x = dynamic.new_element(el_type, &[]).unwrap();
+let y = dynamic.new_element(el_type, &[]).unwrap();
 dynamic.insert(le, &[x, y]).unwrap();
 
 let mut compiled = Semilattice::from_dynamic(&dynamic).unwrap();

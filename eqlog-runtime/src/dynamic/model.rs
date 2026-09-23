@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use super::data::{RelationData, SortData};
-use super::{Element, Error, RelationId, RelationKind, Signature, SortId};
+use super::data::{RelationData, TypeData};
+use super::{Element, Error, RelationId, RelationKind, Signature, TypeId};
 
 /// Elements, equalities, and relation tables for a runtime signature.
 ///
@@ -11,7 +11,7 @@ use super::{Element, Error, RelationId, RelationKind, Signature, SortId};
 #[derive(Clone, Debug)]
 pub struct DynamicModel {
     signature: Arc<Signature>,
-    sorts: Vec<SortData>,
+    types: Vec<TypeData>,
     relations: Vec<RelationData>,
 }
 
@@ -19,7 +19,7 @@ impl DynamicModel {
     /// Creates a structure with no elements or facts.
     pub fn new(signature: Arc<Signature>) -> Self {
         Self {
-            sorts: signature.sorts().map(|_| SortData::new()).collect(),
+            types: signature.types().map(|_| TypeData::new()).collect(),
             relations: signature
                 .relations()
                 .map(|(_, rel)| RelationData::new(rel.arity.len()))
@@ -34,10 +34,10 @@ impl DynamicModel {
     /// Membership and other theory axioms may remain unsatisfied.
     pub(super) fn from_parts(
         signature: Arc<Signature>,
-        sorts: Vec<SortData>,
+        types: Vec<TypeData>,
         relations: Vec<RelationData>,
     ) -> Result<Self, Error> {
-        if sorts.len() != signature.sorts().len() || relations.len() != signature.relations().len()
+        if types.len() != signature.types().len() || relations.len() != signature.relations().len()
         {
             return Err(Error::InvalidModel(
                 "storage does not match the signature".into(),
@@ -45,10 +45,10 @@ impl DynamicModel {
         }
         let model = Self {
             signature,
-            sorts,
+            types,
             relations,
         };
-        for (sort, data) in model.sorts.iter().enumerate() {
+        for (type_, data) in model.types.iter().enumerate() {
             if data.weights.len() != data.equalities.len() {
                 return Err(Error::InvalidModel(
                     "weight count differs from element count".into(),
@@ -57,7 +57,7 @@ impl DynamicModel {
             let mut indexed = BTreeSet::new();
             for [index] in data.new.iter().chain(data.old.iter()) {
                 let el = Element {
-                    sort: SortId(sort),
+                    type_: TypeId(type_),
                     index,
                 };
                 if model.root(el)? != el || !indexed.insert(index) {
@@ -66,7 +66,7 @@ impl DynamicModel {
                     ));
                 }
             }
-            let roots = model.elements_from_equalities(SortId(sort));
+            let roots = model.elements_from_equalities(TypeId(type_));
             if indexed != roots.collect() {
                 return Err(Error::InvalidModel(
                     "carrier index is missing a representative".into(),
@@ -74,7 +74,7 @@ impl DynamicModel {
             }
             for &index in &data.uprooted {
                 let el = Element {
-                    sort: SortId(sort),
+                    type_: TypeId(type_),
                     index,
                 };
                 if model.root(el)? == el {
@@ -89,8 +89,8 @@ impl DynamicModel {
             data.new.check(descriptor.arity.len())?;
             data.old.check(descriptor.arity.len())?;
             for tuple in data.tuples() {
-                for (&sort, index) in descriptor.arity.iter().zip(tuple) {
-                    model.root(Element { sort, index })?;
+                for (&type_, index) in descriptor.arity.iter().zip(tuple) {
+                    model.root(Element { type_, index })?;
                 }
             }
         }
@@ -101,8 +101,8 @@ impl DynamicModel {
         &self.signature
     }
 
-    pub(super) fn sort_data(&self, sort: SortId) -> Result<&SortData, Error> {
-        self.sorts.get(sort.0).ok_or(Error::UnknownSort(sort))
+    pub(super) fn type_data(&self, type_: TypeId) -> Result<&TypeData, Error> {
+        self.types.get(type_.0).ok_or(Error::UnknownType(type_))
     }
 
     pub(super) fn relation_data(&self, relation: RelationId) -> Result<&RelationData, Error> {
@@ -113,24 +113,24 @@ impl DynamicModel {
 
     /// Allocates an element and its membership row.
     /// `parents` lists the enclosing model instances, outermost first.
-    pub fn new_element(&mut self, sort: SortId, parents: &[Element]) -> Result<Element, Error> {
-        let parents = self.check_tuple(&self.signature.sort(sort)?.parents, parents)?;
+    pub fn new_element(&mut self, type_: TypeId, parents: &[Element]) -> Result<Element, Error> {
+        let parents = self.check_tuple(&self.signature.type_(type_)?.parents, parents)?;
         for (i, &parent) in parents.iter().enumerate() {
             self.check_membership(parent, &parents[..i])?;
         }
-        let data = &mut self.sorts[sort.0];
+        let data = &mut self.types[type_.0];
         let len = data.equalities.len();
         if len >= (u32::MAX - 1) as usize {
             return Err(Error::ElementLimit);
         }
         let element = Element {
-            sort,
+            type_,
             index: len as u32,
         };
         data.equalities.increase_size_to(len + 1);
         data.weights.push(0);
         data.new.insert([element.index]);
-        if let Some(relation) = self.signature.membership(sort) {
+        if let Some(relation) = self.signature.membership(type_) {
             let mut tuple = parents;
             tuple.push(element);
             self.insert_row(relation, &tuple);
@@ -139,27 +139,27 @@ impl DynamicModel {
     }
 
     /// Enumerates all allocated handles, including aliases, in allocation order.
-    pub fn handles(&self, sort: SortId) -> Result<impl Iterator<Item = Element> + '_, Error> {
-        let count = self.sort_data(sort)?.equalities.len();
+    pub fn handles(&self, type_: TypeId) -> Result<impl Iterator<Item = Element> + '_, Error> {
+        let count = self.type_data(type_)?.equalities.len();
         Ok((0..count).map(move |index| Element {
-            sort,
+            type_,
             index: index as u32,
         }))
     }
 
     /// Enumerates current representatives.
-    pub fn elements(&self, sort: SortId) -> Result<impl Iterator<Item = Element> + '_, Error> {
-        let data = self.sort_data(sort)?;
+    pub fn elements(&self, type_: TypeId) -> Result<impl Iterator<Item = Element> + '_, Error> {
+        let data = self.type_data(type_)?;
         Ok(data
             .new
             .iter()
             .chain(data.old.iter())
-            .map(move |[index]| Element { sort, index }))
+            .map(move |[index]| Element { type_, index }))
     }
 
     /// Resolves a handle to its current representative.
     pub fn root(&self, element: Element) -> Result<Element, Error> {
-        if element.index as usize >= self.sort_data(element.sort)?.equalities.len() {
+        if element.index as usize >= self.type_data(element.type_)?.equalities.len() {
             return Err(Error::UnknownElement(element));
         }
         Ok(self.root_unchecked(element))
@@ -168,7 +168,7 @@ impl DynamicModel {
     /// Merges two classes without rewriting relation rows. Returns whether they differed.
     ///
     /// Both elements must belong to `parents`, listed outermost first, even when
-    /// already equal. Top-level sorts take an empty slice.
+    /// already equal. Top-level types take an empty slice.
     pub fn equate(
         &mut self,
         parents: &[Element],
@@ -177,19 +177,19 @@ impl DynamicModel {
     ) -> Result<bool, Error> {
         let lhs = self.root(lhs)?;
         let rhs = self.root(rhs)?;
-        if lhs.sort != rhs.sort {
-            return Err(Error::SortMismatch {
-                expected: lhs.sort,
-                actual: rhs.sort,
+        if lhs.type_ != rhs.type_ {
+            return Err(Error::TypeMismatch {
+                expected: lhs.type_,
+                actual: rhs.type_,
             });
         }
-        let parents = self.check_tuple(&self.signature.sort(lhs.sort)?.parents, parents)?;
+        let parents = self.check_tuple(&self.signature.type_(lhs.type_)?.parents, parents)?;
         self.check_membership(lhs, &parents)?;
         self.check_membership(rhs, &parents)?;
         if lhs == rhs {
             return Ok(false);
         }
-        let data = &mut self.sorts[lhs.sort.0];
+        let data = &mut self.types[lhs.type_.0];
         let (root, child) = if data.weights[lhs.index as usize] >= data.weights[rhs.index as usize]
         {
             (lhs.index, rhs.index)
@@ -214,7 +214,7 @@ impl DynamicModel {
             tuple
                 .into_iter()
                 .zip(arity)
-                .map(|(index, &sort)| Element { sort, index })
+                .map(|(index, &type_)| Element { type_, index })
                 .collect()
         }))
     }
@@ -260,14 +260,14 @@ impl DynamicModel {
         }
         data.new.insert(&row);
         for el in tuple {
-            let weight = &mut self.sorts[el.sort.0].weights[el.index as usize];
+            let weight = &mut self.types[el.type_.0].weights[el.index as usize];
             *weight = weight.saturating_add(data.weight);
         }
         true
     }
 
     fn check_membership(&self, element: Element, parents: &[Element]) -> Result<(), Error> {
-        if let Some(relation) = self.signature.membership(element.sort) {
+        if let Some(relation) = self.signature.membership(element.type_) {
             let mut tuple = parents.to_vec();
             tuple.push(element);
             if !self.contains_membership(relation, &tuple) {
@@ -281,42 +281,42 @@ impl DynamicModel {
         self.relations[relation.0].tuples().any(|row| {
             row.iter().zip(tuple).all(|(&index, &el)| {
                 self.root_unchecked(Element {
-                    sort: el.sort,
+                    type_: el.type_,
                     index,
                 }) == el
             })
         })
     }
 
-    fn elements_from_equalities(&self, sort: SortId) -> impl Iterator<Item = u32> + '_ {
-        let equalities = &self.sorts[sort.0].equalities;
+    fn elements_from_equalities(&self, type_: TypeId) -> impl Iterator<Item = u32> + '_ {
+        let equalities = &self.types[type_.0].equalities;
         (0..equalities.len() as u32).filter(|&index| equalities.root_const(index) == index)
     }
 
     fn root_unchecked(&self, element: Element) -> Element {
         Element {
-            sort: element.sort,
-            index: self.sorts[element.sort.0]
+            type_: element.type_,
+            index: self.types[element.type_.0]
                 .equalities
                 .root_const(element.index),
         }
     }
 
-    fn check_tuple(&self, sorts: &[SortId], tuple: &[Element]) -> Result<Vec<Element>, Error> {
-        if tuple.len() != sorts.len() {
+    fn check_tuple(&self, types: &[TypeId], tuple: &[Element]) -> Result<Vec<Element>, Error> {
+        if tuple.len() != types.len() {
             return Err(Error::ArityMismatch {
-                expected: sorts.len(),
+                expected: types.len(),
                 actual: tuple.len(),
             });
         }
         tuple
             .iter()
-            .zip(sorts)
-            .map(|(&element, &sort)| {
-                if element.sort != sort {
-                    return Err(Error::SortMismatch {
-                        expected: sort,
-                        actual: element.sort,
+            .zip(types)
+            .map(|(&element, &type_)| {
+                if element.type_ != type_ {
+                    return Err(Error::TypeMismatch {
+                        expected: type_,
+                        actual: element.type_,
                     });
                 }
                 self.root(element)

@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use eqlog_runtime::dynamic::__private::{self, RelationIndex};
 use eqlog_runtime::dynamic::{
-    CompiledModel, DynamicModel, Element, Error, FunctionKind, RelationKind, Signature, SortKind,
+    CompiledModel, DynamicModel, Element, Error, FunctionKind, RelationKind, Signature, TypeKind,
 };
 use std::sync::Arc;
 
@@ -16,9 +16,9 @@ use crate::nat::Nat;
 use crate::partial_magma::PartialMagma;
 use crate::trans_refl::{TransRefl, V};
 
-fn handle<M: CompiledModel>(sort: &str, index: u32) -> Element {
+fn handle<M: CompiledModel>(type_: &str, index: u32) -> Element {
     Element {
-        sort: M::dynamic_signature().sort_named(sort).unwrap(),
+        type_: M::dynamic_signature().type_named(type_).unwrap(),
         index,
     }
 }
@@ -28,18 +28,18 @@ fn round_trip<M: CompiledModel>(source: &M) -> M {
     let restored = M::from_dynamic(&before).unwrap();
     let after = restored.to_dynamic();
     assert_eq!(before.signature(), after.signature());
-    for (sort, _) in before.signature().sorts() {
+    for (type_, _) in before.signature().types() {
         assert_eq!(
-            __private::sort_data(&before, sort).unwrap().equalities,
-            __private::sort_data(&after, sort).unwrap().equalities
+            __private::type_data(&before, type_).unwrap().equalities,
+            __private::type_data(&after, type_).unwrap().equalities
         );
         assert_eq!(
-            before.handles(sort).unwrap().collect::<Vec<_>>(),
-            after.handles(sort).unwrap().collect::<Vec<_>>()
+            before.handles(type_).unwrap().collect::<Vec<_>>(),
+            after.handles(type_).unwrap().collect::<Vec<_>>()
         );
         assert_eq!(
-            before.elements(sort).unwrap().collect::<BTreeSet<_>>(),
-            after.elements(sort).unwrap().collect::<BTreeSet<_>>()
+            before.elements(type_).unwrap().collect::<BTreeSet<_>>(),
+            after.elements(type_).unwrap().collect::<BTreeSet<_>>()
         );
     }
     for (relation, _) in before.signature().relations() {
@@ -92,12 +92,12 @@ fn dynamic_export_tracks_pending_equalities_and_function_conflicts() {
 #[test]
 fn dynamic_construction_and_aliases_survive_import() {
     let signature = TransRefl::dynamic_signature();
-    let sort = signature.sort_named("V").unwrap();
+    let type_ = signature.type_named("V").unwrap();
     let edge = signature.relation_named("edge").unwrap();
     let mut model = DynamicModel::new(signature);
-    let x = model.new_element(sort, &[]).unwrap();
-    let alias = model.new_element(sort, &[]).unwrap();
-    let y = model.new_element(sort, &[]).unwrap();
+    let x = model.new_element(type_, &[]).unwrap();
+    let alias = model.new_element(type_, &[]).unwrap();
+    let y = model.new_element(type_, &[]).unwrap();
     model.insert(edge, &[alias, y]).unwrap();
     model.equate(&[], alias, x).unwrap();
     let mut compiled = TransRefl::from_dynamic(&model).unwrap();
@@ -221,13 +221,13 @@ fn dynamic_nullary_predicates_preserve_truth_without_saturation() {
 #[test]
 fn dynamic_signatures_preserve_morphism_roles() {
     let signature = MorphismPreservation::dynamic_signature();
-    let world = signature.sort_named("World").unwrap();
-    let morphism = signature.sort_named("WorldMor").unwrap();
-    let item = signature.sort_named("World::Inner::Item").unwrap();
+    let world = signature.type_named("World").unwrap();
+    let morphism = signature.type_named("WorldMor").unwrap();
+    let item = signature.type_named("World::Inner::Item").unwrap();
     let application = signature.relation_named("world_item_mor_app").unwrap();
     assert_eq!(
-        signature.sort(morphism).unwrap().kind,
-        SortKind::Morphism(world)
+        signature.type_(morphism).unwrap().kind,
+        TypeKind::Morphism(world)
     );
     assert_eq!(
         signature.relation(application).unwrap().kind,
@@ -245,9 +245,9 @@ fn dynamic_signatures_preserve_morphism_roles() {
 #[test]
 fn dynamic_checks_parent_chains_before_mutation() {
     let signature = MemberParents::dynamic_signature();
-    let outer = signature.sort_named("Outer").unwrap();
-    let inner = signature.sort_named("Outer::Inner").unwrap();
-    let el = signature.sort_named("Outer::Inner::El").unwrap();
+    let outer = signature.type_named("Outer").unwrap();
+    let inner = signature.type_named("Outer::Inner").unwrap();
+    let el = signature.type_named("Outer::Inner::El").unwrap();
     let membership = signature
         .relation_named("Outer::Inner::inner_member_el")
         .unwrap();
@@ -278,16 +278,16 @@ fn dynamic_checks_parent_chains_before_mutation() {
 #[test]
 fn dynamic_import_preserves_enum_elements_without_constructors() {
     let signature = Nat::dynamic_signature();
-    let sort = signature.sort_named("N").unwrap();
+    let type_ = signature.type_named("N").unwrap();
     let mut dynamic = DynamicModel::new(signature);
-    let element = dynamic.new_element(sort, &[]).unwrap();
+    let element = dynamic.new_element(type_, &[]).unwrap();
     let compiled = Nat::from_dynamic(&dynamic).unwrap();
     assert_eq!(compiled.iter_n().count(), 1);
     assert_eq!(compiled.iter_zero().count(), 0);
     assert_eq!(compiled.iter_succ().count(), 0);
     let exported = compiled.to_dynamic();
     assert_eq!(
-        exported.elements(sort).unwrap().collect::<Vec<_>>(),
+        exported.elements(type_).unwrap().collect::<Vec<_>>(),
         vec![element]
     );
     round_trip(&compiled);
@@ -296,9 +296,9 @@ fn dynamic_import_preserves_enum_elements_without_constructors() {
 #[test]
 fn dynamic_import_preserves_applications_without_endpoints() {
     let signature = MorphismPreservation::dynamic_signature();
-    let world = signature.sort_named("World").unwrap();
-    let el = signature.sort_named("World::El").unwrap();
-    let mor = signature.sort_named("WorldMor").unwrap();
+    let world = signature.type_named("World").unwrap();
+    let el = signature.type_named("World::El").unwrap();
+    let mor = signature.type_named("WorldMor").unwrap();
     let application = signature.relation_named("el_mor_app").unwrap();
     let mut dynamic = DynamicModel::new(signature);
     let a = dynamic.new_element(world, &[]).unwrap();
@@ -319,13 +319,13 @@ fn dynamic_import_preserves_applications_without_endpoints() {
 #[test]
 fn dynamic_import_requires_the_same_descriptor_order() {
     let signature = Logic::dynamic_signature();
-    let sorts = signature.sorts().map(|(_, sort)| sort.clone()).collect();
+    let types = signature.types().map(|(_, type_)| type_.clone()).collect();
     let mut relations: Vec<_> = signature
         .relations()
         .map(|(_, relation)| relation.clone())
         .collect();
     relations.reverse();
-    let reordered = Signature::new(sorts, relations).unwrap();
+    let reordered = Signature::new(types, relations).unwrap();
     let dynamic = DynamicModel::new(Arc::new(reordered));
     assert_eq!(
         Logic::from_dynamic(&dynamic).err(),
@@ -343,7 +343,7 @@ fn conversions_preserve_ids_and_mutate_independently() {
     compiled.equate_el(alias, root);
     assert_eq!(compiled.root_el(alias), root);
     let mut dynamic = compiled.to_dynamic();
-    let sort = dynamic.signature().sort_named("El").unwrap();
+    let type_ = dynamic.signature().type_named("El").unwrap();
     let mul = dynamic.signature().relation_named("mul").unwrap();
     let alias_handle = handle::<PartialMagma>("El", alias.0);
     let root_handle = handle::<PartialMagma>("El", root.0);
@@ -351,7 +351,7 @@ fn conversions_preserve_ids_and_mutate_independently() {
     assert_eq!(dynamic.root(alias_handle).unwrap(), root_handle);
     assert_eq!(
         dynamic
-            .handles(sort)
+            .handles(type_)
             .unwrap()
             .map(|el| el.index)
             .collect::<Vec<_>>(),
@@ -376,7 +376,7 @@ fn conversions_preserve_ids_and_mutate_independently() {
     assert_eq!(restored.root_el(isolated), isolated);
     restored.insert_mul(isolated, root, root);
     assert_eq!(dynamic.tuples(mul).unwrap().count(), 2);
-    assert_eq!(dynamic.new_element(sort, &[]).unwrap().index, 3);
+    assert_eq!(dynamic.new_element(type_, &[]).unwrap().index, 3);
 }
 
 #[test]
@@ -392,9 +392,9 @@ fn import_keeps_alias_only_membership_visible_before_closure() {
     let membership = signature
         .relation_named("Outer::Inner::inner_member_el")
         .unwrap();
-    let sorts = signature
-        .sorts()
-        .map(|(id, _)| __private::sort_data(&snapshot, id).unwrap().clone())
+    let types = signature
+        .types()
+        .map(|(id, _)| __private::type_data(&snapshot, id).unwrap().clone())
         .collect();
     let mut relations: Vec<_> = signature
         .relations()
@@ -402,7 +402,7 @@ fn import_keeps_alias_only_membership_visible_before_closure() {
         .collect();
     relations[membership.0].new = RelationIndex::new(3);
     relations[membership.0].new.table.insert(&[a.0, i.0, y.0]);
-    let dynamic = __private::from_parts(signature, sorts, relations).unwrap();
+    let dynamic = __private::from_parts(signature, types, relations).unwrap();
     let tuple = [
         handle::<MemberParents>("Outer", a.0),
         handle::<MemberParents>("Outer::Inner", i.0),
@@ -461,9 +461,9 @@ fn export_preserves_old_new_partitions_and_pending_equalities() {
     source.insert_edge(x, z);
     source.equate_v(x, y);
     let dynamic = source.to_dynamic();
-    let sort = dynamic.signature().sort_named("V").unwrap();
+    let type_ = dynamic.signature().type_named("V").unwrap();
     let edge = dynamic.signature().relation_named("edge").unwrap();
-    let data = __private::sort_data(&dynamic, sort).unwrap();
+    let data = __private::type_data(&dynamic, type_).unwrap();
     assert_eq!(data.new.iter().collect::<Vec<_>>(), vec![[z.0]]);
     assert_eq!(data.old.iter().collect::<Vec<_>>(), vec![[x.0]]);
     assert_eq!(data.uprooted, vec![y.0]);

@@ -6,14 +6,14 @@
 //! ```
 //! use std::sync::Arc;
 //! use eqlog_runtime::dynamic::{
-//!     DynamicModel, Relation, RelationId, RelationKind, Signature, Sort, SortId,
-//!     SortKind,
+//!     DynamicModel, Relation, RelationId, RelationKind, Signature, Type, TypeId,
+//!     TypeKind,
 //! };
 //!
-//! let el = SortId(0);
+//! let el = TypeId(0);
 //! let edge = RelationId(0);
 //! let signature = Signature::new(
-//!     vec![Sort { name: "El".into(), kind: SortKind::Plain, parents: vec![] }],
+//!     vec![Type { name: "El".into(), kind: TypeKind::Plain, parents: vec![] }],
 //!     vec![Relation {
 //!         name: "edge".into(), kind: RelationKind::Predicate,
 //!         arity: vec![el, el], parents: vec![],
@@ -41,7 +41,7 @@ pub mod __private;
 
 pub use model::DynamicModel;
 pub use signature::{
-    FunctionKind, Relation, RelationId, RelationKind, Signature, Sort, SortId, SortKind,
+    FunctionKind, Relation, RelationId, RelationKind, Signature, Type, TypeId, TypeKind,
 };
 
 use std::fmt;
@@ -50,10 +50,10 @@ use std::sync::Arc;
 /// An element handle within one structure.
 ///
 /// The same ID can refer to different elements in different structures.
-/// Conversions preserve the sort ID and numeric index, including aliases.
+/// Conversions preserve the type ID and numeric index, including aliases.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Element {
-    pub sort: SortId,
+    pub type_: TypeId,
     pub index: u32,
 }
 
@@ -71,7 +71,7 @@ pub trait CompiledModel: Sized {
     /// propagate morphisms or resolve function conflicts. The source is unchanged.
     /// Relation trees share their nodes with the source. Export validates stored
     /// handles and deeply copies union-find and weight vectors. For a compiled
-    /// handle, use its wrapped integer and the sort ID from [`Self::dynamic_signature`].
+    /// handle, use its wrapped integer and the type ID from [`Self::dynamic_signature`].
     fn to_dynamic(&self) -> DynamicModel;
 
     /// Imports data without changing IDs, equality representatives, or raw rows.
@@ -82,7 +82,7 @@ pub trait CompiledModel: Sized {
     /// leave some axioms unsatisfied. For example, an enum element created without
     /// a constructor may still have no case.
     ///
-    /// Returns [`Error::SignatureMismatch`] if sort or relation descriptors differ
+    /// Returns [`Error::SignatureMismatch`] if type or relation descriptors differ
     /// from [`Self::dynamic_signature`], including their order and names.
     fn from_dynamic(model: &DynamicModel) -> Result<Self, Error>;
 }
@@ -94,14 +94,14 @@ pub enum Error {
     InvalidSignature(String),
     /// Stored indices or vector dimensions are inconsistent.
     InvalidModel(String),
-    /// The sort ID is outside this signature.
-    UnknownSort(SortId),
+    /// The type ID is outside this signature.
+    UnknownType(TypeId),
     /// The relation ID is outside this signature.
     UnknownRelation(RelationId),
-    /// The sort exists, but the element index has not been allocated.
+    /// The type exists, but the element index has not been allocated.
     UnknownElement(Element),
-    /// An argument has the wrong carrier sort.
-    SortMismatch { expected: SortId, actual: SortId },
+    /// An argument has the wrong type.
+    TypeMismatch { expected: TypeId, actual: TypeId },
     /// A tuple or parent chain has the wrong length.
     ArityMismatch { expected: usize, actual: usize },
     /// A member does not belong to the supplied enclosing models.
@@ -117,11 +117,11 @@ impl fmt::Display for Error {
         match self {
             Self::InvalidSignature(message) => write!(f, "invalid signature: {message}"),
             Self::InvalidModel(message) => write!(f, "invalid model: {message}"),
-            Self::UnknownSort(sort) => write!(f, "unknown sort {sort:?}"),
+            Self::UnknownType(type_) => write!(f, "unknown type {type_:?}"),
             Self::UnknownRelation(relation) => write!(f, "unknown relation {relation:?}"),
             Self::UnknownElement(element) => write!(f, "unknown element {element:?}"),
-            Self::SortMismatch { expected, actual } => {
-                write!(f, "expected sort {expected:?}, got {actual:?}")
+            Self::TypeMismatch { expected, actual } => {
+                write!(f, "expected type {expected:?}, got {actual:?}")
             }
             Self::ArityMismatch { expected, actual } => {
                 write!(f, "expected {expected} arguments, got {actual}")

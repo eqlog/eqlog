@@ -19,13 +19,13 @@ use super::{
 struct DynamicContext<'a> {
     ctx: &'a RustGenCtx<'a>,
     indices: &'a IndexSelection,
-    sorts: BTreeMap<TypeId, usize>,
+    types: BTreeMap<TypeId, usize>,
 }
 
 impl DynamicContext<'_> {
-    fn sort(&self, typ: TypeId) -> String {
-        let id = self.sorts[&typ];
-        format!("eqlog_runtime::dynamic::SortId({id})")
+    fn type_(&self, typ: TypeId) -> String {
+        let id = self.types[&typ];
+        format!("eqlog_runtime::dynamic::TypeId({id})")
     }
 
     fn qualified(&self, parents: &[TypeId], name: &str) -> String {
@@ -41,14 +41,14 @@ impl DynamicContext<'_> {
         let kind = if signature.iter_ctor_decls().any(|(_, ctor)| ctor == func) {
             "Constructor".to_owned()
         } else if let Some(types) = signature.types_for_mor_app_func(func) {
-            let morphism = self.sort(types.morphism_type);
-            let member = self.sort(types.member_type);
+            let morphism = self.type_(types.morphism_type);
+            let member = self.type_(types.member_type);
             format!("MorphismApplication {{ morphism: {morphism}, member: {member} }}")
         } else if let Some((_, ids)) = signature
             .iter_model_decls()
             .find(|(_, ids)| ids.dom == func || ids.cod == func)
         {
-            let model = self.sort(ids.type_);
+            let model = self.type_(ids.type_);
             if ids.dom == func {
                 format!("MorphismDomain({model})")
             } else {
@@ -74,18 +74,18 @@ impl DynamicContext<'_> {
                 let parents = descriptor
                     .parents
                     .iter()
-                    .map(|&parent| self.sort(parent))
+                    .map(|&parent| self.type_(parent))
                     .join(", ");
                 let kind = match descriptor.kind {
                     TypeKind::Plain => "Plain".to_owned(),
                     TypeKind::Model => "Model".to_owned(),
                     TypeKind::Enum => "Enum".to_owned(),
-                    TypeKind::Mor(model) => format!("Morphism({})", self.sort(model)),
+                    TypeKind::Mor(model) => format!("Morphism({})", self.type_(model)),
                 };
                 writedoc! {f, "
-                    eqlog_runtime::dynamic::Sort {{
+                    eqlog_runtime::dynamic::Type {{
                         name: {name:?}.into(),
-                        kind: eqlog_runtime::dynamic::SortKind::{kind},
+                        kind: eqlog_runtime::dynamic::TypeKind::{kind},
                         parents: vec![{parents}],
                     }},
                 "}?;
@@ -103,15 +103,15 @@ impl DynamicContext<'_> {
                     ),
                     FlatRel::ModelMember(typ) => (
                         &self.ctx.signature().type_(typ).parents,
-                        format!("Membership({})", self.sort(typ)),
+                        format!("Membership({})", self.type_(typ)),
                     ),
                 };
                 let name = self.qualified(parents, &self.ctx.rel_name(rel));
-                let parents = parents.iter().map(|&parent| self.sort(parent)).join(", ");
+                let parents = parents.iter().map(|&parent| self.type_(parent)).join(", ");
                 let arity = rel
                     .arity(self.ctx.signature())
                     .iter()
-                    .map(|&typ| self.sort(typ))
+                    .map(|&typ| self.type_(typ))
                     .join(", ");
                 writedoc! {f, "
                     eqlog_runtime::dynamic::Relation {{
@@ -157,7 +157,7 @@ impl DynamicContext<'_> {
                 let old =
                     display_index_expr(&rel, self.primary(rel.clone(), IndexAge::Old), self.ctx);
                 writedoc! {f, "
-                    eqlog_runtime::dynamic::__private::SortData {{
+                    eqlog_runtime::dynamic::__private::TypeData {{
                         equalities: self.{snake}_equalities.retype(),
                         new: (*{new}).clone(),
                         old: (*{old}).clone(),
@@ -209,7 +209,7 @@ impl DynamicContext<'_> {
             for typ in self.ctx.signature().iter_types() {
                 let snake = self.ctx.type_name(typ).to_case(Case::Snake);
                 let camel = self.ctx.type_name(typ).to_case(Case::UpperCamel);
-                let sort = self.sort(typ);
+                let type_ = self.type_(typ);
                 let rel = FlatInRel::TypeSet(typ);
                 let new = display_index_field_name(
                     &rel,
@@ -217,7 +217,7 @@ impl DynamicContext<'_> {
                     self.ctx,
                 );
                 writedoc! {f, "
-                    let data = eqlog_runtime::dynamic::__private::sort_data(source, {sort})?;
+                    let data = eqlog_runtime::dynamic::__private::type_data(source, {type_})?;
                     model.{snake}_equalities = data.equalities.retype();
                     model.{snake}_weights = vec![0; data.equalities.len()];
                     model.{new} = data.new.union(&data.old);
@@ -323,7 +323,7 @@ pub(super) fn display_dynamic_impl<'a>(
         let dynamic = DynamicContext {
             ctx,
             indices,
-            sorts: ctx
+            types: ctx
                 .signature()
                 .iter_types()
                 .enumerate()
