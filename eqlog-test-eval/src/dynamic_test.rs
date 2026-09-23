@@ -2,7 +2,8 @@ use std::collections::BTreeSet;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use eqlog_runtime::{
-    CompiledModel, Element, EnumCase, Error, FunctionKind, Model, RelationKind, Signature, TypeKind,
+    CompiledModel, Element, EnumCase, Error, FunctionKind, Model, Relation, RelationId,
+    RelationKind, Signature, Type, TypeId, TypeKind,
 };
 use std::sync::Arc;
 
@@ -44,7 +45,7 @@ fn round_trip<M: CompiledModel>(source: &M) -> M {
 }
 
 #[test]
-fn compiled_signatures_are_shared_by_models() {
+fn models_share_static_and_runtime_signatures() {
     let signature: &'static Signature = TransRefl::dynamic_signature();
     let exported = TransRefl::new().to_dynamic();
     let constructed = Model::new(signature);
@@ -54,13 +55,117 @@ fn compiled_signatures_are_shared_by_models() {
         assert!(std::ptr::eq(signature, model.signature()));
     }
 
-    let mut owned = Model::with_signature(Arc::new(signature.clone()));
+    let runtime_signature = Arc::new(signature.clone());
+    let original = Model::with_signature(runtime_signature.clone());
+    let mut owned = original.clone();
+    assert!(std::ptr::eq(original.signature(), owned.signature()));
+    drop(original);
+    drop(runtime_signature);
     let type_ = signature.type_named("V").unwrap();
     let edge = signature.relation_named("edge").unwrap();
     let x = owned.new_element(type_, &[]).unwrap();
     owned.insert(edge, &[x, x]).unwrap();
     let compiled = TransRefl::from_dynamic(&owned).unwrap();
     assert!(compiled.edge(V(x.index), V(x.index)));
+}
+
+#[test]
+fn dynamic_relations_support_arities_through_twelve() {
+    for arity in 0..=12 {
+        let type_ = TypeId(0);
+        let relation = RelationId(0);
+        let signature = Signature::new(
+            vec![Type {
+                name: "El".into(),
+                kind: TypeKind::Plain,
+                parents: vec![],
+            }],
+            vec![Relation {
+                name: "r".into(),
+                kind: RelationKind::Predicate,
+                arity: vec![type_; arity],
+                parents: vec![],
+            }],
+        )
+        .unwrap();
+        let mut model = Model::with_signature(Arc::new(signature));
+        let elements: Vec<_> = (0..arity + 2)
+            .map(|_| model.new_element(type_, &[]).unwrap())
+            .collect();
+        let forward = elements[..arity].to_vec();
+        let reverse: Vec<_> = forward.iter().rev().copied().collect();
+        let shifted = elements[1..arity + 1].to_vec();
+        let repeated = vec![elements[0]; arity];
+        let other_repeated = vec![elements[1]; arity];
+        let expected = BTreeSet::from([forward, reverse, shifted, repeated, other_repeated]);
+        for tuple in &expected {
+            assert!(model.insert(relation, tuple).unwrap());
+            assert!(!model.insert(relation, tuple).unwrap());
+            assert!(model.contains(relation, tuple).unwrap());
+        }
+        let absent = vec![elements[arity + 1]; arity];
+        assert_eq!(model.contains(relation, &absent).unwrap(), arity == 0);
+        let original = model.clone();
+        model.equate(&[], elements[0], elements[1]).unwrap();
+        assert!(model.are_equal(elements[0], elements[1]).unwrap());
+        assert!(!original.are_equal(elements[0], elements[1]).unwrap());
+        assert!(model.contains(relation, &vec![elements[1]; arity]).unwrap());
+        assert_eq!(model.elements(type_).unwrap().count(), arity + 1);
+        assert_eq!(original.elements(type_).unwrap().count(), arity + 2);
+        for copy in [&model, &original] {
+            assert_eq!(
+                copy.tuples(relation).unwrap().collect::<BTreeSet<_>>(),
+                expected
+            );
+        }
+        model.insert(relation, &absent).unwrap();
+        assert_eq!(original.tuples(relation).unwrap().count(), expected.len());
+        assert_eq!(
+            model.tuples(relation).unwrap().count(),
+            expected.len() + usize::from(arity != 0)
+        );
+    }
+}
+
+#[test]
+fn invalid_dynamic_arguments_leave_model_data_unchanged() {
+    let signature = TransRefl::dynamic_signature();
+    let type_ = signature.type_named("V").unwrap();
+    let edge = signature.relation_named("edge").unwrap();
+    let mut model = Model::new(signature);
+    let x = model.new_element(type_, &[]).unwrap();
+    let invalid = Element {
+        type_,
+        index: x.index + 1,
+    };
+    let unknown_type = TypeId(signature.types().len());
+    let unknown_relation = RelationId(signature.relations().len());
+    assert_eq!(
+        model.insert(edge, &[]),
+        Err(Error::ArityMismatch {
+            expected: 2,
+            actual: 0
+        })
+    );
+    assert_eq!(
+        model.insert(edge, &[x, invalid]),
+        Err(Error::UnknownElement(invalid))
+    );
+    assert_eq!(
+        model.equate(&[], x, invalid),
+        Err(Error::UnknownElement(invalid))
+    );
+    assert_eq!(
+        model.new_element(unknown_type, &[]),
+        Err(Error::UnknownType(unknown_type))
+    );
+    assert_eq!(
+        model.insert(unknown_relation, &[x, x]),
+        Err(Error::UnknownRelation(unknown_relation))
+    );
+    let restored = TransRefl::from_dynamic(&model).unwrap();
+    assert_eq!(restored.iter_v().count(), 1);
+    assert_eq!(restored.iter_edge().count(), 0);
 }
 
 #[test]
@@ -100,6 +205,25 @@ fn dynamic_export_tracks_pending_equalities_and_function_conflicts() {
     restored.close();
     assert!(restored.are_equal_el(y, z));
     assert_eq!(restored.iter_mul().count(), 1);
+}
+
+#[test]
+fn dynamic_function_conflicts_survive_until_compiled_closure() {
+    let signature = PartialMagma::dynamic_signature();
+    let type_ = signature.type_named("El").unwrap();
+    let mul = signature.relation_named("mul").unwrap();
+    let mut model = Model::new(signature);
+    let x = model.new_element(type_, &[]).unwrap();
+    let y = model.new_element(type_, &[]).unwrap();
+    model.insert(mul, &[x, x, x]).unwrap();
+    model.insert(mul, &[x, x, y]).unwrap();
+    assert!(!model.are_equal(x, y).unwrap());
+    let mut compiled = PartialMagma::from_dynamic(&model).unwrap();
+    compiled.close();
+    assert_eq!(compiled.iter_el().count(), 1);
+    assert_eq!(compiled.iter_mul().count(), 1);
+    model.equate(&[], x, y).unwrap();
+    assert_eq!(model.tuples(mul).unwrap().count(), 2);
 }
 
 #[test]
@@ -356,6 +480,16 @@ fn dynamic_enum_construction_reuses_values_and_exposes_cases() {
             arguments: vec![z, s]
         }),
         Err(Error::ExpectedConstructor(plus))
+    );
+    assert_eq!(
+        dynamic.new_enum(EnumCase {
+            constructor: succ,
+            arguments: vec![],
+        }),
+        Err(Error::ArityMismatch {
+            expected: 1,
+            actual: 0
+        })
     );
     assert_eq!(dynamic.elements(type_).unwrap().count(), 2);
     let mut compiled = Nat::from_dynamic(&dynamic).unwrap();

@@ -24,4 +24,4 @@ definition, enum construction and case inspection, and equality queries.
 
 Test descriptor validation, copy independence, API behavior against
 compiled models, and continued evaluation after conversion through
-public APIs.
+public APIs in eqlog-test-eval.
