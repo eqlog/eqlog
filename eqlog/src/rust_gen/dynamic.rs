@@ -145,7 +145,7 @@ impl DynamicContext<'_> {
         FmtFn(move |f| {
             writedoc! {f, "
                 fn to_dynamic(&self) -> eqlog_runtime::dynamic::DynamicModel {{
-                    eqlog_runtime::dynamic::DynamicModel::from_parts(
+                    eqlog_runtime::dynamic::__private::from_parts(
                         <Self as eqlog_runtime::dynamic::CompiledModel>::dynamic_signature(),
                         vec![
             "}?;
@@ -157,7 +157,7 @@ impl DynamicContext<'_> {
                 let old =
                     display_index_expr(&rel, self.primary(rel.clone(), IndexAge::Old), self.ctx);
                 writedoc! {f, "
-                    eqlog_runtime::dynamic::SortData {{
+                    eqlog_runtime::dynamic::__private::SortData {{
                         equalities: self.{snake}_equalities.retype(),
                         new: (*{new}).clone(),
                         old: (*{old}).clone(),
@@ -171,7 +171,7 @@ impl DynamicContext<'_> {
                 let weight = display_weight_static_name(rel, self.ctx);
                 writeln!(
                     f,
-                    "eqlog_runtime::dynamic::RelationData {{ weight: {weight},"
+                    "eqlog_runtime::dynamic::__private::RelationData {{ weight: {weight},"
                 )?;
                 for age in [IndexAge::New, IndexAge::Old] {
                     let flat = FlatInRel::Rel(rel);
@@ -179,9 +179,9 @@ impl DynamicContext<'_> {
                     let expression = display_index_expr(&flat, index, self.ctx);
                     let order = index.order.iter().join(", ");
                     writedoc! {f, "
-                        {age}: eqlog_runtime::dynamic::RelationIndex {{
+                        {age}: eqlog_runtime::dynamic::__private::RelationIndex {{
                             order: vec![{order}],
-                            table: eqlog_runtime::dynamic::Table::from((*{expression}).clone()),
+                            table: eqlog_runtime::dynamic::__private::Table::from((*{expression}).clone()),
                         }},
                     "}?;
                 }
@@ -217,7 +217,7 @@ impl DynamicContext<'_> {
                     self.ctx,
                 );
                 writedoc! {f, "
-                    let data = source.sort_data({sort})?;
+                    let data = eqlog_runtime::dynamic::__private::sort_data(source, {sort})?;
                     model.{snake}_equalities = data.equalities.retype();
                     model.{snake}_weights = vec![0; data.equalities.len()];
                     model.{new} = data.new.union(&data.old);
@@ -248,7 +248,7 @@ impl DynamicContext<'_> {
                     let order = index.order.iter().join(", ");
                     let own = display_own_index_field_name(flat, index, self.ctx);
                     writedoc! {f, "
-                        let index = source.relation_data(eqlog_runtime::dynamic::RelationId({id}))?
+                        let index = eqlog_runtime::dynamic::__private::relation_data(source, eqlog_runtime::dynamic::RelationId({id}))?
                             .reindex(&[{order}], &[{equalities}])?;
                         model.{own} = (&index).try_into()?;
                     "}?;
@@ -266,7 +266,7 @@ impl DynamicContext<'_> {
                 let len = arity.len();
                 let weight = display_weight_static_name(rel, self.ctx);
                 writedoc! {f, "
-                    for row in source.relation_data(eqlog_runtime::dynamic::RelationId({id}))?
+                    for row in eqlog_runtime::dynamic::__private::relation_data(source, eqlog_runtime::dynamic::RelationId({id}))?
                         .tuples().collect::<std::collections::BTreeSet<_>>()
                     {{
                         let row: [u32; {len}] = row.try_into().expect(\"matching signature arity\");

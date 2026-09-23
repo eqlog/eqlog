@@ -1,9 +1,10 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
+use eqlog_runtime::dynamic::__private::{self, RelationData, RelationIndex, SortData, Table};
 use eqlog_runtime::dynamic::{
-    DynamicModel, Element, Error, FunctionKind, Relation, RelationData, RelationId, RelationIndex,
-    RelationKind, Signature, Sort, SortData, SortId, SortKind, Table,
+    DynamicModel, Element, Error, FunctionKind, Relation, RelationId, RelationKind, Signature,
+    Sort, SortId, SortKind,
 };
 
 fn signature(arity: usize, kind: RelationKind) -> Signature {
@@ -358,7 +359,7 @@ fn raw_storage_rejects_inconsistent_indices_and_handles() {
     sort.uprooted.push(0);
     let mut relation = RelationData::new(2);
     relation.new.table.insert(&[0, 1]);
-    let model = DynamicModel::from_parts(
+    let model = __private::from_parts(
         signature.clone(),
         vec![sort.clone()],
         vec![relation.clone()],
@@ -371,36 +372,31 @@ fn raw_storage_rejects_inconsistent_indices_and_handles() {
     let mut bad_sort = sort.clone();
     bad_sort.new.insert([0]);
     assert!(
-        DynamicModel::from_parts(signature.clone(), vec![bad_sort], vec![relation.clone()])
-            .is_err()
+        __private::from_parts(signature.clone(), vec![bad_sort], vec![relation.clone()]).is_err()
     );
     let mut bad_sort = sort.clone();
     bad_sort.new.remove([1]);
     assert!(
-        DynamicModel::from_parts(signature.clone(), vec![bad_sort], vec![relation.clone()])
-            .is_err()
+        __private::from_parts(signature.clone(), vec![bad_sort], vec![relation.clone()]).is_err()
     );
     let mut bad_sort = sort.clone();
     bad_sort.weights.pop();
     assert!(
-        DynamicModel::from_parts(signature.clone(), vec![bad_sort], vec![relation.clone()])
-            .is_err()
+        __private::from_parts(signature.clone(), vec![bad_sort], vec![relation.clone()]).is_err()
     );
     let mut bad_relation = relation.clone();
     bad_relation.new.order = vec![0, 0];
     assert!(
-        DynamicModel::from_parts(signature.clone(), vec![sort.clone()], vec![bad_relation])
-            .is_err()
+        __private::from_parts(signature.clone(), vec![sort.clone()], vec![bad_relation]).is_err()
     );
     let mut bad_relation = relation.clone();
     bad_relation.old = RelationIndex::new(1);
     assert!(
-        DynamicModel::from_parts(signature.clone(), vec![sort.clone()], vec![bad_relation])
-            .is_err()
+        __private::from_parts(signature.clone(), vec![sort.clone()], vec![bad_relation]).is_err()
     );
     relation.new.table.insert(&[0, 2]);
     assert_eq!(
-        DynamicModel::from_parts(signature, vec![sort], vec![relation]).err(),
+        __private::from_parts(signature, vec![sort], vec![relation]).err(),
         Some(Error::UnknownElement(Element {
             sort: SortId(0),
             index: 2

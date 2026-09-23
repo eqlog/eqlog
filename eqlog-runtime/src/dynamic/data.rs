@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
-use super::{Error, Table};
+use super::table::Table;
+use super::Error;
 use crate::{PrefixTree1, Unification};
 
 /// Stored equality and evaluation state for one sort.

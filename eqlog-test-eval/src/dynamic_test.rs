@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 
+use eqlog_runtime::dynamic::__private::{self, RelationIndex};
 use eqlog_runtime::dynamic::{
-    CompiledModel, DynamicModel, Element, Error, FunctionKind, RelationIndex, RelationKind,
-    Signature, SortKind,
+    CompiledModel, DynamicModel, Element, Error, FunctionKind, RelationKind, Signature, SortKind,
 };
 use std::sync::Arc;
 
@@ -30,8 +30,8 @@ fn round_trip<M: CompiledModel>(source: &M) -> M {
     assert_eq!(before.signature(), after.signature());
     for (sort, _) in before.signature().sorts() {
         assert_eq!(
-            before.sort_data(sort).unwrap().equalities,
-            after.sort_data(sort).unwrap().equalities
+            __private::sort_data(&before, sort).unwrap().equalities,
+            __private::sort_data(&after, sort).unwrap().equalities
         );
         assert_eq!(
             before.handles(sort).unwrap().collect::<Vec<_>>(),
@@ -394,15 +394,15 @@ fn import_keeps_alias_only_membership_visible_before_closure() {
         .unwrap();
     let sorts = signature
         .sorts()
-        .map(|(id, _)| snapshot.sort_data(id).unwrap().clone())
+        .map(|(id, _)| __private::sort_data(&snapshot, id).unwrap().clone())
         .collect();
     let mut relations: Vec<_> = signature
         .relations()
-        .map(|(id, _)| snapshot.relation_data(id).unwrap().clone())
+        .map(|(id, _)| __private::relation_data(&snapshot, id).unwrap().clone())
         .collect();
     relations[membership.0].new = RelationIndex::new(3);
     relations[membership.0].new.table.insert(&[a.0, i.0, y.0]);
-    let dynamic = DynamicModel::from_parts(signature, sorts, relations).unwrap();
+    let dynamic = __private::from_parts(signature, sorts, relations).unwrap();
     let tuple = [
         handle::<MemberParents>("Outer", a.0),
         handle::<MemberParents>("Outer::Inner", i.0),
@@ -463,19 +463,19 @@ fn export_preserves_old_new_partitions_and_pending_equalities() {
     let dynamic = source.to_dynamic();
     let sort = dynamic.signature().sort_named("V").unwrap();
     let edge = dynamic.signature().relation_named("edge").unwrap();
-    let data = dynamic.sort_data(sort).unwrap();
+    let data = __private::sort_data(&dynamic, sort).unwrap();
     assert_eq!(data.new.iter().collect::<Vec<_>>(), vec![[z.0]]);
     assert_eq!(data.old.iter().collect::<Vec<_>>(), vec![[x.0]]);
     assert_eq!(data.uprooted, vec![y.0]);
     assert_eq!(data.equalities.root_const(y.0), x.0);
-    let data = dynamic.relation_data(edge).unwrap();
+    let data = __private::relation_data(&dynamic, edge).unwrap();
     assert_eq!(data.new.tuples().collect::<Vec<_>>(), vec![vec![x.0, z.0]]);
     assert_eq!(
         data.old.tuples().collect::<BTreeSet<_>>(),
         BTreeSet::from([vec![x.0, x.0], vec![y.0, y.0],])
     );
     let restored = TransRefl::from_dynamic(&dynamic).unwrap().to_dynamic();
-    let data = restored.relation_data(edge).unwrap();
+    let data = __private::relation_data(&restored, edge).unwrap();
     assert_eq!(data.old.tuples().count(), 0);
     assert_eq!(data.new.tuples().count(), 3);
 }

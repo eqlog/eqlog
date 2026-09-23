@@ -36,12 +36,13 @@ mod model;
 mod signature;
 mod table;
 
-pub use data::{RelationData, RelationIndex, SortData};
+#[doc(hidden)]
+pub mod __private;
+
 pub use model::DynamicModel;
 pub use signature::{
     FunctionKind, Relation, RelationId, RelationKind, Signature, Sort, SortId, SortKind,
 };
-pub use table::Table;
 
 use std::fmt;
 use std::sync::Arc;

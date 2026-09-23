@@ -11,5 +11,8 @@ conversion. Share prefix-tree nodes where index layouts agree and copy
 union-find vectors deeply. Rebuild compiled lookup indices on import
 without resolving pending equalities or executing rules.
 
+Keep storage access behind a doc-hidden interface for generated code so
+evaluation bookkeeping stays out of the public model API.
+
 Test incomplete structures, descriptor validation, column permutations,
 copy independence, and continued evaluation after conversion.

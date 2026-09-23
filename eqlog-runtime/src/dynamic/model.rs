@@ -1,7 +1,8 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use super::{Element, Error, RelationData, RelationId, RelationKind, Signature, SortData, SortId};
+use super::data::{RelationData, SortData};
+use super::{Element, Error, RelationId, RelationKind, Signature, SortId};
 
 /// Elements, equalities, and relation tables for a runtime signature.
 ///
@@ -31,7 +32,7 @@ impl DynamicModel {
     ///
     /// Checks storage dimensions, allocated handles, and representative sets.
     /// Membership and other theory axioms may remain unsatisfied.
-    pub fn from_parts(
+    pub(super) fn from_parts(
         signature: Arc<Signature>,
         sorts: Vec<SortData>,
         relations: Vec<RelationData>,
@@ -100,11 +101,11 @@ impl DynamicModel {
         &self.signature
     }
 
-    pub fn sort_data(&self, sort: SortId) -> Result<&SortData, Error> {
+    pub(super) fn sort_data(&self, sort: SortId) -> Result<&SortData, Error> {
         self.sorts.get(sort.0).ok_or(Error::UnknownSort(sort))
     }
 
-    pub fn relation_data(&self, relation: RelationId) -> Result<&RelationData, Error> {
+    pub(super) fn relation_data(&self, relation: RelationId) -> Result<&RelationData, Error> {
         self.relations
             .get(relation.0)
             .ok_or(Error::UnknownRelation(relation))
@@ -146,7 +147,7 @@ impl DynamicModel {
         }))
     }
 
-    /// Enumerates the representatives in the new and old carrier indices.
+    /// Enumerates current representatives.
     pub fn elements(&self, sort: SortId) -> Result<impl Iterator<Item = Element> + '_, Error> {
         let data = self.sort_data(sort)?;
         Ok(data
@@ -203,7 +204,7 @@ impl DynamicModel {
     }
 
     /// Iterates stored rows in signature column order, including aliases.
-    /// New and old partitions may contain the same row.
+    /// Rows may be repeated.
     pub fn tuples(
         &self,
         relation: RelationId,
@@ -235,7 +236,7 @@ impl DynamicModel {
         }
     }
 
-    /// Inserts current representatives into the new relation index.
+    /// Inserts a tuple of current representatives.
     /// Returns whether a row was added. Existing rows are left untouched.
     pub fn insert(&mut self, relation: RelationId, tuple: &[Element]) -> Result<bool, Error> {
         let descriptor = self.signature.relation(relation)?;
