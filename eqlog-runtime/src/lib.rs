@@ -90,25 +90,12 @@ pub struct EnumCase {
 /// Implemented by generated models to transfer data without running rules.
 pub trait CompiledModel: Sized {
     /// Returns the shared signature, independent of evaluation mode.
-    ///
-    /// Symbol names include enclosing models, for example `World::Inner::Item`.
-    /// Rules are not part of the signature.
     fn dynamic_signature() -> Arc<Signature>;
 
     /// Copies stored data, preserving IDs, equality representatives, and raw rows.
-    ///
-    /// Includes inherited facts already present in the model. Export does not
-    /// propagate morphisms or resolve function conflicts. The source is unchanged.
-    /// Relation trees share their nodes with the source. Export validates stored
-    /// handles and deeply copies union-find and weight vectors. For a compiled
-    /// handle, use its wrapped integer and the type ID from [`Self::dynamic_signature`].
     fn to_dynamic(&self) -> Model;
 
     /// Imports data without changing IDs, equality representatives, or raw rows.
-    ///
-    /// All imported facts become explicit and are treated as new by evaluation.
-    /// Compatible indices share tree nodes. Other indices are rebuilt as needed.
-    /// Import does not check theory axioms.
     ///
     /// Returns [`Error::SignatureMismatch`] if type or relation descriptors differ
     /// from [`Self::dynamic_signature`], including their order and names.
