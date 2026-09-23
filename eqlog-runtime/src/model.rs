@@ -4,16 +4,16 @@ use std::sync::Arc;
 use super::data::{RelationData, TypeData};
 use super::{Element, Error, RelationId, RelationKind, Signature, TypeId};
 
-/// Elements, equalities, and relation tables for a runtime signature.
+/// A model with a runtime signature.
 #[derive(Clone, Debug)]
-pub struct DynamicModel {
+pub struct Model {
     signature: Arc<Signature>,
     types: Vec<TypeData>,
     relations: Vec<RelationData>,
 }
 
-impl DynamicModel {
-    /// Creates a structure with no elements or facts.
+impl Model {
+    /// Creates an empty model.
     pub fn new(signature: Arc<Signature>) -> Self {
         Self {
             types: signature.types().map(|_| TypeData::new()).collect(),
@@ -94,6 +94,7 @@ impl DynamicModel {
         Ok(model)
     }
 
+    /// Returns the model's signature.
     pub fn signature(&self) -> &Arc<Signature> {
         &self.signature
     }
@@ -108,8 +109,9 @@ impl DynamicModel {
             .ok_or(Error::UnknownRelation(relation))
     }
 
-    /// Allocates an element and its membership row.
+    /// Adjoins a new element of type `type_`.
     /// `parents` lists the enclosing model instances, outermost first.
+    /// Enum elements are allocated without choosing a constructor.
     pub fn new_element(&mut self, type_: TypeId, parents: &[Element]) -> Result<Element, Error> {
         let parents = self.check_tuple(&self.signature.type_(type_)?.parents, parents)?;
         for (i, &parent) in parents.iter().enumerate() {
@@ -135,7 +137,8 @@ impl DynamicModel {
         Ok(element)
     }
 
-    /// Enumerates current representatives.
+    /// Returns an iterator over elements of type `type_`.
+    /// The iterator yields canonical representatives only.
     pub fn elements(&self, type_: TypeId) -> Result<impl Iterator<Item = Element> + '_, Error> {
         let data = self.type_data(type_)?;
         Ok(data
@@ -145,7 +148,8 @@ impl DynamicModel {
             .map(move |[index]| Element { type_, index }))
     }
 
-    /// Resolves a handle to its current representative.
+    /// Returns the canonical representative of the equivalence class of `element`.
+    /// Returns [`Error::UnknownElement`] if its index has not been allocated.
     pub fn root(&self, element: Element) -> Result<Element, Error> {
         if element.index as usize >= self.type_data(element.type_)?.equalities.len() {
             return Err(Error::UnknownElement(element));
@@ -153,10 +157,11 @@ impl DynamicModel {
         Ok(self.root_unchecked(element))
     }
 
-    /// Merges two classes without rewriting relation rows. Returns whether they differed.
+    /// Enforces the equality `lhs = rhs`.
     ///
-    /// Both elements must belong to `parents`, listed outermost first, even when
-    /// already equal. Top-level types take an empty slice.
+    /// Both elements must belong to the supplied enclosing models, outermost first.
+    /// Top-level types take an empty `parents` slice.
+    /// Returns `true` if the elements were not already equal.
     pub fn equate(
         &mut self,
         parents: &[Element],
@@ -191,8 +196,9 @@ impl DynamicModel {
         Ok(true)
     }
 
-    /// Iterates stored rows in signature column order, including aliases.
-    /// Rows may be repeated.
+    /// Returns an iterator over tuples of elements satisfying `relation`.
+    /// For a function, each tuple contains the arguments followed by the result.
+    /// Tuples may contain aliases or be repeated.
     pub fn tuples(
         &self,
         relation: RelationId,
@@ -207,10 +213,9 @@ impl DynamicModel {
         }))
     }
 
-    /// Resolves the arguments and checks the relation indices.
-    ///
-    /// As in compiled models, pending equality rewrites can hide ordinary facts
-    /// from this lookup. Membership checks also resolve aliases in stored rows.
+    /// Returns `true` if `relation` holds for `tuple`.
+    /// As with compiled predicates, pending equalities can make this lookup miss facts.
+    /// Predicate and function arguments are checked for type, but not model membership.
     pub fn contains(&self, relation: RelationId, tuple: &[Element]) -> Result<bool, Error> {
         let descriptor = self.signature.relation(relation)?;
         let tuple = self.check_tuple(&descriptor.arity, tuple)?;
@@ -224,8 +229,9 @@ impl DynamicModel {
         }
     }
 
-    /// Inserts a tuple of current representatives.
-    /// Returns whether a row was added. Existing rows are left untouched.
+    /// Makes `relation` hold for `tuple`.
+    /// Returns `true` if a tuple was added.
+    /// Predicate and function arguments are checked for type, but not model membership.
     pub fn insert(&mut self, relation: RelationId, tuple: &[Element]) -> Result<bool, Error> {
         let descriptor = self.signature.relation(relation)?;
         let tuple = self.check_tuple(&descriptor.arity, tuple)?;

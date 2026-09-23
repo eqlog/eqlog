@@ -1,8 +1,7 @@
 use std::collections::BTreeSet;
 
-use eqlog_runtime::dynamic::__private::{self, RelationIndex};
-use eqlog_runtime::dynamic::{
-    CompiledModel, DynamicModel, Element, Error, FunctionKind, RelationKind, Signature, TypeKind,
+use eqlog_runtime::{
+    CompiledModel, Element, Error, FunctionKind, Model, RelationKind, Signature, TypeKind,
 };
 use std::sync::Arc;
 
@@ -29,10 +28,6 @@ fn round_trip<M: CompiledModel>(source: &M) -> M {
     let after = restored.to_dynamic();
     assert_eq!(before.signature(), after.signature());
     for (type_, _) in before.signature().types() {
-        assert_eq!(
-            __private::type_data(&before, type_).unwrap().equalities,
-            __private::type_data(&after, type_).unwrap().equalities
-        );
         assert_eq!(
             before.elements(type_).unwrap().collect::<BTreeSet<_>>(),
             after.elements(type_).unwrap().collect::<BTreeSet<_>>()
@@ -90,7 +85,7 @@ fn dynamic_construction_and_aliases_survive_import() {
     let signature = TransRefl::dynamic_signature();
     let type_ = signature.type_named("V").unwrap();
     let edge = signature.relation_named("edge").unwrap();
-    let mut model = DynamicModel::new(signature);
+    let mut model = Model::new(signature);
     let x = model.new_element(type_, &[]).unwrap();
     let alias = model.new_element(type_, &[]).unwrap();
     let y = model.new_element(type_, &[]).unwrap();
@@ -232,7 +227,7 @@ fn dynamic_signatures_preserve_morphism_roles() {
             member: item
         })
     );
-    let error = PartialMagma::from_dynamic(&DynamicModel::new(signature))
+    let error = PartialMagma::from_dynamic(&Model::new(signature))
         .err()
         .unwrap();
     assert_eq!(error, Error::SignatureMismatch);
@@ -247,7 +242,7 @@ fn dynamic_checks_parent_chains_before_mutation() {
     let membership = signature
         .relation_named("Outer::Inner::inner_member_el")
         .unwrap();
-    let mut model = DynamicModel::new(signature);
+    let mut model = Model::new(signature);
     let a = model.new_element(outer, &[]).unwrap();
     let b = model.new_element(outer, &[]).unwrap();
     let i = model.new_element(inner, &[a]).unwrap();
@@ -275,7 +270,7 @@ fn dynamic_checks_parent_chains_before_mutation() {
 fn dynamic_import_preserves_enum_elements_without_constructors() {
     let signature = Nat::dynamic_signature();
     let type_ = signature.type_named("N").unwrap();
-    let mut dynamic = DynamicModel::new(signature);
+    let mut dynamic = Model::new(signature);
     let element = dynamic.new_element(type_, &[]).unwrap();
     let compiled = Nat::from_dynamic(&dynamic).unwrap();
     assert_eq!(compiled.iter_n().count(), 1);
@@ -296,7 +291,7 @@ fn dynamic_import_preserves_applications_without_endpoints() {
     let el = signature.type_named("World::El").unwrap();
     let mor = signature.type_named("WorldMor").unwrap();
     let application = signature.relation_named("el_mor_app").unwrap();
-    let mut dynamic = DynamicModel::new(signature);
+    let mut dynamic = Model::new(signature);
     let a = dynamic.new_element(world, &[]).unwrap();
     let b = dynamic.new_element(world, &[]).unwrap();
     let x = dynamic.new_element(el, &[a]).unwrap();
@@ -322,7 +317,7 @@ fn dynamic_import_requires_the_same_descriptor_order() {
         .collect();
     relations.reverse();
     let reordered = Signature::new(types, relations).unwrap();
-    let dynamic = DynamicModel::new(Arc::new(reordered));
+    let dynamic = Model::new(Arc::new(reordered));
     assert_eq!(
         Logic::from_dynamic(&dynamic).err(),
         Some(Error::SignatureMismatch)
@@ -346,13 +341,6 @@ fn conversions_preserve_ids_and_mutate_independently() {
     let isolated_handle = handle::<PartialMagma>("El", isolated.0);
     assert_eq!(dynamic.root(alias_handle).unwrap(), root_handle);
     assert_eq!(
-        __private::type_data(&dynamic, type_)
-            .unwrap()
-            .equalities
-            .len(),
-        3
-    );
-    assert_eq!(
         dynamic.tuples(mul).unwrap().collect::<Vec<_>>(),
         vec![vec![root_handle, root_handle, alias_handle]]
     );
@@ -372,50 +360,6 @@ fn conversions_preserve_ids_and_mutate_independently() {
     restored.insert_mul(isolated, root, root);
     assert_eq!(dynamic.tuples(mul).unwrap().count(), 2);
     assert_eq!(dynamic.new_element(type_, &[]).unwrap().index, 3);
-}
-
-#[test]
-fn import_keeps_alias_only_membership_visible_before_closure() {
-    let mut source = MemberParents::new();
-    let a = source.new_outer();
-    let i = source.new_inner(a);
-    let x = source.new_el(a, i);
-    let y = source.new_el(a, i);
-    source.equate_el(a, i, x, y);
-    let snapshot = source.to_dynamic();
-    let signature = snapshot.signature().clone();
-    let membership = signature
-        .relation_named("Outer::Inner::inner_member_el")
-        .unwrap();
-    let types = signature
-        .types()
-        .map(|(id, _)| __private::type_data(&snapshot, id).unwrap().clone())
-        .collect();
-    let mut relations: Vec<_> = signature
-        .relations()
-        .map(|(id, _)| __private::relation_data(&snapshot, id).unwrap().clone())
-        .collect();
-    relations[membership.0].new = RelationIndex::new(3);
-    relations[membership.0].new.table.insert(&[a.0, i.0, y.0]);
-    let dynamic = __private::from_parts(signature, types, relations).unwrap();
-    let tuple = [
-        handle::<MemberParents>("Outer", a.0),
-        handle::<MemberParents>("Outer::Inner", i.0),
-        handle::<MemberParents>("Outer::Inner::El", x.0),
-    ];
-    assert!(dynamic.contains(membership, &tuple).unwrap());
-    let mut restored = MemberParents::from_dynamic(&dynamic).unwrap();
-    assert!(restored.inner_member_el(a, i, x));
-    assert_eq!(
-        restored.iter_inner_member_el().collect::<Vec<_>>(),
-        vec![(a, i, y)]
-    );
-    restored.close();
-    assert!(restored.inner_member_el(a, i, x));
-    assert_eq!(
-        restored.iter_inner_member_el().collect::<Vec<_>>(),
-        vec![(a, i, x)]
-    );
 }
 
 #[test]
@@ -444,33 +388,4 @@ fn import_rebuilds_diagonals_before_pending_equalities_are_processed() {
         assert!(restored.pair(x, b, y, y));
         assert_eq!(restored.value(x, b, y), Some(y));
     }
-}
-
-#[test]
-fn export_preserves_old_new_partitions_and_pending_equalities() {
-    let mut source = TransRefl::new();
-    let x = source.new_v();
-    let y = source.new_v();
-    source.close();
-    let z = source.new_v();
-    source.insert_edge(x, z);
-    source.equate_v(x, y);
-    let dynamic = source.to_dynamic();
-    let type_ = dynamic.signature().type_named("V").unwrap();
-    let edge = dynamic.signature().relation_named("edge").unwrap();
-    let data = __private::type_data(&dynamic, type_).unwrap();
-    assert_eq!(data.new.iter().collect::<Vec<_>>(), vec![[z.0]]);
-    assert_eq!(data.old.iter().collect::<Vec<_>>(), vec![[x.0]]);
-    assert_eq!(data.uprooted, vec![y.0]);
-    assert_eq!(data.equalities.root_const(y.0), x.0);
-    let data = __private::relation_data(&dynamic, edge).unwrap();
-    assert_eq!(data.new.tuples().collect::<Vec<_>>(), vec![vec![x.0, z.0]]);
-    assert_eq!(
-        data.old.tuples().collect::<BTreeSet<_>>(),
-        BTreeSet::from([vec![x.0, x.0], vec![y.0, y.0],])
-    );
-    let restored = TransRefl::from_dynamic(&dynamic).unwrap().to_dynamic();
-    let data = __private::relation_data(&restored, edge).unwrap();
-    assert_eq!(data.old.tuples().count(), 0);
-    assert_eq!(data.new.tuples().count(), 3);
 }

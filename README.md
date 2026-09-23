@@ -371,21 +371,21 @@ impl Semilattice {
 
 ### Dynamic structures
 
-`eqlog_runtime::dynamic` holds structures whose signature is known at runtime.
+`eqlog_runtime::Model` holds structures whose signature is known at runtime.
 It uses the same union-find and prefix-tree storage as compiled models, with
 runtime arity dispatch for relation tables. It keeps old/new partitions and
 records ownership in membership relations. It does not evaluate rules or rewrite
 relation rows when elements are equated.
 
-Every generated model implements `eqlog_runtime::dynamic::CompiledModel`:
+Every generated model implements `eqlog_runtime::CompiledModel`:
 
 ```rust,ignore
-use eqlog_runtime::dynamic::{CompiledModel, DynamicModel};
+use eqlog_runtime::{CompiledModel, Model};
 
 let signature = Semilattice::dynamic_signature();
 let el_type = signature.type_named("El").unwrap();
 let le = signature.relation_named("le").unwrap();
-let mut dynamic = DynamicModel::new(signature);
+let mut dynamic = Model::new(signature);
 let x = dynamic.new_element(el_type, &[]).unwrap();
 let y = dynamic.new_element(el_type, &[]).unwrap();
 dynamic.insert(le, &[x, y]).unwrap();
@@ -403,7 +403,7 @@ Import requires matching ordered signatures and treats all imported facts as new
 and explicit for evaluation. Compatible indices share tree nodes, and other
 indices are rebuilt in the column order required by the compiler.
 
-The [`dynamic` module](eqlog-runtime/src/dynamic/mod.rs) documents the public API,
+The [runtime crate](eqlog-runtime/src/lib.rs) documents the public API,
 including constructing a signature without the compiler, parent chains, and
 conversion contracts. Build the API documentation with:
 

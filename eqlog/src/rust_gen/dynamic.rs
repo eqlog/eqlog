@@ -25,7 +25,7 @@ struct DynamicContext<'a> {
 impl DynamicContext<'_> {
     fn type_(&self, typ: TypeId) -> String {
         let id = self.types[&typ];
-        format!("eqlog_runtime::dynamic::TypeId({id})")
+        format!("eqlog_runtime::TypeId({id})")
     }
 
     fn qualified(&self, parents: &[TypeId], name: &str) -> String {
@@ -57,16 +57,16 @@ impl DynamicContext<'_> {
         } else {
             "Ordinary".to_owned()
         };
-        format!("eqlog_runtime::dynamic::FunctionKind::{kind}")
+        format!("eqlog_runtime::FunctionKind::{kind}")
     }
 
     fn signature(&self) -> impl Display + '_ {
         FmtFn(move |f| {
             writedoc! {f, "
-                fn dynamic_signature() -> std::sync::Arc<eqlog_runtime::dynamic::Signature> {{
-                    static SIGNATURE: std::sync::OnceLock<std::sync::Arc<eqlog_runtime::dynamic::Signature>> = std::sync::OnceLock::new();
+                fn dynamic_signature() -> std::sync::Arc<eqlog_runtime::Signature> {{
+                    static SIGNATURE: std::sync::OnceLock<std::sync::Arc<eqlog_runtime::Signature>> = std::sync::OnceLock::new();
                     SIGNATURE.get_or_init(|| std::sync::Arc::new(
-                        eqlog_runtime::dynamic::Signature::new(vec![
+                        eqlog_runtime::Signature::new(vec![
             "}?;
             for typ in self.ctx.signature().iter_types() {
                 let descriptor = self.ctx.signature().type_(typ);
@@ -83,9 +83,9 @@ impl DynamicContext<'_> {
                     TypeKind::Mor(model) => format!("Morphism({})", self.type_(model)),
                 };
                 writedoc! {f, "
-                    eqlog_runtime::dynamic::Type {{
+                    eqlog_runtime::Type {{
                         name: {name:?}.into(),
-                        kind: eqlog_runtime::dynamic::TypeKind::{kind},
+                        kind: eqlog_runtime::TypeKind::{kind},
                         parents: vec![{parents}],
                     }},
                 "}?;
@@ -114,9 +114,9 @@ impl DynamicContext<'_> {
                     .map(|&typ| self.type_(typ))
                     .join(", ");
                 writedoc! {f, "
-                    eqlog_runtime::dynamic::Relation {{
+                    eqlog_runtime::Relation {{
                         name: {name:?}.into(),
-                        kind: eqlog_runtime::dynamic::RelationKind::{kind},
+                        kind: eqlog_runtime::RelationKind::{kind},
                         parents: vec![{parents}],
                         arity: vec![{arity}],
                     }},
@@ -144,9 +144,9 @@ impl DynamicContext<'_> {
     fn export(&self) -> impl Display + '_ {
         FmtFn(move |f| {
             writedoc! {f, "
-                fn to_dynamic(&self) -> eqlog_runtime::dynamic::DynamicModel {{
-                    eqlog_runtime::dynamic::__private::from_parts(
-                        <Self as eqlog_runtime::dynamic::CompiledModel>::dynamic_signature(),
+                fn to_dynamic(&self) -> eqlog_runtime::Model {{
+                    eqlog_runtime::__private::from_parts(
+                        <Self as eqlog_runtime::CompiledModel>::dynamic_signature(),
                         vec![
             "}?;
             for typ in self.ctx.signature().iter_types() {
@@ -157,7 +157,7 @@ impl DynamicContext<'_> {
                 let old =
                     display_index_expr(&rel, self.primary(rel.clone(), IndexAge::Old), self.ctx);
                 writedoc! {f, "
-                    eqlog_runtime::dynamic::__private::TypeData {{
+                    eqlog_runtime::__private::TypeData {{
                         equalities: self.{snake}_equalities.retype(),
                         new: (*{new}).clone(),
                         old: (*{old}).clone(),
@@ -171,7 +171,7 @@ impl DynamicContext<'_> {
                 let weight = display_weight_static_name(rel, self.ctx);
                 writeln!(
                     f,
-                    "eqlog_runtime::dynamic::__private::RelationData {{ weight: {weight},"
+                    "eqlog_runtime::__private::RelationData {{ weight: {weight},"
                 )?;
                 for age in [IndexAge::New, IndexAge::Old] {
                     let flat = FlatInRel::Rel(rel);
@@ -179,9 +179,9 @@ impl DynamicContext<'_> {
                     let expression = display_index_expr(&flat, index, self.ctx);
                     let order = index.order.iter().join(", ");
                     writedoc! {f, "
-                        {age}: eqlog_runtime::dynamic::__private::RelationIndex {{
+                        {age}: eqlog_runtime::__private::RelationIndex {{
                             order: vec![{order}],
-                            table: eqlog_runtime::dynamic::__private::Table::from((*{expression}).clone()),
+                            table: eqlog_runtime::__private::Table::from((*{expression}).clone()),
                         }},
                     "}?;
                 }
@@ -198,11 +198,11 @@ impl DynamicContext<'_> {
     fn import(&self) -> impl Display + '_ {
         FmtFn(move |f| {
             writedoc! {f, "
-                fn from_dynamic(source: &eqlog_runtime::dynamic::DynamicModel)
-                    -> std::result::Result<Self, eqlog_runtime::dynamic::Error>
+                fn from_dynamic(source: &eqlog_runtime::Model)
+                    -> std::result::Result<Self, eqlog_runtime::Error>
                 {{
-                    if source.signature() != &<Self as eqlog_runtime::dynamic::CompiledModel>::dynamic_signature() {{
-                        return Err(eqlog_runtime::dynamic::Error::SignatureMismatch);
+                    if source.signature() != &<Self as eqlog_runtime::CompiledModel>::dynamic_signature() {{
+                        return Err(eqlog_runtime::Error::SignatureMismatch);
                     }}
                     let mut model = Self::new();
             "}?;
@@ -217,7 +217,7 @@ impl DynamicContext<'_> {
                     self.ctx,
                 );
                 writedoc! {f, "
-                    let data = eqlog_runtime::dynamic::__private::type_data(source, {type_})?;
+                    let data = eqlog_runtime::__private::type_data(source, {type_})?;
                     model.{snake}_equalities = data.equalities.retype();
                     model.{snake}_weights = vec![0; data.equalities.len()];
                     model.{new} = data.new.union(&data.old);
@@ -248,7 +248,7 @@ impl DynamicContext<'_> {
                     let order = index.order.iter().join(", ");
                     let own = display_own_index_field_name(flat, index, self.ctx);
                     writedoc! {f, "
-                        let index = eqlog_runtime::dynamic::__private::relation_data(source, eqlog_runtime::dynamic::RelationId({id}))?
+                        let index = eqlog_runtime::__private::relation_data(source, eqlog_runtime::RelationId({id}))?
                             .reindex(&[{order}], &[{equalities}])?;
                         model.{own} = (&index).try_into()?;
                     "}?;
@@ -266,7 +266,7 @@ impl DynamicContext<'_> {
                 let len = arity.len();
                 let weight = display_weight_static_name(rel, self.ctx);
                 writedoc! {f, "
-                    for row in eqlog_runtime::dynamic::__private::relation_data(source, eqlog_runtime::dynamic::RelationId({id}))?
+                    for row in eqlog_runtime::__private::relation_data(source, eqlog_runtime::RelationId({id}))?
                         .tuples().collect::<std::collections::BTreeSet<_>>()
                     {{
                         let row: [u32; {len}] = row.try_into().expect(\"matching signature arity\");
@@ -335,7 +335,7 @@ pub(super) fn display_dynamic_impl<'a>(
         let import = dynamic.import();
         writedoc! {f, "
             #[allow(unused_mut)]
-            impl eqlog_runtime::dynamic::CompiledModel for {name} {{
+            impl eqlog_runtime::CompiledModel for {name} {{
                 {signature}
                 {export}
                 {import}

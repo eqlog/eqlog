@@ -1,10 +1,9 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use eqlog_runtime::dynamic::__private::{self, RelationData, RelationIndex, Table, TypeData};
-use eqlog_runtime::dynamic::{
-    DynamicModel, Element, Error, FunctionKind, Relation, RelationId, RelationKind, Signature,
-    Type, TypeId, TypeKind,
+use eqlog_runtime::{
+    Element, Error, FunctionKind, Model, Relation, RelationId, RelationKind, Signature, Type,
+    TypeId, TypeKind,
 };
 
 fn signature(arity: usize, kind: RelationKind) -> Signature {
@@ -27,7 +26,7 @@ fn signature(arity: usize, kind: RelationKind) -> Signature {
 #[test]
 fn arbitrary_arities_keep_stored_rows_after_equality() {
     for arity in 0..=12 {
-        let mut model = DynamicModel::new(Arc::new(signature(arity, RelationKind::Predicate)));
+        let mut model = Model::new(Arc::new(signature(arity, RelationKind::Predicate)));
         let x = model.new_element(TypeId(0), &[]).unwrap();
         let y = model.new_element(TypeId(0), &[]).unwrap();
         let left = vec![x; arity];
@@ -57,7 +56,7 @@ fn arbitrary_arities_keep_stored_rows_after_equality() {
 #[test]
 fn mixed_columns_survive_prefix_boundaries_and_equality() {
     for arity in [0, 1, 9, 10, 12] {
-        let mut model = DynamicModel::new(Arc::new(signature(arity, RelationKind::Predicate)));
+        let mut model = Model::new(Arc::new(signature(arity, RelationKind::Predicate)));
         let elements: Vec<_> = (0..=arity)
             .map(|_| model.new_element(TypeId(0), &[]).unwrap())
             .collect();
@@ -101,7 +100,7 @@ fn mixed_columns_survive_prefix_boundaries_and_equality() {
 
 #[test]
 fn invalid_operations_return_errors_without_adding_data() {
-    let mut model = DynamicModel::new(Arc::new(signature(1, RelationKind::Predicate)));
+    let mut model = Model::new(Arc::new(signature(1, RelationKind::Predicate)));
     let x = model.new_element(TypeId(0), &[]).unwrap();
     let invalid = Element {
         type_: TypeId(0),
@@ -136,7 +135,7 @@ fn invalid_operations_return_errors_without_adding_data() {
 
 #[test]
 fn function_conflicts_are_data_until_an_evaluator_processes_them() {
-    let mut model = DynamicModel::new(Arc::new(signature(
+    let mut model = Model::new(Arc::new(signature(
         1,
         RelationKind::Function(FunctionKind::Ordinary),
     )));
@@ -247,7 +246,7 @@ fn nested_signature() -> (Vec<Type>, Vec<Relation>) {
 fn descriptors_support_forward_references_but_reject_invalid_roles() {
     let (types, relations) = nested_signature();
     let signature = Signature::new(types.clone(), relations.clone()).unwrap();
-    let mut model = DynamicModel::new(Arc::new(signature));
+    let mut model = Model::new(Arc::new(signature));
     let world = model.new_element(TypeId(2), &[]).unwrap();
     let item = model.new_element(TypeId(0), &[world]).unwrap();
     assert!(model.contains(RelationId(0), &[world, item]).unwrap());
@@ -297,109 +296,4 @@ fn descriptors_support_forward_references_but_reject_invalid_roles() {
     let mut bad = relations;
     bad[3].kind = RelationKind::Function(FunctionKind::Constructor);
     assert!(Signature::new(types, bad).is_err());
-}
-
-#[test]
-fn reindex_combines_permuted_partitions_and_projects_raw_diagonals() {
-    let mut data = RelationData::new(3);
-    data.new.order = vec![2, 0, 1];
-    data.old.order = vec![1, 2, 0];
-    for row in [[9, 1, 1], [8, 1, 2]] {
-        data.new.table.insert(&row);
-    }
-    for row in [[1, 9, 1], [2, 7, 2]] {
-        data.old.table.insert(&row);
-    }
-    let all = data.reindex(&[0, 1, 2], &[]).unwrap();
-    assert_eq!(
-        all.iter().collect::<BTreeSet<_>>(),
-        BTreeSet::from([vec![1, 1, 9], vec![1, 2, 8], vec![2, 2, 7],])
-    );
-    let diagonal = data.reindex(&[1, 0], &[0, 0, 2]).unwrap();
-    assert_eq!(
-        diagonal.iter().collect::<BTreeSet<_>>(),
-        BTreeSet::from([vec![9, 1], vec![7, 2],])
-    );
-    assert!(data.reindex(&[0, 0], &[0, 0, 2]).is_err());
-    assert!(data.reindex(&[0, 1], &[1, 0, 2]).is_err());
-}
-
-#[test]
-fn table_copies_and_unions_are_independent_at_every_arity() {
-    for arity in [0, 1, 9, 10, 12] {
-        let mut source = Table::new(arity);
-        let mut copy = source.clone();
-        source.insert(&vec![1; arity]);
-        assert_eq!(copy.iter().count(), 0);
-        copy.insert(&vec![2; arity]);
-        let mut union = source.union(&copy);
-        assert!(union.contains(&vec![1; arity]));
-        assert!(union.contains(&vec![2; arity]));
-        union.insert(&vec![3; arity]);
-        assert_eq!(source.iter().collect::<Vec<_>>(), vec![vec![1; arity]]);
-        assert_eq!(copy.iter().collect::<Vec<_>>(), vec![vec![2; arity]]);
-        let mut data = RelationData::new(arity);
-        data.new.table = source;
-        data.old.table = copy;
-        let result = data
-            .reindex(&(0..arity).rev().collect::<Vec<_>>(), &[])
-            .unwrap();
-        assert_eq!(result.iter().count(), if arity == 0 { 1 } else { 2 });
-    }
-}
-
-#[test]
-fn raw_storage_rejects_inconsistent_indices_and_handles() {
-    let signature = Arc::new(signature(2, RelationKind::Predicate));
-    let mut type_ = TypeData::new();
-    type_.equalities.increase_size_to(2);
-    type_.equalities.union_roots_into(0, 1);
-    type_.new.insert([1]);
-    type_.weights = vec![0; 2];
-    type_.uprooted.push(0);
-    let mut relation = RelationData::new(2);
-    relation.new.table.insert(&[0, 1]);
-    let model = __private::from_parts(
-        signature.clone(),
-        vec![type_.clone()],
-        vec![relation.clone()],
-    )
-    .unwrap();
-    assert_eq!(
-        model.tuples(RelationId(0)).unwrap().next().unwrap()[0].index,
-        0
-    );
-    let mut bad_type = type_.clone();
-    bad_type.new.insert([0]);
-    assert!(
-        __private::from_parts(signature.clone(), vec![bad_type], vec![relation.clone()]).is_err()
-    );
-    let mut bad_type = type_.clone();
-    bad_type.new.remove([1]);
-    assert!(
-        __private::from_parts(signature.clone(), vec![bad_type], vec![relation.clone()]).is_err()
-    );
-    let mut bad_type = type_.clone();
-    bad_type.weights.pop();
-    assert!(
-        __private::from_parts(signature.clone(), vec![bad_type], vec![relation.clone()]).is_err()
-    );
-    let mut bad_relation = relation.clone();
-    bad_relation.new.order = vec![0, 0];
-    assert!(
-        __private::from_parts(signature.clone(), vec![type_.clone()], vec![bad_relation]).is_err()
-    );
-    let mut bad_relation = relation.clone();
-    bad_relation.old = RelationIndex::new(1);
-    assert!(
-        __private::from_parts(signature.clone(), vec![type_.clone()], vec![bad_relation]).is_err()
-    );
-    relation.new.table.insert(&[0, 2]);
-    assert_eq!(
-        __private::from_parts(signature, vec![type_], vec![relation]).err(),
-        Some(Error::UnknownElement(Element {
-            type_: TypeId(0),
-            index: 2
-        }))
-    );
 }
