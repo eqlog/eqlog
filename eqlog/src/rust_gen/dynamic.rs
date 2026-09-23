@@ -63,9 +63,9 @@ impl DynamicContext<'_> {
     fn signature(&self) -> impl Display + '_ {
         FmtFn(move |f| {
             writedoc! {f, "
-                fn dynamic_signature() -> std::sync::Arc<eqlog_runtime::Signature> {{
-                    static SIGNATURE: std::sync::OnceLock<std::sync::Arc<eqlog_runtime::Signature>> = std::sync::OnceLock::new();
-                    SIGNATURE.get_or_init(|| std::sync::Arc::new(
+                fn dynamic_signature() -> &'static eqlog_runtime::Signature {{
+                    static SIGNATURE: std::sync::OnceLock<eqlog_runtime::Signature> = std::sync::OnceLock::new();
+                    SIGNATURE.get_or_init(||
                         eqlog_runtime::Signature::new(vec![
             "}?;
             for typ in self.ctx.signature().iter_types() {
@@ -124,7 +124,7 @@ impl DynamicContext<'_> {
             }
             writedoc! {f, "
                         ]).expect(\"compiler generated a valid dynamic signature\")
-                    )).clone()
+                    )
                 }}
             "}
         })
@@ -201,7 +201,7 @@ impl DynamicContext<'_> {
                 fn from_dynamic(source: &eqlog_runtime::Model)
                     -> std::result::Result<Self, eqlog_runtime::Error>
                 {{
-                    if source.signature() != &<Self as eqlog_runtime::CompiledModel>::dynamic_signature() {{
+                    if source.signature() != <Self as eqlog_runtime::CompiledModel>::dynamic_signature() {{
                         return Err(eqlog_runtime::Error::SignatureMismatch);
                     }}
                     let mut model = Self::new();

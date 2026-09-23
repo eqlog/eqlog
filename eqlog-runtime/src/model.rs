@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::ops::Deref;
 use std::sync::Arc;
 
 use super::data::{RelationData, TypeData};
@@ -10,14 +11,40 @@ use super::{
 /// A model with a runtime signature.
 #[derive(Clone, Debug)]
 pub struct Model {
-    signature: Arc<Signature>,
+    signature: ModelSignature,
     types: Vec<TypeData>,
     relations: Vec<RelationData>,
 }
 
+#[derive(Clone, Debug)]
+enum ModelSignature {
+    Static(&'static Signature),
+    Shared(Arc<Signature>),
+}
+
+impl Deref for ModelSignature {
+    type Target = Signature;
+
+    fn deref(&self) -> &Signature {
+        match self {
+            Self::Static(signature) => signature,
+            Self::Shared(signature) => signature,
+        }
+    }
+}
+
 impl Model {
     /// Creates an empty model.
-    pub fn new(signature: Arc<Signature>) -> Self {
+    pub fn new(signature: &'static Signature) -> Self {
+        Self::with_model_signature(ModelSignature::Static(signature))
+    }
+
+    /// Creates an empty model with a shared runtime signature.
+    pub fn with_signature(signature: Arc<Signature>) -> Self {
+        Self::with_model_signature(ModelSignature::Shared(signature))
+    }
+
+    fn with_model_signature(signature: ModelSignature) -> Self {
         Self {
             types: signature.types().map(|_| TypeData::new()).collect(),
             relations: signature
@@ -33,7 +60,7 @@ impl Model {
     /// Checks storage dimensions, allocated handles, and representative sets.
     /// Membership and other theory axioms may remain unsatisfied.
     pub(super) fn from_parts(
-        signature: Arc<Signature>,
+        signature: &'static Signature,
         types: Vec<TypeData>,
         relations: Vec<RelationData>,
     ) -> Result<Self, Error> {
@@ -44,7 +71,7 @@ impl Model {
             ));
         }
         let model = Self {
-            signature,
+            signature: ModelSignature::Static(signature),
             types,
             relations,
         };
@@ -98,7 +125,7 @@ impl Model {
     }
 
     /// Returns the model's signature.
-    pub fn signature(&self) -> &Arc<Signature> {
+    pub fn signature(&self) -> &Signature {
         &self.signature
     }
 

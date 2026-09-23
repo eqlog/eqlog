@@ -1,13 +1,11 @@
 //! Generated models need cross-crate access to the runtime's storage.
 
-use std::sync::Arc;
-
 pub use super::data::{RelationData, RelationIndex, TypeData};
 pub use super::table::Table;
 use super::{Error, Model, RelationId, Signature, TypeId};
 
 pub fn from_parts(
-    signature: Arc<Signature>,
+    signature: &'static Signature,
     types: Vec<TypeData>,
     relations: Vec<RelationData>,
 ) -> Result<Model, Error> {

@@ -24,9 +24,24 @@ fn signature(arity: usize, kind: RelationKind) -> Signature {
 }
 
 #[test]
+fn cloned_models_keep_runtime_signatures_alive() {
+    let signature = Arc::new(signature(1, RelationKind::Predicate));
+    let original = Model::with_signature(signature.clone());
+    let mut cloned = original.clone();
+    assert!(std::ptr::eq(original.signature(), cloned.signature()));
+    drop(original);
+    drop(signature);
+
+    let x = cloned.new_element(TypeId(0), &[]).unwrap();
+    cloned.insert(RelationId(0), &[x]).unwrap();
+    assert!(cloned.contains(RelationId(0), &[x]).unwrap());
+    assert_eq!(cloned.signature().type_named("El"), Some(TypeId(0)));
+}
+
+#[test]
 fn arbitrary_arities_keep_stored_rows_after_equality() {
     for arity in 0..=12 {
-        let mut model = Model::new(Arc::new(signature(arity, RelationKind::Predicate)));
+        let mut model = Model::with_signature(Arc::new(signature(arity, RelationKind::Predicate)));
         let x = model.new_element(TypeId(0), &[]).unwrap();
         let y = model.new_element(TypeId(0), &[]).unwrap();
         let left = vec![x; arity];
@@ -56,7 +71,7 @@ fn arbitrary_arities_keep_stored_rows_after_equality() {
 #[test]
 fn mixed_columns_survive_prefix_boundaries_and_equality() {
     for arity in [0, 1, 9, 10, 12] {
-        let mut model = Model::new(Arc::new(signature(arity, RelationKind::Predicate)));
+        let mut model = Model::with_signature(Arc::new(signature(arity, RelationKind::Predicate)));
         let elements: Vec<_> = (0..=arity)
             .map(|_| model.new_element(TypeId(0), &[]).unwrap())
             .collect();
@@ -100,7 +115,7 @@ fn mixed_columns_survive_prefix_boundaries_and_equality() {
 
 #[test]
 fn invalid_operations_return_errors_without_adding_data() {
-    let mut model = Model::new(Arc::new(signature(1, RelationKind::Predicate)));
+    let mut model = Model::with_signature(Arc::new(signature(1, RelationKind::Predicate)));
     let x = model.new_element(TypeId(0), &[]).unwrap();
     let invalid = Element {
         type_: TypeId(0),
@@ -135,7 +150,7 @@ fn invalid_operations_return_errors_without_adding_data() {
 
 #[test]
 fn function_conflicts_are_data_until_an_evaluator_processes_them() {
-    let mut model = Model::new(Arc::new(signature(
+    let mut model = Model::with_signature(Arc::new(signature(
         1,
         RelationKind::Function(FunctionKind::Ordinary),
     )));
@@ -246,7 +261,7 @@ fn nested_signature() -> (Vec<Type>, Vec<Relation>) {
 fn descriptors_support_forward_references_but_reject_invalid_roles() {
     let (types, relations) = nested_signature();
     let signature = Signature::new(types.clone(), relations.clone()).unwrap();
-    let mut model = Model::new(Arc::new(signature));
+    let mut model = Model::with_signature(Arc::new(signature));
     let world = model.new_element(TypeId(2), &[]).unwrap();
     let item = model.new_element(TypeId(0), &[world]).unwrap();
     assert!(model.contains(RelationId(0), &[world, item]).unwrap());
@@ -337,7 +352,7 @@ fn endpoint_lookup_distinguishes_morphism_types_for_the_same_model() {
         }
         relations.push(relation);
     }
-    let mut model = Model::new(Arc::new(Signature::new(types, relations).unwrap()));
+    let mut model = Model::with_signature(Arc::new(Signature::new(types, relations).unwrap()));
     let a = model.new_element(TypeId(2), &[]).unwrap();
     let b = model.new_element(TypeId(2), &[]).unwrap();
     let x = model.new_element(TypeId(0), &[a]).unwrap();
@@ -354,7 +369,7 @@ fn endpoint_lookup_distinguishes_morphism_types_for_the_same_model() {
 fn missing_domain_declarations_are_reported_when_applications_are_used() {
     let (types, mut relations) = nested_signature();
     relations.remove(1);
-    let mut model = Model::new(Arc::new(Signature::new(types, relations).unwrap()));
+    let mut model = Model::with_signature(Arc::new(Signature::new(types, relations).unwrap()));
     let world = model.new_element(TypeId(2), &[]).unwrap();
     let item = model.new_element(TypeId(0), &[world]).unwrap();
     let morphism = model.new_element(TypeId(1), &[]).unwrap();
@@ -374,7 +389,7 @@ fn missing_domain_declarations_are_reported_when_applications_are_used() {
 fn missing_codomain_declarations_do_not_prevent_reading_applications() {
     let (types, mut relations) = nested_signature();
     relations.remove(2);
-    let mut model = Model::new(Arc::new(Signature::new(types, relations).unwrap()));
+    let mut model = Model::with_signature(Arc::new(Signature::new(types, relations).unwrap()));
     let world = model.new_element(TypeId(2), &[]).unwrap();
     let item = model.new_element(TypeId(0), &[world]).unwrap();
     let morphism = model.new_element(TypeId(1), &[]).unwrap();
@@ -422,7 +437,7 @@ fn nested_applications_report_missing_parent_image_declarations_or_values() {
                 parents: vec![],
             });
         }
-        let mut model = Model::new(Arc::new(Signature::new(types, relations).unwrap()));
+        let mut model = Model::with_signature(Arc::new(Signature::new(types, relations).unwrap()));
         let a = model.new_element(TypeId(2), &[]).unwrap();
         let b = model.new_element(TypeId(2), &[]).unwrap();
         let i = model.new_element(TypeId(3), &[a]).unwrap();
@@ -487,7 +502,7 @@ fn enum_and_function_helpers_check_arguments_before_allocating() {
         ],
     )
     .unwrap();
-    let mut model = Model::new(Arc::new(signature));
+    let mut model = Model::with_signature(Arc::new(signature));
     let x = model.new_element(TypeId(0), &[]).unwrap();
     assert_eq!(
         model.new_element(TypeId(1), &[]),

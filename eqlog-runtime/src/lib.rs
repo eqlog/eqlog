@@ -19,7 +19,7 @@
 //!         arity: vec![el, el], parents: vec![],
 //!     }],
 //! )?;
-//! let mut model = Model::new(Arc::new(signature));
+//! let mut model = Model::with_signature(Arc::new(signature));
 //! let x = model.new_element(el, &[])?;
 //! let y = model.new_element(el, &[])?;
 //! model.insert(edge, &[x, y])?;
@@ -67,7 +67,6 @@ pub use signature::{
 };
 
 use std::fmt;
-use std::sync::Arc;
 
 /// An element handle within one structure.
 ///
@@ -89,7 +88,7 @@ pub struct EnumCase {
 /// Implemented by generated models to transfer data without running rules.
 pub trait CompiledModel: Sized {
     /// Returns the shared signature, independent of evaluation mode.
-    fn dynamic_signature() -> Arc<Signature>;
+    fn dynamic_signature() -> &'static Signature;
 
     /// Copies stored data, preserving IDs, equality representatives, and raw rows.
     fn to_dynamic(&self) -> Model;

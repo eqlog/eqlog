@@ -44,6 +44,26 @@ fn round_trip<M: CompiledModel>(source: &M) -> M {
 }
 
 #[test]
+fn compiled_signatures_are_shared_by_models() {
+    let signature: &'static Signature = TransRefl::dynamic_signature();
+    let exported = TransRefl::new().to_dynamic();
+    let constructed = Model::new(signature);
+    let cloned = exported.clone();
+    assert!(std::ptr::eq(signature, TransRefl::dynamic_signature()));
+    for model in [&exported, &constructed, &cloned] {
+        assert!(std::ptr::eq(signature, model.signature()));
+    }
+
+    let mut owned = Model::with_signature(Arc::new(signature.clone()));
+    let type_ = signature.type_named("V").unwrap();
+    let edge = signature.relation_named("edge").unwrap();
+    let x = owned.new_element(type_, &[]).unwrap();
+    owned.insert(edge, &[x, x]).unwrap();
+    let compiled = TransRefl::from_dynamic(&owned).unwrap();
+    assert!(compiled.edge(V(x.index), V(x.index)));
+}
+
+#[test]
 fn dynamic_round_trip_does_not_run_rules() {
     let mut model = TransRefl::new();
     let x = model.new_v();
@@ -748,7 +768,7 @@ fn dynamic_import_requires_the_same_descriptor_order() {
         .collect();
     relations.reverse();
     let reordered = Signature::new(types, relations).unwrap();
-    let dynamic = Model::new(Arc::new(reordered));
+    let dynamic = Model::with_signature(Arc::new(reordered));
     assert_eq!(
         Logic::from_dynamic(&dynamic).err(),
         Some(Error::SignatureMismatch)
