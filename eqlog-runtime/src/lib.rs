@@ -190,7 +190,7 @@ pub use crate::unification::Unification;
 #[doc(hidden)]
 pub use crate::toposort::{morphism_toposort, MorphismWithSignature, ToposortError};
 
-/// Declare an eqlog module.
+/// Declare a compiled Eqlog module.
 ///
 /// # Examples
 ///
