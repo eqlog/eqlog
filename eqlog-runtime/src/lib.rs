@@ -2,8 +2,6 @@
 //!
 //! Create a [`Model`] from a [`Signature`], or use [`CompiledModel`] to
 //! exchange data with generated Rust models.
-//! [`ModelMap`] represents checked homomorphisms; [`find_isomorphism`] and
-//! [`find_isomorphism_under`] compare models and return witnesses.
 //!
 //! ```
 //! use std::sync::Arc;
