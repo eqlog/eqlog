@@ -409,16 +409,16 @@ Import requires matching ordered signatures and treats all imported facts as new
 and explicit for evaluation. Compatible indices share tree nodes, and other
 indices are rebuilt in the column order required by the compiler.
 
-`eqlog_runtime::ModelMap` describes a total, type-preserving homomorphism between
+`eqlog_runtime::ModelHom` describes a total, type-preserving homomorphism between
 two dynamic models with the same ordered signature. Construct one with
-`ModelMap::new(&source, &target, pairs)`, supplying an image for every source
+`ModelHom::new(&source, &target, pairs)`, supplying an image for every source
 equality class. Aliases are accepted, and different source classes can have the
 same image. Construction checks preservation of all relations, including
 function graphs and membership. Maps borrow their endpoints immutably; use
 `apply`, `iter`, `identity`, and `then` to inspect and compose them. `inverse`
 returns a map only when the original is an isomorphism.
 
-`find_isomorphism(&left, &right)` returns an optional `ModelMap` witness. It
+`find_isomorphism(&left, &right)` returns an optional `ModelHom` witness. It
 compares equality classes and canonical tuple sets, ignoring allocation history
 and evaluation bookkeeping without running rules. For maps `f: base -> left`
 and `g: base -> right`, `find_isomorphism_under(&f, &g)` finds a witness `h` such

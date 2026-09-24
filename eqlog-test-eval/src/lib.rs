@@ -47,7 +47,7 @@ mod dynamic_signature_test;
 #[cfg(test)]
 mod dynamic_test;
 #[cfg(test)]
-mod model_map_test;
+mod model_hom_test;
 #[cfg(test)]
 mod eval_func;
 #[cfg(test)]

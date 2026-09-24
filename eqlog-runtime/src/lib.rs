@@ -55,7 +55,7 @@ static TAG: &'static str = concat!("EQLOG_RUNTIME_TAG_", env!("OUT_DIR"));
 
 mod data;
 mod model;
-mod model_map;
+mod model_hom;
 mod signature;
 mod table;
 
@@ -63,7 +63,7 @@ mod table;
 pub mod __private;
 
 pub use model::Model;
-pub use model_map::{find_isomorphism, find_isomorphism_under, ModelMap};
+pub use model_hom::{find_isomorphism, find_isomorphism_under, ModelHom};
 pub use signature::{
     FunctionKind, Relation, RelationId, RelationKind, Signature, Type, TypeId, TypeKind,
 };
@@ -110,7 +110,7 @@ pub enum Error {
     /// Stored indices or vector dimensions are inconsistent.
     InvalidModel(String),
     /// An assignment is not a total model homomorphism, or map endpoints differ.
-    InvalidModelMap(String),
+    InvalidModelHom(String),
     /// The type ID is outside this signature.
     UnknownType(TypeId),
     /// The relation ID is outside this signature.
@@ -146,7 +146,7 @@ impl fmt::Display for Error {
         match self {
             Self::InvalidSignature(message) => write!(f, "invalid signature: {message}"),
             Self::InvalidModel(message) => write!(f, "invalid model: {message}"),
-            Self::InvalidModelMap(message) => write!(f, "invalid model map: {message}"),
+            Self::InvalidModelHom(message) => write!(f, "invalid model homomorphism: {message}"),
             Self::UnknownType(type_) => write!(f, "unknown type {type_:?}"),
             Self::UnknownRelation(relation) => write!(f, "unknown relation {relation:?}"),
             Self::UnknownElement(element) => write!(f, "unknown element {element:?}"),

@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use eqlog_runtime::{
     find_isomorphism, find_isomorphism_under, CompiledModel, Element, Error, FunctionKind, Model,
-    ModelMap, Relation, RelationId, RelationKind, Signature, Type, TypeId, TypeKind,
+    ModelHom, Relation, RelationId, RelationKind, Signature, Type, TypeId, TypeKind,
 };
 
 use crate::trans_refl::TransRefl;
@@ -48,21 +48,21 @@ fn graph(count: usize, edges: &[(usize, usize)]) -> (Model, Vec<Element>) {
     (model, vertices)
 }
 
-fn check_witness(map: &ModelMap<'_>) {
+fn check_witness(map: &ModelHom<'_>) {
     let inverse = map.inverse().unwrap().unwrap();
     let identity = map.then(&inverse).unwrap();
     for (element, image) in identity.iter() {
         assert_eq!(element, image);
     }
-    ModelMap::new(map.source(), map.target(), map.iter()).unwrap();
-    ModelMap::new(inverse.source(), inverse.target(), inverse.iter()).unwrap();
+    ModelHom::new(map.source(), map.target(), map.iter()).unwrap();
+    ModelHom::new(inverse.source(), inverse.target(), inverse.iter()).unwrap();
 }
 
 #[test]
-fn model_maps_validate_totality_types_handles_and_relations() {
+fn model_homs_validate_totality_types_handles_and_relations() {
     let (source, vertices) = graph(2, &[(0, 1)]);
     let (target, images) = graph(2, &[(1, 0)]);
-    let valid = ModelMap::new(
+    let valid = ModelHom::new(
         &source,
         &target,
         [(vertices[0], images[1]), (vertices[1], images[0])],
@@ -70,19 +70,19 @@ fn model_maps_validate_totality_types_handles_and_relations() {
     .unwrap();
     assert_eq!(valid.apply(vertices[0]).unwrap(), images[1]);
     check_witness(&valid);
-    assert!(ModelMap::new(&source, &target, [(vertices[0], images[1])]).is_err());
-    assert!(ModelMap::new(&source, &target, vertices.iter().copied().zip(images)).is_err());
+    assert!(ModelHom::new(&source, &target, [(vertices[0], images[1])]).is_err());
+    assert!(ModelHom::new(&source, &target, vertices.iter().copied().zip(images)).is_err());
     let unknown = Element {
         type_: TypeId(0),
         index: 100,
     };
     assert_eq!(valid.apply(unknown), Err(Error::UnknownElement(unknown)));
     assert_eq!(
-        ModelMap::new(&source, &target, [(vertices[0], unknown)]).err(),
+        ModelHom::new(&source, &target, [(vertices[0], unknown)]).err(),
         Some(Error::UnknownElement(unknown))
     );
     assert_eq!(
-        ModelMap::new(&source, &target, [(unknown, vertices[0])]).err(),
+        ModelHom::new(&source, &target, [(unknown, vertices[0])]).err(),
         Some(Error::UnknownElement(unknown))
     );
 
@@ -104,7 +104,7 @@ fn model_maps_validate_totality_types_handles_and_relations() {
     let a = model.new_element(TypeId(0), &[]).unwrap();
     let b = model.new_element(TypeId(1), &[]).unwrap();
     assert_eq!(
-        ModelMap::new(&model, &model, [(a, b), (b, a)]).err(),
+        ModelHom::new(&model, &model, [(a, b), (b, a)]).err(),
         Some(Error::TypeMismatch {
             expected: TypeId(0),
             actual: TypeId(1),
@@ -118,12 +118,12 @@ fn model_maps_validate_totality_types_handles_and_relations() {
 }
 
 #[test]
-fn model_maps_normalize_aliases_without_running_rules() {
+fn model_homs_normalize_aliases_without_running_rules() {
     let (mut source, vertices) = graph(3, &[(1, 2), (0, 2)]);
     source.equate(&[], vertices[0], vertices[1]).unwrap();
     let (mut target, images) = graph(3, &[(2, 0)]);
     target.equate(&[], images[1], images[2]).unwrap();
-    let map = ModelMap::new(
+    let map = ModelHom::new(
         &source,
         &target,
         [
@@ -146,7 +146,7 @@ fn model_maps_normalize_aliases_without_running_rules() {
             .unwrap()
             .unwrap(),
     );
-    assert!(ModelMap::new(
+    assert!(ModelHom::new(
         &source,
         &target,
         [
@@ -164,10 +164,10 @@ fn model_maps_normalize_aliases_without_running_rules() {
 }
 
 #[test]
-fn model_maps_can_collapse_elements_but_bijections_must_reflect_relations() {
+fn model_homs_can_collapse_elements_but_bijections_must_reflect_relations() {
     let (source, vertices) = graph(2, &[(0, 1)]);
     let (target, images) = graph(1, &[(0, 0)]);
-    let quotient = ModelMap::new(
+    let quotient = ModelHom::new(
         &source,
         &target,
         vertices.iter().map(|&element| (element, images[0])),
@@ -177,20 +177,20 @@ fn model_maps_can_collapse_elements_but_bijections_must_reflect_relations() {
     assert!(find_isomorphism(&source, &target).unwrap().is_none());
 
     let (extended, extra) = graph(2, &[(0, 1), (1, 0)]);
-    let bijection = ModelMap::new(&source, &extended, vertices.iter().copied().zip(extra)).unwrap();
+    let bijection = ModelHom::new(&source, &extended, vertices.iter().copied().zip(extra)).unwrap();
     assert!(bijection.inverse().unwrap().is_none());
     assert!(find_isomorphism(&source, &extended).unwrap().is_none());
 
     let (isolated, isolated_vertices) = graph(2, &[]);
     let (singleton, singleton_vertices) = graph(1, &[]);
-    let inclusion = ModelMap::new(
+    let inclusion = ModelHom::new(
         &singleton,
         &isolated,
         [(singleton_vertices[0], isolated_vertices[0])],
     )
     .unwrap();
     assert!(inclusion.inverse().unwrap().is_none());
-    let identity = ModelMap::identity(&isolated);
+    let identity = ModelHom::identity(&isolated);
     assert_eq!(
         inclusion
             .then(&identity)
@@ -200,7 +200,7 @@ fn model_maps_can_collapse_elements_but_bijections_must_reflect_relations() {
         inclusion.iter().collect::<Vec<_>>()
     );
     let other = isolated.clone();
-    assert!(inclusion.then(&ModelMap::identity(&other)).is_err());
+    assert!(inclusion.then(&ModelHom::identity(&other)).is_err());
 }
 
 #[test]
@@ -213,13 +213,13 @@ fn isomorphisms_under_a_base_respect_labels_and_identifications() {
     right
         .equate(&[], right_vertices[2], right_vertices[1])
         .unwrap();
-    let left_map = ModelMap::new(
+    let left_map = ModelHom::new(
         &base,
         &left,
         base_vertices.iter().copied().zip(left_vertices),
     )
     .unwrap();
-    let right_map = ModelMap::new(
+    let right_map = ModelHom::new(
         &base,
         &right,
         base_vertices
@@ -238,7 +238,7 @@ fn isomorphisms_under_a_base_respect_labels_and_identifications() {
             right_map.apply(element).unwrap()
         );
     }
-    let different_kernel = ModelMap::new(
+    let different_kernel = ModelHom::new(
         &base,
         &right,
         base_vertices.iter().copied().zip(right_vertices),
@@ -254,7 +254,7 @@ fn isomorphisms_under_a_base_respect_labels_and_identifications() {
 
     let (labels, label_vertices) = graph(2, &[]);
     let (ordered, ordered_vertices) = graph(2, &[(0, 1)]);
-    let forward = ModelMap::new(
+    let forward = ModelHom::new(
         &labels,
         &ordered,
         label_vertices
@@ -263,7 +263,7 @@ fn isomorphisms_under_a_base_respect_labels_and_identifications() {
             .zip(ordered_vertices.iter().copied()),
     )
     .unwrap();
-    let reverse = ModelMap::new(
+    let reverse = ModelHom::new(
         &labels,
         &ordered,
         label_vertices
@@ -277,7 +277,7 @@ fn isomorphisms_under_a_base_respect_labels_and_identifications() {
         .unwrap()
         .is_none());
     let other_base = labels.clone();
-    let other_map = ModelMap::new(
+    let other_map = ModelHom::new(
         &other_base,
         &ordered,
         label_vertices.iter().copied().zip(ordered_vertices),
@@ -291,8 +291,8 @@ fn isomorphisms_under_a_base_extend_the_specified_images() {
     let (base, base_vertices) = graph(1, &[]);
     let (left, a) = graph(4, &[(0, 1), (1, 2), (2, 0)]);
     let (right, b) = graph(4, &[(1, 2), (2, 3), (3, 1)]);
-    let to_left = ModelMap::new(&base, &left, [(base_vertices[0], a[0])]).unwrap();
-    let to_right = ModelMap::new(&base, &right, [(base_vertices[0], b[2])]).unwrap();
+    let to_left = ModelHom::new(&base, &left, [(base_vertices[0], a[0])]).unwrap();
+    let to_right = ModelHom::new(&base, &right, [(base_vertices[0], b[2])]).unwrap();
     let iso = find_isomorphism_under(&to_left, &to_right)
         .unwrap()
         .unwrap();
@@ -303,8 +303,8 @@ fn isomorphisms_under_a_base_extend_the_specified_images() {
     assert_eq!(iso.apply(a[3]).unwrap(), b[0]);
 
     let (empty, _) = graph(0, &[]);
-    let empty_to_left = ModelMap::new(&empty, &left, []).unwrap();
-    let empty_to_right = ModelMap::new(&empty, &right, []).unwrap();
+    let empty_to_left = ModelHom::new(&empty, &left, []).unwrap();
+    let empty_to_right = ModelHom::new(&empty, &right, []).unwrap();
     check_witness(
         &find_isomorphism_under(&empty_to_left, &empty_to_right)
             .unwrap()
@@ -319,8 +319,8 @@ fn isomorphism_search_handles_empty_carriers_and_nullary_relations() {
     check_witness(&find_isomorphism(&source, &target).unwrap().unwrap());
     source.insert(RelationId(0), &[]).unwrap();
     assert!(find_isomorphism(&source, &target).unwrap().is_none());
-    assert!(ModelMap::new(&source, &target, []).is_err());
-    assert!(ModelMap::new(&target, &source, [])
+    assert!(ModelHom::new(&source, &target, []).is_err());
+    assert!(ModelHom::new(&target, &source, [])
         .unwrap()
         .inverse()
         .unwrap()
@@ -343,7 +343,7 @@ fn isomorphism_search_requires_matching_ordered_signatures() {
         Some(Error::SignatureMismatch)
     );
     assert_eq!(
-        ModelMap::new(&left, &right, []).err(),
+        ModelHom::new(&left, &right, []).err(),
         Some(Error::SignatureMismatch)
     );
 }
@@ -450,7 +450,7 @@ fn isomorphism_search_preserves_relation_names_columns_and_repeated_arguments() 
 }
 
 #[test]
-fn model_maps_preserve_membership_and_function_graphs() {
+fn model_homs_preserve_membership_and_function_graphs() {
     let owner = TypeId(0);
     let member = TypeId(1);
     let signature = Arc::new(
@@ -500,12 +500,12 @@ fn model_maps_preserve_membership_and_function_graphs() {
     check_witness(&iso);
     assert_eq!(iso.apply(a).unwrap(), c);
     assert_eq!(iso.apply(x).unwrap(), u);
-    assert!(ModelMap::new(&left, &right, [(a, c), (b, d), (x, v), (y, u)]).is_err());
-    assert!(ModelMap::new(&left, &right, [(a, d), (b, c), (x, v), (y, u)]).is_err());
+    assert!(ModelHom::new(&left, &right, [(a, c), (b, d), (x, v), (y, u)]).is_err());
+    assert!(ModelHom::new(&left, &right, [(a, d), (b, c), (x, v), (y, u)]).is_err());
 }
 
 #[test]
-fn model_maps_compare_compiled_snapshots_under_their_input() {
+fn model_homs_compare_compiled_snapshots_under_their_input() {
     let mut base = Model::new(TransRefl::dynamic_signature());
     let type_ = base.signature().type_named("V").unwrap();
     let edge = base.signature().relation_named("edge").unwrap();
@@ -516,7 +516,7 @@ fn model_maps_compare_compiled_snapshots_under_their_input() {
     compiled.close();
     let result = compiled.to_dynamic();
     let imported = TransRefl::from_dynamic(&result).unwrap().to_dynamic();
-    let left = ModelMap::new(&base, &result, [(a, a), (b, b)]).unwrap();
-    let right = ModelMap::new(&base, &imported, [(a, a), (b, b)]).unwrap();
+    let left = ModelHom::new(&base, &result, [(a, a), (b, b)]).unwrap();
+    let right = ModelHom::new(&base, &imported, [(a, a), (b, b)]).unwrap();
     check_witness(&find_isomorphism_under(&left, &right).unwrap().unwrap());
 }

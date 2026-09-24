@@ -9,17 +9,17 @@ use super::{Element, Error, Model, RelationId};
 /// Models must have the same ordered signature. Immutable endpoint borrows keep
 /// the checked assignment valid for the lifetime of the map.
 #[derive(Clone, Debug)]
-pub struct ModelMap<'a> {
+pub struct ModelHom<'a> {
     source: &'a Model,
     target: &'a Model,
     images: BTreeMap<Element, Element>,
 }
 
-impl<'a> ModelMap<'a> {
+impl<'a> ModelHom<'a> {
     /// Checks an assignment, accepting aliases in either endpoint.
     ///
     /// Every source equality class must have an image. Repeated assignments must
-    /// agree modulo target equality. Returns [`Error::InvalidModelMap`] for
+    /// agree modulo target equality. Returns [`Error::InvalidModelHom`] for
     /// missing or conflicting images or a relation that is not preserved.
     pub fn new(
         source: &'a Model,
@@ -39,7 +39,7 @@ impl<'a> ModelMap<'a> {
             }
             if let Some(previous) = canonical.insert(element, image) {
                 if previous != image {
-                    return Err(Error::InvalidModelMap(format!(
+                    return Err(Error::InvalidModelHom(format!(
                         "conflicting images for {element:?}"
                     )));
                 }
@@ -48,7 +48,7 @@ impl<'a> ModelMap<'a> {
         for (type_, _) in source.signature().types() {
             for element in source.elements(type_)? {
                 if !canonical.contains_key(&element) {
-                    return Err(Error::InvalidModelMap(format!(
+                    return Err(Error::InvalidModelHom(format!(
                         "missing image for {element:?}"
                     )));
                 }
@@ -59,7 +59,7 @@ impl<'a> ModelMap<'a> {
             for row in normalized_tuples(source, relation)? {
                 let image: Vec<_> = row.iter().map(|element| canonical[element]).collect();
                 if !target_rows.contains(&image) {
-                    return Err(Error::InvalidModelMap(format!(
+                    return Err(Error::InvalidModelHom(format!(
                         "relation {relation:?} is not preserved at {row:?}"
                     )));
                 }
@@ -113,7 +113,7 @@ impl<'a> ModelMap<'a> {
     /// The intermediate endpoint must be the same model instance.
     pub fn then(&self, next: &Self) -> Result<Self, Error> {
         if !std::ptr::eq(self.target, next.source) {
-            return Err(Error::InvalidModelMap(
+            return Err(Error::InvalidModelHom(
                 "composition requires the same intermediate model".into(),
             ));
         }
@@ -173,7 +173,7 @@ impl<'a> ModelMap<'a> {
 pub fn find_isomorphism<'a>(
     source: &'a Model,
     target: &'a Model,
-) -> Result<Option<ModelMap<'a>>, Error> {
+) -> Result<Option<ModelHom<'a>>, Error> {
     find_with_pairs(source, target, &[])
 }
 
@@ -185,7 +185,7 @@ pub fn find_isomorphism<'a>(
 /// ```
 /// use std::sync::Arc;
 /// use eqlog_runtime::{
-///     find_isomorphism_under, Model, ModelMap, Signature, Type, TypeId, TypeKind,
+///     find_isomorphism_under, Model, ModelHom, Signature, Type, TypeId, TypeKind,
 /// };
 ///
 /// let signature = Arc::new(Signature::new(vec![Type {
@@ -198,19 +198,19 @@ pub fn find_isomorphism<'a>(
 /// left.equate(&[], a, b)?;
 /// let mut right = Model::with_signature(signature);
 /// let c = right.new_element(TypeId(0), &[])?;
-/// let to_left = ModelMap::new(&base, &left, [(a, a), (b, b)])?;
-/// let to_right = ModelMap::new(&base, &right, [(a, c), (b, c)])?;
+/// let to_left = ModelHom::new(&base, &left, [(a, a), (b, b)])?;
+/// let to_right = ModelHom::new(&base, &right, [(a, c), (b, c)])?;
 /// let iso = find_isomorphism_under(&to_left, &to_right)?.unwrap();
 /// assert_eq!(iso.apply(b)?, c);
 /// assert!(iso.inverse()?.is_some());
 /// # Ok::<(), eqlog_runtime::Error>(())
 /// ```
 pub fn find_isomorphism_under<'a>(
-    left: &ModelMap<'a>,
-    right: &ModelMap<'a>,
-) -> Result<Option<ModelMap<'a>>, Error> {
+    left: &ModelHom<'a>,
+    right: &ModelHom<'a>,
+) -> Result<Option<ModelHom<'a>>, Error> {
     if !std::ptr::eq(left.source, right.source) {
-        return Err(Error::InvalidModelMap(
+        return Err(Error::InvalidModelHom(
             "comparison under a base requires the same source model".into(),
         ));
     }
@@ -318,7 +318,7 @@ fn find_with_pairs<'a>(
     source: &'a Model,
     target: &'a Model,
     pairs: &[(Element, Element)],
-) -> Result<Option<ModelMap<'a>>, Error> {
+) -> Result<Option<ModelHom<'a>>, Error> {
     check_signatures(source, target)?;
     let left = Structure::new(source)?;
     let right = Structure::new(target)?;
@@ -361,7 +361,7 @@ fn find_with_pairs<'a>(
         right_colors[right.indices[&image]] = color;
     }
     Ok(
-        search(&left, &right, left_colors, right_colors).map(|images| ModelMap {
+        search(&left, &right, left_colors, right_colors).map(|images| ModelHom {
             source,
             target,
             images: left
