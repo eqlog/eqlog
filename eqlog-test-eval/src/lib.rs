@@ -36,8 +36,11 @@ eqlog_mod!(diagonal_canonicalization);
 eqlog_mod!(morphism_helper_names);
 eqlog_mod!(morphism_preservation);
 eqlog_mod!(member_parents);
+eqlog_mod!(canonicalization);
 
 mod category_mod;
+#[cfg(test)]
+mod canonicalization_test;
 #[cfg(test)]
 mod diagonal_canonicalization_test;
 #[cfg(test)]
@@ -46,6 +49,8 @@ mod distr_lattice_test;
 mod dynamic_signature_test;
 #[cfg(test)]
 mod dynamic_test;
+#[cfg(test)]
+mod model_hom_test;
 #[cfg(test)]
 mod eval_func;
 #[cfg(test)]

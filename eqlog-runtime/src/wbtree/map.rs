@@ -3,7 +3,7 @@ use std::fmt;
 use std::mem;
 use std::rc::Rc;
 
-use crate::PrefixTree2;
+use crate::{Error, Fuel, PrefixTree2};
 
 #[derive(Clone)]
 pub struct WBTreeMap<V: Clone> {
@@ -839,6 +839,44 @@ impl<V: Clone> WBTreeMap<V> {
             current: Some(&self.root),
             current_mappings: Vec::new(),
         }
+    }
+
+    pub(crate) fn iteration_work(
+        &self,
+        fuel: &mut Fuel,
+        value_work: fn(&V, &mut Fuel) -> Result<u64, Error>,
+    ) -> Result<u64, Error> {
+        let mut work = 1u64;
+        let mut pending = vec![(&self.root, 0u64)];
+        while let Some((node, mapping_work)) = pending.pop() {
+            fuel.consume(1)?;
+            if let Some(node) = node {
+                match node.as_ref() {
+                    Node::Data(data) => {
+                        work = work
+                            .saturating_add(1)
+                            .saturating_add(mapping_work)
+                            .saturating_add(value_work(&data.value, fuel)?);
+                        pending.push((&data.left, mapping_work));
+                        pending.push((&data.right, mapping_work));
+                    }
+                    Node::Mapping(mapping) => {
+                        // Full mapping traversal bounds a lookup, including nested
+                        // mappings. Filtered keys still cost work to visit.
+                        let lookup_work = mapping.mapping.map.iteration_work(fuel, |row, fuel| {
+                            fuel.consume(1)?;
+                            Ok((row.set.len() as u64).saturating_add(1))
+                        })?;
+                        let mapping_work = mapping_work
+                            .saturating_add(lookup_work)
+                            .saturating_add(1);
+                        work = work.saturating_add(1);
+                        pending.push((&mapping.child, mapping_work));
+                    }
+                }
+            }
+        }
+        Ok(work)
     }
 
     pub fn iter_mut<'a>(&'a mut self) -> IterMut<'a, V> {

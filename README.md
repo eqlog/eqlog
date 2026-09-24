@@ -377,6 +377,16 @@ runtime arity dispatch for relation tables. It keeps old/new partitions and
 records ownership in membership relations. It does not evaluate rules or rewrite
 relation rows when elements are equated.
 
+Both dynamic and compiled models provide `canonicalize()`. It rewrites relation
+tuples to their equality representatives and removes duplicates without running
+rules or enforcing function axioms. Existing element handles remain valid.
+Changed old facts become new so later rule evaluation can find newly enabled
+matches; unchanged old facts stay old, and pending new facts remain pending
+unless already present in old. Repeated calls preserve this pending work, so
+`canonicalize()` can be interleaved with external edits and `close()` calls.
+Compiled models also refresh their generated query indices, including shared
+model views. Dynamic models expose `is_canonical()` to check this state.
+
 Use `eval` and `define` for function evaluation and definition, and `are_equal`
 to compare elements. Create enum elements with `new_enum` and an `EnumCase`, or
 with `define` on a constructor. Inspect their constructors with `cases` or `case`.
@@ -408,6 +418,36 @@ Export shares prefix-tree nodes and deeply copies union-find and weight vectors.
 Import requires matching ordered signatures and treats all imported facts as new
 and explicit for evaluation. Compatible indices share tree nodes, and other
 indices are rebuilt in the column order required by the compiler.
+
+`eqlog_runtime::ModelHom` describes a total, type-preserving homomorphism between
+two dynamic models with the same ordered signature. Construct one with
+`ModelHom::new(&source, &target, pairs)`, supplying an image for every source
+equality class. Aliases are accepted, and different source classes can have the
+same image. Construction checks preservation of all relations, including
+function graphs and membership. Maps borrow their endpoints immutably; use
+`apply`, `iter`, `identity`, and `then` to inspect and compose them. `inverse`
+returns a map only when the original is an isomorphism.
+
+`find_isomorphism(&left, &right, Fuel::Infinite)` returns an optional `ModelHom`
+witness. Both inputs must already be canonical: call `canonicalize()` first if
+needed. Search compares equality classes and relation tuples, ignoring
+allocation history and evaluation bookkeeping. For maps
+`f: base -> left` and `g: base -> right`,
+`find_isomorphism_under(&f, &g, Fuel::Infinite)` finds a
+witness `h` such that `f.then(&h)` agrees with `g`. The base must be the same model
+instance, and the maps can be non-injective. Canonicalize their targets before
+constructing the maps. Both search functions return `Error::NonCanonicalModel`
+for noncanonical inputs and errors for incompatible signatures or invalid
+endpoints. Search uses color refinement and backtracking and can take factorial
+time on difficult inputs.
+
+Both search functions take an `eqlog_runtime::Fuel` budget. Use
+`Fuel::Finite(100_000)` to bound work, including indexing input facts, processing
+the base maps, refinement, and all backtracking branches. Fuel estimates
+elementary work according to data sizes, including sorting and tuple widths;
+it is not a wall-clock duration, and its units may change with the implementation. An
+insufficient budget returns `Error::FuelExhausted`, while `Ok(None)` means the
+search established that no isomorphism exists. `Fuel::Infinite` removes the limit.
 
 The [runtime crate](eqlog-runtime/src/lib.rs) documents the public API,
 including constructing a signature without the compiler, parent chains, and
