@@ -1,0 +1,32 @@
+model World {
+    model Fiber {
+        type El;
+        pred marked(El);
+        pred edge(El, El);
+        func next(El) -> El;
+
+        rule follow {
+            if marked(x);
+            if edge(x, y);
+            then marked(y);
+        }
+    }
+
+    rule fiber_images {
+        if h: Mor(Fiber);
+        if fiber = dom(h);
+        if x: fiber.El;
+        if cod(h)!;
+        then h.El(x)!;
+    }
+}
+
+rule world_images {
+    if h: Mor(World);
+    if world = dom(h);
+    if fiber: world.Fiber;
+    if x: fiber.El;
+    if cod(h)!;
+    then h.Fiber(fiber)!;
+    then h.Fiber.El(x)!;
+}

@@ -1,6 +1,5 @@
 use std::env;
 use std::fs;
-use std::io::ErrorKind;
 use std::path::PathBuf;
 
 use eqlog::{CompileOptions, Config, EvaluationMode, ModelMode};
@@ -26,23 +25,26 @@ fn main() -> eqlog::Result<()> {
     println!("cargo:rerun-if-changed=theories.rs");
     println!("cargo:rerun-if-changed=corpus");
     println!("cargo:rerun-if-env-changed=EQLOG_OPT_CASE");
+    println!("cargo:rustc-check-cfg=cfg(eqlog_opt_replay)");
     let seed = setting("EQLOG_OPT_THEORY_SEED", 0);
     let count = setting("EQLOG_OPT_THEORIES", 2);
     let out = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo sets OUT_DIR"));
     let mut cases = Vec::new();
     if let Some(path) = env::var_os("EQLOG_OPT_CASE") {
+        println!("cargo:rustc-cfg=eqlog_opt_replay");
         let path = fs::canonicalize(path)?;
         let display = path.display();
         println!("cargo:rerun-if-changed={display}");
-        cases.push(("replay".to_owned(), fs::read_to_string(path)?, None));
+        cases.push(("replay".to_owned(), fs::read_to_string(path)?, false));
     } else {
+        assert!(count > 0, "the random suite needs at least one theory seed");
         for i in 0..count {
             let seed = seed.wrapping_add(i);
             for indexed in [false, true] {
                 cases.push((
                     format!("generated_{seed}_{indexed}"),
                     theories::generate(seed, indexed),
-                    None,
+                    false,
                 ));
             }
         }
@@ -53,12 +55,7 @@ fn main() -> eqlog::Result<()> {
         for path in paths {
             if path.extension().is_some_and(|ext| ext == "eql") {
                 let name = path.file_stem().unwrap().to_str().unwrap().to_owned();
-                let trace = match fs::read_to_string(path.with_extension("json")) {
-                    Ok(trace) => Some(trace),
-                    Err(error) if error.kind() == ErrorKind::NotFound => None,
-                    Err(error) => return Err(error.into()),
-                };
-                cases.push((name, fs::read_to_string(path)?, trace));
+                cases.push((name, fs::read_to_string(path)?, true));
             }
         }
     }
@@ -68,8 +65,9 @@ fn main() -> eqlog::Result<()> {
     );
     let mut modules = String::new();
     let mut registrations = Vec::new();
-    for (i, (name, source, trace)) in cases.iter().enumerate() {
+    for (i, (name, source, authored)) in cases.iter().enumerate() {
         let mut variants = Vec::new();
+        let mut test_calls = Vec::new();
         for (mode, (evaluation_mode, model_mode)) in [
             (EvaluationMode::Naive, ModelMode::Desugared),
             (EvaluationMode::SemiNaive, ModelMode::Desugared),
@@ -113,11 +111,23 @@ fn main() -> eqlog::Result<()> {
             "});
             let name = format!("{evaluation_mode:?}/{model_mode:?}");
             variants.push(format!("Variant {{ name: {name:?}, create: create::<{module}::{model}>, signature: {module}::{model}::dynamic_signature() }}"));
+            test_calls.push(format!(
+                "$test!($crate::tests::{module}::{model} $(, $argument)*)"
+            ));
         }
-        let variants = variants.join(",\n");
-        registrations.push(format!(
-            "Case {{ name: {name:?}, source: {source:?}, trace: {trace:?}, variants: [{variants}] }}"
-        ));
+        if *authored {
+            let test_calls = test_calls.join(",\n");
+            modules.push_str(&formatdoc! {"
+                macro_rules! {name}_variants {{
+                    ($test:ident $(, $argument:expr)*) => {{ [{test_calls}] }};
+                }}
+            "});
+        } else {
+            let variants = variants.join(",\n");
+            registrations.push(format!(
+                "Case {{ name: {name:?}, source: {source:?}, variants: [{variants}] }}"
+            ));
+        }
     }
     let registrations = registrations.join(",\n");
     modules.push_str(&formatdoc! {"

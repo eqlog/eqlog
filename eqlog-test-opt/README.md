@@ -1,97 +1,79 @@
-This crate compares the closures produced by all four combinations of naive or
-semi-naive evaluation and native or desugared model morphisms. Run it with:
+This crate compares naive/semi-naive evaluation and native/desugared model
+morphisms, using all four compiler configurations.
 
 ```sh
 cargo test -p eqlog-test-opt
 ```
 
-The default suite compiles four random theories (two seeds, each with a flat and
-an indexed version) and the `.eql` files in `corpus/`. Each theory gets four
-random operation sequences, each with five rounds of edits and closure. The
-same trace runs independently against each compilation. The test compares
-after every closure, including an initial empty closure and repeated closures.
-Paired corpus `.json` traces also run, ensuring their intended interactions
-remain covered regardless of random inputs.
+The authored cases are ordinary Rust tests in `src/authored.rs`, paired with
+Eqlog theories in `corpus/`. They call generated setters and make explicit
+assertions about results. Each test body runs against all four compilations;
+closures are also compared up to isomorphism under the supplied inputs,
+including morphisms and members allocated in later rounds.
+The compiled models stay alive across every round.
 
-The comparison uses `find_isomorphism_under` with the model of supplied inputs
-as its common base. An arbitrary isomorphism would be too weak: it could swap
-two distinct inputs to disguise a wrong answer. Allocation and function
-definition operations produce symbolic handles, resolved separately in each
-execution. Thus later edits can use old aliases or function results even when
-compilations allocate different IDs or identify different elements. Each
-compiled model stays alive across the whole trace, retaining its old/new
-partitions and auxiliary indices. Runtime-typed edits dispatch to its generated
-setters after validation on a snapshot; importing that snapshot would instead
-mark every fact new and mask incremental evaluation bugs. The next round never
-restarts from the inputs or copies the reference closure.
+The cases cover:
 
-"Random" here means seeded pseudorandom sampling from an explicit, restricted
-distribution, not uniform sampling over all Eqlog programs. `theories.rs`
-samples one to three sorts, three to six predicates of arity zero to three,
-and four to nine rules. Rules sample typed variables, one to three predicate
-premises, optional function lookups, and predicate or equality conclusions.
-Repeated variables, disconnected joins, and recursive predicate dependencies
-are possible. Each sort also has a unary partial function. The indexed version
-puts the declarations and rules inside a model and adds image-creation rules.
-Rules never create ordinary function results, so these theories have finite
-closure over finite inputs and acyclic morphisms.
+- A late gate enabling a join through previously merged function results.
+- A diamond of morphisms whose target images and function results merge,
+  followed by equalities between intermediate models and parallel morphisms.
+- Nested model and member images, with new facts and members arriving after
+  both the inner and outer morphisms have already been evaluated.
+- Random graphs on three to six models, including chains, diamonds, and
+  parallel arrows. Morphisms start with only a domain; codomains and partial,
+  possibly non-injective image maps arrive after closure. Later rounds add
+  members, facts, and equalities. Assertions check membership, predicate
+  preservation, and preservation of functions.
 
-`src/trace.rs` samples well-typed allocations, relation and function-graph
-insertions, definitions, equalities, duplicate insertions, and explicit
-canonicalization. Every declared input relation is scheduled for insertion in
-a randomly chosen round. Each round adds eight to sixteen random edits, with insertion
-weighted twice as heavily as each other available action. Indexed traces have
-three model instances and up to three morphisms with strictly increasing
-endpoints; image operations include both definitions and supplied images.
-Only members of the same parent context are equated. This prevents cycles and
-keeps operations valid under the homomorphisms into every evaluated model.
-Enums, nested models, model equalities, and arbitrary dependent signatures are
-outside this first generator's scope. Unsupported shapes fail explicitly.
+The morphism graph test uses sixteen input seeds by default. Its random
+choices are in the Rust test itself. Increasing model indices orient the
+arrows acyclically, which keeps image creation finite and respects the native
+morphism evaluator's requirement. The graph shape, edge insertion order,
+carrier sizes, and image assignments vary by seed.
 
-Theory generation happens during the Cargo build because Eqlog emits Rust.
-Input generation happens during the test, so exploring more inputs is cheap:
+There is also a separate theory generator in `theories.rs`. It samples one to
+three sorts, three to six predicates of arity zero to three, and four to nine
+rules with typed joins, function lookups, and predicate/equality conclusions.
+Each seed produces a flat theory and a version inside a model with image
+creation rules. Ordinary rules create no elements. This generator still has
+a restricted grammar; enums and arbitrary nested theories are outside it.
+
+These generated theories receive random edit sequences from `src/trace.rs`.
+The comparison preserves every supplied symbolic input, including handles
+returned by function definitions. Runtime-typed edits call generated setters
+in place, retaining old/new facts and auxiliary indices. The default is two
+theory seeds, four input seeds, and five rounds per generated theory.
+
+To explore more inputs or new theories:
 
 ```sh
 EQLOG_OPT_INPUT_SEED=100 EQLOG_OPT_TRACES=100 cargo test -p eqlog-test-opt
 EQLOG_OPT_THEORY_SEED=42 EQLOG_OPT_THEORIES=4 cargo test -p eqlog-test-opt
 ```
 
-`EQLOG_OPT_ROUNDS` changes the number of rounds per trace. Seeds and counts are
-decimal unsigned integers. Defaults are deterministic for routine CI. For fresh
-campaigns, draw a seed from the OS, retain it in the job log, and rebuild:
+The input seed and trace count also control the randomized morphism graph
+test. `EQLOG_OPT_ROUNDS` controls the generated edit sequences. Defaults are
+reproducible. For a fresh theory seed from the OS:
 
 ```sh
 seed=$(od -An -N8 -tu8 /dev/urandom | tr -d ' ')
-echo "Theory and input seed: $seed"
-EQLOG_OPT_THEORY_SEED="$seed" EQLOG_OPT_INPUT_SEED="$seed" cargo test -p eqlog-test-opt
+echo "Theory seed: $seed"
+EQLOG_OPT_THEORY_SEED="$seed" cargo test -p eqlog-test-opt
 ```
 
-The generator uses the pinned `rand` version in Cargo.lock. Exact sources and
-traces are the durable reproduction format across generator changes. On an
-evaluation or comparison failure, the test writes `case.eql` and `trace.json`
-under `target/eqlog-opt-failures/` and prints a replay command:
+Failing generated edit sequences save their exact theory and a machine-readable
+trace under `target/eqlog-opt-failures/`, with a replay command:
 
 ```sh
 EQLOG_OPT_CASE=/absolute/path/case.eql EQLOG_OPT_TRACE=/absolute/path/trace.json \
     cargo test -p eqlog-test-opt optimization_equivalence
 ```
 
-The JSON array is also editable for manual reduction. New/Define operations
-append a handle; other operations reference zero-based handle slots. Replay
-requires a final Close operation. Compiler failures report the generated
-source path under Cargo's build output. Closure has a 512-iteration budget and
-comparison has 50 million units of search fuel (`EQLOG_OPT_FUEL` overrides it).
-Exhaustion fails the test with a separate
-diagnostic; it is never accepted as equivalence. The iteration limit cannot
-interrupt an individual rule evaluation; use a process timeout for campaigns
-with untrusted or much larger corpus entries. Automated shrinking and hard
-per-case process limits are future work.
+JSON is only a failure/replay format for generated edit sequences. Authored
+cases use Rust tests. Random morphism graph failures print their input seed;
+rerun that test with `EQLOG_OPT_INPUT_SEED` set to it and `EQLOG_OPT_TRACES=1`.
 
-The LLM contribution lives in a reviewed, checked-in corpus, not an API call
-during tests. `corpus/README.md` records the scenarios and a recipe for adding
-diverse cases. Random input traces already vary each corpus theory. The two
-sources complement each other: a model can propose purposeful feature
-interactions, while classical generation explores syntax and data without
-depending on a model's tendency to repeat familiar examples. Neither source
-is an independent semantics oracle; agreement between implementations can
-still miss a shared compiler bug.
+Closure has a 512-iteration budget and isomorphism search has 50 million units
+of fuel (`EQLOG_OPT_FUEL` overrides it). Exhaustion fails explicitly. The
+iteration budget cannot interrupt a single rule evaluation. Automated
+shrinking and hard per-case process limits are not implemented.

@@ -102,11 +102,14 @@ struct Variant {
 struct Case {
     name: &'static str,
     source: &'static str,
-    trace: Option<&'static str>,
     variants: [Variant; 4],
 }
 
 include!(concat!(env!("OUT_DIR"), "/cases.rs"));
+
+#[cfg(not(eqlog_opt_replay))]
+#[path = "authored.rs"]
+mod authored;
 
 fn setting(name: &str, default: u64) -> u64 {
     env::var_os(name)
@@ -214,13 +217,6 @@ fn optimization_equivalence() {
         "the optimization suite must exercise inputs"
     );
     for case in &cases {
-        if let Some(trace) = case.trace {
-            run_checked(
-                case,
-                "corpus",
-                &serde_json::from_str::<Vec<Op>>(trace).unwrap(),
-            );
-        }
         for offset in 0..count {
             let seed = seed.wrapping_add(offset);
             let name = case.name;
