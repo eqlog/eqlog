@@ -224,8 +224,8 @@ pub fn find_isomorphism<'a>(
 /// elements, but an isomorphism exists only if they identify the same pairs.
 /// Both target models must be canonicalized before constructing the maps;
 /// otherwise returns [`Error::NonCanonicalModel`].
-/// The fuel budget also covers processing the base maps. Exhaustion returns
-/// [`Error::FuelExhausted`]; `Ok(None)` means no compatible isomorphism exists.
+/// Exhaustion returns [`Error::FuelExhausted`]; `Ok(None)` means no compatible
+/// isomorphism exists.
 ///
 /// ```
 /// use std::sync::Arc;
