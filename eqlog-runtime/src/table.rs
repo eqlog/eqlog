@@ -1,4 +1,4 @@
-use super::Error;
+use super::{Error, Fuel};
 use crate::wbtree::map::WBTreeMap;
 use crate::{
     PrefixTree0, PrefixTree1, PrefixTree2, PrefixTree3, PrefixTree4, PrefixTree5, PrefixTree6,
@@ -9,6 +9,52 @@ use crate::{
 /// Cloning shares tree nodes until either copy is modified.
 #[derive(Clone, Debug)]
 pub struct Table(Rows);
+
+trait IterationWork {
+    fn iteration_work(&self, fuel: &mut Fuel) -> Result<u64, Error>;
+}
+
+impl IterationWork for PrefixTree0 {
+    fn iteration_work(&self, fuel: &mut Fuel) -> Result<u64, Error> {
+        fuel.consume(1)?;
+        Ok(1)
+    }
+}
+
+impl IterationWork for PrefixTree1 {
+    fn iteration_work(&self, fuel: &mut Fuel) -> Result<u64, Error> {
+        fuel.consume(1)?;
+        Ok((self.set.len() as u64).saturating_add(1))
+    }
+}
+
+macro_rules! iteration_work {
+    ($($tree:ident),* $(,)?) => {
+        $(impl IterationWork for $tree {
+            fn iteration_work(&self, fuel: &mut Fuel) -> Result<u64, Error> {
+                self.map.iteration_work(fuel, IterationWork::iteration_work)
+            }
+        })*
+    };
+}
+
+iteration_work! {
+    PrefixTree2, PrefixTree3, PrefixTree4, PrefixTree5, PrefixTree6,
+    PrefixTree7, PrefixTree8, PrefixTree9,
+}
+
+impl Table {
+    pub(crate) fn prepay_iteration(&self, fuel: &mut Fuel) -> Result<(), Error> {
+        match fuel {
+            Fuel::Infinite => Ok(()),
+            Fuel::Finite(_) => {
+                // Logical rows omit empty branches and keys hidden by lazy mappings.
+                let work = self.iteration_work(fuel)?;
+                fuel.consume(work)
+            }
+        }
+    }
+}
 
 macro_rules! conversions {
     ([$($previous:ident,)*];) => {};
@@ -40,6 +86,18 @@ macro_rules! table {
         enum Rows {
             $($variant($tree),)*
             Long { arity: usize, rows: WBTreeMap<Table> },
+        }
+
+        impl IterationWork for Table {
+            fn iteration_work(&self, fuel: &mut Fuel) -> Result<u64, Error> {
+                fuel.consume(1)?;
+                match &self.0 {
+                    $(Rows::$variant(tree) => tree.iteration_work(fuel),)*
+                    Rows::Long { arity: _, rows } => {
+                        rows.iteration_work(fuel, IterationWork::iteration_work)
+                    }
+                }
+            }
         }
 
         impl Table {

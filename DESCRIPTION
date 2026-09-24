@@ -11,3 +11,8 @@ Use joint color refinement and backtracking to find type-preserving
 bijections that preserve and reflect all relations, including function
 graphs and membership. Keep homomorphisms tied to immutable model
 borrows so their validation cannot become stale.
+
+Accept explicit finite or infinite fuel for both isomorphism searches
+so callers can bound expensive comparisons. Account for preprocessing,
+refinement, and backtracking work by data size, and report exhaustion
+separately from a completed search that finds no isomorphism.

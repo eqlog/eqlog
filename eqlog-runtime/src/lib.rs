@@ -63,7 +63,7 @@ mod table;
 pub mod __private;
 
 pub use model::Model;
-pub use model_hom::{find_isomorphism, find_isomorphism_under, ModelHom};
+pub use model_hom::{find_isomorphism, find_isomorphism_under, Fuel, ModelHom};
 pub use signature::{
     FunctionKind, Relation, RelationId, RelationKind, Signature, Type, TypeId, TypeKind,
 };
@@ -102,7 +102,7 @@ pub trait CompiledModel: Sized {
     fn from_dynamic(model: &Model) -> Result<Self, Error>;
 }
 
-/// Invalid descriptors, handles, or mutations. An error leaves model data unchanged.
+/// Invalid data or operations, or exhausted search fuel. Model data is unchanged.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
     /// Descriptors violate the structural requirements of [`Signature::new`].
@@ -111,6 +111,8 @@ pub enum Error {
     InvalidModel(String),
     /// An assignment is not a total model homomorphism, or map endpoints differ.
     InvalidModelHom(String),
+    /// Isomorphism search exhausted its work budget before reaching a conclusion.
+    FuelExhausted,
     /// The type ID is outside this signature.
     UnknownType(TypeId),
     /// The relation ID is outside this signature.
@@ -147,6 +149,7 @@ impl fmt::Display for Error {
             Self::InvalidSignature(message) => write!(f, "invalid signature: {message}"),
             Self::InvalidModel(message) => write!(f, "invalid model: {message}"),
             Self::InvalidModelHom(message) => write!(f, "invalid model homomorphism: {message}"),
+            Self::FuelExhausted => write!(f, "isomorphism search fuel exhausted"),
             Self::UnknownType(type_) => write!(f, "unknown type {type_:?}"),
             Self::UnknownRelation(relation) => write!(f, "unknown relation {relation:?}"),
             Self::UnknownElement(element) => write!(f, "unknown element {element:?}"),

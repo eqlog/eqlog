@@ -418,14 +418,23 @@ function graphs and membership. Maps borrow their endpoints immutably; use
 `apply`, `iter`, `identity`, and `then` to inspect and compose them. `inverse`
 returns a map only when the original is an isomorphism.
 
-`find_isomorphism(&left, &right)` returns an optional `ModelHom` witness. It
-compares equality classes and canonical tuple sets, ignoring allocation history
-and evaluation bookkeeping without running rules. For maps `f: base -> left`
-and `g: base -> right`, `find_isomorphism_under(&f, &g)` finds a witness `h` such
-that `f.then(&h)` agrees with `g`. The base must be the same model instance, and
-the maps can be non-injective. Both search functions return errors for
-incompatible signatures or invalid endpoints. Search uses color refinement and
-backtracking and can take factorial time on difficult inputs.
+`find_isomorphism(&left, &right, Fuel::Infinite)` returns an optional `ModelHom`
+witness. It compares equality classes and canonical tuple sets, ignoring
+allocation history and evaluation bookkeeping without running rules. For maps
+`f: base -> left` and `g: base -> right`,
+`find_isomorphism_under(&f, &g, Fuel::Infinite)` finds a
+witness `h` such that `f.then(&h)` agrees with `g`. The base must be the same model
+instance, and the maps can be non-injective. Both search functions return errors
+for incompatible signatures or invalid endpoints. Search uses color refinement
+and backtracking and can take factorial time on difficult inputs.
+
+Both search functions take an `eqlog_runtime::Fuel` budget. Use
+`Fuel::Finite(100_000)` to bound work, including normalization, processing the
+base maps, refinement, and all backtracking branches. Fuel estimates elementary
+work according to data sizes, including sorting and tuple widths; it is not a
+wall-clock duration, and its units may change with the implementation. An
+insufficient budget returns `Error::FuelExhausted`, while `Ok(None)` means the
+search established that no isomorphism exists. `Fuel::Infinite` removes the limit.
 
 The [runtime crate](eqlog-runtime/src/lib.rs) documents the public API,
 including constructing a signature without the compiler, parent chains, and

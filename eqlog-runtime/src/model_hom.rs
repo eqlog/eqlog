@@ -2,6 +2,42 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::{Element, Error, Model, RelationId};
 
+/// A work budget for isomorphism search, including input normalization.
+///
+/// Finite fuel estimates elementary work, accounting for input sizes, sorting,
+/// refinement, and backtracking. It roughly bounds runtime, rather than counting
+/// only search nodes. Units are implementation-dependent, not elapsed time.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Fuel {
+    /// Search without a work limit.
+    Infinite,
+    /// Stop with [`Error::FuelExhausted`] when this work budget is insufficient.
+    Finite(u64),
+}
+
+impl Fuel {
+    pub(crate) fn consume(&mut self, work: u64) -> Result<(), Error> {
+        match self {
+            Self::Infinite => Ok(()),
+            Self::Finite(remaining) => {
+                if *remaining < work {
+                    return Err(Error::FuelExhausted);
+                }
+                *remaining -= work;
+                Ok(())
+            }
+        }
+    }
+}
+
+fn tree_work(len: usize) -> u64 {
+    u64::from(len.checked_ilog2().unwrap_or(0)) + 1
+}
+
+fn sort_work(len: usize) -> u64 {
+    (len as u64).saturating_mul(tree_work(len))
+}
+
 /// A total, type-preserving homomorphism between two dynamic models.
 ///
 /// Maps act on equality classes and preserve every relation, including function
@@ -26,7 +62,7 @@ impl<'a> ModelHom<'a> {
         target: &'a Model,
         images: impl IntoIterator<Item = (Element, Element)>,
     ) -> Result<Self, Error> {
-        check_signatures(source, target)?;
+        check_signatures(source, target, &mut Fuel::Infinite)?;
         let mut canonical = BTreeMap::new();
         for (element, image) in images {
             let element = source.root(element)?;
@@ -55,8 +91,8 @@ impl<'a> ModelHom<'a> {
             }
         }
         for (relation, _) in source.signature().relations() {
-            let target_rows = normalized_tuples(target, relation)?;
-            for row in normalized_tuples(source, relation)? {
+            let target_rows = normalized_tuples(target, relation, &mut Fuel::Infinite)?;
+            for row in normalized_tuples(source, relation, &mut Fuel::Infinite)? {
                 let image: Vec<_> = row.iter().map(|element| canonical[element]).collect();
                 if !target_rows.contains(&image) {
                     return Err(Error::InvalidModelHom(format!(
@@ -146,8 +182,8 @@ impl<'a> ModelHom<'a> {
         // A bijection already preserves relations, so equal finite cardinalities
         // ensure that no target facts are missing from its image.
         for (relation, _) in self.source.signature().relations() {
-            if normalized_tuples(self.source, relation)?.len()
-                != normalized_tuples(self.target, relation)?.len()
+            if normalized_tuples(self.source, relation, &mut Fuel::Infinite)?.len()
+                != normalized_tuples(self.target, relation, &mut Fuel::Infinite)?.len()
             {
                 return Ok(None);
             }
@@ -170,22 +206,28 @@ impl<'a> ModelHom<'a> {
 /// [`Error::SignatureMismatch`] if signatures differ. The witness is
 /// deterministic but not necessarily unique. Search uses color refinement and
 /// backtracking; highly symmetric inputs can require factorial time.
+/// [`Fuel::Finite`] bounds the work across preprocessing and all search branches.
+/// Exhaustion returns [`Error::FuelExhausted`], not `Ok(None)`. Use
+/// [`Fuel::Infinite`] for an unbounded search.
 pub fn find_isomorphism<'a>(
     source: &'a Model,
     target: &'a Model,
+    fuel: Fuel,
 ) -> Result<Option<ModelHom<'a>>, Error> {
-    find_with_pairs(source, target, &[])
+    find_with_pairs(source, target, &[], fuel)
 }
 
 /// Finds `h: left.target() -> right.target()` with `left.then(h) = right`.
 ///
 /// Both maps must have the same source model instance. They may identify base
 /// elements, but an isomorphism exists only if they identify the same pairs.
+/// The fuel budget also covers processing the base maps. Exhaustion returns
+/// [`Error::FuelExhausted`]; `Ok(None)` means no compatible isomorphism exists.
 ///
 /// ```
 /// use std::sync::Arc;
 /// use eqlog_runtime::{
-///     find_isomorphism_under, Model, ModelHom, Signature, Type, TypeId, TypeKind,
+///     find_isomorphism_under, Fuel, Model, ModelHom, Signature, Type, TypeId, TypeKind,
 /// };
 ///
 /// let signature = Arc::new(Signature::new(vec![Type {
@@ -200,7 +242,7 @@ pub fn find_isomorphism<'a>(
 /// let c = right.new_element(TypeId(0), &[])?;
 /// let to_left = ModelHom::new(&base, &left, [(a, a), (b, b)])?;
 /// let to_right = ModelHom::new(&base, &right, [(a, c), (b, c)])?;
-/// let iso = find_isomorphism_under(&to_left, &to_right)?.unwrap();
+/// let iso = find_isomorphism_under(&to_left, &to_right, Fuel::Finite(100_000))?.unwrap();
 /// assert_eq!(iso.apply(b)?, c);
 /// assert!(iso.inverse()?.is_some());
 /// # Ok::<(), eqlog_runtime::Error>(())
@@ -208,31 +250,92 @@ pub fn find_isomorphism<'a>(
 pub fn find_isomorphism_under<'a>(
     left: &ModelHom<'a>,
     right: &ModelHom<'a>,
+    mut fuel: Fuel,
 ) -> Result<Option<ModelHom<'a>>, Error> {
     if !std::ptr::eq(left.source, right.source) {
         return Err(Error::InvalidModelHom(
             "comparison under a base requires the same source model".into(),
         ));
     }
+    fuel.consume(sort_work(left.images.len()))?;
     let pairs: Vec<_> = left
         .iter()
         .map(|(element, image)| (image, right.images[&element]))
         .collect();
-    find_with_pairs(left.target, right.target, &pairs)
+    find_with_pairs(left.target, right.target, &pairs, fuel)
 }
 
-fn check_signatures(source: &Model, target: &Model) -> Result<(), Error> {
+fn check_signatures(source: &Model, target: &Model, fuel: &mut Fuel) -> Result<(), Error> {
+    fuel.consume(1)?;
+    if std::ptr::eq(source.signature(), target.signature()) {
+        return Ok(());
+    }
+    for signature in [source.signature(), target.signature()] {
+        for (_, type_) in signature.types() {
+            fuel.consume(
+                1u64.saturating_add(type_.name.len() as u64)
+                    .saturating_add(type_.parents.len() as u64),
+            )?;
+        }
+        for (_, relation) in signature.relations() {
+            fuel.consume(
+                1u64.saturating_add(relation.name.len() as u64)
+                    .saturating_add(relation.parents.len() as u64)
+                    .saturating_add(relation.arity.len() as u64),
+            )?;
+        }
+    }
     if source.signature() != target.signature() {
         return Err(Error::SignatureMismatch);
     }
     Ok(())
 }
 
-fn normalized_tuples(model: &Model, relation: RelationId) -> Result<BTreeSet<Vec<Element>>, Error> {
-    model
-        .tuples(relation)?
-        .map(|row| row.into_iter().map(|element| model.root(element)).collect())
-        .collect()
+fn normalized_tuples(
+    model: &Model,
+    relation: RelationId,
+    fuel: &mut Fuel,
+) -> Result<BTreeSet<Vec<Element>>, Error> {
+    let width = model.signature().relation(relation)?.arity.len() as u64;
+    let row_work = width
+        .saturating_add(1)
+        .saturating_mul(width.saturating_add(1));
+    fuel.consume(row_work)?;
+    let data = model.relation_data(relation)?;
+    data.new.table.prepay_iteration(fuel)?;
+    data.old.table.prepay_iteration(fuel)?;
+    let mut rows = model.tuples(relation)?;
+    let mut normalized = BTreeSet::new();
+    loop {
+        // Wide prefix-tree rows can take quadratic work to materialize.
+        fuel.consume(row_work)?;
+        let Some(row) = rows.next() else {
+            break;
+        };
+        fuel.consume(
+            width
+                .saturating_add(1)
+                .saturating_mul(tree_work(normalized.len())),
+        )?;
+        let mut canonical = Vec::with_capacity(row.len());
+        for mut element in row {
+            let equalities = &model.type_data(element.type_)?.equalities;
+            if element.index as usize >= equalities.len() {
+                return Err(Error::UnknownElement(element));
+            }
+            loop {
+                fuel.consume(1)?;
+                let parent = equalities.parent(element.index);
+                if parent == element.index {
+                    break;
+                }
+                element.index = parent;
+            }
+            canonical.push(element);
+        }
+        normalized.insert(canonical);
+    }
+    Ok(normalized)
 }
 
 struct Structure {
@@ -240,14 +343,18 @@ struct Structure {
     indices: BTreeMap<Element, usize>,
     relations: Vec<Vec<Vec<usize>>>,
     incidences: Vec<Vec<(usize, usize, usize)>>,
+    refinement_work: u64,
 }
 
 impl Structure {
-    fn new(model: &Model) -> Result<Self, Error> {
+    fn new(model: &Model, fuel: &mut Fuel) -> Result<Self, Error> {
         let mut elements = Vec::new();
         for (type_, _) in model.signature().types() {
+            let data = model.type_data(type_)?;
+            fuel.consume(1 + data.new.set.len() as u64 + data.old.set.len() as u64)?;
             elements.extend(model.elements(type_)?);
         }
+        fuel.consume(sort_work(elements.len()).saturating_mul(3))?;
         elements.sort_unstable();
         let indices: BTreeMap<_, _> = elements
             .iter()
@@ -257,7 +364,16 @@ impl Structure {
         let mut relations = Vec::new();
         let mut incidences = vec![Vec::new(); elements.len()];
         for (relation, _) in model.signature().relations() {
-            let rows: Vec<Vec<_>> = normalized_tuples(model, relation)?
+            let normalized = normalized_tuples(model, relation, fuel)?;
+            let width = model.signature().relation(relation)?.arity.len() as u64;
+            fuel.consume(
+                (normalized.len() as u64).saturating_mul(
+                    width
+                        .saturating_add(1)
+                        .saturating_mul(tree_work(elements.len())),
+                ),
+            )?;
+            let rows: Vec<Vec<_>> = normalized
                 .into_iter()
                 .map(|row| row.iter().map(|element| indices[element]).collect())
                 .collect();
@@ -268,11 +384,31 @@ impl Structure {
             }
             relations.push(rows);
         }
+        // Prepay each refinement round by the size of its keys and comparisons,
+        // so a single search node cannot hide arbitrarily large work.
+        let mut refinement_work = sort_work(elements.len())
+            .saturating_mul(4)
+            .saturating_add(1);
+        for entries in &incidences {
+            let mut key_work = 1u64;
+            let mut max_width = 1u64;
+            for &(relation, row, _) in entries {
+                let width = 3 + relations[relation][row].len() as u64;
+                key_work = key_work.saturating_add(width);
+                max_width = max_width.max(width);
+            }
+            refinement_work = refinement_work
+                .saturating_add(
+                    key_work.saturating_mul(tree_work(elements.len().saturating_mul(2))),
+                )
+                .saturating_add(sort_work(entries.len()).saturating_mul(max_width));
+        }
         Ok(Self {
             elements,
             indices,
             relations,
             incidences,
+            refinement_work,
         })
     }
 
@@ -297,18 +433,29 @@ impl Structure {
             .collect()
     }
 
-    fn preserves_relations(&self, target: &Self, images: &[usize]) -> bool {
-        self.relations
-            .iter()
-            .zip(&target.relations)
-            .all(|(source_rows, target_rows)| {
-                let mut mapped: Vec<Vec<_>> = source_rows
-                    .iter()
-                    .map(|row| row.iter().map(|&element| images[element]).collect())
-                    .collect();
-                mapped.sort_unstable();
-                mapped == *target_rows
-            })
+    fn preserves_relations(
+        &self,
+        target: &Self,
+        images: &[usize],
+        fuel: &mut Fuel,
+    ) -> Result<bool, Error> {
+        for (source_rows, target_rows) in self.relations.iter().zip(&target.relations) {
+            let width = source_rows.first().map_or(0, Vec::len) as u64;
+            fuel.consume(
+                sort_work(source_rows.len())
+                    .saturating_mul(width.saturating_add(1))
+                    .saturating_add(1),
+            )?;
+            let mut mapped: Vec<Vec<_>> = source_rows
+                .iter()
+                .map(|row| row.iter().map(|&element| images[element]).collect())
+                .collect();
+            mapped.sort_unstable();
+            if mapped != *target_rows {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 }
 
@@ -318,10 +465,12 @@ fn find_with_pairs<'a>(
     source: &'a Model,
     target: &'a Model,
     pairs: &[(Element, Element)],
+    mut fuel: Fuel,
 ) -> Result<Option<ModelHom<'a>>, Error> {
-    check_signatures(source, target)?;
-    let left = Structure::new(source)?;
-    let right = Structure::new(target)?;
+    check_signatures(source, target, &mut fuel)?;
+    let left = Structure::new(source, &mut fuel)?;
+    let right = Structure::new(target, &mut fuel)?;
+    fuel.consume(left.relations.len() as u64)?;
     if left.elements.len() != right.elements.len()
         || left
             .relations
@@ -331,6 +480,7 @@ fn find_with_pairs<'a>(
     {
         return Ok(None);
     }
+    fuel.consume((left.elements.len() as u64).saturating_mul(2))?;
     let mut left_colors: Vec<_> = left
         .elements
         .iter()
@@ -344,6 +494,7 @@ fn find_with_pairs<'a>(
     let mut forward = BTreeMap::new();
     let mut backward = BTreeMap::new();
     for &(element, image) in pairs {
+        fuel.consume(tree_work(forward.len()).saturating_mul(2))?;
         if let Some(previous) = forward.insert(element, image) {
             if previous != image {
                 return Ok(None);
@@ -355,23 +506,31 @@ fn find_with_pairs<'a>(
             }
         }
     }
+    fuel.consume(
+        (forward.len() as u64)
+            .saturating_mul(tree_work(left.elements.len()))
+            .saturating_mul(2),
+    )?;
     for (label, (element, image)) in forward.into_iter().enumerate() {
         let color = source.signature().types().len() + label;
         left_colors[left.indices[&element]] = color;
         right_colors[right.indices[&image]] = color;
     }
-    Ok(
-        search(&left, &right, left_colors, right_colors).map(|images| ModelHom {
-            source,
-            target,
-            images: left
-                .elements
-                .iter()
-                .zip(images)
-                .map(|(&element, image)| (element, right.elements[image]))
-                .collect(),
-        }),
-    )
+    let images = search(&left, &right, left_colors, right_colors, &mut fuel)?;
+    let Some(images) = images else {
+        return Ok(None);
+    };
+    fuel.consume(sort_work(left.elements.len()))?;
+    Ok(Some(ModelHom {
+        source,
+        target,
+        images: left
+            .elements
+            .iter()
+            .zip(images)
+            .map(|(&element, image)| (element, right.elements[image]))
+            .collect(),
+    }))
 }
 
 fn search(
@@ -379,8 +538,10 @@ fn search(
     right: &Structure,
     mut left_colors: Vec<usize>,
     mut right_colors: Vec<usize>,
-) -> Option<Vec<usize>> {
+    fuel: &mut Fuel,
+) -> Result<Option<Vec<usize>>, Error> {
     loop {
+        fuel.consume(left.refinement_work.saturating_add(right.refinement_work))?;
         let previous_count = left_colors.iter().copied().collect::<BTreeSet<_>>().len();
         // A shared palette makes colors comparable between the two structures.
         let mut palette = BTreeMap::new();
@@ -407,7 +568,7 @@ fn search(
             right_counts[color] += 1;
         }
         if left_counts != right_counts {
-            return None;
+            return Ok(None);
         }
         if palette.len() == previous_count {
             break;
@@ -424,18 +585,20 @@ fn search(
     if let Some((&color, elements)) = ambiguous {
         let next_color = classes.len();
         for (image, &candidate_color) in right_colors.iter().enumerate() {
+            fuel.consume(1)?;
             if candidate_color != color {
                 continue;
             }
+            fuel.consume((left_colors.len() as u64).saturating_mul(2))?;
             let mut next_left = left_colors.clone();
             let mut next_right = right_colors.clone();
             next_left[elements[0]] = next_color;
             next_right[image] = next_color;
-            if let Some(images) = search(left, right, next_left, next_right) {
-                return Some(images);
+            if let Some(images) = search(left, right, next_left, next_right, fuel)? {
+                return Ok(Some(images));
             }
         }
-        return None;
+        return Ok(None);
     }
     let by_color: BTreeMap<_, _> = right_colors
         .iter()
@@ -443,5 +606,7 @@ fn search(
         .map(|(element, &color)| (color, element))
         .collect();
     let images: Vec<_> = left_colors.iter().map(|color| by_color[color]).collect();
-    left.preserves_relations(right, &images).then_some(images)
+    Ok(left
+        .preserves_relations(right, &images, fuel)?
+        .then_some(images))
 }
