@@ -8,8 +8,8 @@ renaming cannot hide differences in their consequences.
 Exercise authored scenarios through Rust tests using generated setters
 and explicit assertions. Cover joins through merged witnesses, diamonds
 of morphisms, equal models and parallel morphisms, and nested images.
-Randomize morphism graphs, partial and non-injective maps, and edits
-between closures to expose propagation and equality interactions.
+Vary model instances and morphisms, partial and non-injective maps, and
+edits between closures to expose propagation and equality interactions.
 
 Also generate finite, typed random theories and independent seeded edit
 sequences. Preserve each variant's evaluation partitions between rounds
@@ -19,25 +19,3 @@ Dispatch runtime-typed edits to generated setters in place, after
 validating on a snapshot. Keep compiled instances alive across the
 whole operation trace so importing all facts as new cannot mask
 incremental evaluation bugs.
-
-Provide checked model homomorphisms and isomorphism witnesses on
-equality classes so evaluation strategies can be compared despite
-different element allocation and index layouts. Support comparison
-under a common base even when its elements become identified during
-evaluation.
-
-Expose canonicalization on dynamic and compiled models so equality
-updates can be applied without running rules or losing pending work.
-Preserve existing handles and old/new partitions, promoting rewritten
-old facts to new. Refresh generated query indices and shared views.
-
-Require canonicalized inputs for isomorphism search. Use joint color
-refinement and backtracking to find type-preserving bijections that
-preserve and reflect all relations, including function graphs and
-membership. Keep homomorphisms tied to immutable model borrows so
-their validation cannot become stale.
-
-Accept explicit finite or infinite fuel for both isomorphism searches
-so callers can bound expensive comparisons. Account for input indices,
-refinement, and backtracking work by data size, and report exhaustion
-separately from a completed search that finds no isomorphism.
