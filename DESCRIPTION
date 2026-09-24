@@ -1,4 +1,22 @@
-Compare dynamic models up to isomorphism
+Compare optimized closures on generated theories
+
+Exercise all four combinations of naive/semi-naive evaluation and
+native/desugared morphisms against the same reproducible inputs. Anchor
+isomorphism comparisons to supplied inputs after every closure so a
+renaming cannot hide differences in their consequences.
+
+Combine finite, typed random theories with an LLM-authored corpus of
+feature interactions. Generate independent seeded edit sequences with
+multiple closure rounds, aliases, function definitions and graph
+collisions, and acyclic morphisms. Preserve each variant's evaluation
+partitions between rounds and save exact sources and symbolic JSON
+traces for replay. Document the sampling distribution, supported
+fragment, termination bounds, and a diversity-driven corpus workflow.
+
+Dispatch runtime-typed edits to generated setters in place, after
+validating on a snapshot. Keep compiled instances alive across the
+whole operation trace so importing all facts as new cannot mask
+incremental evaluation bugs.
 
 Provide checked model homomorphisms and isomorphism witnesses on
 equality classes so evaluation strategies can be compared despite

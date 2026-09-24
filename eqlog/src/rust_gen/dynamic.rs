@@ -312,6 +312,117 @@ impl DynamicContext<'_> {
             "}
         })
     }
+
+    fn arguments(&self, types: &[TypeId], slice: &str) -> String {
+        types
+            .iter()
+            .enumerate()
+            .map(|(i, &typ)| {
+                let camel = self.ctx.type_name(typ).to_case(Case::UpperCamel);
+                format!("{camel}({slice}[{i}].index)")
+            })
+            .join(", ")
+    }
+
+    fn edits(&self) -> impl Display + '_ {
+        FmtFn(move |f| {
+            // Validate on an exported snapshot so errors cannot partially mutate
+            // the evaluator. Dispatch to setters to retain its incremental state.
+            writedoc! {f, "
+                fn new_element(&mut self, type_: eqlog_runtime::TypeId, parents: &[eqlog_runtime::Element])
+                    -> std::result::Result<eqlog_runtime::Element, eqlog_runtime::Error>
+                {{
+                    <Self as eqlog_runtime::CompiledModel>::to_dynamic(self).new_element(type_, parents)?;
+                    match type_.0 {{
+            "}?;
+            for typ in self.ctx.signature().iter_types() {
+                match self.ctx.signature().type_(typ).kind {
+                    TypeKind::Enum => continue,
+                    TypeKind::Plain | TypeKind::Model | TypeKind::Mor(_) => {}
+                }
+                let id = self.types[&typ];
+                let snake = self.ctx.type_name(typ).to_case(Case::Snake);
+                let parents = self.arguments(&self.ctx.signature().type_(typ).parents, "parents");
+                writeln!(f, "{id} => Ok(eqlog_runtime::Element {{ type_, index: self.new_{snake}({parents}).0 }}),")?;
+            }
+            writedoc! {f, "
+                        _ => unreachable!(\"validated non-enum type\"),
+                    }}
+                }}
+
+                fn insert(&mut self, relation: eqlog_runtime::RelationId, tuple: &[eqlog_runtime::Element])
+                    -> std::result::Result<bool, eqlog_runtime::Error>
+                {{
+                    let _changed = <Self as eqlog_runtime::CompiledModel>::to_dynamic(self).insert(relation, tuple)?;
+                    match relation.0 {{
+            "}?;
+            for (id, rel) in iter_flat_rels(self.ctx.signature()).enumerate() {
+                let name = self.ctx.rel_name(rel).to_case(Case::Snake);
+                let arguments = self.arguments(rel.arity(self.ctx.signature()).as_ref(), "tuple");
+                writeln!(
+                    f,
+                    "{id} => {{ self.insert_{name}({arguments}); Ok(_changed) }},"
+                )?;
+            }
+            writedoc! {f, "
+                        _ => unreachable!(\"validated relation\"),
+                    }}
+                }}
+
+                fn define(&mut self, function: eqlog_runtime::RelationId, arguments: &[eqlog_runtime::Element])
+                    -> std::result::Result<eqlog_runtime::Element, eqlog_runtime::Error>
+                {{
+                    <Self as eqlog_runtime::CompiledModel>::to_dynamic(self).define(function, arguments)?;
+                    match function.0 {{
+            "}?;
+            for (id, rel) in iter_flat_rels(self.ctx.signature()).enumerate() {
+                let func = match rel {
+                    FlatRel::Func(func) => func,
+                    FlatRel::Pred(_) | FlatRel::ModelMember(_) => continue,
+                };
+                if !self.ctx.function_can_be_made_defined(func) {
+                    continue;
+                }
+                let descriptor = self.ctx.signature().func(func);
+                let name = self.ctx.rel_name(rel).to_case(Case::Snake);
+                let arity = rel.arity(self.ctx.signature());
+                let arguments = self.arguments(&arity[..arity.len() - 1], "arguments");
+                let type_ = self.type_(descriptor.codomain);
+                writedoc! {f, "
+                    {id} => Ok(eqlog_runtime::Element {{
+                        type_: {type_}, index: self.define_{name}({arguments}).0,
+                    }}),
+                "}?;
+            }
+            writedoc! {f, "
+                        _ => unreachable!(\"validated function\"),
+                    }}
+                }}
+
+                fn equate(&mut self, parents: &[eqlog_runtime::Element], lhs: eqlog_runtime::Element, rhs: eqlog_runtime::Element)
+                    -> std::result::Result<bool, eqlog_runtime::Error>
+                {{
+                    let _changed = <Self as eqlog_runtime::CompiledModel>::to_dynamic(self).equate(parents, lhs, rhs)?;
+                    match lhs.type_.0 {{
+            "}?;
+            for typ in self.ctx.signature().iter_types() {
+                let id = self.types[&typ];
+                let camel = self.ctx.type_name(typ).to_case(Case::UpperCamel);
+                let snake = self.ctx.type_name(typ).to_case(Case::Snake);
+                let mut arguments =
+                    self.arguments(&self.ctx.signature().type_(typ).parents, "parents");
+                if !arguments.is_empty() {
+                    arguments.push_str(", ");
+                }
+                writeln!(f, "{id} => {{ self.equate_{snake}({arguments}{camel}(lhs.index), {camel}(rhs.index)); Ok(_changed) }},")?;
+            }
+            writedoc! {f, "
+                        _ => unreachable!(\"validated element type\"),
+                    }}
+                }}
+            "}
+        })
+    }
 }
 
 pub(super) fn display_dynamic_impl<'a>(
@@ -333,12 +444,14 @@ pub(super) fn display_dynamic_impl<'a>(
         let signature = dynamic.signature();
         let export = dynamic.export();
         let import = dynamic.import();
+        let edits = dynamic.edits();
         writedoc! {f, "
             #[allow(unused_mut)]
             impl eqlog_runtime::CompiledModel for {name} {{
                 {signature}
                 {export}
                 {import}
+                {edits}
             }}
         "}
     })
