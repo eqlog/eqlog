@@ -2,6 +2,8 @@
 //!
 //! Create a [`Model`] from a [`Signature`], or use [`CompiledModel`] to
 //! exchange data with generated Rust models.
+//! [`ModelMap`] represents checked homomorphisms; [`find_isomorphism`] and
+//! [`find_isomorphism_under`] compare models and return witnesses.
 //!
 //! ```
 //! use std::sync::Arc;
@@ -55,6 +57,7 @@ static TAG: &'static str = concat!("EQLOG_RUNTIME_TAG_", env!("OUT_DIR"));
 
 mod data;
 mod model;
+mod model_map;
 mod signature;
 mod table;
 
@@ -62,6 +65,7 @@ mod table;
 pub mod __private;
 
 pub use model::Model;
+pub use model_map::{find_isomorphism, find_isomorphism_under, ModelMap};
 pub use signature::{
     FunctionKind, Relation, RelationId, RelationKind, Signature, Type, TypeId, TypeKind,
 };
@@ -107,6 +111,8 @@ pub enum Error {
     InvalidSignature(String),
     /// Stored indices or vector dimensions are inconsistent.
     InvalidModel(String),
+    /// An assignment is not a total model homomorphism, or map endpoints differ.
+    InvalidModelMap(String),
     /// The type ID is outside this signature.
     UnknownType(TypeId),
     /// The relation ID is outside this signature.
@@ -131,7 +137,7 @@ pub enum Error {
     UndefinedFunction(RelationId),
     /// No stored constructor case was found for the element.
     NoEnumCase(Element),
-    /// Import requires the same ordered signature as the generated model.
+    /// Model conversion and comparison require the same ordered signature.
     SignatureMismatch,
     /// Allocation would exceed the union-find's supported element count.
     ElementLimit,
@@ -142,6 +148,7 @@ impl fmt::Display for Error {
         match self {
             Self::InvalidSignature(message) => write!(f, "invalid signature: {message}"),
             Self::InvalidModel(message) => write!(f, "invalid model: {message}"),
+            Self::InvalidModelMap(message) => write!(f, "invalid model map: {message}"),
             Self::UnknownType(type_) => write!(f, "unknown type {type_:?}"),
             Self::UnknownRelation(relation) => write!(f, "unknown relation {relation:?}"),
             Self::UnknownElement(element) => write!(f, "unknown element {element:?}"),
@@ -164,7 +171,7 @@ impl fmt::Display for Error {
                 write!(f, "required function is undefined: {relation:?}")
             }
             Self::NoEnumCase(element) => write!(f, "no enum case found for {element:?}"),
-            Self::SignatureMismatch => write!(f, "dynamic and compiled signatures differ"),
+            Self::SignatureMismatch => write!(f, "model signatures differ"),
             Self::ElementLimit => write!(f, "element ID space exhausted"),
         }
     }

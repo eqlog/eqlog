@@ -1,0 +1,12 @@
+Compare dynamic models up to isomorphism
+
+Provide checked model maps and isomorphism witnesses on equality classes
+so evaluation strategies can be compared despite different element
+allocation and index layouts. Support comparison under a common base
+even when its elements become identified during evaluation.
+
+Normalize relation tuples without mutating models or running rules.
+Use joint color refinement and backtracking to find type-preserving
+bijections that preserve and reflect all relations, including function
+graphs and membership. Keep maps tied to immutable model borrows so
+their validation cannot become stale.
