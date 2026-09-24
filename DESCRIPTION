@@ -6,13 +6,18 @@ different element allocation and index layouts. Support comparison
 under a common base even when its elements become identified during
 evaluation.
 
-Normalize relation tuples without mutating models or running rules.
-Use joint color refinement and backtracking to find type-preserving
-bijections that preserve and reflect all relations, including function
-graphs and membership. Keep homomorphisms tied to immutable model
-borrows so their validation cannot become stale.
+Expose canonicalization on dynamic and compiled models so equality
+updates can be applied without running rules or losing pending work.
+Preserve existing handles and old/new partitions, promoting rewritten
+old facts to new. Refresh generated query indices and shared views.
+
+Require canonicalized inputs for isomorphism search. Use joint color
+refinement and backtracking to find type-preserving bijections that
+preserve and reflect all relations, including function graphs and
+membership. Keep homomorphisms tied to immutable model borrows so
+their validation cannot become stale.
 
 Accept explicit finite or infinite fuel for both isomorphism searches
-so callers can bound expensive comparisons. Account for preprocessing,
+so callers can bound expensive comparisons. Account for input indices,
 refinement, and backtracking work by data size, and report exhaustion
 separately from a completed search that finds no isomorphism.

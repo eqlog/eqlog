@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::{Element, Error, Model, RelationId};
 
-/// A work budget for isomorphism search, including input normalization.
+/// A work budget for isomorphism search, including indexing the input facts.
 ///
 /// Finite fuel estimates elementary work, accounting for input sizes, sorting,
 /// refinement, and backtracking. It roughly bounds runtime, rather than counting
@@ -91,8 +91,8 @@ impl<'a> ModelHom<'a> {
             }
         }
         for (relation, _) in source.signature().relations() {
-            let target_rows = normalized_tuples(target, relation, &mut Fuel::Infinite)?;
-            for row in normalized_tuples(source, relation, &mut Fuel::Infinite)? {
+            let target_rows = normalized_tuples(target, relation)?;
+            for row in normalized_tuples(source, relation)? {
                 let image: Vec<_> = row.iter().map(|element| canonical[element]).collect();
                 if !target_rows.contains(&image) {
                     return Err(Error::InvalidModelHom(format!(
@@ -182,8 +182,8 @@ impl<'a> ModelHom<'a> {
         // A bijection already preserves relations, so equal finite cardinalities
         // ensure that no target facts are missing from its image.
         for (relation, _) in self.source.signature().relations() {
-            if normalized_tuples(self.source, relation, &mut Fuel::Infinite)?.len()
-                != normalized_tuples(self.target, relation, &mut Fuel::Infinite)?.len()
+            if normalized_tuples(self.source, relation)?.len()
+                != normalized_tuples(self.target, relation)?.len()
             {
                 return Ok(None);
             }
@@ -198,9 +198,10 @@ impl<'a> ModelHom<'a> {
 
 /// Finds an isomorphism between models with the same ordered signature.
 ///
-/// Compares equality classes and sets of canonical relation tuples, ignoring
-/// element IDs, aliases, duplicate rows, and evaluation bookkeeping. This does
-/// not run rules or enforce function axioms on unfinished models.
+/// Both inputs must satisfy [`Model::is_canonical`]; otherwise returns
+/// [`Error::NonCanonicalModel`]. Call [`Model::canonicalize`] before searching.
+/// Compares equality classes and relation tuples, ignoring element IDs and
+/// evaluation bookkeeping. This does not run rules or enforce function axioms.
 ///
 /// Returns `Ok(None)` if no isomorphism exists, or
 /// [`Error::SignatureMismatch`] if signatures differ. The witness is
@@ -221,6 +222,8 @@ pub fn find_isomorphism<'a>(
 ///
 /// Both maps must have the same source model instance. They may identify base
 /// elements, but an isomorphism exists only if they identify the same pairs.
+/// Both target models must be canonicalized before constructing the maps;
+/// otherwise returns [`Error::NonCanonicalModel`].
 /// The fuel budget also covers processing the base maps. Exhaustion returns
 /// [`Error::FuelExhausted`]; `Ok(None)` means no compatible isomorphism exists.
 ///
@@ -238,6 +241,7 @@ pub fn find_isomorphism<'a>(
 /// let b = base.new_element(TypeId(0), &[])?;
 /// let mut left = base.clone();
 /// left.equate(&[], a, b)?;
+/// left.canonicalize();
 /// let mut right = Model::with_signature(signature);
 /// let c = right.new_element(TypeId(0), &[])?;
 /// let to_left = ModelHom::new(&base, &left, [(a, a), (b, b)])?;
@@ -256,6 +260,9 @@ pub fn find_isomorphism_under<'a>(
         return Err(Error::InvalidModelHom(
             "comparison under a base requires the same source model".into(),
         ));
+    }
+    if !left.target.is_canonical() || !right.target.is_canonical() {
+        return Err(Error::NonCanonicalModel);
     }
     fuel.consume(sort_work(left.images.len()))?;
     let pairs: Vec<_> = left
@@ -291,51 +298,11 @@ fn check_signatures(source: &Model, target: &Model, fuel: &mut Fuel) -> Result<(
     Ok(())
 }
 
-fn normalized_tuples(
-    model: &Model,
-    relation: RelationId,
-    fuel: &mut Fuel,
-) -> Result<BTreeSet<Vec<Element>>, Error> {
-    let width = model.signature().relation(relation)?.arity.len() as u64;
-    let row_work = width
-        .saturating_add(1)
-        .saturating_mul(width.saturating_add(1));
-    fuel.consume(row_work)?;
-    let data = model.relation_data(relation)?;
-    data.new.table.prepay_iteration(fuel)?;
-    data.old.table.prepay_iteration(fuel)?;
-    let mut rows = model.tuples(relation)?;
-    let mut normalized = BTreeSet::new();
-    loop {
-        // Wide prefix-tree rows can take quadratic work to materialize.
-        fuel.consume(row_work)?;
-        let Some(row) = rows.next() else {
-            break;
-        };
-        fuel.consume(
-            width
-                .saturating_add(1)
-                .saturating_mul(tree_work(normalized.len())),
-        )?;
-        let mut canonical = Vec::with_capacity(row.len());
-        for mut element in row {
-            let equalities = &model.type_data(element.type_)?.equalities;
-            if element.index as usize >= equalities.len() {
-                return Err(Error::UnknownElement(element));
-            }
-            loop {
-                fuel.consume(1)?;
-                let parent = equalities.parent(element.index);
-                if parent == element.index {
-                    break;
-                }
-                element.index = parent;
-            }
-            canonical.push(element);
-        }
-        normalized.insert(canonical);
-    }
-    Ok(normalized)
+fn normalized_tuples(model: &Model, relation: RelationId) -> Result<BTreeSet<Vec<Element>>, Error> {
+    model
+        .tuples(relation)?
+        .map(|row| row.into_iter().map(|element| model.root(element)).collect())
+        .collect()
 }
 
 struct Structure {
@@ -363,20 +330,28 @@ impl Structure {
             .collect();
         let mut relations = Vec::new();
         let mut incidences = vec![Vec::new(); elements.len()];
-        for (relation, _) in model.signature().relations() {
-            let normalized = normalized_tuples(model, relation, fuel)?;
-            let width = model.signature().relation(relation)?.arity.len() as u64;
-            fuel.consume(
-                (normalized.len() as u64).saturating_mul(
-                    width
-                        .saturating_add(1)
-                        .saturating_mul(tree_work(elements.len())),
-                ),
-            )?;
-            let rows: Vec<Vec<_>> = normalized
-                .into_iter()
-                .map(|row| row.iter().map(|element| indices[element]).collect())
-                .collect();
+        for (relation, descriptor) in model.signature().relations() {
+            let width = descriptor.arity.len() as u64;
+            let row_work = width.saturating_add(1).saturating_mul(
+                width
+                    .saturating_add(1)
+                    .saturating_add(tree_work(elements.len())),
+            );
+            fuel.consume(row_work)?;
+            let data = model.relation_data(relation)?;
+            data.new.table.prepay_iteration(fuel)?;
+            data.old.table.prepay_iteration(fuel)?;
+            let mut tuples = model.tuples(relation)?;
+            let mut rows: Vec<Vec<usize>> = Vec::new();
+            loop {
+                fuel.consume(row_work)?;
+                let Some(row) = tuples.next() else {
+                    break;
+                };
+                rows.push(row.iter().map(|element| indices[element]).collect());
+            }
+            fuel.consume(sort_work(rows.len()).saturating_mul(width.saturating_add(1)))?;
+            rows.sort_unstable();
             for (row_index, row) in rows.iter().enumerate() {
                 for (column, &element) in row.iter().enumerate() {
                     incidences[element].push((relation.0, row_index, column));
@@ -467,6 +442,9 @@ fn find_with_pairs<'a>(
     pairs: &[(Element, Element)],
     mut fuel: Fuel,
 ) -> Result<Option<ModelHom<'a>>, Error> {
+    if !source.is_canonical() || !target.is_canonical() {
+        return Err(Error::NonCanonicalModel);
+    }
     check_signatures(source, target, &mut fuel)?;
     let left = Structure::new(source, &mut fuel)?;
     let right = Structure::new(target, &mut fuel)?;

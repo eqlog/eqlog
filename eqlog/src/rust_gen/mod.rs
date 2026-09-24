@@ -1856,8 +1856,23 @@ fn display_canonicalize_fn<'a>(
             })
             .format("\n");
 
+        let propagate = match ctx.model_mode() {
+            ModelMode::Native => "self.recompute_model_indices();",
+            ModelMode::Desugared => "",
+        };
         writedoc! {f, "
-            fn canonicalize(&mut self) {{
+            /// Rewrites facts using the current equality representatives without running rules.
+            /// Changed old facts become new so later evaluation can find newly enabled matches.
+            /// Existing new facts remain pending unless already present in old.
+            /// Element handles remain valid, and repeated calls preserve pending work.
+            /// Refreshes query indices, including shared views in native models.
+            #[allow(dead_code)]
+            pub fn canonicalize(&mut self) {{
+                self.__canonicalize_relations();
+                {propagate}
+            }}
+
+            fn __canonicalize_relations(&mut self) {{
                 {rel_blocks}
 
                 {clear_uprooted_vecs}
@@ -3192,7 +3207,6 @@ fn display_close_until_fn<'a>(
             pub fn close_until(&mut self, condition: impl Fn(&Self) -> bool) -> bool
             {{
             self.canonicalize();
-            {propagate}
             if condition(self) {{
             return true;
             }}
@@ -3206,7 +3220,7 @@ fn display_close_until_fn<'a>(
 
             self.move_new_to_old();
             delta.apply_equalities(self);
-            self.canonicalize();
+            self.__canonicalize_relations();
             delta.apply_tuples(self);
             {propagate}
 

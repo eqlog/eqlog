@@ -111,6 +111,8 @@ pub enum Error {
     InvalidModel(String),
     /// An assignment is not a total model homomorphism, or map endpoints differ.
     InvalidModelHom(String),
+    /// Isomorphism search requires canonicalized input models.
+    NonCanonicalModel,
     /// Isomorphism search exhausted its work budget before reaching a conclusion.
     FuelExhausted,
     /// The type ID is outside this signature.
@@ -149,6 +151,9 @@ impl fmt::Display for Error {
             Self::InvalidSignature(message) => write!(f, "invalid signature: {message}"),
             Self::InvalidModel(message) => write!(f, "invalid model: {message}"),
             Self::InvalidModelHom(message) => write!(f, "invalid model homomorphism: {message}"),
+            Self::NonCanonicalModel => {
+                write!(f, "isomorphism search requires canonicalized models")
+            }
             Self::FuelExhausted => write!(f, "isomorphism search fuel exhausted"),
             Self::UnknownType(type_) => write!(f, "unknown type {type_:?}"),
             Self::UnknownRelation(relation) => write!(f, "unknown relation {relation:?}"),

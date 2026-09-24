@@ -8,11 +8,6 @@ pub struct Unification<T> {
 }
 
 impl<T: Copy + PartialEq + From<u32> + Into<u32>> Unification<T> {
-    // A single step lets bounded searches account for long alias chains.
-    pub(crate) fn parent(&self, el: T) -> T {
-        self.parents[el.into() as usize]
-    }
-
     pub fn new() -> Self {
         Unification {
             parents: Vec::new(),

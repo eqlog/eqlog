@@ -18,6 +18,8 @@ fn canonicalizing_off_diagonal_predicate_preserves_matching_tuple() {
 
         model.equate_t(b, a);
         assert_eq!(model.root_t(a), b);
+        model.canonicalize();
+        model.canonicalize();
         model.insert_gate();
         model.close();
 
@@ -45,6 +47,8 @@ fn canonicalizing_off_diagonal_function_preserves_matching_tuple() {
 
         model.equate_t(b, a);
         assert_eq!(model.root_t(a), b);
+        model.canonicalize();
+        model.canonicalize();
         model.insert_gate();
         model.close();
 

@@ -1,0 +1,26 @@
+type V;
+pred p(V);
+pred q(V);
+pred joined(V);
+pred edge(V, V);
+pred loop_at(V);
+pred gate();
+pred gated(V);
+func value(V) -> V;
+
+rule join {
+    if p(x);
+    if q(x);
+    then joined(x);
+}
+
+rule detect_loop {
+    if edge(x, x);
+    then loop_at(x);
+}
+
+rule gated_join {
+    if gate();
+    if joined(x);
+    then gated(x);
+}

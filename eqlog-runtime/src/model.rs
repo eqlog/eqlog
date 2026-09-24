@@ -2,7 +2,8 @@ use std::collections::BTreeSet;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use super::data::{RelationData, TypeData};
+use super::data::{RelationData, RelationIndex, TypeData};
+use super::table::Table;
 use super::{
     Element, EnumCase, Error, FunctionKind, Relation, RelationId, RelationKind, Signature, TypeId,
     TypeKind,
@@ -14,6 +15,7 @@ pub struct Model {
     signature: ModelSignature,
     types: Vec<TypeData>,
     relations: Vec<RelationData>,
+    canonical: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -52,6 +54,7 @@ impl Model {
                 .map(|(_, rel)| RelationData::new(rel.arity.len()))
                 .collect(),
             signature,
+            canonical: true,
         }
     }
 
@@ -70,10 +73,11 @@ impl Model {
                 "storage does not match the signature".into(),
             ));
         }
-        let model = Self {
+        let mut model = Self {
             signature: ModelSignature::Static(signature),
             types,
             relations,
+            canonical: true,
         };
         for (type_, data) in model.types.iter().enumerate() {
             if data.weights.len() != data.equalities.len() {
@@ -110,18 +114,106 @@ impl Model {
                     ));
                 }
             }
+            model.canonical &= data.uprooted.is_empty();
         }
         for (id, descriptor) in model.signature.relations() {
             let data = &model.relations[id.0];
             data.new.check(descriptor.arity.len())?;
             data.old.check(descriptor.arity.len())?;
+            let mut seen = BTreeSet::new();
             for tuple in data.tuples() {
-                for (&type_, index) in descriptor.arity.iter().zip(tuple) {
-                    model.root(Element { type_, index })?;
+                if tuple.len() != descriptor.arity.len() {
+                    return Err(Error::ArityMismatch {
+                        expected: descriptor.arity.len(),
+                        actual: tuple.len(),
+                    });
                 }
+                for (&type_, &index) in descriptor.arity.iter().zip(&tuple) {
+                    let element = Element { type_, index };
+                    model.canonical &= model.root(element)? == element;
+                }
+                model.canonical &= seen.insert(tuple);
             }
         }
         Ok(model)
+    }
+
+    /// Returns whether equality updates have been applied to all stored facts.
+    /// Canonical models have no pending uprooted elements or duplicate tuples,
+    /// and every tuple contains only representatives. Rules may still be pending.
+    pub fn is_canonical(&self) -> bool {
+        self.canonical
+    }
+
+    /// Rewrites and deduplicates facts using the current equality representatives.
+    ///
+    /// Changed old facts become new so a later evaluation can find newly enabled
+    /// matches. Unchanged old facts remain old, and existing new facts remain
+    /// pending unless already present in old. Repeated calls preserve this work.
+    /// Element handles remain valid. This does not run rules or enforce function
+    /// axioms, and does not create elements or identify additional ones.
+    pub fn canonicalize(&mut self) {
+        if self.canonical {
+            return;
+        }
+        let mut relations = Vec::with_capacity(self.relations.len());
+        for (relation, descriptor) in self.signature.relations() {
+            let data = &self.relations[relation.0];
+            let mut old = RelationIndex {
+                order: data.old.order.clone(),
+                table: Table::new(descriptor.arity.len()),
+            };
+            let mut new = RelationIndex {
+                order: data.new.order.clone(),
+                table: Table::new(descriptor.arity.len()),
+            };
+            let normalize = |row: &[u32]| -> Vec<u32> {
+                descriptor
+                    .arity
+                    .iter()
+                    .zip(row)
+                    .map(|(&type_, &index)| self.root_unchecked(Element { type_, index }).index)
+                    .collect()
+            };
+            let mut pending = Vec::new();
+            for row in data.old.tuples() {
+                let canonical = normalize(&row);
+                if canonical == row {
+                    old.insert(&row);
+                } else {
+                    pending.push(canonical);
+                }
+            }
+            for row in data.new.tuples() {
+                pending.push(normalize(&row));
+            }
+            for row in pending {
+                if !old.contains(&row) {
+                    new.insert(&row);
+                }
+            }
+            relations.push(RelationData {
+                new,
+                old,
+                weight: data.weight,
+            });
+        }
+        for data in &mut self.types {
+            data.weights.fill(0);
+        }
+        for ((_, descriptor), data) in self.signature.relations().zip(&relations) {
+            for row in data.tuples() {
+                for (&type_, index) in descriptor.arity.iter().zip(row) {
+                    let weight = &mut self.types[type_.0].weights[index as usize];
+                    *weight = weight.saturating_add(data.weight);
+                }
+            }
+        }
+        self.relations = relations;
+        for data in &mut self.types {
+            data.uprooted.clear();
+        }
+        self.canonical = true;
     }
 
     /// Returns the model's signature.
@@ -266,12 +358,13 @@ impl Model {
         data.new.remove([child]);
         data.old.remove([child]);
         data.uprooted.push(child);
+        self.canonical = false;
         Ok(true)
     }
 
     /// Returns an iterator over tuples of elements satisfying `relation`.
     /// For a function, each tuple contains the arguments followed by the result.
-    /// Tuples may contain aliases or be repeated.
+    /// Tuples may contain aliases or be repeated until [`Self::canonicalize`].
     pub fn tuples(
         &self,
         relation: RelationId,

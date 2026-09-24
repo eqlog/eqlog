@@ -141,17 +141,6 @@ fn model_homs_normalize_aliases_without_running_rules() {
         target.root(images[2]).unwrap()
     );
     check_witness(&map);
-    check_witness(
-        &find_isomorphism(&source, &target, Fuel::Infinite)
-            .unwrap()
-            .unwrap(),
-    );
-    let (without_aliases, _) = graph(2, &[(0, 1)]);
-    check_witness(
-        &find_isomorphism(&source, &without_aliases, Fuel::Infinite)
-            .unwrap()
-            .unwrap(),
-    );
     assert!(ModelHom::new(
         &source,
         &target,
@@ -166,6 +155,19 @@ fn model_homs_normalize_aliases_without_running_rules() {
     assert_eq!(
         target.tuples(RelationId(0)).unwrap().next().unwrap()[0],
         images[2]
+    );
+    source.canonicalize();
+    target.canonicalize();
+    check_witness(
+        &find_isomorphism(&source, &target, Fuel::Infinite)
+            .unwrap()
+            .unwrap(),
+    );
+    let (without_aliases, _) = graph(2, &[(0, 1)]);
+    check_witness(
+        &find_isomorphism(&source, &without_aliases, Fuel::Infinite)
+            .unwrap()
+            .unwrap(),
     );
 }
 
@@ -223,6 +225,8 @@ fn isomorphisms_under_a_base_respect_labels_and_identifications() {
     right
         .equate(&[], right_vertices[2], right_vertices[1])
         .unwrap();
+    left.canonicalize();
+    right.canonicalize();
     let left_map = ModelHom::new(
         &base,
         &left,
@@ -739,7 +743,7 @@ fn isomorphism_fuel_accounts_for_physical_relation_storage() {
 }
 
 #[test]
-fn isomorphism_fuel_accounts_for_long_alias_chains() {
+fn canonical_search_does_not_traverse_unused_alias_chains() {
     let signature = TransRefl::dynamic_signature();
     let mut model = Model::new(signature);
     let vertices = elements(&mut model, 2_048);
@@ -752,15 +756,39 @@ fn isomorphism_fuel_accounts_for_long_alias_chains() {
     type_data.new.insert([2_047]);
     type_data.uprooted = (0..2_047).collect();
     let relation = relation_data(&model, RelationId(0)).unwrap().clone();
-    let model = from_parts(signature, vec![type_data], vec![relation]).unwrap();
+    let mut model = from_parts(signature, vec![type_data], vec![relation]).unwrap();
 
     assert_eq!(
         find_isomorphism(&model, &model, Fuel::Finite(1_000)).err(),
-        Some(Error::FuelExhausted)
+        Some(Error::NonCanonicalModel)
     );
+    model.canonicalize();
     check_witness(
-        &find_isomorphism(&model, &model, Fuel::Finite(100_000))
+        &find_isomorphism(&model, &model, Fuel::Finite(1_000))
             .unwrap()
             .unwrap(),
     );
+}
+
+#[test]
+fn isomorphism_search_requires_canonical_targets_before_spending_fuel() {
+    let (mut uncanonical, vertices) = graph(2, &[]);
+    uncanonical.equate(&[], vertices[0], vertices[1]).unwrap();
+    let mut canonical = uncanonical.clone();
+    canonical.canonicalize();
+    let (base, base_vertices) = graph(1, &[]);
+    for (left, right) in [(&uncanonical, &canonical), (&canonical, &uncanonical)] {
+        let left_map = ModelHom::new(&base, left, [(base_vertices[0], vertices[0])]).unwrap();
+        let right_map = ModelHom::new(&base, right, [(base_vertices[0], vertices[0])]).unwrap();
+        for fuel in [Fuel::Finite(0), Fuel::Infinite] {
+            assert_eq!(
+                find_isomorphism(left, right, fuel).err(),
+                Some(Error::NonCanonicalModel)
+            );
+            assert_eq!(
+                find_isomorphism_under(&left_map, &right_map, fuel).err(),
+                Some(Error::NonCanonicalModel)
+            );
+        }
+    }
 }
