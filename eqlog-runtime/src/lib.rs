@@ -104,14 +104,14 @@ pub trait CompiledModel: Sized {
     /// Adjoins an element with the same checks as [`Model::new_element`].
     fn new_element(&mut self, type_: TypeId, parents: &[Element]) -> Result<Element, Error>;
 
-    /// Inserts a tuple in place, with the same checks as [`Model::insert`].
+    /// Inserts a tuple with the same checks as [`Model::insert`].
     /// Returns whether the tuple was absent from the relations.
     fn insert(&mut self, relation: RelationId, tuple: &[Element]) -> Result<bool, Error>;
 
     /// Defines a function with the same checks as [`Model::define`].
     fn define(&mut self, function: RelationId, arguments: &[Element]) -> Result<Element, Error>;
 
-    /// Equates two elements in place, with the same checks as [`Model::equate`].
+    /// Equates two elements with the same checks as [`Model::equate`].
     fn equate(&mut self, parents: &[Element], lhs: Element, rhs: Element) -> Result<bool, Error>;
 }
 
