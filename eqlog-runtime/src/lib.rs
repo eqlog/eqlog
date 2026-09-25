@@ -87,7 +87,7 @@ pub struct EnumCase {
     pub arguments: Vec<Element>,
 }
 
-/// Runtime-typed access to generated models without running rules.
+/// Runtime-typed access to generated models.
 ///
 /// Edits validate on a copy, then call setters without resetting fact ages.
 /// Use typed setters to avoid copying the model.
