@@ -1,0 +1,17 @@
+Preserve rule guards and mapped runtime data
+
+Branch and match continuations must match facts shared by their arms.
+Dropping those facts derived conclusions without their guards and left
+shared function results unbound during compilation.
+
+Mapped tree operations must agree with the keys exposed by iteration.
+Resolve mappings before structural edits and set operations, account for
+filtered keys in lookups and lengths, and preserve copy-on-write
+snapshots. Prune empty prefix restrictions so empty relations do not
+appear nonempty.
+
+Use an explicit isomorphism search stack because symmetric carriers can
+require one search level per element and overflow the thread stack.
+
+Cover these failures with integration regressions, seeded map
+comparisons, and dynamic conversion checks with incremental state.

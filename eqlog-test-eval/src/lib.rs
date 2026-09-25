@@ -16,6 +16,7 @@ eqlog_mod!(pca);
 eqlog_mod!(inference);
 eqlog_mod!(reduction_from_nullary);
 eqlog_mod!(branches);
+eqlog_mod!(branch_results);
 eqlog_mod!(nat);
 eqlog_mod!(matches);
 eqlog_mod!(matches_rel);
@@ -46,6 +47,8 @@ mod diagonal_canonicalization_test;
 #[cfg(test)]
 mod distr_lattice_test;
 #[cfg(test)]
+mod dynamic_correctness_test;
+#[cfg(test)]
 mod dynamic_signature_test;
 #[cfg(test)]
 mod dynamic_test;
@@ -63,6 +66,8 @@ mod monoid_test;
 // Disabled by default because it takes a while to run in debug mode.
 //#[cfg(test)]
 //mod pca_test;
+#[cfg(test)]
+mod branch_results_test;
 #[cfg(test)]
 mod branches_test;
 #[cfg(test)]
