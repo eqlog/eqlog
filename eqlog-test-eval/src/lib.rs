@@ -38,9 +38,9 @@ eqlog_mod!(morphism_preservation);
 eqlog_mod!(member_parents);
 eqlog_mod!(canonicalization);
 
-mod category_mod;
 #[cfg(test)]
 mod canonicalization_test;
+mod category_mod;
 #[cfg(test)]
 mod diagonal_canonicalization_test;
 #[cfg(test)]
@@ -50,8 +50,6 @@ mod dynamic_signature_test;
 #[cfg(test)]
 mod dynamic_test;
 #[cfg(test)]
-mod model_hom_test;
-#[cfg(test)]
 mod eval_func;
 #[cfg(test)]
 mod group_test;
@@ -59,6 +57,8 @@ mod group_test;
 mod lex_category_test;
 #[cfg(test)]
 mod logic_test;
+#[cfg(test)]
+mod model_hom_test;
 mod monoid_test;
 // Disabled by default because it takes a while to run in debug mode.
 //#[cfg(test)]

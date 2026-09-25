@@ -863,13 +863,13 @@ impl<V: Clone> WBTreeMap<V> {
                     Node::Mapping(mapping) => {
                         // Full mapping traversal bounds a lookup, including nested
                         // mappings. Filtered keys still cost work to visit.
-                        let lookup_work = mapping.mapping.map.iteration_work(fuel, |row, fuel| {
-                            fuel.consume(1)?;
-                            Ok((row.set.len() as u64).saturating_add(1))
-                        })?;
-                        let mapping_work = mapping_work
-                            .saturating_add(lookup_work)
-                            .saturating_add(1);
+                        let lookup_work =
+                            mapping.mapping.map.iteration_work(fuel, |row, fuel| {
+                                fuel.consume(1)?;
+                                Ok((row.set.len() as u64).saturating_add(1))
+                            })?;
+                        let mapping_work =
+                            mapping_work.saturating_add(lookup_work).saturating_add(1);
                         work = work.saturating_add(1);
                         pending.push((&mapping.child, mapping_work));
                     }
