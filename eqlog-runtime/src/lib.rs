@@ -105,7 +105,7 @@ pub trait CompiledModel: Sized {
     fn new_element(&mut self, type_: TypeId, parents: &[Element]) -> Result<Element, Error>;
 
     /// Inserts a tuple in place, with the same checks as [`Model::insert`].
-    /// Returns whether the tuple was absent from the visible relations.
+    /// Returns whether the tuple was absent from the relations.
     fn insert(&mut self, relation: RelationId, tuple: &[Element]) -> Result<bool, Error>;
 
     /// Defines a function in place, with the same checks as [`Model::define`].
