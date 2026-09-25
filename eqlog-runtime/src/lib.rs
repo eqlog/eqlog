@@ -87,7 +87,7 @@ pub struct EnumCase {
     pub arguments: Vec<Element>,
 }
 
-/// Implemented by generated models to transfer data without running rules.
+/// Runtime-typed access to generated models.
 pub trait CompiledModel: Sized {
     /// Returns the shared signature, independent of evaluation mode.
     fn dynamic_signature() -> &'static Signature;
@@ -100,6 +100,19 @@ pub trait CompiledModel: Sized {
     /// Returns [`Error::SignatureMismatch`] if type or relation descriptors differ
     /// from [`Self::dynamic_signature`], including their order and names.
     fn from_dynamic(model: &Model) -> Result<Self, Error>;
+
+    /// Adjoins an element with the same checks as [`Model::new_element`].
+    fn new_element(&mut self, type_: TypeId, parents: &[Element]) -> Result<Element, Error>;
+
+    /// Inserts a tuple with the same checks as [`Model::insert`].
+    /// Returns whether the tuple was absent from the relations.
+    fn insert(&mut self, relation: RelationId, tuple: &[Element]) -> Result<bool, Error>;
+
+    /// Defines a function with the same checks as [`Model::define`].
+    fn define(&mut self, function: RelationId, arguments: &[Element]) -> Result<Element, Error>;
+
+    /// Equates two elements with the same checks as [`Model::equate`].
+    fn equate(&mut self, parents: &[Element], lhs: Element, rhs: Element) -> Result<bool, Error>;
 }
 
 /// Invalid data or operations, or exhausted search fuel. Model data is unchanged.

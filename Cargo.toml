@@ -6,6 +6,7 @@ members = [
   "eqlog-runtime",
   "eqlog-test-eval",
   "eqlog-test-compile",
+  "eqlog-test-opt",
   # "v1_to_v2",
   # "examples/inference",
 ]

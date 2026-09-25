@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use eqlog_runtime::__private::{from_parts, relation_data, type_data, Table};
-use eqlog_runtime::{CompiledModel, Model};
+use eqlog_runtime::{CompiledModel, Error, Model};
 
 use crate::canonicalization::Canonicalization;
 use crate::member_parents::MemberParents;
@@ -253,4 +253,77 @@ fn canonicalization_refreshes_shared_views_without_consuming_pending_facts() {
     model.canonicalize();
     model.close();
     assert!(model.observed(third));
+}
+
+#[test]
+fn runtime_edits_retain_old_facts_between_closures() {
+    let mut model = Canonicalization::new();
+    let signature = Canonicalization::dynamic_signature();
+    let v = signature.type_named("V").unwrap();
+    let p = signature.relation_named("p").unwrap();
+    let q = signature.relation_named("q").unwrap();
+    let value = signature.relation_named("value").unwrap();
+    let joined = signature.relation_named("joined").unwrap();
+    let x = model.new_element(v, &[]).unwrap();
+    assert!(model.insert(p, &[x]).unwrap());
+    model.close();
+    let before = model.to_dynamic();
+
+    let y = model.new_element(v, &[]).unwrap();
+    let z = model.define(value, &[x]).unwrap();
+    assert_eq!(model.define(value, &[x]).unwrap(), z);
+    assert!(!model.insert(p, &[x]).unwrap());
+    let after = model.to_dynamic();
+    assert_eq!(
+        type_data(&after, v).unwrap().old.iter().collect::<Vec<_>>(),
+        type_data(&before, v)
+            .unwrap()
+            .old
+            .iter()
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(type_data(&after, v).unwrap().new.iter().count(), 2);
+    assert_eq!(
+        relation_data(&after, p)
+            .unwrap()
+            .old
+            .tuples()
+            .collect::<Vec<_>>(),
+        relation_data(&before, p)
+            .unwrap()
+            .old
+            .tuples()
+            .collect::<Vec<_>>()
+    );
+
+    assert_eq!(
+        model.insert(q, &[]),
+        Err(Error::ArityMismatch {
+            expected: 1,
+            actual: 0
+        })
+    );
+    assert_eq!(
+        model.new_element(v, &[x]),
+        Err(Error::ArityMismatch {
+            expected: 0,
+            actual: 1
+        })
+    );
+    assert_eq!(model.define(q, &[x]), Err(Error::ExpectedFunction(q)));
+    assert_eq!(
+        model.equate(&[x], x, y),
+        Err(Error::ArityMismatch {
+            expected: 0,
+            actual: 1
+        })
+    );
+    assert_same_pending_work(&after, &model.to_dynamic());
+
+    model.insert(q, &[y]).unwrap();
+    model.close();
+    assert!(!model.to_dynamic().contains(joined, &[x]).unwrap());
+    assert!(model.equate(&[], x, y).unwrap());
+    model.close();
+    assert!(model.to_dynamic().contains(joined, &[x]).unwrap());
 }

@@ -1,0 +1,33 @@
+type Key;
+type Value;
+func witness(Key) -> Value;
+pred requested(Key);
+pred marked(Value);
+pred edge(Key, Key);
+pred reached(Key);
+pred gate();
+
+rule create_witness {
+    if requested(x);
+    then witness(x)!;
+}
+
+rule mark_witness {
+    if requested(x);
+    if gate();
+    if y = witness(x);
+    then marked(y);
+}
+
+rule join_through_witness {
+    if edge(x, y);
+    if witness(x) = witness(y);
+    if marked(witness(y));
+    then reached(x);
+}
+
+rule recursive_reach {
+    if reached(x);
+    if edge(x, y);
+    then reached(y);
+}
