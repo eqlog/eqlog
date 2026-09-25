@@ -97,8 +97,6 @@ pub trait CompiledModel: Sized {
 
     /// Imports data without changing IDs, equality representatives, or raw rows.
     ///
-    /// Imported facts become new so evaluation can rebuild derived indices.
-    ///
     /// Returns [`Error::SignatureMismatch`] if type or relation descriptors differ
     /// from [`Self::dynamic_signature`], including their order and names.
     fn from_dynamic(model: &Model) -> Result<Self, Error>;
