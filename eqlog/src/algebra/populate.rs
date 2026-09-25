@@ -492,7 +492,7 @@ fn walk_pred_atom(
 /// For ambient preds the chain comes from the rule's
 /// [`Structure::ambient_model_els`], looked up by each parent type. The
 /// pred's parent chain is always a sub-chain of the rule's enclosing
-/// models — the pred has to be visible to the rule — but it may be
+/// models (the pred has to be visible to the rule), but it may be
 /// strictly shorter: a global pred used in a model rule, or a pred
 /// declared on an outer model used in an inner-model rule, both have
 /// fewer parents than the rule itself sits inside.
@@ -660,6 +660,67 @@ fn walk_term(
                     e
                 }
             }
+        }
+        Term::Id(id) => {
+            let arg = ast.id_term(id).arg;
+            let (arg_el, c) = walk_term(arg, current, rule, ast, scopes, signature, errors);
+            changed |= c;
+            let mut candidates = BTreeSet::new();
+            for ct in concrete_types_of_el(rule, current, arg_el) {
+                if let Some(ids) = signature.ids_for_model_type(ct.typ) {
+                    candidates.insert((ids.id, ct.parents));
+                }
+            }
+            if let Some(result) = prior_el {
+                for ct in concrete_types_of_el(rule, current, result) {
+                    match signature.type_(ct.typ).kind {
+                        TypeKind::Mor(model) => {
+                            let ids = signature.ids_for_model_type(model).expect("morphism model");
+                            candidates.insert((ids.id, ct.parents));
+                        }
+                        TypeKind::Plain | TypeKind::Model | TypeKind::Enum => {}
+                    }
+                }
+            }
+            let (e, c) = emit_known_apps(
+                candidates.into_iter().collect(),
+                vec![arg_el],
+                prior_el,
+                current,
+                rule,
+            )
+            .unwrap_or_else(|| expected_or_fresh(prior_el, current, rule));
+            changed |= c;
+            e
+        }
+        Term::Comp(id) => {
+            let CompTerm { first, second } = *ast.comp_term(id);
+            let (first, c) = walk_term(first, current, rule, ast, scopes, signature, errors);
+            changed |= c;
+            let (second, c) = walk_term(second, current, rule, ast, scopes, signature, errors);
+            changed |= c;
+            let mut candidates = BTreeSet::new();
+            for el in [Some(first), Some(second), prior_el].into_iter().flatten() {
+                for ct in concrete_types_of_el(rule, current, el) {
+                    match signature.type_(ct.typ).kind {
+                        TypeKind::Mor(model) => {
+                            let ids = signature.ids_for_model_type(model).expect("morphism model");
+                            candidates.insert((ids.comp, ct.parents));
+                        }
+                        TypeKind::Plain | TypeKind::Model | TypeKind::Enum => {}
+                    }
+                }
+            }
+            let (e, c) = emit_known_apps(
+                candidates.into_iter().collect(),
+                vec![first, second],
+                prior_el,
+                current,
+                rule,
+            )
+            .unwrap_or_else(|| expected_or_fresh(prior_el, current, rule));
+            changed |= c;
+            e
         }
         Term::Dom(did) => {
             let DomTerm { arg } = *ast.dom_term(did);

@@ -4,7 +4,7 @@ type Morphism;
 func mor_dom(Morphism) -> Obj;
 func mor_cod(Morphism) -> Obj;
 func comp(Morphism, Morphism) -> Morphism;
-func id(Obj) -> Morphism;
+func identity(Obj) -> Morphism;
 
 rule {
     if mor_cod(f) = mor_dom(g);
@@ -23,6 +23,6 @@ rule {
 rule {
     if x: Obj;
     if y: Obj;
-    then id(x)!;
-    then id(y)!;
+    then identity(x)!;
+    then identity(y)!;
 }

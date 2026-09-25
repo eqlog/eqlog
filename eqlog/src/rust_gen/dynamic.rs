@@ -46,13 +46,17 @@ impl DynamicContext<'_> {
             format!("MorphismApplication {{ morphism: {morphism}, member: {member} }}")
         } else if let Some((_, ids)) = signature
             .iter_model_decls()
-            .find(|(_, ids)| ids.dom == func || ids.cod == func)
+            .find(|(_, ids)| ids.operation_name(func).is_some())
         {
             let model = self.type_(ids.type_);
             if ids.dom == func {
                 format!("MorphismDomain({model})")
-            } else {
+            } else if ids.cod == func {
                 format!("MorphismCodomain({model})")
+            } else if ids.id == func {
+                format!("MorphismIdentity({model})")
+            } else {
+                format!("MorphismComposition({model})")
             }
         } else {
             "Ordinary".to_owned()

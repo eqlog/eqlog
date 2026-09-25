@@ -48,6 +48,8 @@ typed_id!(AppHeadMemberId);
 typed_id!(TermMemberId);
 typed_id!(DomTermId);
 typed_id!(CodTermId);
+typed_id!(IdTermId);
+typed_id!(CompTermId);
 
 typed_id!(TermListId);
 
@@ -190,6 +192,17 @@ pub struct CodTerm {
 }
 
 #[derive(Copy, Clone, Debug)]
+pub struct IdTerm {
+    pub arg: TermId,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct CompTerm {
+    pub first: TermId,
+    pub second: TermId,
+}
+
+#[derive(Copy, Clone, Debug)]
 pub enum Term {
     Ident(IdentTermId),
     Wildcard,
@@ -197,6 +210,8 @@ pub enum Term {
     Member(TermMemberId),
     Dom(DomTermId),
     Cod(CodTermId),
+    Id(IdTermId),
+    Comp(CompTermId),
 }
 
 // LALRPOP cannot declare the recursive Rust types used by grammar actions.
@@ -357,6 +372,8 @@ pub enum Node {
     TermMember(TermMember),
     DomTerm(DomTerm),
     CodTerm(CodTerm),
+    IdTerm(IdTerm),
+    CompTerm(CompTerm),
     TermList(TermList),
     TypeExpr(TypeExpr),
     AmbientTypeExpr(AmbientTypeExpr),
@@ -384,6 +401,20 @@ pub struct Ast {
 }
 
 impl Ast {
+    pub(crate) fn finish_postfix(&mut self, state: ParsedPostfixTerm) -> TermId {
+        let mut term = match state.parsed {
+            ParsedTerm::Ident(ident) => self.push_term(self.loc(ident), Term::Ident(ident)),
+            ParsedTerm::Term(term) => term,
+            ParsedTerm::Parenthesized(_) => unreachable!("parentheses are flattened"),
+        };
+        for name in state.names {
+            let loc = Location(self.loc(term).0, self.loc(name).1);
+            let member = self.push_term_member(loc, TermMember { term, name });
+            term = self.push_term(loc, Term::Member(member));
+        }
+        term
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
@@ -447,6 +478,8 @@ accessor!(
 accessor!(term_member, push_term_member, TermMemberId, TermMember);
 accessor!(dom_term, push_dom_term, DomTermId, DomTerm);
 accessor!(cod_term, push_cod_term, CodTermId, CodTerm);
+accessor!(id_term, push_id_term, IdTermId, IdTerm);
+accessor!(comp_term, push_comp_term, CompTermId, CompTerm);
 accessor!(term_list, push_term_list, TermListId, TermList);
 accessor!(type_expr, push_type_expr, TypeExprId, TypeExpr);
 accessor!(
@@ -519,6 +552,8 @@ mod tests {
             | Node::TermMember(_)
             | Node::DomTerm(_)
             | Node::CodTerm(_)
+            | Node::IdTerm(_)
+            | Node::CompTerm(_)
             | Node::TermList(_)
             | Node::TypeExpr(_)
             | Node::AmbientTypeExpr(_)
@@ -573,7 +608,13 @@ mod tests {
         let (ast, rhs) = parse_equal_rhs("rule { if x = foo(x); }");
         let app = match *ast.term(rhs) {
             Term::App(app) => app,
-            Term::Ident(_) | Term::Wildcard | Term::Member(_) | Term::Dom(_) | Term::Cod(_) => {
+            Term::Ident(_)
+            | Term::Wildcard
+            | Term::Member(_)
+            | Term::Dom(_)
+            | Term::Cod(_)
+            | Term::Id(_)
+            | Term::Comp(_) => {
                 panic!("expected application")
             }
         };
@@ -586,7 +627,13 @@ mod tests {
             match node_term(node) {
                 Some(Term::Ident(ident)) => ast.ident_term(*ident).name == "foo",
                 Some(
-                    Term::Wildcard | Term::App(_) | Term::Member(_) | Term::Dom(_) | Term::Cod(_),
+                    Term::Wildcard
+                    | Term::App(_)
+                    | Term::Member(_)
+                    | Term::Dom(_)
+                    | Term::Cod(_)
+                    | Term::Id(_)
+                    | Term::Comp(_),
                 )
                 | None => false,
             }
@@ -598,7 +645,13 @@ mod tests {
         let (ast, rhs) = parse_equal_rhs("rule { if x = foo(x)(x); }");
         let outer = match *ast.term(rhs) {
             Term::App(outer) => outer,
-            Term::Ident(_) | Term::Wildcard | Term::Member(_) | Term::Dom(_) | Term::Cod(_) => {
+            Term::Ident(_)
+            | Term::Wildcard
+            | Term::Member(_)
+            | Term::Dom(_)
+            | Term::Cod(_)
+            | Term::Id(_)
+            | Term::Comp(_) => {
                 panic!("expected outer application")
             }
         };
@@ -618,7 +671,13 @@ mod tests {
             let (ast, rhs) = parse_equal_rhs(source);
             let app = match *ast.term(rhs) {
                 Term::App(app) => app,
-                Term::Ident(_) | Term::Wildcard | Term::Member(_) | Term::Dom(_) | Term::Cod(_) => {
+                Term::Ident(_)
+                | Term::Wildcard
+                | Term::Member(_)
+                | Term::Dom(_)
+                | Term::Cod(_)
+                | Term::Id(_)
+                | Term::Comp(_) => {
                     panic!("expected application")
                 }
             };
@@ -648,7 +707,9 @@ mod tests {
                         | Term::Wildcard
                         | Term::App(_)
                         | Term::Dom(_)
-                        | Term::Cod(_),
+                        | Term::Cod(_)
+                        | Term::Id(_)
+                        | Term::Comp(_),
                     )
                     | None => false,
                 }
@@ -674,7 +735,13 @@ mod tests {
                     matches!(ast.ident_term(*ident).name.as_str(), "T" | "p")
                 }
                 Some(
-                    Term::Wildcard | Term::App(_) | Term::Member(_) | Term::Dom(_) | Term::Cod(_),
+                    Term::Wildcard
+                    | Term::App(_)
+                    | Term::Member(_)
+                    | Term::Dom(_)
+                    | Term::Cod(_)
+                    | Term::Id(_)
+                    | Term::Comp(_),
                 )
                 | None => false,
             }
@@ -686,7 +753,13 @@ mod tests {
                     "T" | "p"
                 ),
                 Some(
-                    Term::Ident(_) | Term::Wildcard | Term::App(_) | Term::Dom(_) | Term::Cod(_),
+                    Term::Ident(_)
+                    | Term::Wildcard
+                    | Term::App(_)
+                    | Term::Dom(_)
+                    | Term::Cod(_)
+                    | Term::Id(_)
+                    | Term::Comp(_),
                 )
                 | None => false,
             }

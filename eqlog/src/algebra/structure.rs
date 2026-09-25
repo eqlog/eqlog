@@ -228,8 +228,14 @@ impl Structure {
             let drained = self.drain_equalities();
             let func_changed = self.functionality();
             let type_changed = self.typing(signature);
+            let mor_operation_changed = self.morphism_operation_constraints(signature);
             let mor_app_changed = self.morphism_app_constraints(signature);
-            if !drained && !func_changed && !type_changed && !mor_app_changed {
+            if !drained
+                && !func_changed
+                && !type_changed
+                && !mor_app_changed
+                && !mor_operation_changed
+            {
                 break;
             }
             changed = true;
@@ -364,6 +370,156 @@ impl Structure {
             }
         }
 
+        changed
+    }
+
+    fn morphism_operation_constraints(&mut self, signature: &Signature) -> bool {
+        let apps: Vec<_> = self
+            .func_apps
+            .iter()
+            .map(|(app, result)| (app.clone(), *result))
+            .collect();
+        let mut changed = false;
+        for (app, result) in apps {
+            for (_, ids) in signature.iter_model_decls() {
+                if app.func == ids.id {
+                    changed |= self.identity_action_constraints(&app, result, ids.mor, signature);
+                    for func in [ids.dom, ids.cod] {
+                        changed |= self.insert_func_app_or_equate(
+                            FuncApp {
+                                func,
+                                parents: app.parents.clone(),
+                                args: vec![result],
+                            },
+                            app.args[0],
+                        );
+                    }
+                }
+                if app.func == ids.comp {
+                    changed |=
+                        self.composition_action_constraints(&app, result, ids.mor, signature);
+                    for ((left_func, left), (right_func, right)) in [
+                        ((ids.dom, app.args[0]), (ids.dom, result)),
+                        ((ids.cod, app.args[1]), (ids.cod, result)),
+                        ((ids.cod, app.args[0]), (ids.dom, app.args[1])),
+                    ] {
+                        let left = FuncApp {
+                            func: left_func,
+                            parents: app.parents.clone(),
+                            args: vec![self.root(left)],
+                        };
+                        let right = FuncApp {
+                            func: right_func,
+                            parents: app.parents.clone(),
+                            args: vec![self.root(right)],
+                        };
+                        if let Some(&value) = self.func_apps.get(&left) {
+                            changed |= self.insert_func_app_or_equate(right.clone(), value);
+                        }
+                        if let Some(&value) = self.func_apps.get(&right) {
+                            changed |= self.insert_func_app_or_equate(left, value);
+                        }
+                    }
+                }
+            }
+        }
+        changed
+    }
+
+    fn identity_action_constraints(
+        &mut self,
+        app: &FuncApp,
+        identity: ElId,
+        morphism_type: TypeId,
+        signature: &Signature,
+    ) -> bool {
+        let mut changed = false;
+        for (types, action) in signature.iter_mor_app_funcs() {
+            if types.morphism_type != morphism_type {
+                continue;
+            }
+            let members: Vec<_> = self
+                .els
+                .iter()
+                .filter_map(|(&el, cts)| {
+                    cts.iter()
+                        .any(|ct| {
+                            ct.typ == types.member_type
+                                && ct
+                                    .parents
+                                    .get(app.parents.len())
+                                    .copied()
+                                    .map(|parent| self.root(parent))
+                                    == Some(self.root(app.args[0]))
+                        })
+                        .then_some(el)
+                })
+                .collect();
+            for member in members {
+                changed |= self.insert_func_app_or_equate(
+                    FuncApp {
+                        func: action,
+                        parents: app.parents.clone(),
+                        args: vec![identity, member],
+                    },
+                    member,
+                );
+            }
+            let known: Vec<_> = self
+                .func_apps
+                .keys()
+                .filter(|candidate| {
+                    candidate.func == action
+                        && candidate.parents == app.parents
+                        && self.root(candidate.args[0]) == self.root(identity)
+                })
+                .cloned()
+                .collect();
+            for action in known {
+                let arg = action.args[1];
+                changed |= self.insert_func_app_or_equate(action, arg);
+            }
+        }
+        changed
+    }
+
+    fn composition_action_constraints(
+        &mut self,
+        app: &FuncApp,
+        composite: ElId,
+        morphism_type: TypeId,
+        signature: &Signature,
+    ) -> bool {
+        let mut changed = false;
+        let first_actions: Vec<_> = self
+            .func_apps
+            .iter()
+            .filter_map(|(action, &image)| {
+                let types = signature.types_for_mor_app_func(action.func)?;
+                (types.morphism_type == morphism_type
+                    && action.parents == app.parents
+                    && self.root(action.args[0]) == self.root(app.args[0]))
+                .then_some((action.clone(), image))
+            })
+            .collect();
+        for (first, image) in first_actions {
+            let second = FuncApp {
+                func: first.func,
+                parents: app.parents.clone(),
+                args: vec![self.root(app.args[1]), self.root(image)],
+            };
+            let result = FuncApp {
+                func: first.func,
+                parents: app.parents.clone(),
+                args: vec![self.root(composite), self.root(first.args[1])],
+            };
+            if let Some(&value) = self.func_apps.get(&second) {
+                changed |= self.insert_func_app_or_equate(result.clone(), value);
+            }
+            if let Some(&value) = self.func_apps.get(&result) {
+                changed |= self.insert_func_app_or_equate(second, value);
+            }
+        }
         changed
     }
 
@@ -819,7 +975,7 @@ impl StructureCat {
     ///     pull type information from the codomain back into the domain for
     ///     every mapped element whose [`ConcreteType`] parents are all
     ///     ambient model elements (so their preimages in the domain are
-    ///     unambiguous — the domain's own ambient els of the same types).
+    ///     unambiguous: the domain's own ambient els of the same types).
     ///     Equality, predicate and function data are not propagated
     ///     backwards by this step. Re-close the domain afterwards so any
     ///     equalities induced by newly imposed types settle.
@@ -930,8 +1086,8 @@ impl StructureCat {
         let mut changed = false;
 
         // Canonicalise both keys (under src's unification) and values
-        // (under tgt's unification) so the entries seen below — and the
-        // images derived from them — match `tgt`'s post-close form.
+        // (under tgt's unification) so the entries seen below, and the
+        // images derived from them, match `tgt`'s post-close form.
         // Without canonicalising values, repeated push calls would keep
         // inserting pred_app/func_app entries with stale element ids,
         // each time reporting `changed = true`.
@@ -1187,7 +1343,7 @@ impl StructureCat {
 
     /// Equates pairs of meet elements whose canonical images coincide in
     /// every `end_i`. Computed by partitioning meet's roots by the tuple
-    /// `(root in end_1, root in end_2, …)` and equating within each
+    /// `(root in end_1, root in end_2, ...)` and equating within each
     /// resulting group.
     fn saturate_under_prod_equalities(&mut self, up: &UnderProd) -> bool {
         let groups = self.group_meet_roots_by_end_images(up);
@@ -1410,7 +1566,7 @@ impl StructureCat {
     /// Inverts a `meet -> end` projection: each end-root maps to the
     /// smallest meet-root that projects to it. Multi-preimage entries
     /// keep only the smallest meet-root, so saturations that would have
-    /// required a different preimage are silently skipped — soundness is
+    /// required a different preimage are silently skipped; soundness is
     /// preserved (we only add facts that the projection witnesses).
     fn invert_projection(&self, meet: StructureId, end: StructureId) -> BTreeMap<ElId, ElId> {
         let map = self
@@ -1467,7 +1623,7 @@ impl StructureCat {
 
     /// Rewrites every [`ElMap`] so its keys are roots in the domain's
     /// unification and its values are roots in the codomain's. Collapses
-    /// colliding keys by dropping duplicates — by the time this runs the
+    /// colliding keys by dropping duplicates; by the time this runs the
     /// values for those collisions have already been unified, so dropping
     /// is safe.
     fn canonicalise_morphisms(&mut self) {

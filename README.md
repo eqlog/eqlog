@@ -163,6 +163,43 @@ Constants are used without parentheses, e.g. `foo` and `model.foo`.
 
 To eqlog, functions are synonymous to *partial* functions; they need not be total.
 
+### Morphism identities and composition
+
+`id(m)` is the identity on a model instance `m: M`, with type `Mor(M)`.
+The name `id` is reserved; use `identity` for user-defined functions.
+
+`f >> g` means first `f`, then `g`. Both operands must have the same
+morphism type. A defined composite imposes `cod(f) = dom(g)`, has domain
+`dom(f)`, and has codomain `cod(g)`. Member access and application bind more
+tightly than `>>`; chains associate to the left. Use `(f >> g).El(x)` to
+apply a composite, and `f >> g >> h` for `(f >> g) >> h`.
+
+```eqlog
+model Set {
+    type El;
+}
+
+pred requested(Mor(Set), Mor(Set));
+rule compose_requested {
+    if requested(f, g);
+    if s = dom(f);
+    if cod(f) = dom(g);
+    then id(s)!;
+    then composite := (f >> g)!;
+    then dom(composite) = s;
+}
+```
+
+Identities fix members at every nesting depth. Composite images satisfy
+`(f >> g).El(x) = g.El(f.El(x))` when `f.El(x)` exists. An image under the
+composite does not create a missing intermediate image; once that image
+exists, it also determines the image under `g`.
+
+Create morphisms with `!` or Rust's `define_*` methods. Unit and associativity
+rules reuse existing morphisms instead of allocating new ones. Associativity
+relates the outer composites once both inner composites exist. Creating
+`f >> g >> h` requires `f >> g` to be defined first.
+
 ### Rules
 
 Rules are of the form

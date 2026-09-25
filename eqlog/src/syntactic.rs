@@ -129,11 +129,14 @@ impl<'a> SyntacticChecker<'a> {
     fn check_if_var_lhs(&self, term: TermId) -> Check {
         match *self.ast.term(term) {
             Term::Ident(_) | Term::Wildcard => Ok(()),
-            Term::App(_) | Term::Member(_) | Term::Dom(_) | Term::Cod(_) => {
-                Err(CompileError::IfVarLhsNotVarOrWildcard {
-                    location: self.ast.loc(term),
-                })
-            }
+            Term::App(_)
+            | Term::Member(_)
+            | Term::Dom(_)
+            | Term::Cod(_)
+            | Term::Id(_)
+            | Term::Comp(_) => Err(CompileError::IfVarLhsNotVarOrWildcard {
+                location: self.ast.loc(term),
+            }),
         }
     }
 
@@ -181,6 +184,12 @@ impl<'a> SyntacticChecker<'a> {
             Term::Member(id) => self.check_then_term(self.ast.term_member(id).term),
             Term::Dom(id) => self.check_then_term(self.ast.dom_term(id).arg),
             Term::Cod(id) => self.check_then_term(self.ast.cod_term(id).arg),
+            Term::Id(id) => self.check_then_term(self.ast.id_term(id).arg),
+            Term::Comp(id) => {
+                let CompTerm { first, second } = *self.ast.comp_term(id);
+                self.check_then_term(first)?;
+                self.check_then_term(second)
+            }
         }
     }
 
@@ -202,11 +211,14 @@ impl<'a> SyntacticChecker<'a> {
     fn check_defined_then_var(&self, term: TermId) -> Check {
         match *self.ast.term(term) {
             Term::Ident(_) | Term::Wildcard => Ok(()),
-            Term::App(_) | Term::Member(_) | Term::Dom(_) | Term::Cod(_) => {
-                Err(CompileError::ThenDefinedNotVar {
-                    location: self.ast.loc(term),
-                })
-            }
+            Term::App(_)
+            | Term::Member(_)
+            | Term::Dom(_)
+            | Term::Cod(_)
+            | Term::Id(_)
+            | Term::Comp(_) => Err(CompileError::ThenDefinedNotVar {
+                location: self.ast.loc(term),
+            }),
         }
     }
 
@@ -216,7 +228,12 @@ impl<'a> SyntacticChecker<'a> {
         match *self.ast.term(pattern) {
             Term::Ident(_) => Err(CompileError::MatchPatternIsVariable { location }),
             Term::Wildcard => Err(CompileError::MatchPatternIsWildcard { location }),
-            Term::App(_) | Term::Member(_) | Term::Dom(_) | Term::Cod(_) => Ok(()),
+            Term::App(_)
+            | Term::Member(_)
+            | Term::Dom(_)
+            | Term::Cod(_)
+            | Term::Id(_)
+            | Term::Comp(_) => Ok(()),
         }
     }
 }

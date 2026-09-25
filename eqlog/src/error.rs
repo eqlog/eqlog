@@ -107,6 +107,10 @@ pub enum CompileError {
         name: String,
         location: Location,
     },
+    InvalidMorphismOperand {
+        expected: &'static str,
+        location: Location,
+    },
     UndeterminedTermType {
         location: Location,
     },
@@ -237,6 +241,7 @@ impl CompileError {
             } => *second_declaration,
             CompileError::ConstCalledAsFunction { location, .. } => *location,
             CompileError::FunctionUsedWithoutCall { location, .. } => *location,
+            CompileError::InvalidMorphismOperand { location, .. } => *location,
             CompileError::UndeterminedTermType { location } => *location,
             CompileError::ConflictingTermType { location, .. } => *location,
             CompileError::VariableIntroducedInThenStmt { location } => *location,
@@ -285,6 +290,7 @@ pub enum CompileErrorKind {
     SymbolDeclaredTwice,
     ConstCalledAsFunction,
     FunctionUsedWithoutCall,
+    InvalidMorphismOperand,
     UndeterminedTermType,
     ConflictingTermType,
     VariableIntroducedInThenStmt,
@@ -326,6 +332,7 @@ impl From<&CompileError> for CompileErrorKind {
             SymbolDeclaredTwice { .. } => CompileErrorKind::SymbolDeclaredTwice,
             ConstCalledAsFunction { .. } => CompileErrorKind::ConstCalledAsFunction,
             FunctionUsedWithoutCall { .. } => CompileErrorKind::FunctionUsedWithoutCall,
+            InvalidMorphismOperand { .. } => CompileErrorKind::InvalidMorphismOperand,
             UndeterminedTermType { .. } => CompileErrorKind::UndeterminedTermType,
             ConflictingTermType { .. } => CompileErrorKind::ConflictingTermType,
             VariableIntroducedInThenStmt { .. } => CompileErrorKind::VariableIntroducedInThenStmt,
@@ -440,6 +447,9 @@ static COMPILE_ERROR_KIND_ORDER: LazyLock<HashSet<[CompileErrorKind; 2]>> = Lazy
             relation.insert([MorphismArgumentNumber, k]);
         }
     }
+    transitive_closure(&mut relation);
+
+    relation.insert([InvalidMorphismOperand, UndeterminedTermType]);
     transitive_closure(&mut relation);
 
     for k in CompileErrorKind::iter() {
@@ -643,6 +653,10 @@ impl Display for CompileErrorWithContext {
             }
             FunctionUsedWithoutCall { name, location } => {
                 write!(f, "function \"{name}\" must be called with parentheses\n")?;
+                write_loc(f, *location)?;
+            }
+            InvalidMorphismOperand { expected, location } => {
+                writeln!(f, "expected {expected}")?;
                 write_loc(f, *location)?;
             }
             UndeterminedTermType { location } => {

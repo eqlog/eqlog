@@ -1,7 +1,7 @@
 type El;
 
 func mul(El, El) -> El;
-func id() -> El;
+func identity() -> El;
 func inv(El) -> El;
 
 rule mul_total {
@@ -10,7 +10,7 @@ rule mul_total {
     then mul(x, y)!;
 }
 rule id_total {
-    then id()!;
+    then identity()!;
 }
 rule inv_total {
     if x: El;
@@ -30,7 +30,7 @@ rule left_to_right_associativity {
 
 rule right_identity {
     if t_0 = x;
-    if t_1 = id();
+    if t_1 = identity();
     if to = x;
     then mul(t_0, t_1) = to;
 }
@@ -38,10 +38,10 @@ rule right_identity {
 rule right_inverse_0 {
     if t_0 = x;
     if t_1 = inv(x);
-    if to = id();
+    if to = identity();
     then mul(t_0, t_1) = to;
 }
 rule right_inverse_1 {
     if to = mul(x, inv(x));
-    then id() = to;
+    then identity() = to;
 }

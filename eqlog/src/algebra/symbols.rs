@@ -269,6 +269,12 @@ impl<'a> Checker<'a> {
             }
             Term::Dom(id) => self.walk_term(self.ast.dom_term(id).arg, ctx),
             Term::Cod(id) => self.walk_term(self.ast.cod_term(id).arg, ctx),
+            Term::Id(id) => self.walk_term(self.ast.id_term(id).arg, ctx),
+            Term::Comp(id) => {
+                let CompTerm { first, second } = *self.ast.comp_term(id);
+                self.walk_term(first, ctx);
+                self.walk_term(second, ctx);
+            }
         }
     }
 

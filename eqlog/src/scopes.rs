@@ -101,6 +101,8 @@ ordered_from!(AppHeadId);
 ordered_from!(TermMemberId);
 ordered_from!(DomTermId);
 ordered_from!(CodTermId);
+ordered_from!(IdTermId);
+ordered_from!(CompTermId);
 ordered_from!(TermListId);
 ordered_from!(TypeExprId);
 ordered_from!(AmbientTypeExprId);
@@ -584,6 +586,18 @@ impl<'a> ScopeBuilder<'a> {
                 self.insert_ordered(id, current, after);
                 after
             }
+            Term::Id(id) => {
+                let after = self.walk_term(current, self.ast.id_term(id).arg);
+                self.insert_ordered(id, current, after);
+                after
+            }
+            Term::Comp(id) => {
+                let CompTerm { first, second } = *self.ast.comp_term(id);
+                let after_first = self.walk_term(current, first);
+                let after = self.walk_term(after_first, second);
+                self.insert_ordered(id, current, after);
+                after
+            }
         };
         self.insert_ordered(term, current, exit);
         exit
@@ -644,7 +658,12 @@ impl<'a> ScopeBuilder<'a> {
                 exit
             }
             Term::Wildcard => current,
-            Term::App(_) | Term::Member(_) | Term::Dom(_) | Term::Cod(_) => {
+            Term::App(_)
+            | Term::Member(_)
+            | Term::Dom(_)
+            | Term::Cod(_)
+            | Term::Id(_)
+            | Term::Comp(_) => {
                 unreachable!("if-var terms are checked by syntactic.rs")
             }
         };
@@ -670,7 +689,12 @@ impl<'a> ScopeBuilder<'a> {
                 exit
             }
             Term::Wildcard => after_term,
-            Term::App(_) | Term::Member(_) | Term::Dom(_) | Term::Cod(_) => {
+            Term::App(_)
+            | Term::Member(_)
+            | Term::Dom(_)
+            | Term::Cod(_)
+            | Term::Id(_)
+            | Term::Comp(_) => {
                 unreachable!("defined-then variable terms are checked by syntactic.rs")
             }
         };

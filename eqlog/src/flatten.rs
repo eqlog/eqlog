@@ -165,9 +165,13 @@ fn el_base_name(
             }
             match *ctx.ast.term(term) {
                 Term::Ident(ident) => Some(ctx.ast.ident_term(ident).name.clone()),
-                Term::Wildcard | Term::App(_) | Term::Member(_) | Term::Dom(_) | Term::Cod(_) => {
-                    None
-                }
+                Term::Wildcard
+                | Term::App(_)
+                | Term::Member(_)
+                | Term::Dom(_)
+                | Term::Cod(_)
+                | Term::Id(_)
+                | Term::Comp(_) => None,
             }
         })
         .unwrap_or_else(|| "el".into())
@@ -671,6 +675,16 @@ pub fn flatten(ctx: &FlattenCtx<'_>, options: &CompileOptions) -> Vec<FlatRuleGr
             }),
     );
 
+    groups.extend(category_rules(ctx.signature).into_iter().map(|rule| {
+        postprocess_rule_group(
+            FlatRuleGroup {
+                name: rule.name.clone(),
+                rules: vec![rule],
+            },
+            evaluation_mode,
+        )
+    }));
+
     match options.model_mode {
         ModelMode::Native => {}
         ModelMode::Desugared => {
@@ -718,10 +732,10 @@ fn func_base_name(ctx: &FlattenCtx<'_>, func: FuncId) -> String {
     if let Some((decl, ids)) = ctx
         .signature
         .iter_model_decls()
-        .find(|(_, ids)| ids.dom == func || ids.cod == func)
+        .find(|(_, ids)| ids.operation_name(func).is_some())
     {
         let model_name = &ctx.ast.model_decl(decl).name;
-        let suffix = if ids.dom == func { "dom" } else { "cod" };
+        let suffix = ids.operation_name(func).expect("model operation was found");
         return format!("{model_name}_mor_{suffix}");
     }
     if let Some((types, _)) = ctx

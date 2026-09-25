@@ -40,6 +40,10 @@ pub enum FunctionKind {
     MorphismDomain(TypeId),
     /// The result is an instance of the specified model type.
     MorphismCodomain(TypeId),
+    /// Identity on an instance of the given model.
+    MorphismIdentity(TypeId),
+    /// Composition of morphisms of the given model.
+    MorphismComposition(TypeId),
     /// Applies a morphism to a member, which may belong to a nested model.
     MorphismApplication { morphism: TypeId, member: TypeId },
 }
@@ -87,8 +91,8 @@ impl Signature {
     /// an enum. Morphism functions must have the expected argument and result types.
     ///
     /// Enum constructors and morphism functions may be omitted. A morphism type
-    /// has at most one domain function, one codomain function, and one application
-    /// for each member type.
+    /// has at most one function for each endpoint, identity and composition role,
+    /// and one application for each member type.
     /// Returns [`Error::UnknownType`] or [`Error::InvalidSignature`] for invalid
     /// descriptors.
     pub fn new(types: Vec<Type>, relations: Vec<Relation>) -> Result<Self, Error> {
@@ -127,6 +131,8 @@ impl Signature {
         let mut domains = BTreeSet::new();
         let mut codomains = BTreeSet::new();
         let mut applications = BTreeSet::new();
+        let mut identities = BTreeSet::new();
+        let mut compositions = BTreeSet::new();
         for (index, relation) in signature.relations.iter().enumerate() {
             let name = &relation.name;
             if name.is_empty() || !names.insert(name) {
@@ -154,6 +160,12 @@ impl Signature {
                         }
                         FunctionKind::MorphismCodomain(_) => {
                             codomains.insert(relation.arity[relation.parents.len()])
+                        }
+                        FunctionKind::MorphismIdentity(_) => {
+                            identities.insert(*relation.arity.last().expect("function result"))
+                        }
+                        FunctionKind::MorphismComposition(_) => {
+                            compositions.insert(*relation.arity.last().expect("function result"))
                         }
                         FunctionKind::MorphismApplication { morphism, member } => {
                             applications.insert((morphism, member))
@@ -343,6 +355,28 @@ impl Signature {
                 if argument_model != model {
                     return Err(Error::InvalidSignature(
                         "endpoint argument is not the model's morphism type".into(),
+                    ));
+                }
+            }
+            FunctionKind::MorphismIdentity(model) => {
+                self.check_model(model)?;
+                if args != [model, result]
+                    || self.morphism_model(result)? != model
+                    || relation.parents != self.type_(model)?.parents
+                {
+                    return Err(Error::InvalidSignature(
+                        "invalid morphism identity signature".into(),
+                    ));
+                }
+            }
+            FunctionKind::MorphismComposition(model) => {
+                self.check_model(model)?;
+                if args != [result, result, result]
+                    || self.morphism_model(result)? != model
+                    || relation.parents != self.type_(model)?.parents
+                {
+                    return Err(Error::InvalidSignature(
+                        "invalid morphism composition signature".into(),
                     ));
                 }
             }
