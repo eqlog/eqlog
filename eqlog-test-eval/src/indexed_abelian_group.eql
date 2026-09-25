@@ -2,7 +2,7 @@ model AbelianGroup {
     type El;
 
     func mul(El, El) -> El;
-    func id() -> El;
+    func identity() -> El;
     func inv(El) -> El;
 
     rule mul_total {
@@ -12,7 +12,7 @@ model AbelianGroup {
     }
 
     rule id_total {
-        then id()!;
+        then identity()!;
     }
 
     rule inv_total {
@@ -41,7 +41,7 @@ model AbelianGroup {
     rule right_identity {
         if x: El;
         if t_0 = x;
-        if t_1 = id();
+        if t_1 = identity();
         if to = x;
         then mul(t_0, t_1) = to;
     }
@@ -50,14 +50,14 @@ model AbelianGroup {
         if x: El;
         if t_0 = x;
         if t_1 = inv(x);
-        if to = id();
+        if to = identity();
         then mul(t_0, t_1) = to;
     }
 
     rule right_inverse_1 {
         if x: El;
         if to = mul(x, inv(x));
-        then id() = to;
+        then identity() = to;
     }
 
     rule commutativity {

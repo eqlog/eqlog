@@ -301,6 +301,8 @@ impl Generator {
                 | RelationKind::Function(
                     FunctionKind::Ordinary
                     | FunctionKind::Constructor
+                    | FunctionKind::MorphismIdentity(_)
+                    | FunctionKind::MorphismComposition(_)
                     | FunctionKind::MorphismApplication { .. },
                 ) => None,
             };
@@ -334,7 +336,9 @@ impl Generator {
                     FunctionKind::Ordinary
                     | FunctionKind::Constructor
                     | FunctionKind::MorphismDomain(_)
-                    | FunctionKind::MorphismCodomain(_),
+                    | FunctionKind::MorphismCodomain(_)
+                    | FunctionKind::MorphismIdentity(_)
+                    | FunctionKind::MorphismComposition(_),
                 ) => None,
             })
             .collect();
@@ -390,6 +394,8 @@ pub fn generate(signature: &'static Signature, seed: u64, rounds: usize) -> Vec<
                 FunctionKind::Constructor
                 | FunctionKind::MorphismDomain(_)
                 | FunctionKind::MorphismCodomain(_)
+                | FunctionKind::MorphismIdentity(_)
+                | FunctionKind::MorphismComposition(_)
                 | FunctionKind::MorphismApplication { .. },
             ) => {}
         }
@@ -490,6 +496,8 @@ fn validate_signature(signature: &Signature) {
                 FunctionKind::Constructor
                 | FunctionKind::MorphismDomain(_)
                 | FunctionKind::MorphismCodomain(_)
+                | FunctionKind::MorphismIdentity(_)
+                | FunctionKind::MorphismComposition(_)
                 | FunctionKind::MorphismApplication { .. },
             ) => continue,
         };

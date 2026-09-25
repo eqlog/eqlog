@@ -110,10 +110,10 @@ impl<'a> RustGenCtx<'a> {
         if let Some((_decl, ids)) = self
             .signature
             .iter_model_decls()
-            .find(|(_, ids)| ids.dom == func || ids.cod == func)
+            .find(|(_, ids)| ids.operation_name(func).is_some())
         {
             let mor_name = self.type_name(ids.mor).to_case(Snake);
-            let suffix = if ids.dom == func { "dom" } else { "cod" };
+            let suffix = ids.operation_name(func).expect("model operation was found");
             return format!("{mor_name}_{suffix}");
         }
 

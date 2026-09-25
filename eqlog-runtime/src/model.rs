@@ -254,6 +254,8 @@ impl Model {
                 FunctionKind::Ordinary
                 | FunctionKind::MorphismDomain(_)
                 | FunctionKind::MorphismCodomain(_)
+                | FunctionKind::MorphismIdentity(_)
+                | FunctionKind::MorphismComposition(_)
                 | FunctionKind::MorphismApplication { .. },
             ) => Err(Error::ExpectedConstructor(value.constructor)),
         }
@@ -465,6 +467,8 @@ impl Model {
                 FunctionKind::Ordinary
                 | FunctionKind::MorphismDomain(_)
                 | FunctionKind::MorphismCodomain(_)
+                | FunctionKind::MorphismIdentity(_)
+                | FunctionKind::MorphismComposition(_)
                 | FunctionKind::MorphismApplication { .. } => {
                     return Err(Error::ConstructorRequired(result_type));
                 }
@@ -493,7 +497,9 @@ impl Model {
             FunctionKind::Ordinary
             | FunctionKind::Constructor
             | FunctionKind::MorphismDomain(_)
-            | FunctionKind::MorphismCodomain(_) => {
+            | FunctionKind::MorphismCodomain(_)
+            | FunctionKind::MorphismIdentity(_)
+            | FunctionKind::MorphismComposition(_) => {
                 if !result_parents.is_empty() && result_parents != &descriptor.parents {
                     return Err(Error::InvalidSignature(
                         "function result has different enclosing models".into(),
@@ -531,6 +537,8 @@ impl Model {
                     FunctionKind::Ordinary
                     | FunctionKind::MorphismDomain(_)
                     | FunctionKind::MorphismCodomain(_)
+                    | FunctionKind::MorphismIdentity(_)
+                    | FunctionKind::MorphismComposition(_)
                     | FunctionKind::MorphismApplication { .. },
                 ) => None,
             })
@@ -586,7 +594,9 @@ impl Model {
                 FunctionKind::Ordinary
                 | FunctionKind::Constructor
                 | FunctionKind::MorphismDomain(_)
-                | FunctionKind::MorphismCodomain(_),
+                | FunctionKind::MorphismCodomain(_)
+                | FunctionKind::MorphismIdentity(_)
+                | FunctionKind::MorphismComposition(_),
             ) => None,
         };
         for &element in tuple {

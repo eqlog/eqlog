@@ -228,8 +228,14 @@ impl Structure {
             let drained = self.drain_equalities();
             let func_changed = self.functionality();
             let type_changed = self.typing(signature);
+            let mor_operation_changed = self.morphism_operation_constraints(signature);
             let mor_app_changed = self.morphism_app_constraints(signature);
-            if !drained && !func_changed && !type_changed && !mor_app_changed {
+            if !drained
+                && !func_changed
+                && !type_changed
+                && !mor_app_changed
+                && !mor_operation_changed
+            {
                 break;
             }
             changed = true;
@@ -364,6 +370,158 @@ impl Structure {
             }
         }
 
+        changed
+    }
+
+    fn morphism_operation_constraints(&mut self, signature: &Signature) -> bool {
+        let apps: Vec<_> = self
+            .func_apps
+            .iter()
+            .map(|(app, result)| (app.clone(), *result))
+            .collect();
+        let mut changed = false;
+        for (app, result) in apps {
+            for (_, ids) in signature.iter_model_decls() {
+                if app.func == ids.id {
+                    changed |= self.identity_action_constraints(&app, result, ids.mor, signature);
+                    for func in [ids.dom, ids.cod] {
+                        changed |= self.insert_func_app_or_equate(
+                            FuncApp {
+                                func,
+                                parents: app.parents.clone(),
+                                args: vec![result],
+                            },
+                            app.args[0],
+                        );
+                    }
+                }
+                if app.func == ids.comp {
+                    changed |=
+                        self.composition_action_constraints(&app, result, ids.mor, signature);
+                    // A composite constrains endpoints in either direction, including
+                    // endpoints discovered later through member applications.
+                    for ((left_func, left), (right_func, right)) in [
+                        ((ids.dom, app.args[0]), (ids.dom, result)),
+                        ((ids.cod, app.args[1]), (ids.cod, result)),
+                        ((ids.cod, app.args[0]), (ids.dom, app.args[1])),
+                    ] {
+                        let left = FuncApp {
+                            func: left_func,
+                            parents: app.parents.clone(),
+                            args: vec![self.root(left)],
+                        };
+                        let right = FuncApp {
+                            func: right_func,
+                            parents: app.parents.clone(),
+                            args: vec![self.root(right)],
+                        };
+                        if let Some(&value) = self.func_apps.get(&left) {
+                            changed |= self.insert_func_app_or_equate(right.clone(), value);
+                        }
+                        if let Some(&value) = self.func_apps.get(&right) {
+                            changed |= self.insert_func_app_or_equate(left, value);
+                        }
+                    }
+                }
+            }
+        }
+        changed
+    }
+
+    fn identity_action_constraints(
+        &mut self,
+        app: &FuncApp,
+        identity: ElId,
+        morphism_type: TypeId,
+        signature: &Signature,
+    ) -> bool {
+        let mut changed = false;
+        for (types, action) in signature.iter_mor_app_funcs() {
+            if types.morphism_type != morphism_type {
+                continue;
+            }
+            let members: Vec<_> = self
+                .els
+                .iter()
+                .filter_map(|(&el, cts)| {
+                    cts.iter()
+                        .any(|ct| {
+                            ct.typ == types.member_type
+                                && ct
+                                    .parents
+                                    .get(app.parents.len())
+                                    .copied()
+                                    .map(|parent| self.root(parent))
+                                    == Some(self.root(app.args[0]))
+                        })
+                        .then_some(el)
+                })
+                .collect();
+            for member in members {
+                changed |= self.insert_func_app_or_equate(
+                    FuncApp {
+                        func: action,
+                        parents: app.parents.clone(),
+                        args: vec![identity, member],
+                    },
+                    member,
+                );
+            }
+            let known: Vec<_> = self
+                .func_apps
+                .keys()
+                .filter(|candidate| {
+                    candidate.func == action
+                        && candidate.parents == app.parents
+                        && self.root(candidate.args[0]) == self.root(identity)
+                })
+                .cloned()
+                .collect();
+            for action in known {
+                let arg = action.args[1];
+                changed |= self.insert_func_app_or_equate(action, arg);
+            }
+        }
+        changed
+    }
+
+    fn composition_action_constraints(
+        &mut self,
+        app: &FuncApp,
+        composite: ElId,
+        morphism_type: TypeId,
+        signature: &Signature,
+    ) -> bool {
+        let mut changed = false;
+        let first_actions: Vec<_> = self
+            .func_apps
+            .iter()
+            .filter_map(|(action, &image)| {
+                let types = signature.types_for_mor_app_func(action.func)?;
+                (types.morphism_type == morphism_type
+                    && action.parents == app.parents
+                    && self.root(action.args[0]) == self.root(app.args[0]))
+                .then_some((action.clone(), image))
+            })
+            .collect();
+        for (first, image) in first_actions {
+            let second = FuncApp {
+                func: first.func,
+                parents: app.parents.clone(),
+                args: vec![self.root(app.args[1]), self.root(image)],
+            };
+            let result = FuncApp {
+                func: first.func,
+                parents: app.parents.clone(),
+                args: vec![self.root(composite), self.root(first.args[1])],
+            };
+            if let Some(&value) = self.func_apps.get(&second) {
+                changed |= self.insert_func_app_or_equate(result.clone(), value);
+            }
+            if let Some(&value) = self.func_apps.get(&result) {
+                changed |= self.insert_func_app_or_equate(second, value);
+            }
+        }
         changed
     }
 

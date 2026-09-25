@@ -1,4 +1,5 @@
 mod ast;
+mod category;
 mod diagonals;
 mod index_selection;
 mod morphisms;
@@ -11,6 +12,7 @@ use crate::algebra::signature::{FuncId, Signature};
 use crate::options::EvaluationMode;
 
 pub use ast::*;
+pub use category::*;
 pub use diagonals::*;
 pub use index_selection::*;
 pub use morphisms::*;

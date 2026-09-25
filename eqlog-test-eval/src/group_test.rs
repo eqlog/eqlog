@@ -5,7 +5,7 @@ fn left_identity_test() {
     let mut grp = Group::new();
 
     let x = grp.new_el();
-    let id = grp.define_id();
+    let id = grp.define_identity();
     let id_x = grp.define_mul(id, x);
 
     assert!(grp.close_until(|grp| grp.are_equal_el(x, id_x)));
@@ -18,7 +18,7 @@ fn left_inverse_test() {
     let x = grp.new_el();
     let xinv = grp.define_inv(x);
     let x_xinv = grp.define_mul(x, xinv);
-    let id = grp.define_id();
+    let id = grp.define_identity();
 
     assert!(grp.close_until(|grp| grp.are_equal_el(x_xinv, id)));
 }

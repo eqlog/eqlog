@@ -288,3 +288,39 @@ fn nested_applications_report_missing_parent_image_declarations() {
     assert_eq!(model.elements(TypeId(0)).unwrap().count(), 2);
     assert_eq!(model.tuples(RelationId(3)).unwrap().count(), 0);
 }
+
+#[test]
+fn identity_and_composition_descriptors_validate_their_roles() {
+    let (types, relations) = nested_signature();
+    for (kind, arity) in [
+        (
+            FunctionKind::MorphismIdentity(TypeId(2)),
+            vec![TypeId(2), TypeId(1)],
+        ),
+        (
+            FunctionKind::MorphismComposition(TypeId(2)),
+            vec![TypeId(1), TypeId(1), TypeId(1)],
+        ),
+    ] {
+        let operation = Relation {
+            name: "operation".into(),
+            kind: RelationKind::Function(kind),
+            parents: vec![],
+            arity,
+        };
+        let mut valid = relations.clone();
+        valid.push(operation.clone());
+        assert!(Signature::new(types.clone(), valid.clone()).is_ok());
+        valid.push(Relation {
+            name: "duplicate".into(),
+            ..operation.clone()
+        });
+        assert!(Signature::new(types.clone(), valid).is_err());
+
+        let mut bad = operation;
+        bad.arity[0] = TypeId(0);
+        let mut invalid = relations.clone();
+        invalid.push(bad);
+        assert!(Signature::new(types.clone(), invalid).is_err());
+    }
+}

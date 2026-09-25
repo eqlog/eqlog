@@ -15,13 +15,13 @@ fn iter_morphism_with_signature<'a>(
 }
 
 fn are_isomorphic(lhs: Obj, rhs: Obj, cat: &LexCategory) -> bool {
-    let lhs_id = match cat.id(lhs) {
+    let lhs_id = match cat.identity(lhs) {
         Some(lhs_id) => lhs_id,
         None => {
             return false;
         }
     };
-    let rhs_id = match cat.id(rhs) {
+    let rhs_id = match cat.identity(rhs) {
         Some(rhs_id) => rhs_id,
         None => {
             return false;

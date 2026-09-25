@@ -86,6 +86,7 @@ pub fn build_structures(
             .collect();
         errors.extend(last_arg_num_errors);
         errors.extend(morphism_application_errors(ast, scopes, signature, &rule));
+        errors.extend(morphism_operand_errors(ast, signature, &rule));
         errors.extend(undetermined_type_errors(ast, &rule));
         // Only run lower-priority surjectivity checks when the structures are
         // at a settled state without higher-priority structure errors.
@@ -104,6 +105,53 @@ pub fn build_structures(
         assert!(prev.is_none(), "rule {rid:?} visited twice in decl tree");
     }
     (rules, first_errors.unwrap_or_default())
+}
+
+fn morphism_operand_errors(
+    ast: &Ast,
+    signature: &Signature,
+    rule: &RuleStructures,
+) -> Vec<CompileError> {
+    let mut reported = BTreeSet::new();
+    let mut errors = Vec::new();
+    for (sid, terms) in rule.semantic_els.iter().enumerate() {
+        for &term in terms.keys() {
+            let operands = match *ast.term(term) {
+                Term::Id(id) => vec![(ast.id_term(id).arg, true), (term, false)],
+                Term::Comp(id) => {
+                    let CompTerm { first, second } = *ast.comp_term(id);
+                    vec![(first, false), (second, false), (term, false)]
+                }
+                Term::Ident(_)
+                | Term::Wildcard
+                | Term::App(_)
+                | Term::Member(_)
+                | Term::Dom(_)
+                | Term::Cod(_) => Vec::new(),
+            };
+            for (operand, model_required) in operands {
+                let Some(types) = concrete_types_of_term(rule, StructureId(sid), operand) else {
+                    continue;
+                };
+                let invalid = types.iter().any(|ct| match signature.type_(ct.typ).kind {
+                    TypeKind::Model => !model_required,
+                    TypeKind::Mor(_) => model_required,
+                    TypeKind::Plain | TypeKind::Enum => true,
+                });
+                if invalid && reported.insert(operand) {
+                    errors.push(CompileError::InvalidMorphismOperand {
+                        expected: if model_required {
+                            "a model instance as the argument of id"
+                        } else {
+                            "a morphism"
+                        },
+                        location: ast.loc(operand),
+                    });
+                }
+            }
+        }
+    }
+    errors
 }
 
 fn morphism_application_errors(

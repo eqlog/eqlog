@@ -1,0 +1,134 @@
+model Set {
+    type El;
+}
+
+pred identity_requested(Set);
+rule requested_identity {
+    if identity_requested(s);
+    then id(s)!;
+}
+
+pred composition_requested(Mor(Set), Mor(Set));
+rule requested_composition {
+    if composition_requested(f, g);
+    if cod(f) = dom(g);
+    then (f >> g)!;
+}
+
+pred observed(Mor(Set), Mor(Set));
+rule composite_application {
+    if composition_requested(f, g);
+    if dom(f)!;
+    if cod(g)!;
+    if y = (f >> g).El(x);
+    then observed(f, g);
+    then x = x;
+    then y = y;
+}
+
+pred chain_requested(Mor(Set), Mor(Set), Mor(Set));
+rule chain {
+    if chain_requested(f, g, h);
+    if fg = f >> g;
+    if gh = g >> h;
+    then (fg >> h)!;
+    then f >> gh = f >> g >> h;
+}
+
+pred identity_observed(Set);
+rule identity_application {
+    if s: Set;
+    if x = id(s).El(x);
+    then identity_observed(s);
+}
+
+pred inferred_identity(Mor(Set));
+rule infer_identity_from_result {
+    if f: Mor(Set);
+    if f = id(s);
+    then inferred_identity(f);
+    then s = s;
+}
+
+model Bundle {
+    model Fiber {
+        type Item;
+    }
+
+    pred inner_identity_requested(Fiber);
+    rule inner_identity {
+        if inner_identity_requested(s);
+        then id(s)!;
+    }
+
+    pred inner_composition_requested(Mor(Fiber), Mor(Fiber));
+    rule inner_composition {
+        if inner_composition_requested(f, g);
+        if cod(f) = dom(g);
+        then (f >> g)!;
+    }
+}
+
+pred bundle_identity_requested(Bundle);
+rule bundle_identity {
+    if bundle_identity_requested(b);
+    then id(b)!;
+}
+
+pred bundle_composition_requested(Mor(Bundle), Mor(Bundle));
+rule bundle_composition {
+    if bundle_composition_requested(f, g);
+    if cod(f) = dom(g);
+    then (f >> g)!;
+}
+
+pred deep_observed(Mor(Bundle), Mor(Bundle));
+rule deep_application {
+    if bundle_composition_requested(f, g);
+    if dom(f)!;
+    if cod(g)!;
+    if y = (f >> g).Fiber.Item(x);
+    then deep_observed(f, g);
+    then x = x;
+    then y = y;
+}
+
+pred nested_identity_requested(Bundle);
+rule nested_identity_application {
+    if nested_identity_requested(b);
+    if fiber: b.Fiber;
+    if x: fiber.Item;
+    then i := id(b)!;
+    then i.Fiber.Item(x)!;
+}
+
+pred composite_observed(Mor(Set));
+rule infer_composition_from_result {
+    if h: Mor(Set);
+    if h = f >> g;
+    then composite_observed(h);
+    then f = f;
+    then g = g;
+}
+
+pred nested_composition_requested(Mor(Bundle), Mor(Bundle));
+rule nested_composition_application {
+    if nested_composition_requested(f, g);
+    if a = dom(f);
+    if cod(f) = dom(g);
+    if cod(g)!;
+    if fiber: a.Fiber;
+    if mid = f.Fiber(fiber);
+    if target = g.Fiber(mid);
+    if x: fiber.Item;
+    then h := (f >> g)!;
+    then h.Fiber.Item(x)!;
+    then target = target;
+}
+
+pred left_chain_requested(Mor(Set), Mor(Set), Mor(Set));
+rule left_chain {
+    if left_chain_requested(f, g, h);
+    if (f >> g)!;
+    then (f >> g >> h)!;
+}

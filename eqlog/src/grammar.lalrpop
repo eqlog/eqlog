@@ -48,7 +48,8 @@ TermAtom: ParsedTerm = {
     <term: Wildcard> => ParsedTerm::Term(term),
     <term: DomTerm> => ParsedTerm::Term(term),
     <term: CodTerm> => ParsedTerm::Term(term),
-    "(" <term: PostfixTerm> ")" => ParsedTerm::Parenthesized(Box::new(term)),
+    <term: IdTerm> => ParsedTerm::Term(term),
+    "(" <term: CompositionTerm> ")" => ParsedTerm::Parenthesized(Box::new(term)),
 }
 
 TermPostfix: TermPostfix = {
@@ -72,6 +73,14 @@ CodTerm: TermId = {
         let loc = Location(l, r);
         let c = ast.push_cod_term(loc, CodTerm { arg });
         ast.push_term(loc, Term::Cod(c))
+    },
+}
+
+IdTerm: TermId = {
+    <l: @L> "id" "(" <arg: Term> ")" <r: @R> => {
+        let loc = Location(l, r);
+        let id = ast.push_id_term(loc, IdTerm { arg });
+        ast.push_term(loc, Term::Id(id))
     },
 }
 
@@ -118,21 +127,24 @@ PostfixTerm: ParsedPostfixTerm = {
     },
 }
 
+CompositionTerm: ParsedPostfixTerm = {
+    <mut first: PostfixTerm> <rest: (">>" <PostfixTerm>)*> => {
+        for second in rest {
+            let start = first.start;
+            let first_term = ast.finish_postfix(first);
+            let second_term = ast.finish_postfix(second);
+            let loc = Location(start, ast.loc(second_term).1);
+            let comp = ast.push_comp_term(loc, CompTerm { first: first_term, second: second_term });
+            let term = ast.push_term(loc, Term::Comp(comp));
+            first = ParsedPostfixTerm { start, parsed: ParsedTerm::Term(term), names: Vec::new() };
+        }
+        first
+    },
+}
+
 #[inline]
 Term: TermId = {
-    <state: PostfixTerm> => {
-        let mut term = match state.parsed {
-            ParsedTerm::Ident(ident) => ast.push_term(ast.loc(ident), Term::Ident(ident)),
-            ParsedTerm::Term(term) => term,
-            ParsedTerm::Parenthesized(_) => unreachable!("parentheses are flattened"),
-        };
-        for name in state.names {
-            let loc = Location(ast.loc(term).0, ast.loc(name).1);
-            let member = ast.push_term_member(loc, TermMember { term, name });
-            term = ast.push_term(loc, Term::Member(member));
-        }
-        term
-    },
+    <state: CompositionTerm> => ast.finish_postfix(state),
 }
 
 #[inline]

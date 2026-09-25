@@ -169,6 +169,12 @@ impl<'a> OccurrencesChecker<'a> {
             Term::Member(id) => self.collect_term(self.ast.term_member(id).term, occ),
             Term::Dom(id) => self.collect_term(self.ast.dom_term(id).arg, occ),
             Term::Cod(id) => self.collect_term(self.ast.cod_term(id).arg, occ),
+            Term::Id(id) => self.collect_term(self.ast.id_term(id).arg, occ),
+            Term::Comp(id) => {
+                let CompTerm { first, second } = *self.ast.comp_term(id);
+                self.collect_term(first, occ);
+                self.collect_term(second, occ);
+            }
         }
     }
 

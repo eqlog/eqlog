@@ -12,8 +12,8 @@
 //! 1. Walk the AST and register one [`Type`] per `type` / `enum` / `model`
 //!    declaration, plus the auto-generated mor companion type for every
 //!    model. The same pass also registers the morphism operations that
-//!    every model implies: the `dom`/`cod` projections (one [`Func`] each
-//!    per model, on [`ModelIds`]) and the `mor_app` functions (one
+//!    every model implies: the `dom`/`cod` projections, identity and composition
+//!    (one [`Func`] each per model, on [`ModelIds`]) and the `mor_app` functions (one
 //!    [`Func`] per member type, on
 //!    [`Signature::mor_app_func_for_type`]). Produces lookups from AST
 //!    decl ids to ids, exposed via [`Signature::type_for_type_decl`] and
@@ -88,9 +88,8 @@ pub struct Func {
 }
 
 /// The ids a `model` declaration produces: the model type itself, its
-/// auto-generated morphism-type companion, and the dom/cod projections
-/// that read the source/target model instance from a morphism. The
-/// morphism-application functions live separately on
+/// auto-generated morphism-type companion, and the domain, codomain, identity
+/// and composition operations. The morphism-application functions live separately on
 /// [`Signature::mor_app_func`], with both type roles named explicitly.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct ModelIds {
@@ -98,6 +97,21 @@ pub struct ModelIds {
     pub mor: TypeId,
     pub dom: FuncId,
     pub cod: FuncId,
+    pub id: FuncId,
+    pub comp: FuncId,
+}
+
+impl ModelIds {
+    pub fn operation_name(self, func: FuncId) -> Option<&'static str> {
+        [
+            (self.dom, "dom"),
+            (self.cod, "cod"),
+            (self.id, "id"),
+            (self.comp, "comp"),
+        ]
+        .into_iter()
+        .find_map(|(candidate, name)| (candidate == func).then_some(name))
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -376,7 +390,7 @@ struct Builder<'a> {
 impl<'a> Builder<'a> {
     /// Pass 1: walk the AST registering one [`Type`] per `type`/`enum`/`model`
     /// declaration (plus the mor companion of each model) and the morphism
-    /// operations (`dom`, `cod` per model and `mor_app` per member type),
+    /// operations (`dom`, `cod`, `id`, `comp` per model and `mor_app` per member type),
     /// recording the AST-id to [`TypeId`] lookups on [`Signature`].
     fn populate_types(&mut self, decls: &[DeclId], parents: &[TypeId]) {
         for decl in decls {
@@ -402,6 +416,16 @@ impl<'a> Builder<'a> {
                         domain: vec![mor_tid],
                         codomain: model_tid,
                     });
+                    let identity = self.signature.push_func(Func {
+                        parents: parents.to_vec(),
+                        domain: vec![model_tid],
+                        codomain: mor_tid,
+                    });
+                    let comp = self.signature.push_func(Func {
+                        parents: parents.to_vec(),
+                        domain: vec![mor_tid, mor_tid],
+                        codomain: mor_tid,
+                    });
                     self.signature.model_decls.insert(
                         id,
                         ModelIds {
@@ -409,6 +433,8 @@ impl<'a> Builder<'a> {
                             mor: mor_tid,
                             dom,
                             cod,
+                            id: identity,
+                            comp,
                         },
                     );
                     let body = self.ast.model_decl(id).body.clone();
