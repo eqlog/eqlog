@@ -1,16 +1,8 @@
 Support identities and composition for morphisms
 
-Allow rules to express identity maps and chains of model morphisms using
-id(model) and first >> second, with member access binding more tightly.
-Infer model types and endpoints in either direction and preserve nested
-member typing when identities or composites supply parent images.
+Add id(model) and first >> second so rules can express categorical
+operations directly. Reuse existing morphisms during closure to avoid
+unbounded generation. Rename user-defined id functions to identity.
 
-Reuse existing morphisms for unit and associativity laws so closure does
-not enumerate a free category. Propagate identity and composite actions
-through known member images. Rename example identity functions to keep
-id available as a builtin. Expose identity and composition roles in
-runtime signatures so dynamic clients can distinguish generated
-operations.
-
-Cover valid evaluation, partial actions, nested members, composition
-order, associativity, and invalid operands with integration tests.
+Cover category laws, nested members, partial images, runtime signatures,
+and invalid operands with integration tests.

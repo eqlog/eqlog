@@ -32,8 +32,7 @@ fn conclusion(stmt: FlatIfStmt) -> FlatThenStmt {
     }
 }
 
-// These laws reuse existing elements, so merely declaring a model never
-// starts enumerating its free category of morphisms.
+// Allocating morphisms here could make closure of a free category diverge.
 pub fn category_rules(signature: &Signature) -> Vec<FlatRule> {
     let mut rules = Vec::new();
     for (_, ids) in signature.iter_model_decls() {

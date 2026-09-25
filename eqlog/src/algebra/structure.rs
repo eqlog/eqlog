@@ -398,8 +398,6 @@ impl Structure {
                 if app.func == ids.comp {
                     changed |=
                         self.composition_action_constraints(&app, result, ids.mor, signature);
-                    // A composite constrains endpoints in either direction, including
-                    // endpoints discovered later through member applications.
                     for ((left_func, left), (right_func, right)) in [
                         ((ids.dom, app.args[0]), (ids.dom, result)),
                         ((ids.cod, app.args[1]), (ids.cod, result)),
@@ -977,7 +975,7 @@ impl StructureCat {
     ///     pull type information from the codomain back into the domain for
     ///     every mapped element whose [`ConcreteType`] parents are all
     ///     ambient model elements (so their preimages in the domain are
-    ///     unambiguous — the domain's own ambient els of the same types).
+    ///     unambiguous: the domain's own ambient els of the same types).
     ///     Equality, predicate and function data are not propagated
     ///     backwards by this step. Re-close the domain afterwards so any
     ///     equalities induced by newly imposed types settle.
@@ -1088,8 +1086,8 @@ impl StructureCat {
         let mut changed = false;
 
         // Canonicalise both keys (under src's unification) and values
-        // (under tgt's unification) so the entries seen below — and the
-        // images derived from them — match `tgt`'s post-close form.
+        // (under tgt's unification) so the entries seen below, and the
+        // images derived from them, match `tgt`'s post-close form.
         // Without canonicalising values, repeated push calls would keep
         // inserting pred_app/func_app entries with stale element ids,
         // each time reporting `changed = true`.
@@ -1345,7 +1343,7 @@ impl StructureCat {
 
     /// Equates pairs of meet elements whose canonical images coincide in
     /// every `end_i`. Computed by partitioning meet's roots by the tuple
-    /// `(root in end_1, root in end_2, …)` and equating within each
+    /// `(root in end_1, root in end_2, ...)` and equating within each
     /// resulting group.
     fn saturate_under_prod_equalities(&mut self, up: &UnderProd) -> bool {
         let groups = self.group_meet_roots_by_end_images(up);
@@ -1568,7 +1566,7 @@ impl StructureCat {
     /// Inverts a `meet -> end` projection: each end-root maps to the
     /// smallest meet-root that projects to it. Multi-preimage entries
     /// keep only the smallest meet-root, so saturations that would have
-    /// required a different preimage are silently skipped — soundness is
+    /// required a different preimage are silently skipped; soundness is
     /// preserved (we only add facts that the projection witnesses).
     fn invert_projection(&self, meet: StructureId, end: StructureId) -> BTreeMap<ElId, ElId> {
         let map = self
@@ -1625,7 +1623,7 @@ impl StructureCat {
 
     /// Rewrites every [`ElMap`] so its keys are roots in the domain's
     /// unification and its values are roots in the codomain's. Collapses
-    /// colliding keys by dropping duplicates — by the time this runs the
+    /// colliding keys by dropping duplicates; by the time this runs the
     /// values for those collisions have already been unified, so dropping
     /// is safe.
     fn canonicalise_morphisms(&mut self) {

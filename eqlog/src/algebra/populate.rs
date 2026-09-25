@@ -492,7 +492,7 @@ fn walk_pred_atom(
 /// For ambient preds the chain comes from the rule's
 /// [`Structure::ambient_model_els`], looked up by each parent type. The
 /// pred's parent chain is always a sub-chain of the rule's enclosing
-/// models — the pred has to be visible to the rule — but it may be
+/// models (the pred has to be visible to the rule), but it may be
 /// strictly shorter: a global pred used in a model rule, or a pred
 /// declared on an outer model used in an inner-model rule, both have
 /// fewer parents than the rule itself sits inside.

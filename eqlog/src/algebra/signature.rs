@@ -1,33 +1,8 @@
-//! Dependent signatures: types, predicates and functions, parameterised by
-//! enclosing model types.
+//! Signatures parameterized by enclosing model types.
 //!
-//! Following the AST conventions of the rest of the crate, ids ([`TypeId`],
-//! [`PredId`], [`FuncId`]) are opaque indices into flat `Vec`s on
-//! [`Signature`]. The data structs ([`Type`], [`Pred`], [`Func`]) hold the
-//! algebraic shape only and carry no source-name information. Downstream
-//! callers needing names go through the AST.
-//!
-//! [`build_signature`] runs in two passes:
-//!
-//! 1. Walk the AST and register one [`Type`] per `type` / `enum` / `model`
-//!    declaration, plus the auto-generated mor companion type for every
-//!    model. The same pass also registers the morphism operations that
-//!    every model implies: the `dom`/`cod` projections, identity and composition
-//!    (one [`Func`] each per model, on [`ModelIds`]) and the `mor_app` functions (one
-//!    [`Func`] per member type, on
-//!    [`Signature::mor_app_func_for_type`]). Produces lookups from AST
-//!    decl ids to ids, exposed via [`Signature::type_for_type_decl`] and
-//!    friends.
-//! 2. Walk the AST again to register the user-declared [`Pred`]s and
-//!    [`Func`]s. Type-name references in pred/func/ctor arg decls (and
-//!    func result types) are resolved against the ambient
-//!    [`crate::scopes::Scopes`] entry of the relevant AST node, then
-//!    translated through the pass-1 lookups.
-//!
-//! Symbol-resolution failures (undeclared names, names that resolve to a
-//! non-type symbol) are accumulated as [`CompileError`]s and returned
-//! alongside the partial [`Signature`]. The caller is responsible for
-//! merging them with errors from other passes.
+//! Types and generated morphism operations are registered before user
+//! relations so argument and result types can refer to later declarations.
+//! Source names remain in the AST.
 
 use std::collections::BTreeMap;
 
@@ -87,10 +62,6 @@ pub struct Func {
     pub codomain: TypeId,
 }
 
-/// The ids a `model` declaration produces: the model type itself, its
-/// auto-generated morphism-type companion, and the domain, codomain, identity
-/// and composition operations. The morphism-application functions live separately on
-/// [`Signature::mor_app_func`], with both type roles named explicitly.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct ModelIds {
     pub type_: TypeId,
@@ -388,10 +359,6 @@ struct Builder<'a> {
 }
 
 impl<'a> Builder<'a> {
-    /// Pass 1: walk the AST registering one [`Type`] per `type`/`enum`/`model`
-    /// declaration (plus the mor companion of each model) and the morphism
-    /// operations (`dom`, `cod`, `id`, `comp` per model and `mor_app` per member type),
-    /// recording the AST-id to [`TypeId`] lookups on [`Signature`].
     fn populate_types(&mut self, decls: &[DeclId], parents: &[TypeId]) {
         for decl in decls {
             match *self.ast.decl(*decl) {

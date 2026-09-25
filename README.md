@@ -165,18 +165,14 @@ To eqlog, functions are synonymous to *partial* functions; they need not be tota
 
 ### Morphism identities and composition
 
-For a model instance `m: M`, `id(m)` denotes its identity morphism of type
-`Mor(M)`. The name `id` is reserved; user-defined identity functions can be
-named `identity`.
+`id(m)` is the identity on a model instance `m: M`, with type `Mor(M)`.
+The name `id` is reserved; use `identity` for user-defined functions.
 
-`f >> g` composes morphisms in written order: first `f`, then `g`.
-Both operands must have the same morphism type. A defined composite imposes
-`cod(f) = dom(g)`, has domain `dom(f)`, and has codomain `cod(g)`.
-Composition binds less tightly than member access and application, and chains
-associate to the left. For example, `(f >> g).El(x)` applies the composite's
-`El` component, and `f >> g >> h` parses as `(f >> g) >> h`.
-
-These operations use the existing definedness syntax:
+`f >> g` means first `f`, then `g`. Both operands must have the same
+morphism type. A defined composite imposes `cod(f) = dom(g)`, has domain
+`dom(f)`, and has codomain `cod(g)`. Member access and application bind more
+tightly than `>>`; chains associate to the left. Use `(f >> g).El(x)` to
+apply a composite, and `f >> g >> h` for `(f >> g) >> h`.
 
 ```eqlog
 model Set {
@@ -194,19 +190,15 @@ rule compose_requested {
 }
 ```
 
-Identities fix every member, including nested members. Composite images
-propagate as `(f >> g).El(x) = g.El(f.El(x))` when the intermediate image
-`f.El(x)` exists. Knowing only an image under the composite does not create
-that intermediate image; if it is supplied later, it constrains the image
-under `g` too.
+Identities fix members at every nesting depth. Composite images satisfy
+`(f >> g).El(x) = g.El(f.El(x))` when `f.El(x)` exists. An image under the
+composite does not create a missing intermediate image; once that image
+exists, it also determines the image under `g`.
 
-Identity and composition morphisms are created explicitly with `!` or the
-Rust `define_*` APIs. The category laws reuse existing morphisms: composing
-with an existing identity gives the original morphism, and associativity
-relates the two outer composites once both inner composites exist. Declaring
-a model does not enumerate all identities or composites. As with other
-nested function calls, creating `f >> g >> h` requires the inner composite
-`f >> g` to be defined first.
+Create morphisms with `!` or Rust's `define_*` methods. Unit and associativity
+rules reuse existing morphisms instead of allocating new ones. Associativity
+relates the outer composites once both inner composites exist. Creating
+`f >> g >> h` requires `f >> g` to be defined first.
 
 ### Rules
 

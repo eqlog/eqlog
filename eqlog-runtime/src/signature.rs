@@ -40,9 +40,9 @@ pub enum FunctionKind {
     MorphismDomain(TypeId),
     /// The result is an instance of the specified model type.
     MorphismCodomain(TypeId),
-    /// Returns the identity morphism of an instance of this model type.
+    /// Identity on an instance of the given model.
     MorphismIdentity(TypeId),
-    /// Composes two morphisms between instances of this model type.
+    /// Composition of morphisms of the given model.
     MorphismComposition(TypeId),
     /// Applies a morphism to a member, which may belong to a nested model.
     MorphismApplication { morphism: TypeId, member: TypeId },
