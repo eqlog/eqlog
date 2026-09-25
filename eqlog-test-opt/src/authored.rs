@@ -49,15 +49,15 @@ impl Run {
 
     fn close<M: Evaluator>(&mut self, model: &mut M) {
         model.close_bounded();
-        let mut snapshot = model.to_dynamic();
-        snapshot.canonicalize();
+        let mut copy = model.to_dynamic();
+        copy.canonicalize();
         self.closures.push((
             State {
                 model: self.inputs.model.clone(),
                 handles: self.inputs.handles.clone(),
             },
             State {
-                model: snapshot,
+                model: copy,
                 handles: self.images.clone(),
             },
         ));

@@ -20,7 +20,7 @@ trait Evaluator: CompiledModel {
 
 trait Execution {
     fn apply(&mut self, op: &Op);
-    fn snapshot(&self) -> State;
+    fn copy_state(&self) -> State;
 }
 
 struct CompiledState<M> {
@@ -76,7 +76,7 @@ impl<M: Evaluator> Execution for CompiledState<M> {
         }
     }
 
-    fn snapshot(&self) -> State {
+    fn copy_state(&self) -> State {
         let mut model = self.model.to_dynamic();
         model.canonicalize();
         State {
@@ -182,11 +182,11 @@ fn run(case: &Case, trace: &[Op]) {
         }
         match op {
             Op::Close => {
-                let snapshots: Vec<_> = states.iter().map(|state| state.snapshot()).collect();
-                for (variant, state) in case.variants.iter().zip(&snapshots).skip(1) {
+                let copies: Vec<_> = states.iter().map(|state| state.copy_state()).collect();
+                for (variant, state) in case.variants.iter().zip(&copies).skip(1) {
                     let name = variant.name;
                     eprintln!("compare at step {step}: Naive/Desugared vs {name}");
-                    compare(&base, &snapshots[0], state);
+                    compare(&base, &copies[0], state);
                 }
             }
             Op::New { .. }

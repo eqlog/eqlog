@@ -89,8 +89,8 @@ pub struct EnumCase {
 
 /// Runtime-typed access to generated models without running rules.
 ///
-/// Edits validate on a snapshot, then call setters without resetting fact ages.
-/// Use typed setters to avoid the snapshot cost.
+/// Edits validate on a copy, then call setters without resetting fact ages.
+/// Use typed setters to avoid copying the model.
 pub trait CompiledModel: Sized {
     /// Returns the shared signature, independent of evaluation mode.
     fn dynamic_signature() -> &'static Signature;
