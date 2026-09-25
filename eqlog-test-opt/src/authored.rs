@@ -13,14 +13,14 @@ impl Run {
     fn new<M: CompiledModel>(model: &M) -> Self {
         let mut model = model.to_dynamic();
         model.canonicalize();
-        let handles: Vec<_> = model
+        let elements: Vec<_> = model
             .signature()
             .types()
             .flat_map(|(type_, _)| model.elements(type_).unwrap())
             .collect();
         Self {
-            images: handles.clone(),
-            inputs: State { model, handles },
+            images: elements.clone(),
+            inputs: State { model, elements },
             closures: Vec::new(),
         }
     }
@@ -39,11 +39,11 @@ impl Run {
                     .iter()
                     .position(|&image| image == Element { type_, index })
                     .expect("supplied parents are tracked inputs");
-                self.inputs.handles[position]
+                self.inputs.elements[position]
             })
             .collect();
         let element = self.inputs.model.new_element(type_, &parents).unwrap();
-        self.inputs.handles.push(element);
+        self.inputs.elements.push(element);
         self.images.push(Element { type_, index });
     }
 
@@ -54,11 +54,11 @@ impl Run {
         self.closures.push((
             State {
                 model: self.inputs.model.clone(),
-                handles: self.inputs.handles.clone(),
+                elements: self.inputs.elements.clone(),
             },
             State {
                 model: copy,
-                handles: self.images.clone(),
+                elements: self.images.clone(),
             },
         ));
     }

@@ -29,19 +29,19 @@ pub enum Op {
 
 pub struct State {
     pub model: Model,
-    pub handles: Vec<Element>,
+    pub elements: Vec<Element>,
 }
 
 impl State {
     pub fn new(signature: &'static Signature) -> Self {
         Self {
             model: Model::new(signature),
-            handles: Vec::new(),
+            elements: Vec::new(),
         }
     }
 
     fn elements(&self, slots: &[usize]) -> Vec<Element> {
-        slots.iter().map(|&slot| self.handles[slot]).collect()
+        slots.iter().map(|&slot| self.elements[slot]).collect()
     }
 
     pub fn apply(&mut self, op: &Op) {
@@ -52,7 +52,7 @@ impl State {
                     .model
                     .new_element(type_, &self.elements(parents))
                     .unwrap();
-                self.handles.push(element);
+                self.elements.push(element);
             }
             Op::Insert {
                 relation,
@@ -72,7 +72,7 @@ impl State {
                     .model
                     .define(function, &self.elements(arguments))
                     .unwrap();
-                self.handles.push(element);
+                self.elements.push(element);
             }
             Op::Equate {
                 parents,
@@ -82,8 +82,8 @@ impl State {
                 self.model
                     .equate(
                         &self.elements(parents),
-                        self.handles[*left],
-                        self.handles[*right],
+                        self.elements[*left],
+                        self.elements[*right],
                     )
                     .unwrap();
             }
@@ -131,7 +131,7 @@ impl Generator {
     }
 
     fn allocate(&mut self, pool: usize) {
-        let slot = self.state.handles.len();
+        let slot = self.state.elements.len();
         let type_ = self
             .signature
             .type_(self.pools[pool].type_)
@@ -256,7 +256,7 @@ impl Generator {
         let result = *descriptor.arity.last().unwrap();
         let parents = arguments[..self.signature.type_(result).unwrap().parents.len()].to_vec();
         let function = descriptor.name.clone();
-        let slot = self.state.handles.len();
+        let slot = self.state.elements.len();
         self.emit(Op::Define {
             function,
             arguments,
@@ -282,7 +282,7 @@ impl Generator {
         let target = self.rng.random_range(source + 1..models.len());
         let source = models[source];
         let target = models[target];
-        let slot = self.state.handles.len();
+        let slot = self.state.elements.len();
         let name = self.signature.type_(type_).unwrap().name.clone();
         self.emit(Op::New {
             type_: name,
@@ -351,7 +351,7 @@ impl Generator {
                 arguments: vec![slot, input, output],
             });
         } else {
-            let result = self.state.handles.len();
+            let result = self.state.elements.len();
             self.emit(Op::Define {
                 function,
                 arguments: vec![slot, input],

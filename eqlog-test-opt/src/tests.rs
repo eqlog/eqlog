@@ -25,7 +25,7 @@ trait Execution {
 
 struct CompiledState<M> {
     model: M,
-    handles: Vec<Element>,
+    elements: Vec<Element>,
 }
 
 impl<M: Evaluator> Execution for CompiledState<M> {
@@ -33,7 +33,7 @@ impl<M: Evaluator> Execution for CompiledState<M> {
         let elements = |slots: &[usize]| {
             slots
                 .iter()
-                .map(|&slot| self.handles[slot])
+                .map(|&slot| self.elements[slot])
                 .collect::<Vec<_>>()
         };
         let signature = M::dynamic_signature();
@@ -41,7 +41,7 @@ impl<M: Evaluator> Execution for CompiledState<M> {
             Op::New { type_, parents } => {
                 let type_ = signature.type_named(type_).unwrap();
                 let element = self.model.new_element(type_, &elements(parents)).unwrap();
-                self.handles.push(element);
+                self.elements.push(element);
             }
             Op::Insert {
                 relation,
@@ -56,7 +56,7 @@ impl<M: Evaluator> Execution for CompiledState<M> {
             } => {
                 let function = signature.relation_named(function).unwrap();
                 let element = self.model.define(function, &elements(arguments)).unwrap();
-                self.handles.push(element);
+                self.elements.push(element);
             }
             Op::Equate {
                 parents,
@@ -66,8 +66,8 @@ impl<M: Evaluator> Execution for CompiledState<M> {
                 self.model
                     .equate(
                         &elements(parents),
-                        self.handles[*left],
-                        self.handles[*right],
+                        self.elements[*left],
+                        self.elements[*right],
                     )
                     .unwrap();
             }
@@ -81,7 +81,7 @@ impl<M: Evaluator> Execution for CompiledState<M> {
         model.canonicalize();
         State {
             model,
-            handles: self.handles.clone(),
+            elements: self.elements.clone(),
         }
     }
 }
@@ -89,7 +89,7 @@ impl<M: Evaluator> Execution for CompiledState<M> {
 fn create<M: Evaluator + 'static>() -> Box<dyn Execution> {
     Box::new(CompiledState {
         model: M::from_dynamic(&Model::new(M::dynamic_signature())).unwrap(),
-        handles: Vec::new(),
+        elements: Vec::new(),
     })
 }
 
@@ -124,24 +124,24 @@ fn setting(name: &str, default: u64) -> u64 {
 }
 
 fn compare(base: &State, left: &State, right: &State) {
-    assert_eq!(base.handles.len(), left.handles.len());
-    assert_eq!(base.handles.len(), right.handles.len());
+    assert_eq!(base.elements.len(), left.elements.len());
+    assert_eq!(base.elements.len(), right.elements.len());
     let to_left = ModelHom::new(
         &base.model,
         &left.model,
-        base.handles
+        base.elements
             .iter()
             .copied()
-            .zip(left.handles.iter().copied()),
+            .zip(left.elements.iter().copied()),
     )
     .unwrap();
     let to_right = ModelHom::new(
         &base.model,
         &right.model,
-        base.handles
+        base.elements
             .iter()
             .copied()
-            .zip(right.handles.iter().copied()),
+            .zip(right.elements.iter().copied()),
     )
     .unwrap();
     let fuel = setting("EQLOG_OPT_FUEL", 50_000_000);
@@ -287,11 +287,11 @@ fn oracle_rejects_swapped_inputs_even_when_unanchored_isomorphism_exists() {
     let mut left = oracle_input();
     let mut right = oracle_input();
     left.model
-        .insert(RelationId(0), &[left.handles[0]])
+        .insert(RelationId(0), &[left.elements[0]])
         .unwrap();
     right
         .model
-        .insert(RelationId(0), &[right.handles[1]])
+        .insert(RelationId(0), &[right.elements[1]])
         .unwrap();
     assert!(
         find_isomorphism(&left.model, &right.model, Fuel::Finite(10_000))
@@ -308,7 +308,7 @@ fn oracle_rejects_a_missing_derived_fact() {
     let mut left = oracle_input();
     let right = oracle_input();
     left.model
-        .insert(RelationId(0), &[left.handles[0]])
+        .insert(RelationId(0), &[left.elements[0]])
         .unwrap();
     compare(&base, &left, &right);
 }
@@ -318,17 +318,17 @@ fn oracle_accepts_different_allocations_and_equality_representatives() {
     let base = oracle_input();
     let mut left = oracle_input();
     let mut right = oracle_input();
-    let extra_right = right.handles[0];
-    right.handles[0] = right.model.new_element(TypeId(0), &[]).unwrap();
+    let extra_right = right.elements[0];
+    right.elements[0] = right.model.new_element(TypeId(0), &[]).unwrap();
     let extra_left = left.model.new_element(TypeId(0), &[]).unwrap();
     left.model.insert(RelationId(0), &[extra_left]).unwrap();
     right.model.insert(RelationId(0), &[extra_right]).unwrap();
     left.model
-        .equate(&[], left.handles[0], left.handles[1])
+        .equate(&[], left.elements[0], left.elements[1])
         .unwrap();
     right
         .model
-        .equate(&[], right.handles[1], right.handles[0])
+        .equate(&[], right.elements[1], right.elements[0])
         .unwrap();
     left.model.canonicalize();
     right.model.canonicalize();
