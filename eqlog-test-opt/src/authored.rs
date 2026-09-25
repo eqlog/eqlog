@@ -64,12 +64,15 @@ impl Run {
     }
 }
 
-fn assert_equivalent(runs: [Run; 4]) {
-    let reference = &runs[0];
+fn assert_equivalent(runs: [(&str, Run); 4]) {
+    let (reference_name, reference) = &runs[0];
     assert!(!reference.closures.is_empty());
-    for run in &runs[1..] {
+    for (name, run) in &runs[1..] {
         assert_eq!(reference.closures.len(), run.closures.len());
-        for ((inputs, left), (_, right)) in reference.closures.iter().zip(&run.closures) {
+        for (step, ((inputs, left), (_, right))) in
+            reference.closures.iter().zip(&run.closures).enumerate()
+        {
+            eprintln!("closure {step}: {reference_name} vs {name}");
             compare(inputs, left, right);
         }
     }
@@ -262,7 +265,6 @@ macro_rules! random_morphism_graph {
             model.insert_edge(worlds[source], x, y);
             model.insert_next(worlds[source], x, y);
         }
-        // Parallel arrows let equality expose conflicting image assignments.
         edges.push((0, 1));
         edges.shuffle(&mut rng);
         let mut run = Run::new(&model);

@@ -326,8 +326,6 @@ impl DynamicContext<'_> {
 
     fn edits(&self) -> impl Display + '_ {
         FmtFn(move |f| {
-            // Validate on an exported snapshot so errors cannot partially mutate
-            // the evaluator. Dispatch to setters to retain its incremental state.
             writedoc! {f, "
                 fn new_element(&mut self, type_: eqlog_runtime::TypeId, parents: &[eqlog_runtime::Element])
                     -> std::result::Result<eqlog_runtime::Element, eqlog_runtime::Error>

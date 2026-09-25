@@ -89,8 +89,8 @@ pub struct EnumCase {
 
 /// Runtime-typed access to generated models without running rules.
 ///
-/// Edits validate on an exported snapshot before calling generated setters.
-/// Prefer the typed setters when the cost of exporting the model matters.
+/// Edits validate on a snapshot, then call setters without resetting fact ages.
+/// Use typed setters to avoid the snapshot cost.
 pub trait CompiledModel: Sized {
     /// Returns the shared signature, independent of evaluation mode.
     fn dynamic_signature() -> &'static Signature;
@@ -101,14 +101,12 @@ pub trait CompiledModel: Sized {
     /// Imports data without changing IDs, equality representatives, or raw rows.
     ///
     /// Imported facts become new so evaluation can rebuild derived indices.
-    /// In-place edits retain the evaluator's incremental history.
     ///
     /// Returns [`Error::SignatureMismatch`] if type or relation descriptors differ
     /// from [`Self::dynamic_signature`], including their order and names.
     fn from_dynamic(model: &Model) -> Result<Self, Error>;
 
-    /// Adjoins an element without rebuilding evaluation indices or aging existing facts.
-    /// Validates runtime handles and parent membership as in [`Model::new_element`].
+    /// Adjoins an element with the same checks as [`Model::new_element`].
     fn new_element(&mut self, type_: TypeId, parents: &[Element]) -> Result<Element, Error>;
 
     /// Inserts a tuple in place, with the same checks as [`Model::insert`].

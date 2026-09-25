@@ -1,21 +1,14 @@
 Compare optimized closures on generated theories
 
-Exercise all four combinations of naive/semi-naive evaluation and
-native/desugared morphisms against the same reproducible inputs. Anchor
-isomorphism comparisons to supplied inputs after every closure so a
-renaming cannot hide differences in their consequences.
+Compare naive/semi-naive evaluation and native/desugared morphisms
+after repeated edits and closures. Fix supplied inputs during
+isomorphism search so renaming cannot hide different consequences.
 
-Exercise authored scenarios through Rust tests using generated setters
-and explicit assertions. Cover joins through merged witnesses, diamonds
-of morphisms, equal models and parallel morphisms, and nested images.
-Vary model instances and morphisms, partial and non-injective maps, and
-edits between closures to expose propagation and equality interactions.
+Use direct Rust tests for merged witnesses, morphism diamonds, and
+nested images. Generate typed theories and seeded operation sequences;
+save failing theories and traces for replay. Vary morphism endpoints,
+partial image maps, late facts, and equalities.
 
-Also generate finite, typed random theories and independent seeded edit
-sequences. Preserve each variant's evaluation partitions between rounds
-and save failing random theories and symbolic traces for replay.
-
-Dispatch runtime-typed edits to generated setters in place, after
-validating on a snapshot. Keep compiled instances alive across the
-whole operation trace so importing all facts as new cannot mask
-incremental evaluation bugs.
+Dispatch runtime-typed edits to setters on persistent compiled models.
+Reimporting facts between closures would reset incremental state and
+could mask evaluation bugs.

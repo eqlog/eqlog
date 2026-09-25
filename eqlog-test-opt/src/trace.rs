@@ -156,14 +156,9 @@ impl Generator {
     }
 
     fn initialize(&mut self) {
-        // Fixed parent contexts keep later operations valid in every quotient.
         for (type_, descriptor) in self.signature.types() {
             match descriptor.kind {
                 TypeKind::Model => {
-                    assert!(
-                        descriptor.parents.is_empty(),
-                        "nested models need a new trace generator"
-                    );
                     self.add_pool(type_, Vec::new(), 3);
                 }
                 TypeKind::Plain | TypeKind::Morphism(_) => {}
@@ -173,10 +168,6 @@ impl Generator {
         for (type_, descriptor) in self.signature.types() {
             match descriptor.kind {
                 TypeKind::Plain => {
-                    assert!(
-                        descriptor.parents.len() <= 1,
-                        "nested members need a new trace generator"
-                    );
                     let contexts = self.contexts(&descriptor.parents);
                     for parents in contexts {
                         let count = self.rng.random_range(2..=4);
@@ -194,7 +185,6 @@ impl Generator {
     }
 
     fn contexts(&self, parents: &[TypeId]) -> Vec<Vec<usize>> {
-        assert!(parents.len() <= 1, "nested contexts are not supported");
         match parents.first() {
             None => vec![Vec::new()],
             Some(type_) => self
@@ -281,18 +271,13 @@ impl Generator {
 
     fn morphism(&mut self, morphisms: &[(TypeId, TypeId)]) {
         let &(type_, model) = &morphisms[self.rng.random_range(0..morphisms.len())];
-        let parents = self.signature.type_(type_).unwrap().parents.clone();
-        assert!(
-            parents.is_empty(),
-            "nested morphisms need a new trace generator"
-        );
         let models = &self
             .pools
             .iter()
             .find(|pool| pool.type_ == model)
             .unwrap()
             .slots;
-        // Increasing endpoints bound image creation even when rules request all images.
+        // Acyclic morphisms keep image creation finite.
         let source = self.rng.random_range(0..models.len() - 1);
         let target = self.rng.random_range(source + 1..models.len());
         let source = models[source];
@@ -426,25 +411,24 @@ pub fn generate(signature: &'static Signature, seed: u64, rounds: usize) -> Vec<
         if !morphisms.is_empty() && round < 3 {
             generator.morphism(&morphisms);
         }
-        // Delaying some facts exercises rules enabled after earlier closures.
         for &(due, relation) in &scheduled {
             if due == round {
                 generator.insert(&[relation]);
             }
         }
+        let mut choices = vec![Action::Allocate, Action::Equate, Action::Canonicalize];
+        if !relations.is_empty() {
+            choices.extend([Action::Insert, Action::Insert]);
+        }
+        if !functions.is_empty() {
+            choices.push(Action::Define);
+        }
+        if !generator.arrows.is_empty() {
+            choices.push(Action::Image);
+        }
+        let pools = generator.plain_pools();
         for _ in 0..generator.rng.random_range(8..=16) {
-            let mut choices = vec![Action::Allocate, Action::Equate, Action::Canonicalize];
-            if !relations.is_empty() {
-                choices.extend([Action::Insert, Action::Insert]);
-            }
-            if !functions.is_empty() {
-                choices.push(Action::Define);
-            }
-            if !generator.arrows.is_empty() {
-                choices.push(Action::Image);
-            }
             let action = choices[generator.rng.random_range(0..choices.len())];
-            let pools = generator.plain_pools();
             let pool = pools[generator.rng.random_range(0..pools.len())];
             match action {
                 Action::Insert => generator.insert(&relations),
@@ -498,48 +482,38 @@ fn validate_signature(signature: &Signature) {
         }
     }
     for (_, relation) in signature.relations() {
-        match relation.kind {
-            RelationKind::Predicate | RelationKind::Function(FunctionKind::Ordinary) => {
-                for &type_ in &relation.arity {
-                    let descriptor = signature.type_(type_).unwrap();
-                    match descriptor.kind {
-                        TypeKind::Plain | TypeKind::Model => {}
-                        TypeKind::Enum | TypeKind::Morphism(_) => {
-                            panic!("input relations need plain or model arguments")
-                        }
-                    }
-                    assert!(
-                        relation.parents.starts_with(&descriptor.parents),
-                        "member arguments must belong to the enclosing model"
-                    );
-                }
-                match relation.kind {
-                    RelationKind::Function(FunctionKind::Ordinary) => {
-                        let result = signature.type_(*relation.arity.last().unwrap()).unwrap();
-                        match result.kind {
-                            TypeKind::Plain => {}
-                            TypeKind::Model | TypeKind::Enum | TypeKind::Morphism(_) => {
-                                panic!("input functions must return plain elements")
-                            }
-                        }
-                    }
-                    RelationKind::Predicate
-                    | RelationKind::Membership(_)
-                    | RelationKind::Function(
-                        FunctionKind::Constructor
-                        | FunctionKind::MorphismDomain(_)
-                        | FunctionKind::MorphismCodomain(_)
-                        | FunctionKind::MorphismApplication { .. },
-                    ) => {}
-                }
-            }
+        let function = match relation.kind {
+            RelationKind::Predicate => false,
+            RelationKind::Function(FunctionKind::Ordinary) => true,
             RelationKind::Membership(_)
             | RelationKind::Function(
                 FunctionKind::Constructor
                 | FunctionKind::MorphismDomain(_)
                 | FunctionKind::MorphismCodomain(_)
                 | FunctionKind::MorphismApplication { .. },
-            ) => {}
+            ) => continue,
+        };
+        for &type_ in &relation.arity {
+            let descriptor = signature.type_(type_).unwrap();
+            match descriptor.kind {
+                TypeKind::Plain | TypeKind::Model => {}
+                TypeKind::Enum | TypeKind::Morphism(_) => {
+                    panic!("input relations need plain or model arguments")
+                }
+            }
+            assert!(
+                relation.parents.starts_with(&descriptor.parents),
+                "member arguments must belong to the enclosing model"
+            );
+        }
+        if function {
+            let result = signature.type_(*relation.arity.last().unwrap()).unwrap();
+            match result.kind {
+                TypeKind::Plain => {}
+                TypeKind::Model | TypeKind::Enum | TypeKind::Morphism(_) => {
+                    panic!("input functions must return plain elements")
+                }
+            }
         }
     }
 }

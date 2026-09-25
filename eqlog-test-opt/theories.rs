@@ -46,7 +46,7 @@ pub fn generate(seed: u64, indexed: bool) -> String {
         source.push_str(&format!("pred {name}({arguments});\n"));
     }
     for rule in 0..rng.random_range(4..=9) {
-        let variables: Vec<Vec<String>> = (0..sorts)
+        let mut variables: Vec<Vec<String>> = (0..sorts)
             .map(|sort| {
                 (0..rng.random_range(1..=2))
                     .map(|i| format!("x_{sort}_{i}"))
@@ -66,8 +66,12 @@ pub fn generate(seed: u64, indexed: bool) -> String {
         }
         if rng.random_bool(0.2) {
             let sort = rng.random_range(0..sorts);
-            let x = &variables[sort][0];
-            let y = variables[sort].last().unwrap();
+            let names = &mut variables[sort];
+            if names.len() == 1 {
+                names.push(format!("x_{sort}_1"));
+            }
+            let x = &names[0];
+            let y = &names[1];
             body.push_str(&format!("    then {x} = {y};\n"));
         } else {
             let predicate = &predicates[rng.random_range(0..predicates.len())];

@@ -3,7 +3,6 @@ model World {
         type El;
         pred marked(El);
         pred edge(El, El);
-        func next(El) -> El;
 
         rule follow {
             if marked(x);

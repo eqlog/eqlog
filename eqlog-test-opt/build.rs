@@ -111,9 +111,12 @@ fn main() -> eqlog::Result<()> {
             "});
             let name = format!("{evaluation_mode:?}/{model_mode:?}");
             variants.push(format!("Variant {{ name: {name:?}, create: create::<{module}::{model}>, signature: {module}::{model}::dynamic_signature() }}"));
-            test_calls.push(format!(
-                "$test!($crate::tests::{module}::{model} $(, $argument)*)"
-            ));
+            test_calls.push(formatdoc! {"
+                {{
+                    eprintln!({name:?});
+                    ({name:?}, $test!($crate::tests::{module}::{model} $(, $argument)*))
+                }}
+            "});
         }
         if *authored {
             let test_calls = test_calls.join(",\n");
