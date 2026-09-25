@@ -121,7 +121,6 @@ fn nested_preservation_does_not_create_images() {
 }
 
 #[test]
-#[cfg(feature = "desugared")]
 fn cyclic_morphisms_reach_a_fixed_point() {
     let mut model = MorphismPreservation::new();
     let a = model.new_world();
@@ -217,4 +216,128 @@ fn nested_application_preservation_waits_for_parent_images() {
     assert_eq!(model.inner_mor_dom(b, image_g), Some(image_source));
     assert_eq!(model.inner_mor_cod(b, image_g), Some(image_target));
     assert_eq!(model.item_mor_app(b, image_g, image_x), Some(image_y));
+}
+
+#[test]
+fn self_morphism_permutations_preserve_facts_across_rebuilds() {
+    let mut model = MorphismPreservation::new();
+    let world = model.new_world();
+    let elements = [
+        model.new_el(world),
+        model.new_el(world),
+        model.new_el(world),
+    ];
+    let h = model.new_world_mor();
+    model.insert_world_mor_dom(h, world);
+    model.insert_world_mor_cod(h, world);
+    let label = model.new_ambient();
+    model.insert_tagged(world, elements[0], label);
+    model.insert_edge(world, elements[0], elements[1]);
+    model.insert_el_mor_app(h, elements[0], elements[1]);
+    model.close();
+    assert!(model.tagged(world, elements[1], label));
+    assert!(!model.tagged(world, elements[2], label));
+    assert_eq!(model.edge(world, elements[1]), None);
+
+    model.insert_el_mor_app(h, elements[1], elements[2]);
+    model.insert_el_mor_app(h, elements[2], elements[0]);
+    for _ in 0..3 {
+        model.canonicalize();
+        model.close();
+        for i in 0..elements.len() {
+            assert!(model.tagged(world, elements[i], label));
+            assert_eq!(model.edge(world, elements[i]), Some(elements[(i + 1) % 3]));
+        }
+        assert_eq!(model.iter_el().count(), 3);
+    }
+}
+
+#[test]
+fn outer_cycles_retain_support_for_acyclic_inner_graphs() {
+    let mut model = MorphismPreservation::new();
+    let a = model.new_world();
+    let b = model.new_world();
+    let a0 = model.new_inner(a);
+    let a1 = model.new_inner(a);
+    let b0 = model.new_inner(b);
+    let b1 = model.new_inner(b);
+    let x0 = model.new_item(a, a0);
+    let x1 = model.new_item(a, a1);
+    let y0 = model.new_item(b, b0);
+    let y1 = model.new_item(b, b1);
+    for (world, source, target, x, y) in [(a, a0, a1, x0, x1), (b, b0, b1, y0, y1)] {
+        let h = model.new_inner_mor(world);
+        model.insert_inner_mor_dom(world, h, source);
+        model.insert_inner_mor_cod(world, h, target);
+        model.insert_item_mor_app(world, h, x, y);
+    }
+    let h = model.new_world_mor();
+    model.insert_world_mor_dom(h, a);
+    model.insert_world_mor_cod(h, b);
+    model.insert_inner_mor_app(h, a0, b1);
+    model.insert_inner_mor_app(h, a1, b0);
+    model.insert_world_item_mor_app(h, x0, y1);
+    model.insert_world_item_mor_app(h, x1, y0);
+    let k = model.new_world_mor();
+    model.insert_world_mor_dom(k, b);
+    model.insert_world_mor_cod(k, a);
+    model.insert_inner_mor_app(k, b0, a1);
+    model.insert_inner_mor_app(k, b1, a0);
+    model.insert_world_item_mor_app(k, y0, x1);
+
+    model.insert_marked(a, a1, x1);
+    model.close();
+    assert!(!model.marked(a, a0, x0));
+    assert!(model.marked(b, b1, y1));
+
+    // The return map closes a path through both inner graphs. Its seed must
+    // survive even though neither inner morphism graph contains a cycle.
+    model.insert_world_item_mor_app(k, y1, x0);
+    for _ in 0..3 {
+        model.canonicalize();
+        model.close();
+        for (world, inner, item) in [(a, a0, x0), (a, a1, x1), (b, b0, y0), (b, b1, y1)] {
+            assert!(model.marked(world, inner, item));
+        }
+        assert_eq!(model.iter_marked().count(), 4);
+    }
+}
+
+#[test]
+fn outer_transport_can_install_a_nested_cycle() {
+    let mut model = MorphismPreservation::new();
+    let a = model.new_world();
+    let b = model.new_world();
+    let a0 = model.new_inner(a);
+    let a1 = model.new_inner(a);
+    let b0 = model.new_inner(b);
+    let b1 = model.new_inner(b);
+    let x0 = model.new_item(a, a0);
+    let x1 = model.new_item(a, a1);
+    let y0 = model.new_item(b, b0);
+    let y1 = model.new_item(b, b1);
+    let h = model.new_world_mor();
+    model.insert_world_mor_dom(h, a);
+    model.insert_world_mor_cod(h, b);
+    model.insert_inner_mor_app(h, a0, b0);
+    model.insert_inner_mor_app(h, a1, b1);
+    model.insert_world_item_mor_app(h, x0, y0);
+    model.insert_world_item_mor_app(h, x1, y1);
+    for (source, target, x, y) in [(a0, a1, x0, x1), (a1, a0, x1, x0)] {
+        let g = model.new_inner_mor(a);
+        model.insert_inner_mor_dom(a, g, source);
+        model.insert_inner_mor_cod(a, g, target);
+        model.insert_item_mor_app(a, g, x, y);
+        let image_g = model.new_inner_mor(b);
+        model.insert_inner_mor_mor_app(h, g, image_g);
+    }
+    model.close();
+    model.insert_marked(b, b1, y1);
+    for _ in 0..3 {
+        model.close();
+        assert!(model.marked(b, b0, y0));
+        assert!(model.marked(b, b1, y1));
+        assert!(!model.marked(a, a0, x0));
+        assert!(!model.marked(a, a1, x1));
+    }
 }

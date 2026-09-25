@@ -158,16 +158,78 @@ fn test_transitive() {
 }
 
 #[test]
-#[cfg_attr(
-    not(feature = "desugared"),
-    should_panic(expected = "cycle being present in the morphism category: CycleDetected")
-)]
 fn self_morphism_can_be_closed() {
     let mut model = Subset::new();
     let object = model.new_subs();
     let h = model.new_subs_mor();
     model.insert_subs_mor_dom(h, object);
     model.insert_subs_mor_cod(h, object);
+    let element = model.new_carrier();
+    model.insert_element(object, element);
 
+    for _ in 0..3 {
+        model.close();
+        assert!(model.element(object, element));
+        assert_eq!(model.iter_element().count(), 1);
+    }
+}
+
+#[test]
+fn cycles_propagate_to_downstream_components() {
+    let mut model = Subset::new();
+    let objects: Vec<_> = (0..7).map(|_| model.new_subs()).collect();
+    for (source, target) in [
+        (0, 1),
+        (1, 2),
+        (2, 1),
+        (2, 3),
+        (3, 4),
+        (4, 3),
+        (5, 6),
+        (6, 5),
+    ] {
+        let h = model.new_subs_mor();
+        model.insert_subs_mor_dom(h, objects[source]);
+        model.insert_subs_mor_cod(h, objects[target]);
+    }
+    let first = model.new_carrier();
+    model.insert_element(objects[0], first);
+    let second = model.new_carrier();
+    model.insert_element(objects[2], second);
+    for _ in 0..3 {
+        model.canonicalize();
+        model.close();
+        for (i, &object) in objects.iter().enumerate() {
+            assert_eq!(model.element(object, first), i < 5);
+            assert_eq!(model.element(object, second), (1..5).contains(&i));
+        }
+    }
+
+    let late = model.new_carrier();
+    model.insert_element(objects[4], late);
     model.close();
+    for (i, &object) in objects.iter().enumerate() {
+        assert_eq!(model.element(object, late), i == 3 || i == 4);
+    }
+}
+
+#[test]
+fn merging_endpoints_can_create_a_cycle() {
+    let mut model = Subset::new();
+    let a = model.new_subs();
+    let b = model.new_subs();
+    let h = model.new_subs_mor();
+    model.insert_subs_mor_dom(h, a);
+    model.insert_subs_mor_cod(h, b);
+    let element = model.new_carrier();
+    model.insert_element(a, element);
+    model.close();
+    assert!(model.element(b, element));
+
+    model.equate_subs(a, b);
+    for _ in 0..3 {
+        model.close();
+        assert!(model.element(a, element));
+        assert_eq!(model.iter_element().count(), 1);
+    }
 }

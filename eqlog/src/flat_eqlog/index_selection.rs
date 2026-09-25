@@ -250,12 +250,12 @@ pub fn select_indices<'a>(
     }));
 
     if native_propagation {
-        // The query specs needed for topological sorting of the model morphism graph.
+        // The query specs needed for component scheduling of the model morphism graph.
         query_specs.extend(signature.iter_model_decls().flat_map(|(_decl, ids)| {
             let mor_type = FlatInRel::TypeSet(ids.mor);
             let dom = FlatInRel::Rel(FlatRel::Func(ids.dom));
             let cod = FlatInRel::Rel(FlatRel::Func(ids.cod));
-            // `dom`/`cod` flatten as (parents..., mor, obj). Toposort needs
+            // `dom`/`cod` flatten as (parents..., mor, obj). Component scheduling needs
             // "given parents+object, outgoing mors" and "given parents+mor, obj".
             let parent_len = signature.func(ids.dom).parents.len();
             let mut dom_projections = (0..parent_len).collect::<BTreeSet<_>>();

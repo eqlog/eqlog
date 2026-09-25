@@ -354,3 +354,88 @@ fn random_morphism_graphs_preserve_facts_functions_and_late_equalities() {
         assert_equivalent(transport_variants!(random_morphism_graph, seed));
     }
 }
+
+macro_rules! circular_morphism_graph {
+    ($model:ty, $seed:expr) => {{
+        let mut rng = StdRng::seed_from_u64($seed);
+        let mut model = <$model>::new();
+        let worlds: Vec<_> = (0..rng.random_range(3..=6))
+            .map(|_| model.new_world())
+            .collect();
+        let members: Vec<Vec<_>> = worlds
+            .iter()
+            .map(|&world| (0..3).map(|_| model.new_el(world)).collect())
+            .collect();
+        let label = model.new_label();
+        model.insert_ready(worlds[0]);
+        model.insert_marked(worlds[0], members[0][0]);
+        let mut edges: Vec<_> = (0..worlds.len())
+            .map(|source| (source, (source + 1) % worlds.len()))
+            .collect();
+        for source in 0..worlds.len() {
+            for target in 0..worlds.len() {
+                if rng.random_bool(0.3) {
+                    edges.push((source, target));
+                }
+            }
+        }
+        edges.push((0, 0));
+        edges.shuffle(&mut rng);
+        let mut pending = Vec::new();
+        let mut arrows = Vec::new();
+        for (source, target) in edges {
+            let h = model.new_world_mor();
+            model.insert_world_mor_dom(h, worlds[source]);
+            for &x in &members[source] {
+                let y = members[target][rng.random_range(0..members[target].len())];
+                pending.push((h, x, y));
+            }
+            arrows.push((h, worlds[target]));
+        }
+        let mut run = Run::new(&model);
+        run.close(&mut model);
+        for (h, target) in arrows {
+            model.insert_world_mor_cod(h, target);
+        }
+        run.close(&mut model);
+        for &world in &worlds {
+            assert!(model.ready(world));
+        }
+
+        pending.shuffle(&mut rng);
+        for batch in pending.chunks(pending.len().div_ceil(3)) {
+            for &(h, x, y) in batch {
+                model.insert_el_mor_app(h, x, y);
+            }
+            let source = rng.random_range(0..worlds.len());
+            let x = members[source][rng.random_range(0..3)];
+            let y = members[source][rng.random_range(0..3)];
+            model.insert_tagged(worlds[source], x, label);
+            model.insert_edge(worlds[source], x, y);
+            model.insert_next(worlds[source], x, y);
+            run.close(&mut model);
+        }
+
+        model.equate_el(worlds[0], members[0][0], members[0][1]);
+        run.close(&mut model);
+        model.equate_world(worlds[0], worlds[1]);
+        run.close(&mut model);
+        let late_label = model.new_label();
+        run.input("Label", late_label.0, &[]);
+        model.insert_tagged(worlds[0], members[0][0], late_label);
+        run.close(&mut model);
+        run.close(&mut model);
+        run
+    }};
+}
+
+#[test]
+fn circular_morphism_graphs_agree_across_evaluation_modes() {
+    let first_seed = setting("EQLOG_OPT_INPUT_SEED", 0);
+    let count = setting("EQLOG_OPT_TRACES", 16);
+    for offset in 0..count {
+        let seed = first_seed.wrapping_add(offset);
+        eprintln!("circular morphism graph seed {seed}");
+        assert_equivalent(circular_transport_variants!(circular_morphism_graph, seed));
+    }
+}
