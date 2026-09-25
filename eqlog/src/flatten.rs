@@ -596,7 +596,9 @@ fn flatten_rule(
             .clone();
 
         let cod_matching_stmts = match morphism.kind {
-            MorphismKind::If => dom_matching_stmts
+            // Branch and match continuations can gain facts shared by every
+            // arm, including function results that need bindings at runtime.
+            MorphismKind::If | MorphismKind::Noop => dom_matching_stmts
                 .iter()
                 .cloned()
                 .chain(flatten_if_arbitrary(
@@ -630,7 +632,6 @@ fn flatten_rule(
                 }
                 cod_matching_stmts
             }
-            MorphismKind::Noop => dom_matching_stmts,
         };
 
         let prev = matching_stmts.insert(morphism.tgt, cod_matching_stmts);

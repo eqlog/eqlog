@@ -419,6 +419,24 @@ fn isomorphism_search_backtracks_on_regular_graphs() {
 }
 
 #[test]
+fn isomorphism_search_handles_deep_symmetry_without_call_stack_growth() {
+    std::thread::Builder::new()
+        .stack_size(128 * 1024)
+        .spawn(|| {
+            let mut left = Model::with_signature(signature(&[]));
+            elements(&mut left, 256);
+            let right = left.clone();
+            let iso = find_isomorphism(&left, &right, Fuel::Finite(100_000_000))
+                .unwrap()
+                .unwrap();
+            check_witness(&iso);
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+#[test]
 fn isomorphism_search_agrees_with_exhaustive_small_graph_oracle() {
     let possible_edges = [(0, 1), (0, 2), (1, 0), (1, 2), (2, 0), (2, 1)];
     let permutations = [

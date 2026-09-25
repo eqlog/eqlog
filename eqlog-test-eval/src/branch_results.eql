@@ -1,0 +1,66 @@
+type Input;
+type Middle;
+type Output;
+
+func make_middle(Input) -> Middle;
+func make_output(Middle) -> Output;
+pred joined(Input, Output);
+
+rule branch_results {
+    if x: Input;
+    branch {
+        then make_middle(x)!;
+        then make_output(make_middle(x))!;
+    } along {
+        then make_middle(x)!;
+        then make_output(make_middle(x))!;
+    }
+    then joined(x, make_output(make_middle(x)));
+}
+
+enum Choice {
+    Left(Input),
+    Right(Input)
+}
+
+func chosen(Choice) -> Output;
+pred matched(Choice, Output);
+
+rule match_results {
+    if choice: Choice;
+    match choice {
+        Left(_) => {
+            then chosen(choice)!;
+        }
+        Right(_) => {
+            then chosen(choice)!;
+        }
+    }
+    then matched(choice, chosen(choice));
+}
+
+pred guard(Input);
+pred checked(Input);
+
+rule branch_guards {
+    if x: Input;
+    branch {
+        if guard(x);
+    } along {
+        if guard(x);
+    }
+    then checked(x);
+}
+
+pred pair(Input, Input);
+pred same(Input);
+
+rule branch_equalities {
+    if pair(x, y);
+    branch {
+        if x = y;
+    } along {
+        if x = y;
+    }
+    then same(x);
+}

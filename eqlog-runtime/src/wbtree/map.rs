@@ -731,7 +731,28 @@ impl<V: Clone> WBTreeMap<V> {
         WBTreeMap { root: None, len: 0 }
     }
 
+    fn has_mapping(&self) -> bool {
+        match self.root.as_deref() {
+            None | Some(Node::Data(_)) => false,
+            Some(Node::Mapping(_)) => true,
+        }
+    }
+
+    fn materialize(&mut self) {
+        if !self.has_mapping() {
+            return;
+        }
+        // Tree edits compare stored keys, so resolve lazy mappings before editing.
+        // Mappings only wrap the root; edits and set operations materialize inputs.
+        let mut result = Self::new();
+        for (key, value) in self.iter() {
+            result.insert(key, value.clone());
+        }
+        *self = result;
+    }
+
     pub fn insert(&mut self, key: u32, value: V) -> Option<V> {
+        self.materialize();
         let (new_root, old_value) = Node::insert_simple(self.root.take(), key, value);
         self.root = new_root;
         if old_value.is_none() {
@@ -758,9 +779,10 @@ impl<V: Clone> WBTreeMap<V> {
 
                         match mapped_key {
                             None => {
-                                // Key is not in mapping domain, skip this subtree
-                                // This shouldn't happen in a well-formed tree, but handle it
-                                return None;
+                                // A filtered pivot says nothing about its descendants.
+                                return self.iter().find_map(|(candidate, value)| {
+                                    (candidate == *key).then_some(value)
+                                });
                             }
                             Some(mk) => match key.cmp(&mk) {
                                 Ordering::Less => current = &data_node.left,
@@ -779,41 +801,21 @@ impl<V: Clone> WBTreeMap<V> {
     }
 
     pub fn get_mut(&mut self, key: &u32) -> Option<&mut V> {
-        // Accumulate mappings as we traverse (cloned since we need mutable access)
-        let mut mappings: Vec<PrefixTree2> = Vec::new();
+        self.materialize();
         let mut current = &mut self.root;
-        loop {
-            match current {
-                None => return None,
-                Some(node) => {
-                    let node_mut = Rc::make_mut(node);
-                    match node_mut {
-                        Node::Data(data_node) => {
-                            // Apply all accumulated mappings to the stored key
-                            let mapped_key = if mappings.is_empty() {
-                                Some(data_node.key)
-                            } else {
-                                let mapping_refs: Vec<&PrefixTree2> = mappings.iter().collect();
-                                apply_mappings(&mapping_refs, data_node.key)
-                            };
-
-                            match mapped_key {
-                                None => return None,
-                                Some(mk) => match key.cmp(&mk) {
-                                    Ordering::Less => current = &mut data_node.left,
-                                    Ordering::Greater => current = &mut data_node.right,
-                                    Ordering::Equal => return Some(&mut data_node.value),
-                                },
-                            }
-                        }
-                        Node::Mapping(mapping_node) => {
-                            mappings.push(mapping_node.mapping.clone());
-                            current = &mut mapping_node.child;
-                        }
-                    }
+        while let Some(node) = current {
+            match Rc::make_mut(node) {
+                Node::Data(data_node) => match key.cmp(&data_node.key) {
+                    Ordering::Less => current = &mut data_node.left,
+                    Ordering::Greater => current = &mut data_node.right,
+                    Ordering::Equal => return Some(&mut data_node.value),
+                },
+                Node::Mapping(_) => {
+                    unreachable!("materialized trees do not contain mappings")
                 }
             }
         }
+        None
     }
 
     pub fn contains_key(&self, key: &u32) -> bool {
@@ -821,11 +823,19 @@ impl<V: Clone> WBTreeMap<V> {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.len == 0
+        if self.has_mapping() {
+            self.iter().next().is_none()
+        } else {
+            self.len == 0
+        }
     }
 
     pub fn len(&self) -> usize {
-        self.len
+        if self.has_mapping() {
+            self.iter().count()
+        } else {
+            self.len
+        }
     }
 
     pub fn clear(&mut self) {
@@ -898,6 +908,7 @@ impl<V: Clone> WBTreeMap<V> {
     }
 
     pub fn remove(&mut self, key: &u32) -> Option<V> {
+        self.materialize();
         if !self.contains_key(key) {
             return None;
         }
@@ -913,7 +924,11 @@ impl<V: Clone> WBTreeMap<V> {
     where
         F: FnMut(&u32, V, V) -> V,
     {
-        let new_root = Node::union(self.root.clone(), other.root.clone(), &mut merge);
+        let mut left = self.clone();
+        let mut right = other.clone();
+        left.materialize();
+        right.materialize();
+        let new_root = Node::union(left.root, right.root, &mut merge);
         let new_len = Node::size(&new_root);
         WBTreeMap {
             root: new_root,
@@ -925,7 +940,11 @@ impl<V: Clone> WBTreeMap<V> {
     where
         F: FnMut(&u32, V, V) -> Option<V>,
     {
-        let new_root = Node::difference(self.root.clone(), other.root.clone(), &mut diff);
+        let mut left = self.clone();
+        let mut right = other.clone();
+        left.materialize();
+        right.materialize();
+        let new_root = Node::difference(left.root, right.root, &mut diff);
         let new_len = Node::size(&new_root);
         WBTreeMap {
             root: new_root,
@@ -935,8 +954,10 @@ impl<V: Clone> WBTreeMap<V> {
 
     /// Returns a new map where all keys have been transformed by the given mapping.
     /// The mapping must be monotone (order-preserving) for the tree structure to remain valid.
-    /// Keys not in the mapping's domain will be filtered out during iteration.
+    /// Keys not in the mapping's domain are filtered out.
     /// This operation is O(1) - it just wraps the tree in a mapping node.
+    /// Counting and partial-domain lookups may traverse the tree. Structural edits
+    /// and set operations materialize mapped inputs before comparing stored keys.
     pub fn mapped(&self, mapping: PrefixTree2) -> Self {
         debug_assert!(
             {
@@ -2659,9 +2680,9 @@ mod tests {
         // Apply the mapping
         let mapped_tree = base_map.mapped(mapping);
 
-        // Note: get() with partial mappings may not work correctly for all keys
-        // because tree search requires comparing with intermediate nodes.
-        // However, iteration correctly filters and yields only mapped keys.
+        assert_eq!(mapped_tree.get(&10), Some(&"zero"));
+        assert_eq!(mapped_tree.get(&30), Some(&"two"));
+        assert_eq!(mapped_tree.len(), 2);
 
         // Iteration yields only keys in the mapping domain
         let items: Vec<_> = mapped_tree.iter().collect();

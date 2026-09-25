@@ -511,13 +511,13 @@ fn find_with_pairs<'a>(
     }))
 }
 
-fn search(
+fn refine_colors(
     left: &Structure,
     right: &Structure,
-    mut left_colors: Vec<usize>,
-    mut right_colors: Vec<usize>,
+    left_colors: &mut Vec<usize>,
+    right_colors: &mut Vec<usize>,
     fuel: &mut Fuel,
-) -> Result<Option<Vec<usize>>, Error> {
+) -> Result<bool, Error> {
     loop {
         fuel.consume(left.refinement_work.saturating_add(right.refinement_work))?;
         let previous_count = left_colors.iter().copied().collect::<BTreeSet<_>>().len();
@@ -527,64 +527,113 @@ fn search(
             let next = palette.len();
             *palette.entry(key).or_insert(next)
         };
-        left_colors = left
-            .refinement_keys(&left_colors)
+        *left_colors = left
+            .refinement_keys(left_colors)
             .into_iter()
             .map(&mut recolor)
             .collect();
-        right_colors = right
-            .refinement_keys(&right_colors)
+        *right_colors = right
+            .refinement_keys(right_colors)
             .into_iter()
             .map(&mut recolor)
             .collect();
         let mut left_counts = vec![0; palette.len()];
         let mut right_counts = vec![0; palette.len()];
-        for &color in &left_colors {
+        for &color in left_colors.iter() {
             left_counts[color] += 1;
         }
-        for &color in &right_colors {
+        for &color in right_colors.iter() {
             right_counts[color] += 1;
         }
         if left_counts != right_counts {
-            return Ok(None);
+            return Ok(false);
         }
         if palette.len() == previous_count {
-            break;
+            return Ok(true);
         }
     }
-    let mut classes = BTreeMap::<usize, Vec<usize>>::new();
-    for (element, &color) in left_colors.iter().enumerate() {
-        classes.entry(color).or_default().push(element);
-    }
-    let ambiguous = classes
-        .iter()
-        .filter(|(_, elements)| elements.len() > 1)
-        .min_by_key(|(_, elements)| elements.len());
-    if let Some((&color, elements)) = ambiguous {
-        let next_color = classes.len();
-        for (image, &candidate_color) in right_colors.iter().enumerate() {
+}
+
+struct SearchBranch {
+    left_colors: Vec<usize>,
+    right_colors: Vec<usize>,
+    element: usize,
+    color: usize,
+    next_color: usize,
+    next_image: usize,
+}
+
+impl SearchBranch {
+    fn next(&mut self, fuel: &mut Fuel) -> Result<Option<(Vec<usize>, Vec<usize>)>, Error> {
+        while self.next_image < self.right_colors.len() {
             fuel.consume(1)?;
-            if candidate_color != color {
+            let image = self.next_image;
+            self.next_image += 1;
+            if self.right_colors[image] != self.color {
                 continue;
             }
-            fuel.consume((left_colors.len() as u64).saturating_mul(2))?;
-            let mut next_left = left_colors.clone();
-            let mut next_right = right_colors.clone();
-            next_left[elements[0]] = next_color;
-            next_right[image] = next_color;
-            if let Some(images) = search(left, right, next_left, next_right, fuel)? {
-                return Ok(Some(images));
+            fuel.consume((self.left_colors.len() as u64).saturating_mul(2))?;
+            let mut left_colors = self.left_colors.clone();
+            let mut right_colors = self.right_colors.clone();
+            left_colors[self.element] = self.next_color;
+            right_colors[image] = self.next_color;
+            return Ok(Some((left_colors, right_colors)));
+        }
+        Ok(None)
+    }
+}
+
+fn search(
+    left: &Structure,
+    right: &Structure,
+    mut left_colors: Vec<usize>,
+    mut right_colors: Vec<usize>,
+    fuel: &mut Fuel,
+) -> Result<Option<Vec<usize>>, Error> {
+    // Symmetric carriers can require one branch per element even when the first
+    // assignment succeeds, so search depth must not consume the call stack.
+    let mut branches = Vec::new();
+    loop {
+        if refine_colors(left, right, &mut left_colors, &mut right_colors, fuel)? {
+            let mut classes = BTreeMap::<usize, Vec<usize>>::new();
+            for (element, &color) in left_colors.iter().enumerate() {
+                classes.entry(color).or_default().push(element);
+            }
+            let ambiguous = classes
+                .iter()
+                .filter(|(_, elements)| elements.len() > 1)
+                .min_by_key(|(_, elements)| elements.len());
+            if let Some((&color, elements)) = ambiguous {
+                branches.push(SearchBranch {
+                    left_colors,
+                    right_colors,
+                    element: elements[0],
+                    color,
+                    next_color: classes.len(),
+                    next_image: 0,
+                });
+            } else {
+                let by_color: BTreeMap<_, _> = right_colors
+                    .iter()
+                    .enumerate()
+                    .map(|(element, &color)| (color, element))
+                    .collect();
+                let images: Vec<_> = left_colors.iter().map(|color| by_color[color]).collect();
+                if left.preserves_relations(right, &images, fuel)? {
+                    return Ok(Some(images));
+                }
             }
         }
-        return Ok(None);
+        loop {
+            let Some(branch) = branches.last_mut() else {
+                return Ok(None);
+            };
+            if let Some((next_left, next_right)) = branch.next(fuel)? {
+                left_colors = next_left;
+                right_colors = next_right;
+                break;
+            }
+            branches.pop();
+        }
     }
-    let by_color: BTreeMap<_, _> = right_colors
-        .iter()
-        .enumerate()
-        .map(|(element, &color)| (color, element))
-        .collect();
-    let images: Vec<_> = left_colors.iter().map(|color| by_color[color]).collect();
-    Ok(left
-        .preserves_relations(right, &images, fuel)?
-        .then_some(images))
 }

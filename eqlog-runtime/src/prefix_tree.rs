@@ -230,6 +230,10 @@ impl PrefixTree1 {
 }
 impl PrefixTree2 {
     pub fn insert_restriction(&mut self, el0: u32, restriction: PrefixTree1) {
+        if restriction.is_empty() {
+            return;
+        }
+
         match self.map.entry(el0) {
             map::Entry::Occupied(mut occupied_entry) => {
                 *occupied_entry.get_mut() = occupied_entry.get_mut().union(&restriction);
@@ -242,6 +246,10 @@ impl PrefixTree2 {
 }
 impl PrefixTree3 {
     pub fn insert_restriction(&mut self, el0: u32, restriction: PrefixTree2) {
+        if restriction.is_empty() {
+            return;
+        }
+
         match self.map.entry(el0) {
             map::Entry::Occupied(mut occupied_entry) => {
                 *occupied_entry.get_mut() = occupied_entry.get_mut().union(&restriction);
@@ -254,6 +262,10 @@ impl PrefixTree3 {
 }
 impl PrefixTree4 {
     pub fn insert_restriction(&mut self, el0: u32, restriction: PrefixTree3) {
+        if restriction.is_empty() {
+            return;
+        }
+
         match self.map.entry(el0) {
             map::Entry::Occupied(mut occupied_entry) => {
                 *occupied_entry.get_mut() = occupied_entry.get_mut().union(&restriction);
@@ -266,6 +278,10 @@ impl PrefixTree4 {
 }
 impl PrefixTree5 {
     pub fn insert_restriction(&mut self, el0: u32, restriction: PrefixTree4) {
+        if restriction.is_empty() {
+            return;
+        }
+
         match self.map.entry(el0) {
             map::Entry::Occupied(mut occupied_entry) => {
                 *occupied_entry.get_mut() = occupied_entry.get_mut().union(&restriction);
@@ -278,6 +294,10 @@ impl PrefixTree5 {
 }
 impl PrefixTree6 {
     pub fn insert_restriction(&mut self, el0: u32, restriction: PrefixTree5) {
+        if restriction.is_empty() {
+            return;
+        }
+
         match self.map.entry(el0) {
             map::Entry::Occupied(mut occupied_entry) => {
                 *occupied_entry.get_mut() = occupied_entry.get_mut().union(&restriction);
@@ -290,6 +310,10 @@ impl PrefixTree6 {
 }
 impl PrefixTree7 {
     pub fn insert_restriction(&mut self, el0: u32, restriction: PrefixTree6) {
+        if restriction.is_empty() {
+            return;
+        }
+
         match self.map.entry(el0) {
             map::Entry::Occupied(mut occupied_entry) => {
                 *occupied_entry.get_mut() = occupied_entry.get_mut().union(&restriction);
@@ -302,6 +326,10 @@ impl PrefixTree7 {
 }
 impl PrefixTree8 {
     pub fn insert_restriction(&mut self, el0: u32, restriction: PrefixTree7) {
+        if restriction.is_empty() {
+            return;
+        }
+
         match self.map.entry(el0) {
             map::Entry::Occupied(mut occupied_entry) => {
                 *occupied_entry.get_mut() = occupied_entry.get_mut().union(&restriction);
@@ -314,6 +342,10 @@ impl PrefixTree8 {
 }
 impl PrefixTree9 {
     pub fn insert_restriction(&mut self, el0: u32, restriction: PrefixTree8) {
+        if restriction.is_empty() {
+            return;
+        }
+
         match self.map.entry(el0) {
             map::Entry::Occupied(mut occupied_entry) => {
                 *occupied_entry.get_mut() = occupied_entry.get_mut().union(&restriction);
@@ -1281,6 +1313,9 @@ impl PrefixTree2 {
         match self.map.entry(el0) {
             map::Entry::Occupied(mut occupied_entry) => {
                 *occupied_entry.get_mut() = occupied_entry.get_mut().difference(&restriction);
+                if occupied_entry.get_mut().is_empty() {
+                    occupied_entry.remove();
+                }
             }
             map::Entry::Vacant(_) => {}
         }
@@ -1292,6 +1327,9 @@ impl PrefixTree3 {
         match self.map.entry(el0) {
             map::Entry::Occupied(mut occupied_entry) => {
                 *occupied_entry.get_mut() = occupied_entry.get_mut().difference(&restriction);
+                if occupied_entry.get_mut().is_empty() {
+                    occupied_entry.remove();
+                }
             }
             map::Entry::Vacant(_) => {}
         }
@@ -1303,6 +1341,9 @@ impl PrefixTree4 {
         match self.map.entry(el0) {
             map::Entry::Occupied(mut occupied_entry) => {
                 *occupied_entry.get_mut() = occupied_entry.get_mut().difference(&restriction);
+                if occupied_entry.get_mut().is_empty() {
+                    occupied_entry.remove();
+                }
             }
             map::Entry::Vacant(_) => {}
         }
@@ -1314,6 +1355,9 @@ impl PrefixTree5 {
         match self.map.entry(el0) {
             map::Entry::Occupied(mut occupied_entry) => {
                 *occupied_entry.get_mut() = occupied_entry.get_mut().difference(&restriction);
+                if occupied_entry.get_mut().is_empty() {
+                    occupied_entry.remove();
+                }
             }
             map::Entry::Vacant(_) => {}
         }
@@ -1325,6 +1369,9 @@ impl PrefixTree6 {
         match self.map.entry(el0) {
             map::Entry::Occupied(mut occupied_entry) => {
                 *occupied_entry.get_mut() = occupied_entry.get_mut().difference(&restriction);
+                if occupied_entry.get_mut().is_empty() {
+                    occupied_entry.remove();
+                }
             }
             map::Entry::Vacant(_) => {}
         }
@@ -1336,6 +1383,9 @@ impl PrefixTree7 {
         match self.map.entry(el0) {
             map::Entry::Occupied(mut occupied_entry) => {
                 *occupied_entry.get_mut() = occupied_entry.get_mut().difference(&restriction);
+                if occupied_entry.get_mut().is_empty() {
+                    occupied_entry.remove();
+                }
             }
             map::Entry::Vacant(_) => {}
         }
@@ -1347,6 +1397,9 @@ impl PrefixTree8 {
         match self.map.entry(el0) {
             map::Entry::Occupied(mut occupied_entry) => {
                 *occupied_entry.get_mut() = occupied_entry.get_mut().difference(&restriction);
+                if occupied_entry.get_mut().is_empty() {
+                    occupied_entry.remove();
+                }
             }
             map::Entry::Vacant(_) => {}
         }
@@ -1358,6 +1411,9 @@ impl PrefixTree9 {
         match self.map.entry(el0) {
             map::Entry::Occupied(mut occupied_entry) => {
                 *occupied_entry.get_mut() = occupied_entry.get_mut().difference(&restriction);
+                if occupied_entry.get_mut().is_empty() {
+                    occupied_entry.remove();
+                }
             }
             map::Entry::Vacant(_) => {}
         }
