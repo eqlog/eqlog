@@ -42,6 +42,11 @@ impl<'a> RustGenCtx<'a> {
         format!("__insert_{name}")
     }
 
+    pub(crate) fn supported_insert_name(&self, rel: FlatRel) -> String {
+        let name = self.rel_name(rel).to_case(Snake);
+        format!("__support_insert_{name}")
+    }
+
     pub(crate) fn ast(&self) -> &Ast {
         self.ast
     }

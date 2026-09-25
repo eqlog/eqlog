@@ -1,0 +1,11 @@
+Preserve facts through circular morphism graphs
+
+Close strongly connected morphism components to a fixed point so
+cycles and self-morphisms can transport facts. Retain owned facts
+within cycles, including nested graphs, so rebuilding shared indices
+cannot erase their only support. Keep single-pass propagation between
+components. Preserve owned support when canonicalizing aliases already
+visible by inheritance.
+
+Exercise repeated closure, late facts, partial maps, and equalities
+in native and desugared evaluation.

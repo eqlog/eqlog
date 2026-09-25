@@ -11,7 +11,11 @@ Each case checks expected results and compares closures up to isomorphism under 
 The randomized morphism test creates 3-6 model instances joined by a chain, random forward arrows, and a parallel arrow.
 It varies element counts, arrow insertion order, and partial image maps, including non-injective maps.
 Codomains, facts, members, and equalities arrive between closures.
-Arrows stay acyclic to bound image creation and satisfy the native evaluator.
+Arrows stay acyclic to bound image creation.
+
+A second randomized test uses circular graphs, self-morphisms, and partial,
+non-injective maps without image creation rules. It compares repeated closures
+after late endpoints, images, facts, function definitions, and equalities.
 
 `theories.rs` generates 1-3 sorts, unary partial functions, 3-6 predicates of arity 0-3, and 4-9 rules with typed joins and predicate/equality conclusions.
 Equality conclusions include both repeated and distinct variables.
@@ -24,7 +28,7 @@ Compiled models persist between operations.
 Runtime dispatch calls their setters to preserve incremental state.
 Reimporting a dynamic model would mark all facts as new and could hide evaluation bugs.
 
-Defaults are two theory seeds, four traces per generated theory, five rounds per trace, and sixteen seeds for the randomized morphism test.
+Defaults are two theory seeds, four traces per generated theory, five rounds per trace, and sixteen seeds for each randomized morphism test.
 To vary them:
 
 ```sh
@@ -32,7 +36,7 @@ EQLOG_OPT_THEORY_SEED=42 EQLOG_OPT_THEORIES=4 cargo test -p eqlog-test-opt
 EQLOG_OPT_INPUT_SEED=100 EQLOG_OPT_TRACES=100 EQLOG_OPT_ROUNDS=8 cargo test -p eqlog-test-opt
 ```
 
-Input seeds and trace counts also control the randomized morphism test.
+Input seeds and trace counts also control the randomized morphism tests.
 For a fresh theory seed:
 
 ```sh
@@ -48,7 +52,7 @@ EQLOG_OPT_CASE=/absolute/path/case.eql EQLOG_OPT_TRACE=/absolute/path/trace.json
     cargo test -p eqlog-test-opt optimization_equivalence
 ```
 
-The randomized morphism test prints its seed; replay it with `EQLOG_OPT_INPUT_SEED=<seed> EQLOG_OPT_TRACES=1`.
+Each randomized morphism test prints its seed; replay it with `EQLOG_OPT_INPUT_SEED=<seed> EQLOG_OPT_TRACES=1`.
 
 Closure fails after 512 iterations.
 Isomorphism search fails on fuel exhaustion (50 million by default; override with `EQLOG_OPT_FUEL`).

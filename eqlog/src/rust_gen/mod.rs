@@ -1112,7 +1112,13 @@ fn display_pub_insert_relation<'a>(
         let contains_checks = contains_indices
             .into_iter()
             .map(|index_spec| {
-                let index_expr = display_index_expr(flat_rel, &index_spec, ctx);
+                let index_expr = if ctx.has_shared_indices(flat_rel) {
+                    let own = display_own_index_field_name(flat_rel, index_spec, ctx);
+                    let all = display_all_index_field_name(flat_rel, index_spec, ctx);
+                    format!("(if retain_support {{ &self.{own} }} else {{ &self.{all} }})")
+                } else {
+                    display_index_expr(flat_rel, index_spec, ctx).to_string()
+                };
                 let IndexSpec { order, age: _ } = index_spec;
                 let row_args = order.iter().map(|i| rel_args[*i].clone()).format(", ");
                 FmtFn(move |f| {
@@ -1163,7 +1169,8 @@ fn display_pub_insert_relation<'a>(
             .format("\n");
 
         let internal_insert = ctx.internal_insert_name(rel);
-        let args = rel_args.iter().format(", ");
+        let supported_insert = ctx.supported_insert_name(rel);
+        let args = rel_args.iter().format(", ").to_string();
         let parent_checks = FmtFn(|f| match rel {
             FlatRel::ModelMember(typ) => {
                 let (member, parents) = rel_args.split_last().unwrap();
@@ -1186,6 +1193,11 @@ fn display_pub_insert_relation<'a>(
             }}
 
             fn {internal_insert}(&mut self, {rel_fn_args}) {{
+                self.{supported_insert}(false, {args});
+            }}
+
+            #[allow(unused_variables)]
+            fn {supported_insert}(&mut self, retain_support: bool, {rel_fn_args}) {{
                 {canonicalize}
                 {unwrap_args}
 
@@ -1657,7 +1669,7 @@ fn display_canonicalize_rel_block<'a>(
     index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
-        let internal_insert = ctx.internal_insert_name(rel);
+        let supported_insert = ctx.supported_insert_name(rel);
 
         let arity = rel.arity(ctx.signature());
         let arity_len = arity.len();
@@ -1782,6 +1794,8 @@ fn display_canonicalize_rel_block<'a>(
         let remove_from_primary_old_index =
             display_remove_from_index_expr(flat_rel, primary_old_index, row_args, ctx);
 
+        // An inherited canonical copy must not suppress the replacement of
+        // an owned alias: it may depend on that alias through a cycle.
         let insert_row_args = row_args
             .iter()
             .zip(arity.iter())
@@ -1817,7 +1831,7 @@ fn display_canonicalize_rel_block<'a>(
 
             {reduce_weights}
 
-            self.{internal_insert}({insert_row_args});
+            self.{supported_insert}(true, {insert_row_args});
             }}
         "}
     })
@@ -2622,12 +2636,22 @@ fn display_apply_morphism_index_propagated<'a>(
             .format("\n");
 
         let suffix_type = display_prefix_tree_type(suffix_len);
+        // Only callers inside cycles need a change signal to decide whether
+        // to repeat; acyclic propagation avoids the extra set difference.
         writedoc! {f, "
             for ([{prefix_vars}], mapped_dom_set) in propagated {{
                 let mapped_dom_set: {suffix_type} = mapped_dom_set;
                 {wrap_suffix}
-                {index_field_name}_own.remove_restriction(el0, &mapped_dom_set);
-                {old_index_field_name}_own.remove_restriction(el0, &mapped_dom_set);
+                if !retain_own {{
+                    {index_field_name}_own.remove_restriction(el0, &mapped_dom_set);
+                    {old_index_field_name}_own.remove_restriction(el0, &mapped_dom_set);
+                }}
+                if retain_own && !changed {{
+                    changed = {index_field_name}_all.get(el0).map_or(
+                        !mapped_dom_set.is_empty(),
+                        |existing| !mapped_dom_set.difference(&existing).is_empty(),
+                    );
+                }}
                 {index_field_name}_all.insert_restriction(el0, mapped_dom_set);
             }}
         "}
@@ -2646,7 +2670,7 @@ fn index_with_order<'a>(
         .unwrap_or_else(|_| panic!("should have exactly one {age} index with order {order:?}"))
 }
 
-fn display_ordered_morphisms<'a>(
+fn display_morphism_components<'a>(
     typ: TypeId,
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
@@ -2656,7 +2680,6 @@ fn display_ordered_morphisms<'a>(
             .signature()
             .ids_for_model_type(typ)
             .expect("typ is model type");
-        let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
         let parent_len = ctx.signature().type_(typ).parents.len();
 
         let dom_rel = FlatInRel::Rel(FlatRel::Func(ids.dom));
@@ -2726,16 +2749,15 @@ fn display_ordered_morphisms<'a>(
         if parent_len == 0 {
             writedoc! {f, r#"
                 let objects = self.{obj_old}.union(&self.{obj_new});
-                let ordered_{type_snake}_mor: Vec<eqlog_runtime::MorphismWithSignature> =
-                eqlog_runtime::morphism_toposort(
+                let components =
+                eqlog_runtime::morphism_components(
                 &self.{dom_new},
                 &self.{dom_old},
                 &self.{cod_new},
                 &self.{cod_old},
                 &objects,
                 PrefixTree1::empty(),
-                )
-                .expect("TODO: Return error about a cycle being present in the morphism category");
+                );
             "#}
         } else {
             let dom_new_slice = display_tree_prefix_slice(&dom_new, parent_len, 2);
@@ -2754,15 +2776,14 @@ fn display_ordered_morphisms<'a>(
                 for [_, object] in {cod_new_slice}.iter().chain({cod_old_slice}.iter()) {{
                     objects.insert([object]);
                 }}
-                let ordered_{type_snake}_mor = eqlog_runtime::morphism_toposort(
+                let components = eqlog_runtime::morphism_components(
                     {dom_new_slice},
                     {dom_old_slice},
                     {cod_new_slice},
                     {cod_old_slice},
                     &objects,
                     PrefixTree1::empty(),
-                )
-                .expect("TODO: Return error about a cycle being present in the morphism category");
+                );
             "#}
         }
     })
@@ -2871,7 +2892,7 @@ fn display_propagate_model_morphisms_fn<'a>(
     FmtFn(move |f| {
         let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
         let parent_len = ctx.signature().type_(typ).parents.len();
-        let ordered = display_ordered_morphisms(typ, ctx, index_selection);
+        let components = display_morphism_components(typ, ctx, index_selection);
         let remaps = index_selection
             .indices
             .iter()
@@ -2914,46 +2935,57 @@ fn display_propagate_model_morphisms_fn<'a>(
             .filter(|(_, ids)| ctx.signature().type_(ids.type_).parents.last() == Some(&typ))
             .map(|(_, ids)| {
                 let child_snake = display_type(ids.type_, ctx).to_string().to_case(Snake);
-                format!("self.__propagate_{child_snake}_morphisms([{child_parents}]);")
+                format!("component_changed |= self.__propagate_{child_snake}_morphisms([{child_parents}], retain_component_own);")
             })
             .format("\n")
             .to_string();
-        let (visited, domain, remaining) = if children.is_empty() {
-            (String::new(), String::new(), String::new())
-        } else {
-            (
-                "let mut visited = BTreeSet::new();".to_string(),
-                formatdoc! {"
-                    if visited.insert(*dom) {{
-                        let object = *dom;
-                        {children}
-                    }}
-                "},
-                formatdoc! {"
-                    for [object] in objects.iter() {{
-                        if visited.insert(object) {{
+        // Cyclic inheritance cannot replace owned facts: every copy might
+        // otherwise depend on another copy in the same cycle. This applies
+        // to nested graphs too, since outer maps can close an inner path.
+        writedoc! {f, "
+            #[allow(unused_variables, unused_mut)]
+            fn __propagate_{type_snake}_morphisms(
+                &mut self, parents: [u32; {parent_len}], retain_own: bool,
+            ) -> bool {{
+                {components}
+                let mut changed = false;
+                for component in components {{
+                    let cyclic = !component.internal.is_empty();
+                    let retain_component_own = retain_own || cyclic;
+                    loop {{
+                        let mut component_changed = false;
+                        for &object in &component.objects {{
                             {children}
                         }}
+                        for morphism in &component.internal {{
+                            component_changed |= self.__propagate_{type_snake}_morphism(
+                                parents, morphism, retain_component_own,
+                            );
+                        }}
+                        changed |= component_changed;
+                        if !cyclic || !component_changed {{
+                            break;
+                        }}
                     }}
-                "},
-            )
-        };
-
-        // Topological order completes all incoming propagation before a
-        // source's interior is processed and its outgoing morphisms run.
-        // Eqlog identifiers start with a letter, so leading underscores keep
-        // these helpers distinct from public relation methods.
-        writedoc! {f, "
-            #[allow(unused_variables)]
-            fn __propagate_{type_snake}_morphisms(&mut self, parents: [u32; {parent_len}]) {{
-                {ordered}
-                {visited}
-                #[allow(unused)]
-                for MorphismWithSignature {{ morph, dom, cod }} in ordered_{type_snake}_mor.iter() {{
-                    {domain}
-                    {remaps}
+                    for morphism in &component.outgoing {{
+                        changed |= self.__propagate_{type_snake}_morphism(
+                            parents, morphism, retain_own,
+                        );
+                    }}
                 }}
-                {remaining}
+                changed
+            }}
+
+            #[allow(unused_variables, unused_mut)]
+            fn __propagate_{type_snake}_morphism(
+                &mut self,
+                parents: [u32; {parent_len}],
+                MorphismWithSignature {{ morph, dom, cod }}: &MorphismWithSignature,
+                retain_own: bool,
+            ) -> bool {{
+                let mut changed = false;
+                {remaps}
+                changed
             }}
         "}
     })
@@ -3118,7 +3150,7 @@ fn display_recompute_model_indices_fn<'a>(
             .filter(|(_, ids)| ctx.signature().type_(ids.type_).parents.is_empty())
             .map(|(_, ids)| {
                 let type_snake = display_type(ids.type_, ctx).to_string().to_case(Snake);
-                format!("self.__propagate_{type_snake}_morphisms([]);")
+                format!("self.__propagate_{type_snake}_morphisms([], false);")
             })
             .format("\n");
         let rebuild_diagonals = display_rebuild_model_diagonals(ctx, index_selection);

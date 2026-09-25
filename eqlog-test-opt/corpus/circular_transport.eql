@@ -1,0 +1,32 @@
+type Label;
+
+model World {
+    type El;
+    pred ready();
+    pred edge(El, El);
+    pred marked(El);
+    pred tagged(El, Label);
+    func next(El) -> El;
+
+    rule follow {
+        if ready();
+        if marked(x);
+        if edge(x, y);
+        then marked(y);
+    }
+
+    rule diagonal {
+        if edge(x, x);
+        if next(x) = y;
+        then marked(y);
+    }
+}
+
+pred observed(World);
+rule observe {
+    if w: World;
+    if w.ready();
+    if x: w.El;
+    if w.marked(x);
+    then observed(w);
+}

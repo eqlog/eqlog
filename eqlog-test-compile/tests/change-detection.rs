@@ -185,7 +185,7 @@ fn model_mode_changes_invalidate_cache() {
         config.options.evaluation_mode = evaluation_mode;
         process(&config).expect("Native compilation failed");
         let native_output = fs::read_to_string(&out_file).expect("Failed to read generated code");
-        assert!(native_output.contains("morphism_toposort"));
+        assert!(native_output.contains("morphism_components"));
 
         for model_mode in [ModelMode::Desugared, ModelMode::Native] {
             let sentinel = pin_modified(&out_file);
@@ -198,7 +198,7 @@ fn model_mode_changes_invalidate_cache() {
                 ModelMode::Native => assert_eq!(output, native_output),
                 ModelMode::Desugared => {
                     assert!(output.contains("__preserve_"));
-                    assert!(!output.contains("morphism_toposort"));
+                    assert!(!output.contains("morphism_components"));
                     assert!(!output.contains("recompute_model_indices"));
                     assert!(!output.contains("__propagate_"));
                     assert!(!output.contains("_own"));
