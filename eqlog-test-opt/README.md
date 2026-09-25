@@ -19,6 +19,7 @@ acyclic to bound image creation and satisfy the native evaluator.
 
 `theories.rs` generates 1-3 sorts, unary partial functions, 3-6 predicates of
 arity 0-3, and 4-9 rules with typed joins and predicate/equality conclusions.
+Equality conclusions include both repeated and distinct variables.
 Each seed produces a flat theory and a version inside a model with image
 creation rules. Ordinary rules create no elements. The grammar excludes enums
 and nested models; the latter are covered by a handwritten case.

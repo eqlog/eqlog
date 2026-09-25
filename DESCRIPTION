@@ -8,6 +8,8 @@ Use direct Rust tests for merged witnesses, morphism diamonds, and
 nested images. Generate typed theories and seeded operation sequences;
 save failing theories and traces for replay. Vary morphism endpoints,
 partial image maps, late facts, and equalities.
+Include both reflexive equalities and equalities between distinct
+variables.
 
 Dispatch runtime-typed edits to setters on persistent compiled models.
 Reimporting facts between closures would reset incremental state and
