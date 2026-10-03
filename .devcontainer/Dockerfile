@@ -9,6 +9,7 @@ RUN export DEBIAN_FRONTEND=noninteractive \
         build-essential \
         pkg-config \
         git \
+        ripgrep \
         curl \
         ca-certificates \
         sudo \
