@@ -85,6 +85,7 @@ pub fn module_env_out_rels(ram_module: &RamModule) -> BTreeSet<FlatOutRel> {
 pub fn display_module_env_struct<'a>(
     ram_module: &'a RamModule,
     ctx: &'a RustGenCtx<'a>,
+    indices: &'a IndexSelection,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
         let in_rels = module_env_in_rels(ram_module)
@@ -94,7 +95,11 @@ pub fn display_module_env_struct<'a>(
                     let name = display_index_field_name(&rel, &index_spec, ctx);
                     let typ = display_index_type(&rel, ctx);
 
-                    write!(f, "{name}: &'a {typ},")
+                    if indices.is_primary(&rel, &index_spec) {
+                        write!(f, "{name}: &'a {typ},")
+                    } else {
+                        write!(f, "{name}: &'a dyn Fn() -> &'a {typ},")
+                    }
                 })
             })
             .format("\n");
@@ -139,11 +144,19 @@ fn display_set_var<'a>(set_var: &'a SetVar, ctx: &'a RustGenCtx<'a>) -> impl 'a 
     })
 }
 
-fn display_in_set_expr<'a>(expr: &'a InSetExpr, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
+fn display_in_set_expr<'a>(
+    expr: &'a InSetExpr,
+    ctx: &'a RustGenCtx<'a>,
+    indices: &'a IndexSelection,
+) -> impl 'a + Display {
     FmtFn(move |f| match expr {
         InSetExpr::GetIndex(GetIndexExpr { rel, index_spec }) => {
             let index_field = display_index_field_name(rel, index_spec, ctx);
-            write!(f, "env.{index_field}")
+            if indices.is_primary(rel, index_spec) {
+                write!(f, "env.{index_field}")
+            } else {
+                write!(f, "(env.{index_field})()")
+            }
         }
         InSetExpr::Restrict(RestrictExpr {
             set,
@@ -156,11 +169,15 @@ fn display_in_set_expr<'a>(expr: &'a InSetExpr, ctx: &'a RustGenCtx<'a>) -> impl
     })
 }
 
-fn display_stmt_pre<'a>(ram_stmt: &'a RamStmt, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
+fn display_stmt_pre<'a>(
+    ram_stmt: &'a RamStmt,
+    ctx: &'a RustGenCtx<'a>,
+    indices: &'a IndexSelection,
+) -> impl 'a + Display {
     FmtFn(move |f| {
         match ram_stmt {
             RamStmt::DefineSet(DefineSetStmt { defined_var, expr }) => {
-                let expr = display_in_set_expr(expr, ctx);
+                let expr = display_in_set_expr(expr, ctx, indices);
                 let strictness = defined_var.strictness;
                 let defined_var = display_set_var(defined_var, ctx);
                 match strictness {
@@ -264,6 +281,7 @@ fn display_routine<'a>(
     }: &'a RamRoutine,
     ram_module: &'a RamModule,
     ctx: &'a RustGenCtx<'a>,
+    indices: &'a IndexSelection,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let name = name;
@@ -271,7 +289,7 @@ fn display_routine<'a>(
 
         let stmts_pre = stmts
             .iter()
-            .map(|stmt| display_stmt_pre(stmt, ctx))
+            .map(|stmt| display_stmt_pre(stmt, ctx, indices))
             .format("\n");
         let stmts_post = stmts
             .iter()
@@ -342,18 +360,18 @@ fn display_module_main_fn<'a>(
 
 pub fn display_ram_module<'a>(
     ram_module: &'a RamModule,
-    _index_selection: &'a IndexSelection,
+    index_selection: &'a IndexSelection,
     ctx: &'a RustGenCtx<'a>,
     symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
         let imports = display_imports();
-        let env_struct = display_module_env_struct(ram_module, ctx);
+        let env_struct = display_module_env_struct(ram_module, ctx, index_selection);
         let main_fn = display_module_main_fn(ram_module, symbol_prefix);
         let routines = ram_module
             .routines
             .iter()
-            .map(|routine| display_routine(routine, ram_module, ctx))
+            .map(|routine| display_routine(routine, ram_module, ctx, index_selection))
             .format("\n");
 
         writedoc! {f, r#"

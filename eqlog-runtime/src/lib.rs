@@ -54,6 +54,7 @@
 static TAG: &'static str = concat!("EQLOG_RUNTIME_TAG_", env!("OUT_DIR"));
 
 mod data;
+mod lazy_index;
 mod model;
 mod model_hom;
 mod signature;

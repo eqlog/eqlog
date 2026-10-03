@@ -96,15 +96,6 @@ impl FlatInRel {
             }
         }
     }
-
-    pub fn parent_model_type(&self, signature: &Signature) -> Option<TypeId> {
-        match self {
-            FlatInRel::Rel(rel) | FlatInRel::RelWithDiagonals { rel, .. } => {
-                rel.parent_model_type(signature)
-            }
-            FlatInRel::Equality(_) | FlatInRel::TypeSet(_) => None,
-        }
-    }
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]

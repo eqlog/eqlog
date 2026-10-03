@@ -3,18 +3,21 @@ use std::fmt::Display;
 
 use indoc::writedoc;
 
+use super::indices::{projection, source_relation};
 use super::{
-    display_index_field_name, display_index_type, display_module_env_struct_name,
-    display_out_set_field_name, module_env_in_rels, module_env_out_rels, RustGenCtx,
+    display_all_index_field_name, display_index_field_name, display_index_type,
+    display_module_env_struct_name, display_out_set_field_name, module_env_in_rels,
+    module_env_out_rels, RustGenCtx,
 };
-use crate::flat_eqlog::{FlatInRel, IndexAge, IndexSpec, Stratum};
+use crate::flat_eqlog::{FlatInRel, IndexAge, IndexSelection, IndexSpec, Stratum};
 use crate::fmt_util::FmtFn;
 use crate::options::ModelMode;
 use crate::ram::RamModule;
 
 pub struct Codegen<'s> {
     strata: &'s [Stratum],
-    inputs: BTreeMap<(FlatInRel, IndexSpec), usize>,
+    inputs: BTreeMap<FlatInRel, usize>,
+    indices: BTreeMap<(FlatInRel, IndexSpec), usize>,
 }
 
 fn input_key(rel: FlatInRel, mut index: IndexSpec) -> (FlatInRel, IndexSpec) {
@@ -24,10 +27,14 @@ fn input_key(rel: FlatInRel, mut index: IndexSpec) -> (FlatInRel, IndexSpec) {
 
 impl<'s> Codegen<'s> {
     pub fn new(strata: &'s [Stratum], modules: &[RamModule]) -> Self {
-        let inputs: BTreeSet<_> = modules
+        let indices: BTreeSet<_> = modules
             .iter()
             .flat_map(module_env_in_rels)
             .map(|(rel, index)| input_key(rel, index))
+            .collect();
+        let inputs: BTreeSet<_> = indices
+            .iter()
+            .map(|(rel, _)| source_relation(rel))
             .collect();
         Self {
             strata,
@@ -36,25 +43,45 @@ impl<'s> Codegen<'s> {
                 .enumerate()
                 .map(|(i, key)| (key, i))
                 .collect(),
+            indices: indices
+                .into_iter()
+                .enumerate()
+                .map(|(i, key)| (key, i))
+                .collect(),
         }
     }
 
-    pub fn fields<'a>(&'a self, ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
+    pub fn fields<'a>(
+        &'a self,
+        ctx: &'a RustGenCtx<'a>,
+        selection: &'a IndexSelection,
+    ) -> impl Display + 'a {
         FmtFn(move |f| {
             let count = self.strata.len();
             writeln!(f, "__stratum_initialized: [bool; {count}],")?;
-            for ((rel, _), i) in &self.inputs {
+            for (rel, i) in &self.inputs {
                 let typ = display_index_type(rel, ctx);
                 writeln!(
                     f,
                     "__rule_input_{i}: eqlog_runtime::__private::RelationVersions<{typ}>,"
                 )?;
             }
+            for ((rel, index), i) in &self.indices {
+                if selection.is_primary(rel, index) {
+                    continue;
+                }
+                let source = source_relation(rel);
+                let source_type = display_index_type(&source, ctx);
+                let target = display_index_type(rel, ctx);
+                for age in [IndexAge::Old, IndexAge::New] {
+                    writeln!(f, "__rule_index_{i}_{age}: eqlog_runtime::__private::IndexSeed<{source_type}, {target}>,")?;
+                }
+            }
             Ok(())
         })
     }
 
-    pub fn init(&self) -> impl Display + '_ {
+    pub fn init<'a>(&'a self, selection: &'a IndexSelection) -> impl Display + 'a {
         FmtFn(move |f| {
             let count = self.strata.len();
             writeln!(f, "__stratum_initialized: [false; {count}],")?;
@@ -64,6 +91,17 @@ impl<'s> Codegen<'s> {
                     "__rule_input_{i}: eqlog_runtime::__private::RelationVersions::new(),"
                 )?;
             }
+            for ((rel, index), i) in &self.indices {
+                if selection.is_primary(rel, index) {
+                    continue;
+                }
+                for age in [IndexAge::Old, IndexAge::New] {
+                    writeln!(
+                        f,
+                        "__rule_index_{i}_{age}: eqlog_runtime::__private::IndexSeed::new(),"
+                    )?;
+                }
+            }
             Ok(())
         })
     }
@@ -72,24 +110,19 @@ impl<'s> Codegen<'s> {
         &'a self,
         modules: &'a [RamModule],
         ctx: &'a RustGenCtx<'a>,
+        selection: &'a IndexSelection,
     ) -> impl Display + 'a {
         FmtFn(move |f| {
             writeln!(f, "fn __publish_rule_inputs(&mut self) {{")?;
-            for ((rel, old_index), i) in &self.inputs {
-                let new_index = IndexSpec {
-                    order: old_index.order.clone(),
-                    age: IndexAge::New,
-                };
-                let old = display_index_field_name(rel, old_index, ctx);
-                let new = display_index_field_name(rel, &new_index, ctx);
-                let suffix = if ctx.has_shared_indices(rel) {
-                    "_all"
-                } else {
-                    ""
-                };
+            for (rel, i) in &self.inputs {
+                let old_index = selection.primary(rel, IndexAge::Old);
+                let new_index = selection.primary(rel, IndexAge::New);
+                assert_eq!(old_index.order, new_index.order);
+                let old = display_all_index_field_name(rel, old_index, ctx);
+                let new = display_all_index_field_name(rel, new_index, ctx);
                 writeln!(
                     f,
-                    "self.__rule_input_{i}.publish(&self.{old}{suffix}, &self.{new}{suffix});"
+                    "self.__rule_input_{i}.publish(&self.{old}, &self.{new});"
                 )?;
             }
             writeln!(f, "}}")?;
@@ -98,7 +131,7 @@ impl<'s> Codegen<'s> {
                     .groups
                     .iter()
                     .flat_map(|&i| module_env_in_rels(&modules[i]))
-                    .map(|(rel, index)| self.inputs[&input_key(rel, index)])
+                    .map(|(rel, _)| self.inputs[&source_relation(&rel)])
                     .collect();
                 writedoc! {f, "
                     fn __run_stratum_{s}(&mut self, delta: &mut ModelDelta) -> bool {{
@@ -115,6 +148,24 @@ impl<'s> Codegen<'s> {
                     if !dirty {{ return false; }}
                     self.__stratum_initialized[{s}] = true;
                 "}?;
+                writeln!(f, "{{")?;
+                let indexed_inputs: BTreeSet<_> = stratum
+                    .groups
+                    .iter()
+                    .flat_map(|&i| module_env_in_rels(&modules[i]))
+                    .collect();
+                for (rel, index) in indexed_inputs {
+                    if selection.is_primary(&rel, &index) {
+                        continue;
+                    }
+                    let source = source_relation(&rel);
+                    let i = self.inputs[&source];
+                    let j = self.indices[&input_key(rel.clone(), index.clone())];
+                    let primary = selection.primary(&source, IndexAge::Old);
+                    let project = projection(&rel, &index, primary);
+                    let age = index.age;
+                    writeln!(f, "let index_{j}_{age} = LazyCell::new(|| input_{i}.{age}_index({j}, &mut self.__rule_index_{j}_{age}, {project}));")?;
+                }
                 for &m in &stratum.groups {
                     let module = &modules[m];
                     let env = display_module_env_struct_name(module);
@@ -126,8 +177,13 @@ impl<'s> Codegen<'s> {
                             IndexAge::Old => "old",
                             IndexAge::New => "new",
                         };
-                        let i = self.inputs[&input_key(rel.clone(), index.clone())];
-                        writeln!(f, "{field}: &input_{i}.{age},")?;
+                        let i = self.inputs[&source_relation(&rel)];
+                        if selection.is_primary(&rel, &index) {
+                            writeln!(f, "{field}: &input_{i}.{age},")?;
+                        } else {
+                            let j = self.indices[&input_key(rel.clone(), index.clone())];
+                            writeln!(f, "{field}: &|| &*index_{j}_{age},")?;
+                        }
                     }
                     for rel in module_env_out_rels(module) {
                         let field = display_out_set_field_name(&rel, ctx);
@@ -135,6 +191,7 @@ impl<'s> Codegen<'s> {
                     }
                     writeln!(f, "}}; {name}(env);")?;
                 }
+                writeln!(f, "}}")?;
                 let propagate = match ctx.model_mode() {
                     ModelMode::Native => "self.recompute_model_indices();",
                     ModelMode::Desugared => "",

@@ -1,0 +1,15 @@
+Build secondary indices only when consumed
+
+Keep primary tuple storage eager and retain secondary indices with their
+source snapshots. Catch up on demand using borrowed, sharing-aware tree
+differences instead of materializing temporary difference trees.
+
+Publish primary snapshots for strata and share derived indices between
+consumers of the same snapshot. Defer secondary reads through rule
+environments so empty joins can avoid constructing unused indices.
+Propagate native model facts through primary indices and derive other
+orders and diagonals lazily. Keep simultaneous scheduling the default.
+
+Cover sparse tree edits, mapped comparisons, snapshot identity, delayed
+reads, equality replacements, and dynamic import. Leave canonicalization
+branch updates for separate work.

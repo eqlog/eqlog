@@ -118,3 +118,23 @@ fn generic_map_difference_still_applies_callbacks_to_shared_values() {
     let result = map.difference(&snapshot, |_, left, right| Some(left + right));
     assert_eq!(result.get(&1), Some(&4));
 }
+
+#[test]
+fn materialized_deltas_reuse_whole_added_prefixes() {
+    let mut versions = RelationVersions::new();
+    let mut rows = PrefixTree2::new();
+    rows.insert([0, 0]);
+    versions.publish(&rows, PrefixTree2::empty());
+    versions.consume(0);
+    for i in 0..1000 {
+        rows.insert([1, i]);
+    }
+    versions.publish(&rows, PrefixTree2::empty());
+    let lagging = versions.consume(0);
+    let fresh = versions.consume(1);
+    assert_eq!(lagging.new.iter().count(), 1000);
+    assert!(SnapshotSet::shares_root(
+        lagging.new.get(1).unwrap(),
+        fresh.new.get(1).unwrap(),
+    ));
+}

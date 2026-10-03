@@ -523,12 +523,8 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
         config.options.scheduling_mode,
     );
     let flat_rules_iter = flat_rule_groups.iter().flat_map(|group| group.rules.iter());
-    let mut index_selection =
+    let index_selection =
         select_indices(flat_rules_iter, &signature, config.options.model_mode);
-    match config.options.scheduling_mode {
-        SchedulingMode::Simultaneous => {}
-        SchedulingMode::Stratified => index_selection.complete_ages(),
-    }
 
     let ram_program = flat_rule_groups_to_ram(flat_rule_groups, schedule, &index_selection);
 

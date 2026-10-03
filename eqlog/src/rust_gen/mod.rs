@@ -1,6 +1,7 @@
 mod context;
 mod dynamic;
 mod flat_eqlog;
+mod indices;
 mod rule;
 mod stratified;
 mod types;
@@ -909,93 +910,27 @@ fn display_pub_iter_fn<'a>(
     })
 }
 
-fn display_diagonal_checks<'a>(args: &'a [ElVar], equalities: &'a [usize]) -> impl Display + 'a {
-    equalities
-        .iter()
-        .copied()
-        .enumerate()
-        .filter(|(i, j)| i != j)
-        .map(move |(i, j)| {
-            let argi = &args[i];
-            let argj = &args[j];
-            format!("{argi} == {argj}")
-        })
-        .format(" && ")
-}
-
-/// Displays a block of code that inserts the variable row into the indices for a Rel.
 fn display_insert_row_block<'a>(
     args: &'a [ElVar],
     age: IndexAge,
     rel: FlatRel,
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
-) -> impl 'a + Display {
-    index_selection
-        .indices
-        .iter()
-        .flat_map(|(rel, indices)| {
-            indices
-                .iter()
-                .map(move |index| (rel.clone(), index.clone()))
-        })
-        .filter(move |(flat_in_rel, index)| {
-            if index.age != age {
-                return false;
-            }
-
-            match flat_in_rel {
-                FlatInRel::Rel(r0) => *r0 == rel,
-                FlatInRel::RelWithDiagonals {
-                    rel: r0,
-                    equalities: _,
-                } => *r0 == rel,
-                FlatInRel::Equality(_) | FlatInRel::TypeSet(_) => false,
-            }
-        })
-        .map(move |(flat_in_rel, index)| {
-            FmtFn(move |f| {
-                let index_name = display_index_field_name(&flat_in_rel, &index, ctx);
-                let (checks, relevant_args) = match &flat_in_rel {
-                    FlatInRel::Rel(_) => (None, args.to_vec()),
-                    FlatInRel::RelWithDiagonals { rel: _, equalities } => {
-                        let checks = display_diagonal_checks(args, equalities).to_string();
-                        let relevant_args = equalities
-                            .iter()
-                            .copied()
-                            .enumerate()
-                            .filter_map(|(i, j)| if i == j { Some(args[i].clone()) } else { None })
-                            .collect();
-                        (Some(checks), relevant_args)
-                    }
-                    FlatInRel::Equality(_) | FlatInRel::TypeSet(_) => {
-                        unreachable!("only relation indices are selected")
-                    }
-                };
-                let args = index
-                    .order
-                    .iter()
-                    .map(|i| relevant_args[*i].clone())
-                    .format(", ")
-                    .to_string();
-                if let Some(checks) = &checks {
-                    writeln!(f, "if {checks} {{")?;
-                }
-                if ctx.has_shared_indices(&flat_in_rel) {
-                    writedoc! {f, "
-                        self.{index_name}_own.insert([{args}]);
-                        self.{index_name}_all.insert([{args}]);
-                    "}?;
-                } else {
-                    writeln!(f, "self.{index_name}.insert([{args}]);")?;
-                }
-                if checks.is_some() {
-                    writeln!(f, "}}")?;
-                }
-                Ok(())
-            })
-        })
-        .format("\n")
+) -> impl Display + 'a {
+    FmtFn(move |f| {
+        let flat = FlatInRel::Rel(rel);
+        let index = index_selection.primary(&flat, age);
+        let field = display_index_field_name(&flat, index, ctx);
+        let args = index.order.iter().map(|&i| &args[i]).format(", ").to_string();
+        if ctx.has_shared_indices(&flat) {
+            writedoc! {f, "
+                self.{field}_own.insert([{args}]);
+                self.{field}_all.insert([{args}]);
+            "}
+        } else {
+            writeln!(f, "self.{field}.insert([{args}]);")
+        }
+    })
 }
 
 fn display_pub_insert_relation<'a>(
@@ -1102,12 +1037,10 @@ fn display_pub_insert_relation<'a>(
             display_insert_row_block(rel_args, IndexAge::New, rel, ctx, index_selection);
 
         let flat_rel = FlatInRel::Rel(rel);
-        let contains_query = QuerySpec::one(flat_rel.clone(), ctx.signature());
-        let contains_indices = index_selection
-            .queries
-            .get(&(flat_rel.clone(), contains_query))
-            .expect("should have indices for relation")
-            .as_slice();
+        let contains_indices = [
+            index_selection.primary(&flat_rel, IndexAge::Old),
+            index_selection.primary(&flat_rel, IndexAge::New),
+        ];
 
         let flat_rel = &flat_rel;
         let contains_checks = contains_indices
@@ -1169,6 +1102,7 @@ fn display_pub_insert_relation<'a>(
             })
             .format("\n");
 
+        let invalidate = indices::invalidate(rel, index_selection, ctx);
         let internal_insert = ctx.internal_insert_name(rel);
         let supported_insert = ctx.supported_insert_name(rel);
         let args = rel_args.iter().format(", ").to_string();
@@ -1204,6 +1138,7 @@ fn display_pub_insert_relation<'a>(
 
                 {contains_checks}
 
+                {invalidate}
                 {index_inserts}
 
                 {el_index_inserts}
@@ -1621,33 +1556,6 @@ fn display_remove_from_index_expr<'a>(
     ctx: &'a RustGenCtx<'a>,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
-        let equalities = match &rel {
-            FlatInRel::Rel(_) => None,
-            FlatInRel::RelWithDiagonals { rel: _, equalities } => Some(equalities),
-            FlatInRel::Equality(_) | FlatInRel::TypeSet(_) => None,
-        };
-
-        // Off-diagonal tuples can share the projection of a valid diagonal
-        // tuple, so only remove rows that actually belong to this index.
-        let checks =
-            equalities.map(|equalities| display_diagonal_checks(row_args, equalities).to_string());
-
-        let row_args: Vec<ElVar> = match equalities {
-            Some(equalities) => row_args
-                .iter()
-                .cloned()
-                .enumerate()
-                .filter_map(|(i, row_arg)| {
-                    if equalities[i] == i {
-                        Some(row_arg)
-                    } else {
-                        None
-                    }
-                })
-                .collect(),
-            None => row_args.to_vec(),
-        };
-
         let permuted_row_args = index
             .order
             .iter()
@@ -1656,11 +1564,7 @@ fn display_remove_from_index_expr<'a>(
 
         let field_name = display_own_index_field_name(&rel, &index, ctx);
 
-        let remove = format!("self.{field_name}.remove([{permuted_row_args}])");
-        match checks {
-            Some(checks) => write!(f, "if {checks} {{ {remove} }} else {{ false }}"),
-            None => write!(f, "{remove}"),
-        }
+        write!(f, "self.{field_name}.remove([{permuted_row_args}])")
     })
 }
 
@@ -1731,64 +1635,7 @@ fn display_canonicalize_rel_block<'a>(
         assert_eq!(primary_old_indices.len(), 1);
         let primary_old_index: IndexSpec = primary_old_indices[0].clone();
 
-        let mut secondary_new_indices: BTreeSet<(FlatInRel, IndexSpec)> = BTreeSet::new();
-        let mut secondary_old_indices: BTreeSet<(FlatInRel, IndexSpec)> = BTreeSet::new();
-        for (r0, indices) in &index_selection.indices {
-            match r0 {
-                FlatInRel::Rel(_) => {
-                    if r0 != &flat_rel {
-                        continue;
-                    }
-                }
-                FlatInRel::RelWithDiagonals {
-                    rel: rel0,
-                    equalities: _,
-                } => {
-                    if *rel0 != rel {
-                        continue;
-                    }
-                }
-                FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => continue,
-            };
-
-            for index in indices {
-                if r0 == &flat_rel {
-                    if *index == primary_new_index || *index == primary_old_index {
-                        continue;
-                    }
-                }
-
-                match index.age {
-                    IndexAge::New => {
-                        secondary_new_indices.insert((r0.clone(), index.clone()));
-                    }
-                    IndexAge::Old => {
-                        secondary_old_indices.insert((r0.clone(), index.clone()));
-                    }
-                }
-            }
-        }
-
-        let remove_from_secondary_new_indices = secondary_new_indices
-            .into_iter()
-            .map(move |(r, index)| {
-                FmtFn(move |f| {
-                    let remove_from_index_expr =
-                        display_remove_from_index_expr(r.clone(), index.clone(), row_args, ctx);
-                    write!(f, "{remove_from_index_expr};")
-                })
-            })
-            .format("\n");
-        let remove_from_secondary_old_indices = secondary_old_indices
-            .into_iter()
-            .map(move |(r, index)| {
-                FmtFn(move |f| {
-                    let remove_from_index_expr =
-                        display_remove_from_index_expr(r.clone(), index.clone(), row_args, ctx);
-                    write!(f, "{remove_from_index_expr};")
-                })
-            })
-            .format("\n");
+        let invalidate = indices::invalidate(rel, index_selection, ctx);
 
         let remove_from_primary_new_index =
             display_remove_from_index_expr(flat_rel.clone(), primary_new_index, row_args, ctx);
@@ -1815,16 +1662,11 @@ fn display_canonicalize_rel_block<'a>(
             let mut non_canonical_rows: Vec<Vec<[u32; {arity_len}]>> = Vec::new();
             {fill_non_canonical_rows_vec}
 
+            if !non_canonical_rows.is_empty() {{
+                {invalidate}
+            }}
             for [{row_args}] in non_canonical_rows.into_iter().flatten() {{
-            let was_in_indices = if {remove_from_primary_new_index} {{
-            {remove_from_secondary_new_indices}
-            true
-            }} else if {remove_from_primary_old_index} {{
-            {remove_from_secondary_old_indices}
-            true
-            }} else {{
-            false
-            }};
+            let was_in_indices = {remove_from_primary_new_index} || {remove_from_primary_old_index};
 
             if !was_in_indices {{
             continue;
@@ -2227,51 +2069,11 @@ fn display_move_new_to_old_fn<'a>(
                         index_selection,
                     );
 
-                    let new_clears = index_selection
-                        .indices
-                        .iter()
-                        .flat_map(|(rel, indices)| {
-                            indices
-                                .iter()
-                                .map(move |index| (rel.clone(), index.clone()))
-                        })
-                        .filter(|(flat_in_rel, index)| {
-                            match index.age {
-                                IndexAge::Old => {
-                                    return false;
-                                }
-                                IndexAge::New => {}
-                            }
-
-                            match flat_in_rel {
-                                FlatInRel::Rel(rel0) => {
-                                    *rel0
-                                        == match &flat_rel {
-                                            FlatInRel::Rel(rel) => *rel,
-                                            _ => unreachable!("flat relation should be a relation"),
-                                        }
-                                }
-                                FlatInRel::RelWithDiagonals { rel: rel0, .. } => {
-                                    *rel0
-                                        == match &flat_rel {
-                                            FlatInRel::Rel(rel) => *rel,
-                                            _ => unreachable!("flat relation should be a relation"),
-                                        }
-                                }
-                                FlatInRel::TypeSet(_) => false,
-                                FlatInRel::Equality(_) => false,
-                            }
-                        })
-                        .map(move |(flat_in_rel, index)| {
-                            FmtFn(move |f| {
-                                let field_name =
-                                    display_own_index_field_name(&flat_in_rel, &index, ctx);
-                                write!(f, "self.{field_name}.clear();")
-                            })
-                        })
-                        .format("\n");
+                    let new_clears = format!("self.{primary_new_index}.clear();");
+                    let invalidate = indices::invalidate(rel, index_selection, ctx);
 
                     writedoc! {f, "
+                        {invalidate}
                         for [{primary_new_args}] in self.{primary_new_index}.iter() {{
                         {old_inserts}
                         }}
@@ -2288,7 +2090,9 @@ fn display_move_new_to_old_fn<'a>(
             .flat_map(|(rel, indices)| {
                 indices
                     .iter()
-                    .filter(|index| index.age == IndexAge::New)
+                    .filter(|index| {
+                        index.age == IndexAge::New && index_selection.is_primary(rel, index)
+                    })
                     .map(move |index| {
                         FmtFn(move |f| {
                             let old_index = IndexSpec {
@@ -2431,7 +2235,7 @@ fn display_parent_then_morph_gets(base: String, parent_len: usize) -> String {
 }
 
 fn display_tree_prefix_slice(field: &str, parent_len: usize, leaf_dim: usize) -> String {
-    let mut expr = format!("self.{field}");
+    let mut expr = format!("self.{field}()");
     for i in 0..parent_len {
         if i == 0 {
             expr = format!("{expr}.get(parents[{i}])");
@@ -2480,11 +2284,11 @@ fn display_mor_app_map_expr<'a>(
             display_all_index_field_name(&mor_app_rel, mor_app_eval_index_old, ctx);
 
         let new_gets = display_parent_then_morph_gets(
-            format!("self.{mor_app_eval_index_new_name}"),
+            format!("self.{mor_app_eval_index_new_name}()"),
             parent_len,
         );
         let old_gets = display_parent_then_morph_gets(
-            format!("self.{mor_app_eval_index_old_name}"),
+            format!("self.{mor_app_eval_index_old_name}()"),
             parent_len,
         );
         writedoc! {f, "
@@ -2748,13 +2552,13 @@ fn display_morphism_components<'a>(
 
         if parent_len == 0 {
             writedoc! {f, r#"
-                let objects = self.{obj_old}.union(&self.{obj_new});
+                let objects = self.{obj_old}().union(self.{obj_new}());
                 let components =
                 eqlog_runtime::morphism_components(
-                &self.{dom_new},
-                &self.{dom_old},
-                &self.{cod_new},
-                &self.{cod_old},
+                self.{dom_new}(),
+                self.{dom_old}(),
+                self.{cod_new}(),
+                self.{cod_old}(),
                 &objects,
                 PrefixTree1::empty(),
                 );
@@ -2871,15 +2675,23 @@ fn display_remap_parented_index<'a>(
         );
         let suffix_type = display_prefix_tree_type(suffix_len);
 
+        let relation = match flat_in_rel {
+            FlatInRel::Rel(rel) => rel,
+            FlatInRel::RelWithDiagonals { .. }
+            | FlatInRel::TypeSet(_)
+            | FlatInRel::Equality(_) => unreachable!("only primary relation indices are propagated"),
+        };
+        let invalidate = indices::invalidate(relation, index_selection, ctx);
         writedoc! {f, r#"
+            {member_maps}
             let mut {index_field_name}_all = self.{index_field_name}_all.clone();
             let {index_field_name}_own = &mut self.{index_field_name}_own;
             let {old_index_field_name}_own = &mut self.{old_index_field_name}_own;
-            {member_maps}
             let mut propagated: Vec<([u32; {prefix_len}], {suffix_type})> = Vec::new();
             {collect_propagated}
             {apply_propagated}
             self.{index_field_name}_all = {index_field_name}_all;
+            {invalidate}
         "#}
     })
 }
@@ -2911,7 +2723,9 @@ fn display_propagate_model_morphisms_fn<'a>(
             .flat_map(|(rel, indices)| {
                 indices
                     .iter()
-                    .filter(|index| index.age == IndexAge::New)
+                    .filter(|index| {
+                        index.age == IndexAge::New && index_selection.is_primary(rel, index)
+                    })
                     .map(move |index| {
                         display_remap_parented_index(
                             rel.clone(),
@@ -2991,103 +2805,6 @@ fn display_propagate_model_morphisms_fn<'a>(
     })
 }
 
-fn display_rebuild_model_diagonals<'a>(
-    ctx: &'a RustGenCtx<'a>,
-    index_selection: &'a IndexSelection,
-) -> impl Display + 'a {
-    FmtFn(move |f| {
-        let mut diagonals_by_rel = BTreeMap::new();
-        for (diagonal, indices) in &index_selection.indices {
-            match diagonal {
-                FlatInRel::RelWithDiagonals { rel, equalities } => {
-                    if ctx.has_shared_indices(diagonal) {
-                        diagonals_by_rel
-                            .entry(*rel)
-                            .or_insert_with(Vec::new)
-                            .push((diagonal, equalities, indices));
-                    }
-                }
-                FlatInRel::Rel(_) | FlatInRel::Equality(_) | FlatInRel::TypeSet(_) => {}
-            }
-        }
-
-        // Mapping can both create and break repeated-variable equalities, so
-        // diagonal indices must be selected from complete propagated tuples.
-        // Rebuild owned indices too, since propagation can remove owned tuples.
-        for (rel, diagonals) in diagonals_by_rel {
-            let args: Vec<ElVar> = (0..rel.arity(ctx.signature()).len())
-                .map(ElVar::from)
-                .collect();
-            let full_rel = FlatInRel::Rel(rel);
-            for (age, suffix) in [
-                (IndexAge::New, "all"),
-                (IndexAge::New, "own"),
-                (IndexAge::Old, "own"),
-            ] {
-                let query = match age {
-                    IndexAge::New => QuerySpec::all_new(),
-                    IndexAge::Old => QuerySpec::all_old(),
-                };
-                let source_index = index_selection
-                    .queries
-                    .get(&(full_rel.clone(), query))
-                    .expect("full relation should have primary indices")
-                    .iter()
-                    .exactly_one()
-                    .expect("full relation should have one primary index per age");
-                let source = display_index_field_name(&full_rel, source_index, ctx);
-                let unpack = source_index.order.iter().map(|i| &args[*i]).format(", ");
-                let clear = diagonals
-                    .iter()
-                    .flat_map(|(diagonal, _, indices)| {
-                        indices
-                            .iter()
-                            .filter(|index| index.age == age)
-                            .map(|index| {
-                                let field = display_index_field_name(diagonal, index, ctx);
-                                format!("self.{field}_{suffix}.clear();")
-                            })
-                    })
-                    .format("\n");
-                let insert = diagonals
-                    .iter()
-                    .map(|(diagonal, equalities, indices)| {
-                        let checks = display_diagonal_checks(&args, equalities);
-                        let relevant_args: Vec<_> = equalities
-                            .iter()
-                            .copied()
-                            .enumerate()
-                            .filter_map(|(i, j)| if i == j { Some(&args[i]) } else { None })
-                            .collect();
-                        let inserts = indices
-                            .iter()
-                            .filter(|index| index.age == age)
-                            .map(|index| {
-                                let field = display_index_field_name(diagonal, index, ctx);
-                                let row =
-                                    index.order.iter().map(|i| relevant_args[*i]).format(", ");
-                                format!("self.{field}_{suffix}.insert([{row}]);")
-                            })
-                            .format("\n");
-                        formatdoc! {"
-                            if {checks} {{
-                                {inserts}
-                            }}
-                        "}
-                    })
-                    .format("\n");
-                writedoc! {f, "
-                    {clear}
-                    for [{unpack}] in self.{source}_{suffix}.iter() {{
-                        {insert}
-                    }}
-                "}?;
-            }
-        }
-        Ok(())
-    })
-}
-
 fn display_recompute_model_indices_fn<'a>(
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
@@ -3100,7 +2817,9 @@ fn display_recompute_model_indices_fn<'a>(
             .flat_map(|(rel, indices)| {
                 indices
                     .iter()
-                    .filter(|index| index.age == IndexAge::New)
+                    .filter(|index| {
+                        index.age == IndexAge::New && index_selection.is_primary(rel, index)
+                    })
                     .map(|index| {
                         let old_index = IndexSpec {
                             order: index.order.clone(),
@@ -3153,15 +2872,20 @@ fn display_recompute_model_indices_fn<'a>(
                 format!("self.__propagate_{type_snake}_morphisms([], false);")
             })
             .format("\n");
-        let rebuild_diagonals = display_rebuild_model_diagonals(ctx, index_selection);
+        let invalidate = iter_flat_rels(ctx.signature())
+            .filter(|rel| ctx.has_shared_indices(&FlatInRel::Rel(*rel)))
+            .map(|rel| indices::invalidate(rel, index_selection, ctx))
+            .format("\n")
+            .to_string();
         writedoc! {f, "
             {propagation_functions}
 
             fn recompute_model_indices(&mut self) {{
+                {invalidate}
                 {initialize}
                 {propagate}
-                {rebuild_diagonals}
                 {finish}
+                {invalidate}
             }}
         "}
     })
@@ -3170,6 +2894,7 @@ fn display_recompute_model_indices_fn<'a>(
 fn display_module_env_var<'a>(
     ram_module: &'a RamModule,
     ctx: &'a RustGenCtx<'a>,
+    indices: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let env_struct_name = display_module_env_struct_name(ram_module);
@@ -3178,10 +2903,11 @@ fn display_module_env_var<'a>(
             .map(|(flat_in_rel, index)| {
                 FmtFn(move |f| {
                     let field_name = display_index_field_name(&flat_in_rel, &index, ctx);
-                    if ctx.has_shared_indices(&flat_in_rel) {
-                        write!(f, "{field_name}: &self.{field_name}_all,")
+                    let expr = display_index_expr(&flat_in_rel, &index, ctx);
+                    if indices.is_primary(&flat_in_rel, &index) {
+                        write!(f, "{field_name}: {expr},")
                     } else {
-                        write!(f, "{field_name}: &self.{field_name},")
+                        write!(f, "{field_name}: &|| {expr},")
                     }
                 })
             })
@@ -3210,6 +2936,7 @@ fn display_module_env_var<'a>(
 fn display_close_until_fn<'a>(
     ram_modules: &'a [RamModule],
     ctx: &'a RustGenCtx<'a>,
+    indices: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let module_calls = ram_modules
@@ -3217,7 +2944,7 @@ fn display_close_until_fn<'a>(
             .map(|ram_module| {
                 FmtFn(move |f: &mut Formatter| -> Result {
                     let name = ram_module.name.as_str();
-                    let env_var = display_module_env_var(ram_module, ctx);
+                    let env_var = display_module_env_var(ram_module, ctx, indices);
                     writedoc! {f, r#"
                         {env_var}
                         {name}(env);
@@ -3299,7 +3026,7 @@ fn display_new_fn<'a>(
         writeln!(f, "Self {{").unwrap();
         writeln!(f, "__pending_delta: ModelDelta::new(),")?;
         if let Some(codegen) = codegen {
-            write!(f, "{}", codegen.init())?;
+            write!(f, "{}", codegen.init(index_selection))?;
         }
         for typ in ctx.signature().iter_types() {
             let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
@@ -3310,9 +3037,15 @@ fn display_new_fn<'a>(
         for (flat_rel, indices) in &index_selection.indices {
             for index in indices {
                 let field_name = display_index_field_name(&flat_rel, &index, ctx);
-                let index_type = display_index_type(&flat_rel, ctx);
+                let index_type = if index_selection.is_primary(flat_rel, index) {
+                    display_index_type(flat_rel, ctx).to_string()
+                } else {
+                    "eqlog_runtime::__private::LazyIndex".to_string()
+                };
                 if ctx.has_shared_indices(&flat_rel) {
-                    writeln!(f, "{field_name}_own: {index_type}::new(),").unwrap();
+                    if index_selection.is_primary(flat_rel, index) {
+                        writeln!(f, "{field_name}_own: {index_type}::new(),").unwrap();
+                    }
                     writeln!(f, "{field_name}_all: {index_type}::new(),").unwrap();
                 } else {
                     writeln!(f, "{field_name}: {index_type}::new(),").unwrap();
@@ -3550,10 +3283,10 @@ fn display_index_expr<'a>(
     FmtFn(move |f| {
         let index_field = display_index_field_name(&flat_in_rel, &index, ctx);
         if ctx.has_shared_indices(&flat_in_rel) {
-            write!(f, "(&self.{index_field}_all)")
+            write!(f, "self.{index_field}_all()")
         } else {
             let index_field = display_index_field_name(&flat_in_rel, &index, ctx);
-            write!(f, "(&self.{index_field})")
+            write!(f, "self.{index_field}()")
         }
     })
 }
@@ -3679,10 +3412,12 @@ fn display_theory_struct<'a>(
             .map(|(rel, index)| {
                 FmtFn(move |f| {
                     let index_name = display_index_field_name(&rel, &index, ctx);
-                    let index_type = display_index_type(&rel, ctx);
+                    let index_type = indices::field_type(&rel, &index, index_selection, ctx);
                     if ctx.has_shared_indices(&rel) {
+                        if index_selection.is_primary(&rel, &index) {
+                            writeln!(f, "{index_name}_own: {index_type},")?;
+                        }
                         writedoc! {f, "
-                            {index_name}_own: {index_type},
                             {index_name}_all: {index_type},
                         "}
                     } else {
@@ -3716,7 +3451,7 @@ fn display_theory_struct<'a>(
 
         let scheduler_fields = FmtFn(move |f| {
             if let Some(codegen) = codegen {
-                write!(f, "{}", codegen.fields(ctx))?;
+                write!(f, "{}", codegen.fields(ctx, index_selection))?;
             }
             Ok(())
         });
@@ -3745,6 +3480,7 @@ fn display_theory_impl<'a>(
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         writeln!(f, "impl {} {{", name)?;
+        write!(f, "{}", indices::accessors(index_selection, ctx))?;
 
         let new_fn = display_new_fn(ctx, index_selection, codegen);
         write!(f, "{}", new_fn)?;
@@ -3755,11 +3491,11 @@ fn display_theory_impl<'a>(
 
         match codegen {
             Some(codegen) => {
-                write!(f, "{}", codegen.methods(ram_modules, ctx))?;
+                write!(f, "{}", codegen.methods(ram_modules, ctx, index_selection))?;
                 write!(f, "{}", codegen.close())?;
             }
             None => {
-                let close_until_fn = display_close_until_fn(ram_modules, ctx);
+                let close_until_fn = display_close_until_fn(ram_modules, ctx, index_selection);
                 write!(f, "{close_until_fn}")?;
             }
         }
@@ -3920,7 +3656,7 @@ pub fn display_module<'a>(
 
         let module_env_structs = ram_modules
             .iter()
-            .map(|ram_module| display_module_env_struct(ram_module, ctx))
+            .map(|ram_module| display_module_env_struct(ram_module, ctx, index_selection))
             .format("\n");
         writeln!(f, "{module_env_structs}")?;
 

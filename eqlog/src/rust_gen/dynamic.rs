@@ -236,15 +236,17 @@ impl DynamicContext<'_> {
                 .map(|(id, rel)| (rel, id))
                 .collect();
             for (flat, indices) in &self.indices.indices {
-                let (rel, equalities) = match flat {
-                    FlatInRel::Rel(rel) => (*rel, String::new()),
-                    FlatInRel::RelWithDiagonals { rel, equalities } => {
-                        (*rel, equalities.iter().join(", "))
-                    }
-                    FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => continue,
+                let rel = match flat {
+                    FlatInRel::Rel(rel) => *rel,
+                    FlatInRel::RelWithDiagonals { .. }
+                    | FlatInRel::TypeSet(_)
+                    | FlatInRel::Equality(_) => continue,
                 };
                 let id = relations[&rel];
                 for index in indices {
+                    if !self.indices.is_primary(flat, index) {
+                        continue;
+                    }
                     match index.age {
                         IndexAge::Old => continue,
                         IndexAge::New => {}
@@ -253,7 +255,7 @@ impl DynamicContext<'_> {
                     let own = display_own_index_field_name(flat, index, self.ctx);
                     writedoc! {f, "
                         let index = eqlog_runtime::__private::relation_data(source, eqlog_runtime::RelationId({id}))?
-                            .reindex(&[{order}], &[{equalities}])?;
+                            .reindex(&[{order}], &[])?;
                         model.{own} = (&index).try_into()?;
                     "}?;
                     if self.ctx.has_shared_indices(flat) {

@@ -1166,6 +1166,159 @@ impl PrefixTree9 {
     }
 }
 
+// A visitor avoids allocating intermediate tuple sets when callers only need edits.
+impl PrefixTree0 {
+    pub fn visit_difference(&self, other: &Self, visit: &mut impl FnMut([u32; 0])) {
+        if self.0.is_some() && other.0.is_none() {
+            visit([]);
+        }
+    }
+}
+
+impl PrefixTree1 {
+    pub fn visit_difference(&self, other: &Self, visit: &mut impl FnMut([u32; 1])) {
+        for key in self.set.difference_iter(&other.set) {
+            visit([key]);
+        }
+    }
+}
+
+impl PrefixTree2 {
+    pub fn visit_difference(&self, other: &Self, visit: &mut impl FnMut([u32; 2])) {
+        for (key, left, right) in self.map.difference_entries(&other.map) {
+            let mut suffix = |[el1]: [u32; 1]| visit([key, el1]);
+            match right {
+                Some(right) => left.visit_difference(right, &mut suffix),
+                None => {
+                    for row in left.iter() {
+                        suffix(row);
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl PrefixTree3 {
+    pub fn visit_difference(&self, other: &Self, visit: &mut impl FnMut([u32; 3])) {
+        for (key, left, right) in self.map.difference_entries(&other.map) {
+            let mut suffix = |[el1, el2]: [u32; 2]| visit([key, el1, el2]);
+            match right {
+                Some(right) => left.visit_difference(right, &mut suffix),
+                None => {
+                    for row in left.iter() {
+                        suffix(row);
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl PrefixTree4 {
+    pub fn visit_difference(&self, other: &Self, visit: &mut impl FnMut([u32; 4])) {
+        for (key, left, right) in self.map.difference_entries(&other.map) {
+            let mut suffix = |[el1, el2, el3]: [u32; 3]| visit([key, el1, el2, el3]);
+            match right {
+                Some(right) => left.visit_difference(right, &mut suffix),
+                None => {
+                    for row in left.iter() {
+                        suffix(row);
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl PrefixTree5 {
+    pub fn visit_difference(&self, other: &Self, visit: &mut impl FnMut([u32; 5])) {
+        for (key, left, right) in self.map.difference_entries(&other.map) {
+            let mut suffix = |[el1, el2, el3, el4]: [u32; 4]| visit([key, el1, el2, el3, el4]);
+            match right {
+                Some(right) => left.visit_difference(right, &mut suffix),
+                None => {
+                    for row in left.iter() {
+                        suffix(row);
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl PrefixTree6 {
+    pub fn visit_difference(&self, other: &Self, visit: &mut impl FnMut([u32; 6])) {
+        for (key, left, right) in self.map.difference_entries(&other.map) {
+            let mut suffix = |[el1, el2, el3, el4, el5]: [u32; 5]| {
+                visit([key, el1, el2, el3, el4, el5])
+            };
+            match right {
+                Some(right) => left.visit_difference(right, &mut suffix),
+                None => {
+                    for row in left.iter() {
+                        suffix(row);
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl PrefixTree7 {
+    pub fn visit_difference(&self, other: &Self, visit: &mut impl FnMut([u32; 7])) {
+        for (key, left, right) in self.map.difference_entries(&other.map) {
+            let mut suffix = |[el1, el2, el3, el4, el5, el6]: [u32; 6]| {
+                visit([key, el1, el2, el3, el4, el5, el6])
+            };
+            match right {
+                Some(right) => left.visit_difference(right, &mut suffix),
+                None => {
+                    for row in left.iter() {
+                        suffix(row);
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl PrefixTree8 {
+    pub fn visit_difference(&self, other: &Self, visit: &mut impl FnMut([u32; 8])) {
+        for (key, left, right) in self.map.difference_entries(&other.map) {
+            let mut suffix = |[el1, el2, el3, el4, el5, el6, el7]: [u32; 7]| {
+                visit([key, el1, el2, el3, el4, el5, el6, el7])
+            };
+            match right {
+                Some(right) => left.visit_difference(right, &mut suffix),
+                None => {
+                    for row in left.iter() {
+                        suffix(row);
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl PrefixTree9 {
+    pub fn visit_difference(&self, other: &Self, visit: &mut impl FnMut([u32; 9])) {
+        for (key, left, right) in self.map.difference_entries(&other.map) {
+            let mut suffix = |[el1, el2, el3, el4, el5, el6, el7, el8]: [u32; 8]| {
+                visit([key, el1, el2, el3, el4, el5, el6, el7, el8])
+            };
+            match right {
+                Some(right) => left.visit_difference(right, &mut suffix),
+                None => {
+                    for row in left.iter() {
+                        suffix(row);
+                    }
+                }
+            }
+        }
+    }
+}
+
 // difference methods
 impl PrefixTree0 {
     pub fn difference(&self, other: &PrefixTree0) -> PrefixTree0 {
