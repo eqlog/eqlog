@@ -1,0 +1,18 @@
+Preserve sharing while closing dependency strata
+
+Close ordinary rule components in dependency order inside the existing
+outer allocation loop, so downstream rules can consume completed inputs.
+Keep simultaneous scheduling available for equivalence checks.
+
+Give each consuming component checkpoints of shared published relation
+versions. Preserve roots across unchanged storage rebuilds and unchanged
+subtrees across edits, and keep equality replacements visible as new
+work.
+
+Retain deferred definition requests across early close_until returns so
+resumption cannot lose work whose premises were already consumed.
+
+Compare scheduling modes alongside evaluation and morphism modes, and
+cover nested allocation feedback, recursive strata, equality joins, and
+physical snapshot sharing. Model-instance scheduling remains future
+work.

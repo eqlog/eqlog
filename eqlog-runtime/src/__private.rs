@@ -2,6 +2,7 @@
 
 pub use super::data::{RelationData, RelationIndex, TypeData};
 pub use super::table::Table;
+pub use super::versions::{RelationVersions, RelationView, SnapshotSet};
 use super::{Error, Model, RelationId, Signature, TypeId};
 
 pub fn from_parts(

@@ -671,6 +671,7 @@ impl<V: Clone> Node<V> {
         left: Option<Rc<Node<V>>>,
         right: Option<Rc<Node<V>>>,
         diff: &mut F,
+        cancel_shared: bool,
     ) -> Option<Rc<Node<V>>>
     where
         F: FnMut(&u32, V, V) -> Option<V>,
@@ -679,6 +680,9 @@ impl<V: Clone> Node<V> {
             (None, _) => None,
             (Some(l), None) => Some(l),
             (Some(l), Some(r)) => {
+                if cancel_shared && Rc::ptr_eq(&l, &r) {
+                    return None;
+                }
                 // Use left tree as base, split right tree on left root's key
                 let DataNode {
                     key: l_key,
@@ -689,8 +693,8 @@ impl<V: Clone> Node<V> {
                 } = Self::unwrap_to_data(l);
                 let (r_left, r_value_opt, r_right) = Self::split(Some(r), &l_key);
 
-                let new_left = Self::difference(l_left, r_left, diff);
-                let new_right = Self::difference(l_right, r_right, diff);
+                let new_left = Self::difference(l_left, r_left, diff, cancel_shared);
+                let new_right = Self::difference(l_right, r_right, diff, cancel_shared);
 
                 match r_value_opt {
                     // Key exists in both trees, call diff function
@@ -727,6 +731,14 @@ impl<V: Clone> Node<V> {
 }
 
 impl<V: Clone> WBTreeMap<V> {
+    pub(crate) fn shares_root(&self, other: &Self) -> bool {
+        match (&self.root, &other.root) {
+            (None, None) => true,
+            (Some(left), Some(right)) => Rc::ptr_eq(left, right),
+            (None, Some(_)) | (Some(_), None) => false,
+        }
+    }
+
     pub const fn new() -> Self {
         WBTreeMap { root: None, len: 0 }
     }
@@ -936,15 +948,40 @@ impl<V: Clone> WBTreeMap<V> {
         }
     }
 
-    pub fn difference<F>(&self, other: &Self, mut diff: F) -> Self
+    pub fn difference<F>(&self, other: &Self, diff: F) -> Self
     where
         F: FnMut(&u32, V, V) -> Option<V>,
     {
+        self.difference_impl(other, diff, false)
+    }
+
+    // Set subtraction cancels identical subtrees; arbitrary map callbacks need
+    // not do so, even when both inputs share every node.
+    pub(crate) fn difference_shared<F>(&self, other: &Self, diff: F) -> Self
+    where
+        F: FnMut(&u32, V, V) -> Option<V>,
+    {
+        self.difference_impl(other, diff, true)
+    }
+
+    fn difference_impl<F>(&self, other: &Self, mut diff: F, cancel_shared: bool) -> Self
+    where
+        F: FnMut(&u32, V, V) -> Option<V>,
+    {
+        if self.root.is_none() {
+            return Self::new();
+        }
+        if other.root.is_none() {
+            return self.clone();
+        }
+        if cancel_shared && self.shares_root(other) {
+            return Self::new();
+        }
         let mut left = self.clone();
         let mut right = other.clone();
         left.materialize();
         right.materialize();
-        let new_root = Node::difference(left.root, right.root, &mut diff);
+        let new_root = Node::difference(left.root, right.root, &mut diff, cancel_shared);
         let new_len = Node::size(&new_root);
         WBTreeMap {
             root: new_root,

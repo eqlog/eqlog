@@ -3,21 +3,27 @@ use convert_case::{Case::Snake, Casing as _};
 use crate::algebra::signature::{FuncId, Signature, TypeId, TypeKind};
 use crate::ast::Ast;
 use crate::flat_eqlog::{FlatInRel, FlatRel};
-use crate::options::ModelMode;
+use crate::options::{CompileOptions, ModelMode, SchedulingMode};
 
 pub(crate) struct RustGenCtx<'a> {
     ast: &'a Ast,
     signature: &'a Signature,
     model_mode: ModelMode,
+    scheduling_mode: SchedulingMode,
 }
 
 impl<'a> RustGenCtx<'a> {
-    pub(crate) fn new(ast: &'a Ast, signature: &'a Signature, model_mode: ModelMode) -> Self {
+    pub(crate) fn new(ast: &'a Ast, signature: &'a Signature, options: CompileOptions) -> Self {
         Self {
             ast,
             signature,
-            model_mode,
+            model_mode: options.model_mode,
+            scheduling_mode: options.scheduling_mode,
         }
+    }
+
+    pub(crate) fn scheduling_mode(&self) -> SchedulingMode {
+        self.scheduling_mode
     }
 
     pub(crate) fn model_mode(&self) -> ModelMode {

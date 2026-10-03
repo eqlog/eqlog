@@ -58,6 +58,7 @@ mod model;
 mod model_hom;
 mod signature;
 mod table;
+mod versions;
 
 #[doc(hidden)]
 pub mod __private;

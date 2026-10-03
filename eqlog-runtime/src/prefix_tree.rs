@@ -1187,7 +1187,7 @@ impl PrefixTree1 {
 
 impl PrefixTree2 {
     pub fn difference(&self, other: &Self) -> Self {
-        let map = self.map.difference(&other.map, |_key, val1, val2| {
+        let map = self.map.difference_shared(&other.map, |_key, val1, val2| {
             let diff_result = val1.difference(&val2);
             if diff_result.is_empty() {
                 None
@@ -1201,7 +1201,7 @@ impl PrefixTree2 {
 
 impl PrefixTree3 {
     pub fn difference(&self, other: &Self) -> Self {
-        let map = self.map.difference(&other.map, |_key, val1, val2| {
+        let map = self.map.difference_shared(&other.map, |_key, val1, val2| {
             let diff_result = val1.difference(&val2);
             if diff_result.is_empty() {
                 None
@@ -1215,7 +1215,7 @@ impl PrefixTree3 {
 
 impl PrefixTree4 {
     pub fn difference(&self, other: &Self) -> Self {
-        let map = self.map.difference(&other.map, |_key, val1, val2| {
+        let map = self.map.difference_shared(&other.map, |_key, val1, val2| {
             let diff_result = val1.difference(&val2);
             if diff_result.is_empty() {
                 None
@@ -1229,7 +1229,7 @@ impl PrefixTree4 {
 
 impl PrefixTree5 {
     pub fn difference(&self, other: &Self) -> Self {
-        let map = self.map.difference(&other.map, |_key, val1, val2| {
+        let map = self.map.difference_shared(&other.map, |_key, val1, val2| {
             let diff_result = val1.difference(&val2);
             if diff_result.is_empty() {
                 None
@@ -1243,7 +1243,7 @@ impl PrefixTree5 {
 
 impl PrefixTree6 {
     pub fn difference(&self, other: &Self) -> Self {
-        let map = self.map.difference(&other.map, |_key, val1, val2| {
+        let map = self.map.difference_shared(&other.map, |_key, val1, val2| {
             let diff_result = val1.difference(&val2);
             if diff_result.is_empty() {
                 None
@@ -1257,7 +1257,7 @@ impl PrefixTree6 {
 
 impl PrefixTree7 {
     pub fn difference(&self, other: &Self) -> Self {
-        let map = self.map.difference(&other.map, |_key, val1, val2| {
+        let map = self.map.difference_shared(&other.map, |_key, val1, val2| {
             let diff_result = val1.difference(&val2);
             if diff_result.is_empty() {
                 None
@@ -1271,7 +1271,7 @@ impl PrefixTree7 {
 
 impl PrefixTree8 {
     pub fn difference(&self, other: &Self) -> Self {
-        let map = self.map.difference(&other.map, |_key, val1, val2| {
+        let map = self.map.difference_shared(&other.map, |_key, val1, val2| {
             let diff_result = val1.difference(&val2);
             if diff_result.is_empty() {
                 None
@@ -1285,7 +1285,7 @@ impl PrefixTree8 {
 
 impl PrefixTree9 {
     pub fn difference(&self, other: &Self) -> Self {
-        let map = self.map.difference(&other.map, |_key, val1, val2| {
+        let map = self.map.difference_shared(&other.map, |_key, val1, val2| {
             let diff_result = val1.difference(&val2);
             if diff_result.is_empty() {
                 None

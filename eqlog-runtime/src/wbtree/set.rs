@@ -7,6 +7,10 @@ pub struct WBTreeSet {
 }
 
 impl WBTreeSet {
+    pub(crate) fn shares_root(&self, other: &Self) -> bool {
+        self.map.shares_root(&other.map)
+    }
+
     pub const fn new() -> Self {
         WBTreeSet {
             map: WBTreeMap::new(),
@@ -51,7 +55,9 @@ impl WBTreeSet {
 
     pub fn difference(&self, other: &Self) -> Self {
         WBTreeSet {
-            map: self.map.difference(&other.map, |_element, (), ()| None),
+            map: self
+                .map
+                .difference_shared(&other.map, |_element, (), ()| None),
         }
     }
 }

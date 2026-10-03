@@ -520,6 +520,19 @@ SQL databases speed up inner joins using indices, and eqlog automatically select
 In each iteration, it is not necessary to enumerate if statements that were already enumerated in the previous iteration.
 This optimization is known as *semi-naive evaluation*, and is again something that eqlog uses to speed up the `close` function.
 
+By default, Eqlog groups mutually dependent rule modules into strata and closes
+them in dependency order. Equality maintenance and implicit morphism transport
+are included in the dependencies. Each stratum tracks its consumed inputs using
+shared relation snapshots, including across repeated `close` calls. Snapshot
+publication retains unchanged roots and subtrees instead of independently
+replaying updates into each consumer's old relation sets.
+
+Set `CompileOptions::scheduling_mode` to `SchedulingMode::Simultaneous`, or pass
+`--scheduling-mode simultaneous` to the compiler, to use simultaneous rounds.
+This option is independent of naive/semi-naive evaluation and native/desugared
+morphism handling. Member rules currently run across all model instances;
+scheduling them separately by model instance is not yet implemented.
+
 ### Equalities
 In addition to the standard datalog features discussed so far, eqlog supports equalities in `then` statements.
 One example is the antisymmetry axiom of partial orders:
@@ -587,30 +600,21 @@ but `close` nevertheless terminates.
 
 If a theory contains non-surjective rules, the generated `close` function will consist of nested close loops:
 The outer loop is responsible for non-surjective rules, and the inner loop is responsible for surjective rules.
-In pseudo-code, the `close` function looks a bit like this:
-```rust
-// Match `if` statements in a rule and change the model such that the
-// corresponding `then` statements holds. Returns true if the model was
-// changed, i.e. if new facts were concluded.
-fn adjoin_conclusions(ax: Axiom) -> bool {
-  ...
-}
+The inner schedule closes the ordinary strata in order. Function-definition
+requests accumulate until this schedule is stable, then the outer loop applies
+them and repeats if they changed the model. Pending requests survive an early
+`close_until` return together with the consumers' checkpoints.
+In pseudo-code:
 
-fn close() {
-  loop {
-    loop {
-      let model_changed = surjective_rules.iter().any(adjoin_conclusion);
-      if !model_changed {
-        break;
-      }
-    }
+```text
+repeat:
+    for stratum in dependency order:
+        evaluate unseen inputs and queue definition requests
+        apply ordinary conclusions and propagate
+        repeat this stratum while recursive inputs have unseen facts
 
-    let model_changed = non_surjective_rules.iter().any(adjoin_conclusion);
-    if !model_changed {
-      break;
-    }
-  }
-}
+    apply queued definitions, reusing existing function results
+until applying definitions makes no change
 ```
 
 ## Background
