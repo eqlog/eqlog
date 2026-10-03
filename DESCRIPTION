@@ -1,0 +1,3 @@
+Enable fast search in the devcontainer
+
+Install ripgrep so contributors can use rg without manual setup.
