@@ -2,7 +2,6 @@ mod context;
 mod dynamic;
 mod flat_eqlog;
 mod rule;
-mod schedule;
 mod stratified;
 mod types;
 
@@ -14,7 +13,7 @@ use crate::algebra::signature::{FuncId, MorphismMemberTypes, TypeId, TypeKind};
 use crate::ast::EnumDeclId;
 use crate::flat_eqlog::*;
 use crate::fmt_util::*;
-use crate::options::{ModelMode, SchedulingMode};
+use crate::options::ModelMode;
 use crate::ram::*;
 use convert_case::{Case, Casing};
 use indoc::{formatdoc, writedoc};
@@ -3291,7 +3290,7 @@ fn display_close_fn() -> impl Display {
 fn display_new_fn<'a>(
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
-    plan: Option<&'a stratified::Plan>,
+    codegen: Option<&'a stratified::Codegen<'a>>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         writeln!(f, "/// Creates an empty model.").unwrap();
@@ -3299,8 +3298,8 @@ fn display_new_fn<'a>(
         writeln!(f, "pub fn new() -> Self {{").unwrap();
         writeln!(f, "Self {{").unwrap();
         writeln!(f, "__pending_delta: ModelDelta::new(),")?;
-        if let Some(plan) = plan {
-            write!(f, "{}", plan.init())?;
+        if let Some(codegen) = codegen {
+            write!(f, "{}", codegen.init())?;
         }
         for typ in ctx.signature().iter_types() {
             let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
@@ -3666,7 +3665,7 @@ fn display_theory_struct<'a>(
     name: &'a str,
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
-    plan: Option<&'a stratified::Plan>,
+    codegen: Option<&'a stratified::Codegen<'a>>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let index_fields = index_selection
@@ -3716,8 +3715,8 @@ fn display_theory_struct<'a>(
             .format("\n");
 
         let scheduler_fields = FmtFn(move |f| {
-            if let Some(plan) = plan {
-                write!(f, "{}", plan.fields(ctx))?;
+            if let Some(codegen) = codegen {
+                write!(f, "{}", codegen.fields(ctx))?;
             }
             Ok(())
         });
@@ -3742,22 +3741,22 @@ fn display_theory_impl<'a>(
     ram_modules: &'a [RamModule],
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
-    plan: Option<&'a stratified::Plan>,
+    codegen: Option<&'a stratified::Codegen<'a>>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         writeln!(f, "impl {} {{", name)?;
 
-        let new_fn = display_new_fn(ctx, index_selection, plan);
+        let new_fn = display_new_fn(ctx, index_selection, codegen);
         write!(f, "{}", new_fn)?;
         writeln!(f, "")?;
 
         let close_fn = display_close_fn();
         write!(f, "{}", close_fn)?;
 
-        match plan {
-            Some(plan) => {
-                write!(f, "{}", plan.methods(ram_modules, ctx))?;
-                write!(f, "{}", plan.close())?;
+        match codegen {
+            Some(codegen) => {
+                write!(f, "{}", codegen.methods(ram_modules, ctx))?;
+                write!(f, "{}", codegen.close())?;
             }
             None => {
                 let close_until_fn = display_close_until_fn(ram_modules, ctx);
@@ -3901,11 +3900,12 @@ fn display_rule_modules<'a>(
 pub fn display_module<'a>(
     name: &'a str,
     ctx: &'a RustGenCtx<'a>,
-    ram_modules: &'a [RamModule],
+    program: &'a RamProgram,
     index_selection: &'a IndexSelection,
     symbol_prefix: &'a str,
     build_type: BuildType,
 ) -> impl 'a + Display {
+    let ram_modules = program.modules.as_slice();
     FmtFn(move |f| {
         let imports = display_imports();
         write!(f, "{}", imports)?;
@@ -3961,11 +3961,11 @@ pub fn display_module<'a>(
         let model_delta_struct = display_model_delta_struct(ctx);
         write!(f, "{}", model_delta_struct)?;
 
-        let plan = match ctx.scheduling_mode() {
-            SchedulingMode::Simultaneous => None,
-            SchedulingMode::Stratified => Some(stratified::Plan::new(ram_modules, ctx)),
+        let codegen = match &program.schedule {
+            RuleSchedule::Simultaneous => None,
+            RuleSchedule::Stratified(strata) => Some(stratified::Codegen::new(strata, ram_modules)),
         };
-        let theory_struct = display_theory_struct(name, ctx, index_selection, plan.as_ref());
+        let theory_struct = display_theory_struct(name, ctx, index_selection, codegen.as_ref());
         write!(f, "{}", theory_struct)?;
 
         let model_delta_impl = display_model_delta_impl(ctx);
@@ -3973,7 +3973,7 @@ pub fn display_module<'a>(
         write!(f, "\n")?;
 
         let theory_impl =
-            display_theory_impl(name, ram_modules, ctx, index_selection, plan.as_ref());
+            display_theory_impl(name, ram_modules, ctx, index_selection, codegen.as_ref());
         write!(f, "{}", theory_impl)?;
 
         let dynamic_impl = dynamic::display_dynamic_impl(name, ctx, index_selection);

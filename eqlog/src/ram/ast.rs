@@ -1,4 +1,4 @@
-use crate::flat_eqlog::{FlatInRel, FlatOutRel, FlatRule, IndexSpec};
+use crate::flat_eqlog::{FlatInRel, FlatOutRel, FlatRule, IndexSpec, RuleSchedule};
 use std::sync::Arc;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
@@ -88,4 +88,10 @@ pub struct RamRoutine {
 pub struct RamModule {
     pub name: String,
     pub routines: Vec<RamRoutine>,
+}
+
+pub struct RamProgram {
+    // Keep group order through lowering so the schedule also indexes modules.
+    pub modules: Vec<RamModule>,
+    pub schedule: RuleSchedule,
 }

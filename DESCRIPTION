@@ -4,6 +4,10 @@ Close ordinary rule components in dependency order inside the existing
 outer allocation loop, so downstream rules can consume completed inputs.
 Keep simultaneous scheduling available for equivalence checks.
 
+Analyze dependencies on flattened rule groups before RAM lowering and
+carry the resulting schedule with the RAM program, so code generation
+only emits the selected execution order.
+
 Give each consuming component checkpoints of shared published relation
 versions. Preserve roots across unchanged storage rebuilds and unchanged
 subtrees across edits, and keep equality replacements visible as new

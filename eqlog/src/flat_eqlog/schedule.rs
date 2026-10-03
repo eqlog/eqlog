@@ -1,13 +1,33 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::algebra::signature::Signature;
-use crate::flat_eqlog::{iter_flat_rels, morphism_preservation_rules, FlatInRel, FlatOutRel};
-use crate::options::ModelMode;
-use crate::ram::RamModule;
+use crate::flat_eqlog::{
+    iter_flat_rels, morphism_preservation_rules, FlatInRel, FlatOutRel, FlatRuleGroup,
+};
+use crate::options::{ModelMode, SchedulingMode};
+
+pub enum RuleSchedule {
+    Simultaneous,
+    Stratified(Vec<Stratum>),
+}
 
 pub struct Stratum {
-    pub modules: Vec<usize>,
+    pub groups: Vec<usize>,
     pub recursive: bool,
+}
+
+pub fn schedule_rule_groups(
+    groups: &[FlatRuleGroup],
+    signature: &Signature,
+    model_mode: ModelMode,
+    scheduling_mode: SchedulingMode,
+) -> RuleSchedule {
+    match scheduling_mode {
+        SchedulingMode::Simultaneous => RuleSchedule::Simultaneous,
+        SchedulingMode::Stratified => {
+            RuleSchedule::Stratified(strata(groups, signature, model_mode))
+        }
+    }
 }
 
 fn resource(rel: &FlatInRel) -> FlatInRel {
@@ -17,24 +37,18 @@ fn resource(rel: &FlatInRel) -> FlatInRel {
     }
 }
 
-pub fn strata(modules: &[RamModule], signature: &Signature, model_mode: ModelMode) -> Vec<Stratum> {
+fn strata(groups: &[FlatRuleGroup], signature: &Signature, model_mode: ModelMode) -> Vec<Stratum> {
     let resources: Vec<_> = iter_flat_rels(signature)
         .map(FlatInRel::Rel)
         .chain(signature.iter_types().map(FlatInRel::TypeSet))
         .collect();
-    let reads: Vec<BTreeSet<_>> = modules
+    let reads: Vec<BTreeSet<_>> = groups
         .iter()
-        .map(|module| {
-            module
-                .routines
+        .map(|group| {
+            group
+                .rules
                 .iter()
-                .flat_map(|routine| {
-                    routine
-                        .flat_rule
-                        .premise
-                        .iter()
-                        .map(|stmt| resource(&stmt.rel))
-                })
+                .flat_map(|rule| rule.premise.iter().map(|stmt| resource(&stmt.rel)))
                 .collect()
         })
         .collect();
@@ -63,10 +77,10 @@ pub fn strata(modules: &[RamModule], signature: &Signature, model_mode: ModelMod
             }
         }
     }
-    let mut edges = vec![Vec::new(); modules.len()];
-    for (source, module) in modules.iter().enumerate() {
+    let mut edges = vec![Vec::new(); groups.len()];
+    for (source, group) in groups.iter().enumerate() {
         let mut writes = BTreeSet::new();
-        for output in module.routines.iter().flat_map(|r| &r.flat_rule.conclusion) {
+        for output in group.rules.iter().flat_map(|rule| &rule.conclusion) {
             match output.rel {
                 FlatOutRel::Rel(rel) => {
                     writes.insert(FlatInRel::Rel(rel));
@@ -102,9 +116,9 @@ pub fn strata(modules: &[RamModule], signature: &Signature, model_mode: ModelMod
     }
     components(&edges)
         .into_iter()
-        .map(|modules| {
-            let recursive = modules.len() > 1 || edges[modules[0]].contains(&modules[0]);
-            Stratum { modules, recursive }
+        .map(|groups| {
+            let recursive = groups.len() > 1 || edges[groups[0]].contains(&groups[0]);
+            Stratum { groups, recursive }
         })
         .collect()
 }

@@ -3,18 +3,17 @@ use std::fmt::Display;
 
 use indoc::writedoc;
 
-use super::schedule::{strata, Stratum};
 use super::{
     display_index_field_name, display_index_type, display_module_env_struct_name,
     display_out_set_field_name, module_env_in_rels, module_env_out_rels, RustGenCtx,
 };
-use crate::flat_eqlog::{FlatInRel, IndexAge, IndexSpec};
+use crate::flat_eqlog::{FlatInRel, IndexAge, IndexSpec, Stratum};
 use crate::fmt_util::FmtFn;
 use crate::options::ModelMode;
 use crate::ram::RamModule;
 
-pub struct Plan {
-    strata: Vec<Stratum>,
+pub struct Codegen<'s> {
+    strata: &'s [Stratum],
     inputs: BTreeMap<(FlatInRel, IndexSpec), usize>,
 }
 
@@ -23,15 +22,15 @@ fn input_key(rel: FlatInRel, mut index: IndexSpec) -> (FlatInRel, IndexSpec) {
     (rel, index)
 }
 
-impl Plan {
-    pub fn new(modules: &[RamModule], ctx: &RustGenCtx<'_>) -> Self {
+impl<'s> Codegen<'s> {
+    pub fn new(strata: &'s [Stratum], modules: &[RamModule]) -> Self {
         let inputs: BTreeSet<_> = modules
             .iter()
             .flat_map(module_env_in_rels)
             .map(|(rel, index)| input_key(rel, index))
             .collect();
         Self {
-            strata: strata(modules, ctx.signature(), ctx.model_mode()),
+            strata,
             inputs: inputs
                 .into_iter()
                 .enumerate()
@@ -96,7 +95,7 @@ impl Plan {
             writeln!(f, "}}")?;
             for (s, stratum) in self.strata.iter().enumerate() {
                 let inputs: BTreeSet<_> = stratum
-                    .modules
+                    .groups
                     .iter()
                     .flat_map(|&i| module_env_in_rels(&modules[i]))
                     .map(|(rel, index)| self.inputs[&input_key(rel, index)])
@@ -116,7 +115,7 @@ impl Plan {
                     if !dirty {{ return false; }}
                     self.__stratum_initialized[{s}] = true;
                 "}?;
-                for &m in &stratum.modules {
+                for &m in &stratum.groups {
                     let module = &modules[m];
                     let env = display_module_env_struct_name(module);
                     let name = &module.name;
