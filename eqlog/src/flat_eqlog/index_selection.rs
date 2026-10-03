@@ -170,6 +170,27 @@ pub struct IndexSelection {
     pub queries: BTreeMap<(FlatInRel, QuerySpec), Vec<IndexSpec>>,
 }
 
+impl IndexSelection {
+    pub fn complete_ages(&mut self) {
+        // A consumer's age partition differs from the storage maintenance round.
+        for indices in self.indices.values_mut() {
+            let other_ages: Vec<_> = indices
+                .iter()
+                .map(|index| IndexSpec {
+                    order: index.order.clone(),
+                    age: match index.age {
+                        IndexAge::New => IndexAge::Old,
+                        IndexAge::Old => IndexAge::New,
+                    },
+                })
+                .collect();
+            indices.extend(other_ages);
+            indices.sort();
+            indices.dedup();
+        }
+    }
+}
+
 pub fn iter_flat_rels(signature: &Signature) -> impl Iterator<Item = FlatRel> + '_ {
     signature
         .iter_preds()

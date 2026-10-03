@@ -1,0 +1,66 @@
+type Item;
+type Value;
+
+pred seed(Item);
+pred ready(Item);
+pred reached(Item);
+pred edge(Item, Item);
+pred output(Item);
+
+func witness(Item) -> Value;
+pred witnessed(Item);
+pred staged(Item);
+
+rule output_rule {
+    if reached(x);
+    then output(x);
+}
+
+rule recursive_rule {
+    if reached(x);
+    if edge(x, y);
+    then reached(y);
+}
+
+rule start_rule {
+    if ready(x);
+    then reached(x);
+}
+
+rule ready_rule {
+    if seed(x);
+    then ready(x);
+}
+
+rule witness_rule {
+    if output(x);
+    then staged(x);
+    then witness(x)!;
+}
+
+rule witness_completed {
+    if witness(x)!;
+    then witnessed(x);
+}
+
+rule outer_feedback {
+    if witnessed(x);
+    if edge(x, y);
+    then seed(y);
+}
+
+pred left(Item);
+pred right(Item);
+pred joined(Item);
+pred merge(Item, Item);
+
+rule join_rule {
+    if left(x);
+    if right(x);
+    then joined(x);
+}
+
+rule merge_rule {
+    if merge(x, y);
+    then x = y;
+}

@@ -2,6 +2,7 @@ mod context;
 mod dynamic;
 mod flat_eqlog;
 mod rule;
+mod stratified;
 mod types;
 
 pub(crate) use context::RustGenCtx;
@@ -2117,9 +2118,8 @@ fn display_model_delta_apply_tuples_fn<'a>(ctx: &'a RustGenCtx<'a>) -> impl 'a +
             })
             .format("\n");
 
-        // allow(unused_variables) is there for theories without relations.
         writedoc! {f, "
-            #[allow(unused_variables)]
+            #[allow(unused)]
             fn apply_tuples(&mut self, model: &mut Model) {{
                 {relations}
             }}
@@ -3243,7 +3243,7 @@ fn display_close_until_fn<'a>(
             return true;
             }}
 
-            let mut delta = ModelDelta::new();
+            let mut delta = std::mem::replace(&mut self.__pending_delta, ModelDelta::new());
 
 
             loop {{
@@ -3257,12 +3257,14 @@ fn display_close_until_fn<'a>(
             {propagate}
 
             if condition(self) {{
+            self.__pending_delta = delta;
             return true;
             }}
 
             if !self.is_dirty() {{
             delta.apply_func_defs (self);
             if !self.is_dirty() {{
+            self.__pending_delta = delta;
             return false;
             }}
             }}
@@ -3288,12 +3290,17 @@ fn display_close_fn() -> impl Display {
 fn display_new_fn<'a>(
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
+    codegen: Option<&'a stratified::Codegen<'a>>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         writeln!(f, "/// Creates an empty model.").unwrap();
         writeln!(f, "#[allow(dead_code)]").unwrap();
         writeln!(f, "pub fn new() -> Self {{").unwrap();
         writeln!(f, "Self {{").unwrap();
+        writeln!(f, "__pending_delta: ModelDelta::new(),")?;
+        if let Some(codegen) = codegen {
+            write!(f, "{}", codegen.init())?;
+        }
         for typ in ctx.signature().iter_types() {
             let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
             writeln!(f, "{type_snake}_equalities: Unification::new(),").unwrap();
@@ -3658,6 +3665,7 @@ fn display_theory_struct<'a>(
     name: &'a str,
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
+    codegen: Option<&'a stratified::Codegen<'a>>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let index_fields = index_selection
@@ -3706,6 +3714,13 @@ fn display_theory_struct<'a>(
             .map(|typ| display_type_fields(typ, ctx))
             .format("\n");
 
+        let scheduler_fields = FmtFn(move |f| {
+            if let Some(codegen) = codegen {
+                write!(f, "{}", codegen.fields(ctx))?;
+            }
+            Ok(())
+        });
+
         writedoc! {f, "
             /// A model of the `{name}` theory.
             pub struct {name} {{
@@ -3713,6 +3728,8 @@ fn display_theory_struct<'a>(
                 {element_index_fields}
                 {type_fields}
                 empty_join_is_dirty: bool,
+                __pending_delta: ModelDelta,
+                {scheduler_fields}
             }}
             type Model = {name};
         "}
@@ -3724,19 +3741,28 @@ fn display_theory_impl<'a>(
     ram_modules: &'a [RamModule],
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
+    codegen: Option<&'a stratified::Codegen<'a>>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         writeln!(f, "impl {} {{", name)?;
 
-        let new_fn = display_new_fn(ctx, index_selection);
+        let new_fn = display_new_fn(ctx, index_selection, codegen);
         write!(f, "{}", new_fn)?;
         writeln!(f, "")?;
 
         let close_fn = display_close_fn();
         write!(f, "{}", close_fn)?;
 
-        let close_until_fn = display_close_until_fn(ram_modules, ctx);
-        write!(f, "{}", close_until_fn)?;
+        match codegen {
+            Some(codegen) => {
+                write!(f, "{}", codegen.methods(ram_modules, ctx))?;
+                write!(f, "{}", codegen.close())?;
+            }
+            None => {
+                let close_until_fn = display_close_until_fn(ram_modules, ctx);
+                write!(f, "{close_until_fn}")?;
+            }
+        }
 
         for typ in ctx.signature().iter_types() {
             let iter_type_fn = display_iter_type_fn(typ, ctx, index_selection);
@@ -3874,11 +3900,12 @@ fn display_rule_modules<'a>(
 pub fn display_module<'a>(
     name: &'a str,
     ctx: &'a RustGenCtx<'a>,
-    ram_modules: &'a [RamModule],
+    program: &'a RamProgram,
     index_selection: &'a IndexSelection,
     symbol_prefix: &'a str,
     build_type: BuildType,
 ) -> impl 'a + Display {
+    let ram_modules = program.modules.as_slice();
     FmtFn(move |f| {
         let imports = display_imports();
         write!(f, "{}", imports)?;
@@ -3934,14 +3961,19 @@ pub fn display_module<'a>(
         let model_delta_struct = display_model_delta_struct(ctx);
         write!(f, "{}", model_delta_struct)?;
 
-        let theory_struct = display_theory_struct(name, ctx, index_selection);
+        let codegen = match &program.schedule {
+            RuleSchedule::Simultaneous => None,
+            RuleSchedule::Stratified(strata) => Some(stratified::Codegen::new(strata, ram_modules)),
+        };
+        let theory_struct = display_theory_struct(name, ctx, index_selection, codegen.as_ref());
         write!(f, "{}", theory_struct)?;
 
         let model_delta_impl = display_model_delta_impl(ctx);
         write!(f, "{}", model_delta_impl)?;
         write!(f, "\n")?;
 
-        let theory_impl = display_theory_impl(name, ram_modules, ctx, index_selection);
+        let theory_impl =
+            display_theory_impl(name, ram_modules, ctx, index_selection, codegen.as_ref());
         write!(f, "{}", theory_impl)?;
 
         let dynamic_impl = dynamic::display_dynamic_impl(name, ctx, index_selection);

@@ -1,4 +1,7 @@
 use eqlog_runtime::eqlog_mod;
+eqlog_mod!(strata);
+#[cfg(test)]
+mod strata_test;
 eqlog_mod!(equational_monoid);
 eqlog_mod!(monoid);
 eqlog_mod!(pointed);

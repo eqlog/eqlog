@@ -173,7 +173,7 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
     }
 }
 
-pub fn flat_rule_group_to_ram(
+fn flat_rule_group_to_ram(
     flat_rule_group: FlatRuleGroup,
     index_selection: &IndexSelection,
 ) -> RamModule {
@@ -191,4 +191,16 @@ pub fn flat_rule_group_to_ram(
         name: flat_rule_group.name.clone(),
         routines,
     }
+}
+
+pub fn flat_rule_groups_to_ram(
+    groups: Vec<FlatRuleGroup>,
+    schedule: RuleSchedule,
+    index_selection: &IndexSelection,
+) -> RamProgram {
+    let modules = groups
+        .into_iter()
+        .map(|group| flat_rule_group_to_ram(group, index_selection))
+        .collect();
+    RamProgram { modules, schedule }
 }

@@ -7,8 +7,7 @@ use crate::error::*;
 use crate::flat_eqlog::*;
 use crate::flatten::*;
 use crate::grammar::*;
-use crate::options::{CompileOptions, EvaluationMode, ModelMode};
-use crate::ram::*;
+use crate::options::{CompileOptions, EvaluationMode, ModelMode, SchedulingMode};
 use crate::rust_gen::*;
 use crate::scope_checks::{check_bindings, check_occurrences};
 use crate::scopes::resolve_scopes;
@@ -148,10 +147,15 @@ fn digest_program(theory_name: &str, src: &str, options: &CompileOptions) -> Dig
         ModelMode::Native => "native",
         ModelMode::Desugared => "desugared",
     };
+    let scheduling_mode = match options.scheduling_mode {
+        SchedulingMode::Simultaneous => "simultaneous",
+        SchedulingMode::Stratified => "stratified",
+    };
     Sha256::new()
         .chain_update(digest_source(theory_name, src))
         .chain_update(evaluation_mode.as_bytes())
         .chain_update(model_mode.as_bytes())
+        .chain_update(scheduling_mode.as_bytes())
         .finalize()
         .into()
 }
@@ -512,13 +516,21 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     }
     let flatten_ctx = FlattenCtx::new(&ast, module, &signature, &rule_structures);
     let flat_rule_groups = flatten(&flatten_ctx, &config.options);
+    let schedule = schedule_rule_groups(
+        &flat_rule_groups,
+        &signature,
+        config.options.model_mode,
+        config.options.scheduling_mode,
+    );
     let flat_rules_iter = flat_rule_groups.iter().flat_map(|group| group.rules.iter());
-    let index_selection = select_indices(flat_rules_iter, &signature, config.options.model_mode);
+    let mut index_selection =
+        select_indices(flat_rules_iter, &signature, config.options.model_mode);
+    match config.options.scheduling_mode {
+        SchedulingMode::Simultaneous => {}
+        SchedulingMode::Stratified => index_selection.complete_ages(),
+    }
 
-    let ram_modules: Vec<RamModule> = flat_rule_groups
-        .into_iter()
-        .map(|rule_group| flat_rule_group_to_ram(rule_group, &index_selection))
-        .collect();
+    let ram_program = flat_rule_groups_to_ram(flat_rule_groups, schedule, &index_selection);
 
     let theory_name_len = theory_name.len();
     let symbol_prefix = format!("eql_{theory_name_len}_{theory_name}");
@@ -527,7 +539,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     let module_contents = display_module(
         &theory_name.to_case(Case::UpperCamel),
         &rust_gen_ctx,
-        ram_modules.as_slice(),
+        &ram_program,
         &index_selection,
         symbol_prefix.as_str(),
         build_type,
@@ -547,7 +559,8 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     fs::create_dir_all(component_out_dir.as_path())
         .with_context(|| format!("Creating component out dir {}", component_out_dir.display()))?;
 
-    ram_modules
+    ram_program
+        .modules
         .iter()
         .par_bridge()
         .try_for_each(|ram_module| -> Result<()> {

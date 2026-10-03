@@ -1,4 +1,5 @@
-Run all four combinations of naive/semi-naive evaluation and native/desugared morphisms:
+Run all eight combinations of naive/semi-naive evaluation, native/desugared
+morphisms, and simultaneous/stratified scheduling:
 
 ```sh
 cargo test -p eqlog-test-opt
