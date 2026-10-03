@@ -47,6 +47,11 @@ fn allocation_feedback_wraps_an_ordered_inner_schedule() {
     };
     process(&config).unwrap();
     let path = output.path().join("theory.eql.rs");
+    let simultaneous = fs::read_to_string(&path).unwrap();
+    assert!(!simultaneous.contains("fn __run_stratum_"));
+
+    config.options.scheduling_mode = SchedulingMode::Stratified;
+    process(&config).unwrap();
     let generated = fs::read_to_string(&path).unwrap();
     let feedback = stratum_of(&generated, "feedback");
     let first = stratum_of(&generated, "first");
@@ -59,8 +64,7 @@ fn allocation_feedback_wraps_an_ordered_inner_schedule() {
 
     config.options.scheduling_mode = SchedulingMode::Simultaneous;
     process(&config).unwrap();
-    let simultaneous = fs::read_to_string(&path).unwrap();
-    assert!(!simultaneous.contains("fn __run_stratum_"));
+    assert_eq!(simultaneous, fs::read_to_string(&path).unwrap());
     config.options.scheduling_mode = SchedulingMode::Stratified;
     process(&config).unwrap();
     assert_eq!(generated, fs::read_to_string(&path).unwrap());

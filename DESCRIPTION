@@ -2,7 +2,8 @@ Preserve sharing while closing dependency strata
 
 Close ordinary rule components in dependency order inside the existing
 outer allocation loop, so downstream rules can consume completed inputs.
-Keep simultaneous scheduling available for equivalence checks.
+Keep simultaneous scheduling as the default, with dependency scheduling
+opt-in while its maintenance costs are improved.
 
 Analyze dependencies on flattened rule groups before RAM lowering and
 carry the resulting schedule with the RAM program, so code generation

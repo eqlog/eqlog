@@ -23,10 +23,10 @@ pub enum ModelMode {
 /// How rule groups share a fixed-point schedule.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum SchedulingMode {
-    /// Retain one simultaneous round for comparison with dependency scheduling.
+    /// Evaluate all rule groups together in each round.
+    #[default]
     Simultaneous,
     /// Close dependency components before evaluating their consumers.
-    #[default]
     Stratified,
 }
 
@@ -37,6 +37,6 @@ pub struct CompileOptions {
     pub evaluation_mode: EvaluationMode,
     /// Defaults to [`ModelMode::Native`], independently of rule evaluation.
     pub model_mode: ModelMode,
-    /// Defaults to [`SchedulingMode::Stratified`].
+    /// Defaults to [`SchedulingMode::Simultaneous`].
     pub scheduling_mode: SchedulingMode,
 }

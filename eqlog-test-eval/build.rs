@@ -9,8 +9,8 @@ fn main() -> eqlog::Result<()> {
     if cfg!(feature = "desugared") {
         options.model_mode = eqlog::ModelMode::Desugared;
     }
-    if cfg!(feature = "simultaneous") {
-        options.scheduling_mode = eqlog::SchedulingMode::Simultaneous;
+    if cfg!(feature = "stratified") {
+        options.scheduling_mode = eqlog::SchedulingMode::Stratified;
     }
     eqlog::process_root_with_options(&options)?;
     Ok(())

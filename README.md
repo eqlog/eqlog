@@ -520,18 +520,20 @@ SQL databases speed up inner joins using indices, and eqlog automatically select
 In each iteration, it is not necessary to enumerate if statements that were already enumerated in the previous iteration.
 This optimization is known as *semi-naive evaluation*, and is again something that eqlog uses to speed up the `close` function.
 
-By default, Eqlog groups mutually dependent rule modules into strata and closes
-them in dependency order. Equality maintenance and implicit morphism transport
-are included in the dependencies. Each stratum tracks its consumed inputs using
-shared relation snapshots, including across repeated `close` calls. Snapshot
-publication retains unchanged roots and subtrees instead of independently
-replaying updates into each consumer's old relation sets.
-
-Set `CompileOptions::scheduling_mode` to `SchedulingMode::Simultaneous`, or pass
-`--scheduling-mode simultaneous` to the compiler, to use simultaneous rounds.
+By default, Eqlog evaluates all rule modules in simultaneous rounds. Set
+`CompileOptions::scheduling_mode` to `SchedulingMode::Stratified`, or pass
+`--scheduling-mode stratified` to the compiler, to opt into dependency strata.
 This option is independent of naive/semi-naive evaluation and native/desugared
-morphism handling. Member rules currently run across all model instances;
-scheduling them separately by model instance is not yet implemented.
+morphism handling.
+
+In stratified mode, Eqlog groups mutually dependent rule modules into strata
+and closes them in dependency order. Equality maintenance and implicit morphism
+transport are included in the dependencies. Each stratum tracks its consumed
+inputs using shared relation snapshots, including across repeated `close`
+calls. Snapshot publication retains unchanged roots and subtrees instead of
+independently replaying updates into each consumer's old relation sets.
+Member rules currently run across all model instances; scheduling them
+separately by model instance is not yet implemented.
 
 ### Equalities
 In addition to the standard datalog features discussed so far, eqlog supports equalities in `then` statements.
