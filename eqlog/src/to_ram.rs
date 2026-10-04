@@ -1,4 +1,6 @@
+use crate::algebra::signature::Signature;
 use crate::flat_eqlog::*;
+use crate::options::ModelMode;
 use crate::ram::*;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -182,7 +184,7 @@ fn flat_rule_group_to_ram(
         .into_iter()
         .map(|flat_rule| {
             let mut routine = flat_rule_to_ram(flat_rule, index_selection);
-            make_ram_lazy(routine.stmts.as_mut_slice(), index_selection);
+            make_ram_lazy(routine.stmts.as_mut_slice());
             routine.stmts = sort_ram_stmts(routine.stmts.as_slice());
             routine
         })
@@ -197,10 +199,19 @@ pub fn flat_rule_groups_to_ram(
     groups: Vec<FlatRuleGroup>,
     schedule: RuleSchedule,
     index_selection: &IndexSelection,
+    signature: &Signature,
+    mode: ModelMode,
 ) -> RamProgram {
-    let modules = groups
+    let modules: Vec<_> = groups
         .into_iter()
         .map(|group| flat_rule_group_to_ram(group, index_selection))
         .collect();
-    RamProgram { modules, schedule }
+    let (preparations, native_indices) =
+        plan_index_preparation(&modules, &schedule, index_selection, signature, mode);
+    RamProgram {
+        modules,
+        schedule,
+        preparations,
+        native_indices,
+    }
 }

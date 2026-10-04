@@ -1,0 +1,23 @@
+type Atom;
+model Container {
+    pred pair(Atom, Atom);
+}
+model Unused {
+    pred spare(Atom);
+}
+pred forwards(Container, Atom);
+pred backwards(Container, Atom);
+pred forward_result(Container, Atom);
+pred backward_result(Container, Atom);
+
+rule read_forward {
+    if forwards(c, x);
+    if c.pair(x, y);
+    then forward_result(c, y);
+}
+
+rule read_backward {
+    if backwards(c, y);
+    if c.pair(x, y);
+    then backward_result(c, x);
+}

@@ -4,6 +4,7 @@ use std::fmt::Display;
 use indoc::writedoc;
 
 use super::indices::{projection, source_relation};
+use super::native_indices;
 use super::{
     display_all_index_field_name, display_index_field_name, display_index_type,
     display_module_env_struct_name, display_out_set_field_name, module_env_in_rels,
@@ -11,13 +12,14 @@ use super::{
 };
 use crate::flat_eqlog::{FlatInRel, IndexAge, IndexSelection, IndexSpec, Stratum};
 use crate::fmt_util::FmtFn;
-use crate::options::ModelMode;
-use crate::ram::RamModule;
+use crate::ram::{IndexPreparation, NativeIndexPreparation, RamModule, RamProgram};
 
 pub struct Codegen<'s> {
     strata: &'s [Stratum],
     inputs: BTreeMap<FlatInRel, usize>,
     indices: BTreeMap<(FlatInRel, IndexSpec), usize>,
+    preparations: &'s [IndexPreparation],
+    native_indices: &'s [NativeIndexPreparation],
 }
 
 fn input_key(rel: FlatInRel, mut index: IndexSpec) -> (FlatInRel, IndexSpec) {
@@ -26,10 +28,11 @@ fn input_key(rel: FlatInRel, mut index: IndexSpec) -> (FlatInRel, IndexSpec) {
 }
 
 impl<'s> Codegen<'s> {
-    pub fn new(strata: &'s [Stratum], modules: &[RamModule]) -> Self {
-        let indices: BTreeSet<_> = modules
+    pub fn new(strata: &'s [Stratum], program: &'s RamProgram) -> Self {
+        let indices: BTreeSet<_> = program
+            .preparations
             .iter()
-            .flat_map(module_env_in_rels)
+            .flat_map(|plan| plan.indices.iter().cloned())
             .map(|(rel, index)| input_key(rel, index))
             .collect();
         let inputs: BTreeSet<_> = indices
@@ -38,6 +41,8 @@ impl<'s> Codegen<'s> {
             .collect();
         Self {
             strata,
+            preparations: &program.preparations,
+            native_indices: &program.native_indices,
             inputs: inputs
                 .into_iter()
                 .enumerate()
@@ -67,7 +72,9 @@ impl<'s> Codegen<'s> {
                 )?;
             }
             for ((rel, index), i) in &self.indices {
-                if selection.is_primary(rel, index) {
+                if selection.is_primary(rel, index)
+                    || native_indices::find(self.native_indices, rel, index).is_some()
+                {
                     continue;
                 }
                 let source = source_relation(rel);
@@ -92,7 +99,9 @@ impl<'s> Codegen<'s> {
                 )?;
             }
             for ((rel, index), i) in &self.indices {
-                if selection.is_primary(rel, index) {
+                if selection.is_primary(rel, index)
+                    || native_indices::find(self.native_indices, rel, index).is_some()
+                {
                     continue;
                 }
                 for age in [IndexAge::Old, IndexAge::New] {
@@ -113,33 +122,34 @@ impl<'s> Codegen<'s> {
         selection: &'a IndexSelection,
     ) -> impl Display + 'a {
         FmtFn(move |f| {
-            writeln!(f, "fn __publish_rule_inputs(&mut self) {{")?;
-            for (rel, i) in &self.inputs {
-                let old_index = selection.primary(rel, IndexAge::Old);
-                let new_index = selection.primary(rel, IndexAge::New);
-                assert_eq!(old_index.order, new_index.order);
-                let old = display_all_index_field_name(rel, old_index, ctx);
-                let new = display_all_index_field_name(rel, new_index, ctx);
-                writeln!(
-                    f,
-                    "self.__rule_input_{i}.publish(&self.{old}, &self.{new});"
-                )?;
-            }
-            writeln!(f, "}}")?;
             for (s, stratum) in self.strata.iter().enumerate() {
-                let inputs: BTreeSet<_> = stratum
-                    .groups
+                let inputs: BTreeSet<_> = self.preparations[s]
+                    .indices
                     .iter()
-                    .flat_map(|&i| module_env_in_rels(&modules[i]))
-                    .map(|(rel, _)| self.inputs[&source_relation(&rel)])
+                    .map(|(rel, _)| source_relation(rel))
                     .collect();
                 writedoc! {f, "
                     fn __run_stratum_{s}(&mut self, delta: &mut ModelDelta) -> bool {{
                         #[allow(unused_mut)]
                         let mut dirty = !self.__stratum_initialized[{s}];
                 "}?;
-                for i in inputs {
+                if !self.preparations[s].propagation.relations.is_empty() {
+                    writeln!(f, "self.recompute_model_indices_stratum_{s}();")?;
+                }
+                for rel in inputs {
+                    let i = self.inputs[&rel];
+                    let old = display_all_index_field_name(
+                        &rel,
+                        selection.primary(&rel, IndexAge::Old),
+                        ctx,
+                    );
+                    let new = display_all_index_field_name(
+                        &rel,
+                        selection.primary(&rel, IndexAge::New),
+                        ctx,
+                    );
                     writedoc! {f, "
+                        self.__rule_input_{i}.publish(&self.{old}, &self.{new});
                         let input_{i} = self.__rule_input_{i}.consume({s});
                         dirty |= !input_{i}.new.is_empty();
                     "}?;
@@ -149,12 +159,20 @@ impl<'s> Codegen<'s> {
                     self.__stratum_initialized[{s}] = true;
                 "}?;
                 writeln!(f, "{{")?;
-                let indexed_inputs: BTreeSet<_> = stratum
-                    .groups
-                    .iter()
-                    .flat_map(|&i| module_env_in_rels(&modules[i]))
-                    .collect();
-                for (rel, index) in indexed_inputs {
+                for (rel, index) in &self.preparations[s].support_indices {
+                    write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
+                }
+                for id in &self.preparations[s].native_indices {
+                    writeln!(f, "self.__prepare_native_index_{id}();")?;
+                    writeln!(
+                        f,
+                        "let native_input_{id} = self.__native_input_{id}.consume({s});"
+                    )?;
+                }
+                for (rel, index) in &self.preparations[s].indices {
+                    if native_indices::find(self.native_indices, rel, index).is_some() {
+                        continue;
+                    }
                     if selection.is_primary(&rel, &index) {
                         continue;
                     }
@@ -164,7 +182,7 @@ impl<'s> Codegen<'s> {
                     let primary = selection.primary(&source, IndexAge::Old);
                     let project = projection(&rel, &index, primary);
                     let age = index.age;
-                    writeln!(f, "let index_{j}_{age} = LazyCell::new(|| input_{i}.{age}_index({j}, &mut self.__rule_index_{j}_{age}, {project}));")?;
+                    writeln!(f, "let index_{j}_{age} = input_{i}.{age}_index({j}, &mut self.__rule_index_{j}_{age}, {project});")?;
                 }
                 for &m in &stratum.groups {
                     let module = &modules[m];
@@ -178,11 +196,13 @@ impl<'s> Codegen<'s> {
                             IndexAge::New => "new",
                         };
                         let i = self.inputs[&source_relation(&rel)];
-                        if selection.is_primary(&rel, &index) {
+                        if let Some(id) = native_indices::find(self.native_indices, &rel, &index) {
+                            writeln!(f, "{field}: &native_input_{id}.{age},")?;
+                        } else if selection.is_primary(&rel, &index) {
                             writeln!(f, "{field}: &input_{i}.{age},")?;
                         } else {
                             let j = self.indices[&input_key(rel.clone(), index.clone())];
-                            writeln!(f, "{field}: &|| &*index_{j}_{age},")?;
+                            writeln!(f, "{field}: &index_{j}_{age},")?;
                         }
                     }
                     for rel in module_env_out_rels(module) {
@@ -192,17 +212,11 @@ impl<'s> Codegen<'s> {
                     writeln!(f, "}}; {name}(env);")?;
                 }
                 writeln!(f, "}}")?;
-                let propagate = match ctx.model_mode() {
-                    ModelMode::Native => "self.recompute_model_indices();",
-                    ModelMode::Desugared => "",
-                };
                 writedoc! {f, "
                         self.move_new_to_old();
                         delta.apply_equalities(self);
                         self.__canonicalize_relations();
                         delta.apply_tuples(self);
-                        {propagate}
-                        self.__publish_rule_inputs();
                         true
                     }}
                 "}?;
@@ -216,10 +230,14 @@ impl<'s> Codegen<'s> {
             writedoc! {f, "
                 /// Closes the model until the condition holds or all rules are satisfied.
                 /// Depending on the axioms, this may run indefinitely.
+                #[allow(dead_code)]
                 pub fn close_until(&mut self, condition: impl Fn(&Self) -> bool) -> bool {{
-                    self.canonicalize();
-                    self.__publish_rule_inputs();
-                    if condition(self) {{ return true; }}
+                    self.__close_until(Some(&condition))
+                }}
+
+                fn __close_until(&mut self, condition: Option<&dyn Fn(&Self) -> bool>) -> bool {{
+                    self.__canonicalize_relations();
+                    if self.__check_condition(condition) {{ return true; }}
                     let mut delta = std::mem::replace(&mut self.__pending_delta, ModelDelta::new());
                     loop {{
             "}?;
@@ -230,7 +248,7 @@ impl<'s> Codegen<'s> {
                     writeln!(f, "if self.__run_stratum_{s}(&mut delta) {{")?;
                 }
                 writedoc! {f, "
-                    if condition(self) {{
+                    if self.__check_condition(condition) {{
                         self.__pending_delta = delta;
                         return true;
                     }}
@@ -242,11 +260,11 @@ impl<'s> Codegen<'s> {
                         delta.apply_func_defs(self);
                         if !self.is_dirty() {{
                             self.__pending_delta = delta;
+                            self.canonicalize();
                             return false;
                         }}
-                        self.canonicalize();
-                        self.__publish_rule_inputs();
-                        if condition(self) {{
+                        self.__canonicalize_relations();
+                        if self.__check_condition(condition) {{
                             self.__pending_delta = delta;
                             return true;
                         }}

@@ -9,16 +9,20 @@ include!(concat!(
 ));
 
 #[test]
-fn an_empty_earlier_join_leaves_the_secondary_input_unforced() {
+fn rules_accept_prepared_secondary_inputs() {
+    let mut ends = PrefixTree1::new();
+    ends.insert([2]);
+    let mut reverse_edges = PrefixTree2::new();
+    reverse_edges.insert([2, 1]);
     let mut output = Vec::new();
     let env = BackwardStepEnv {
         phantom: std::marker::PhantomData,
         end_old_order_0: PrefixTree1::empty(),
-        end_new_order_0: PrefixTree1::empty(),
+        end_new_order_0: &ends,
         edge_new_order_0_1: PrefixTree2::empty(),
-        edge_old_order_1_0: &|| panic!("unreachable index was forced"),
+        edge_old_order_1_0: &reverse_edges,
         new_backward: &mut output,
     };
     backward_step(env);
-    assert!(output.is_empty());
+    assert_eq!(output, vec![[1]]);
 }

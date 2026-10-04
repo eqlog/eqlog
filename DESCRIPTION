@@ -1,15 +1,19 @@
-Build secondary indices only when consumed
+Prepare indices at stratum boundaries
 
-Keep primary tuple storage eager and retain secondary indices with their
-source snapshots. Catch up on demand using borrowed, sharing-aware tree
-differences instead of materializing temporary difference trees.
+Compile each stratum's input indices and transitive native transport
+dependencies before Rust generation. Prepare the selected indices before
+evaluation and pass direct references to rules. Keep simultaneous
+scheduling as the default, with one preparation plan per round.
 
-Publish primary snapshots for strata and share derived indices between
-consumers of the same snapshot. Defer secondary reads through rule
-environments so empty joins can avoid constructing unused indices.
-Propagate native model facts through primary indices and derive other
-orders and diagonals lazily. Keep simultaneous scheduling the default.
+Refresh only the member relations needed by the stratum, including graph
+and application dependencies for nested models. Propagate secondary
+orders from owned tuples so inherited subtrees remain shared. Refresh
+all public views on return and before close_until callbacks.
 
-Cover sparse tree edits, mapped comparisons, snapshot identity, delayed
-reads, equality replacements, and dynamic import. Leave canonicalization
-branch updates for separate work.
+Retain source snapshots and catch up secondary indices with borrowed,
+sharing-aware differences. Share unchanged snapshots and derived indices
+between consumers. Public queries outside evaluation remain lazy.
+
+Cover index selection, late graph edges, cycles, inherited subtree
+sharing, equality replacements, and both scheduling modes. Leave
+canonicalization-aware branch updates for separate work.

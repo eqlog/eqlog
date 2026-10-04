@@ -1,9 +1,8 @@
 use std::collections::BTreeSet;
 
 use super::ast::*;
-use crate::flat_eqlog::IndexSelection;
 
-pub fn make_ram_lazy(ram_stmts: &mut [RamStmt], indices: &IndexSelection) {
+pub fn make_ram_lazy(ram_stmts: &mut [RamStmt]) {
     let mut lazy_vars: BTreeSet<SetVarName> = BTreeSet::new();
 
     for stmt in ram_stmts.iter_mut() {
@@ -13,12 +12,7 @@ pub fn make_ram_lazy(ram_stmts: &mut [RamStmt], indices: &IndexSelection) {
                     lazy_vars.insert(define_set.defined_var.name.clone());
                     define_set.defined_var.strictness = Strictness::Lazy;
                 }
-                InSetExpr::GetIndex(index) => {
-                    if !indices.is_primary(&index.rel, &index.index_spec) {
-                        lazy_vars.insert(define_set.defined_var.name.clone());
-                        define_set.defined_var.strictness = Strictness::Lazy;
-                    }
-                }
+                InSetExpr::GetIndex(_) => {}
             },
             RamStmt::Iter(iter_stmt) => {
                 for set_var in iter_stmt.sets.iter_mut() {

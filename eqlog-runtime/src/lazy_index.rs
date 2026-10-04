@@ -86,6 +86,18 @@ impl<P: SnapshotSet, I: SnapshotSet> LazyIndex<P, I> {
             .get_or_init(|| self.seed.borrow_mut().update(source, project))
     }
 
+    pub fn prepare(&mut self, source: &P, project: impl Fn(P::Row) -> Option<I::Row>) {
+        self.current.take();
+        let index = self.seed.get_mut().update(source, project);
+        self.current = OnceCell::from(index);
+    }
+
+    pub fn prepared(&self) -> &I {
+        self.current
+            .get()
+            .expect("the compiler must prepare rule inputs before evaluation")
+    }
+
     /// Call whenever the primary may change, before any subsequent reads.
     pub fn invalidate(&mut self) {
         self.current.take();

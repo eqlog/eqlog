@@ -17,6 +17,40 @@ pub(super) fn source_relation(rel: &FlatInRel) -> FlatInRel {
     }
 }
 
+pub(super) fn read_method(
+    rel: &FlatInRel,
+    index: &IndexSpec,
+    indices: &IndexSelection,
+    ctx: &RustGenCtx<'_>,
+    prepared: bool,
+) -> String {
+    let field = display_all_index_field_name(rel, index, ctx);
+    if prepared && !indices.is_primary(rel, index) {
+        format!("{field}.prepared")
+    } else {
+        field.to_string()
+    }
+}
+
+pub(super) fn prepare<'a>(
+    rel: &'a FlatInRel,
+    index: &'a IndexSpec,
+    indices: &'a IndexSelection,
+    ctx: &'a RustGenCtx<'a>,
+) -> impl Display + 'a {
+    FmtFn(move |f| {
+        if indices.is_primary(rel, index) {
+            return Ok(());
+        }
+        let source = source_relation(rel);
+        let primary = indices.primary(&source, index.age);
+        let source_field = display_all_index_field_name(&source, primary, ctx);
+        let field = display_all_index_field_name(rel, index, ctx);
+        let project = projection(rel, index, primary);
+        writeln!(f, "self.{field}.prepare(&self.{source_field}, {project});")
+    })
+}
+
 pub(super) fn projection(rel: &FlatInRel, index: &IndexSpec, source: &IndexSpec) -> String {
     let columns: Vec<_> = match rel {
         FlatInRel::RelWithDiagonals { equalities, .. } => equalities

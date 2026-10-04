@@ -1,4 +1,5 @@
 use eqlog_runtime::eqlog_mod;
+eqlog_mod!(prepared_native);
 eqlog_mod!(lazy_indices);
 #[cfg(test)]
 mod lazy_indices_test;

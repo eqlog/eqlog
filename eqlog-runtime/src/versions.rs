@@ -219,6 +219,32 @@ impl<T: SnapshotSet> RelationVersions<T> {
         self.views.clear();
     }
 
+    /// Transported indices already share their owned and inherited subtrees.
+    /// Replaying their tuple edits would sever that sharing between models.
+    pub fn publish_shared(&mut self, rows: &T) {
+        if self.current.rows.shares_root(rows) {
+            return;
+        }
+        let mut changed = false;
+        self.current
+            .rows
+            .visit_difference(rows, &mut |_| changed = true);
+        rows.visit_difference(&self.current.rows, &mut |_| changed = true);
+        if !changed {
+            return;
+        }
+        self.current = Rc::new(Version {
+            id: self
+                .current
+                .id
+                .checked_add(1)
+                .expect("relation version overflow"),
+            rows: rows.clone(),
+            indices: SnapshotIndices::default(),
+        });
+        self.views.clear();
+    }
+
     /// The caller must commit the resulting work before allowing an early exit.
     pub fn consume(&mut self, consumer: usize) -> RelationView<T> {
         let seen = self.seen.get(&consumer).unwrap_or(&self.empty);

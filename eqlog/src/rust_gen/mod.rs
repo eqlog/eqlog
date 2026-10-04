@@ -2,6 +2,7 @@ mod context;
 mod dynamic;
 mod flat_eqlog;
 mod indices;
+mod native_indices;
 mod rule;
 mod stratified;
 mod types;
@@ -921,7 +922,12 @@ fn display_insert_row_block<'a>(
         let flat = FlatInRel::Rel(rel);
         let index = index_selection.primary(&flat, age);
         let field = display_index_field_name(&flat, index, ctx);
-        let args = index.order.iter().map(|&i| &args[i]).format(", ").to_string();
+        let args = index
+            .order
+            .iter()
+            .map(|&i| &args[i])
+            .format(", ")
+            .to_string();
         if ctx.has_shared_indices(&flat) {
             writedoc! {f, "
                 self.{field}_own.insert([{args}]);
@@ -2251,6 +2257,7 @@ fn display_mor_app_map_expr<'a>(
     typ: TypeId,
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
+    prepared: bool,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let morphism_type = ctx
@@ -2278,10 +2285,20 @@ fn display_mor_app_map_expr<'a>(
         let mor_app_eval_index_old =
             index_with_order(mor_app_indices, IndexAge::Old, order.as_slice());
 
-        let mor_app_eval_index_new_name =
-            display_all_index_field_name(&mor_app_rel, mor_app_eval_index_new, ctx);
-        let mor_app_eval_index_old_name =
-            display_all_index_field_name(&mor_app_rel, mor_app_eval_index_old, ctx);
+        let mor_app_eval_index_new_name = indices::read_method(
+            &mor_app_rel,
+            mor_app_eval_index_new,
+            index_selection,
+            ctx,
+            prepared,
+        );
+        let mor_app_eval_index_old_name = indices::read_method(
+            &mor_app_rel,
+            mor_app_eval_index_old,
+            index_selection,
+            ctx,
+            prepared,
+        );
 
         let new_gets = display_parent_then_morph_gets(
             format!("self.{mor_app_eval_index_new_name}()"),
@@ -2478,6 +2495,7 @@ fn display_morphism_components<'a>(
     typ: TypeId,
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
+    prepared: bool,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let ids = ctx
@@ -2513,40 +2531,52 @@ fn display_morphism_components<'a>(
         let cod_order: Vec<usize> = (0..parent_len + 2).collect();
         let obj_order: Vec<usize> = (0..parent_len + 1).collect();
 
-        let dom_new = display_all_index_field_name(
+        let dom_new = indices::read_method(
             &dom_rel,
             index_with_order(dom_indices, IndexAge::New, &dom_order),
+            index_selection,
             ctx,
+            prepared,
         )
         .to_string();
-        let dom_old = display_all_index_field_name(
+        let dom_old = indices::read_method(
             &dom_rel,
             index_with_order(dom_indices, IndexAge::Old, &dom_order),
+            index_selection,
             ctx,
+            prepared,
         )
         .to_string();
-        let cod_new = display_all_index_field_name(
+        let cod_new = indices::read_method(
             &cod_rel,
             index_with_order(cod_indices, IndexAge::New, &cod_order),
+            index_selection,
             ctx,
+            prepared,
         )
         .to_string();
-        let cod_old = display_all_index_field_name(
+        let cod_old = indices::read_method(
             &cod_rel,
             index_with_order(cod_indices, IndexAge::Old, &cod_order),
+            index_selection,
             ctx,
+            prepared,
         )
         .to_string();
-        let obj_new = display_all_index_field_name(
+        let obj_new = indices::read_method(
             &obj_rel,
             index_with_order(obj_indices, IndexAge::New, &obj_order),
+            index_selection,
             ctx,
+            prepared,
         )
         .to_string();
-        let obj_old = display_all_index_field_name(
+        let obj_old = indices::read_method(
             &obj_rel,
             index_with_order(obj_indices, IndexAge::Old, &obj_order),
+            index_selection,
             ctx,
+            prepared,
         )
         .to_string();
 
@@ -2599,9 +2629,16 @@ fn display_remap_parented_index<'a>(
     parent_model_type: TypeId,
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
+    prepare_maps: Option<&'a BTreeSet<(FlatInRel, IndexSpec)>>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let flat_arity = flat_in_rel.arity(ctx.signature());
+        let preparation = FmtFn(|f| {
+            for (rel, index) in prepare_maps.into_iter().flatten() {
+                write!(f, "{}", indices::prepare(rel, index, index_selection, ctx))?;
+            }
+            Ok(())
+        });
         let arity: Vec<_> = index_spec
             .order
             .iter()
@@ -2648,8 +2685,13 @@ fn display_remap_parented_index<'a>(
             .enumerate()
             .filter_map(|(i, column)| match column {
                 MorphismIndexColumnKind::Member(typ) => Some(FmtFn(move |f| {
-                    let map =
-                        display_mor_app_map_expr(parent_model_type, typ, ctx, index_selection);
+                    let map = display_mor_app_map_expr(
+                        parent_model_type,
+                        typ,
+                        ctx,
+                        index_selection,
+                        prepare_maps.is_some(),
+                    );
                     writedoc! {f, "
                         let map_el{i} = {map};
                     "}
@@ -2677,12 +2719,13 @@ fn display_remap_parented_index<'a>(
 
         let relation = match flat_in_rel {
             FlatInRel::Rel(rel) => rel,
-            FlatInRel::RelWithDiagonals { .. }
-            | FlatInRel::TypeSet(_)
-            | FlatInRel::Equality(_) => unreachable!("only primary relation indices are propagated"),
+            FlatInRel::RelWithDiagonals { .. } | FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => {
+                unreachable!("only primary relation indices are propagated")
+            }
         };
         let invalidate = indices::invalidate(relation, index_selection, ctx);
         writedoc! {f, r#"
+            {preparation}
             {member_maps}
             let mut {index_field_name}_all = self.{index_field_name}_all.clone();
             let {index_field_name}_own = &mut self.{index_field_name}_own;
@@ -2700,15 +2743,26 @@ fn display_propagate_model_morphisms_fn<'a>(
     typ: TypeId,
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
+    plan: Option<&'a PropagationPlan>,
+    suffix: &'a str,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
         let parent_len = ctx.signature().type_(typ).parents.len();
-        let components = display_morphism_components(typ, ctx, index_selection);
+        let components = display_morphism_components(typ, ctx, index_selection, plan.is_some());
+        let prepare_graph = FmtFn(|f| {
+            if let Some(plan) = plan {
+                for (rel, index) in plan.graph_indices.get(&typ).into_iter().flatten() {
+                    write!(f, "{}", indices::prepare(rel, index, index_selection, ctx))?;
+                }
+            }
+            Ok(())
+        });
         let remaps = index_selection
             .indices
             .iter()
             .filter(|(rel, _)| ctx.has_shared_indices(rel))
+            .filter(|(rel, _)| propagation_includes(plan, rel))
             .filter(|(rel, _)| match rel {
                 FlatInRel::Rel(rel) => {
                     rel.parent_model_type(ctx.signature())
@@ -2733,6 +2787,7 @@ fn display_propagate_model_morphisms_fn<'a>(
                             typ,
                             ctx,
                             index_selection,
+                            plan.and_then(|plan| plan.map_indices.get(&(typ, rel.clone()))),
                         )
                     })
             })
@@ -2747,9 +2802,10 @@ fn display_propagate_model_morphisms_fn<'a>(
             .signature()
             .iter_model_decls()
             .filter(|(_, ids)| ctx.signature().type_(ids.type_).parents.last() == Some(&typ))
+            .filter(|(_, ids)| plan.is_none_or(|plan| plan.models.contains(&ids.type_)))
             .map(|(_, ids)| {
                 let child_snake = display_type(ids.type_, ctx).to_string().to_case(Snake);
-                format!("component_changed |= self.__propagate_{child_snake}_morphisms([{child_parents}], retain_component_own);")
+                format!("component_changed |= self.__propagate_{child_snake}_morphisms{suffix}([{child_parents}], retain_component_own);")
             })
             .format("\n")
             .to_string();
@@ -2758,9 +2814,10 @@ fn display_propagate_model_morphisms_fn<'a>(
         // to nested graphs too, since outer maps can close an inner path.
         writedoc! {f, "
             #[allow(unused_variables, unused_mut)]
-            fn __propagate_{type_snake}_morphisms(
+            fn __propagate_{type_snake}_morphisms{suffix}(
                 &mut self, parents: [u32; {parent_len}], retain_own: bool,
             ) -> bool {{
+                {prepare_graph}
                 {components}
                 let mut changed = false;
                 for component in components {{
@@ -2772,7 +2829,7 @@ fn display_propagate_model_morphisms_fn<'a>(
                             {children}
                         }}
                         for morphism in &component.internal {{
-                            component_changed |= self.__propagate_{type_snake}_morphism(
+                            component_changed |= self.__propagate_{type_snake}_morphism{suffix}(
                                 parents, morphism, retain_component_own,
                             );
                         }}
@@ -2782,7 +2839,7 @@ fn display_propagate_model_morphisms_fn<'a>(
                         }}
                     }}
                     for morphism in &component.outgoing {{
-                        changed |= self.__propagate_{type_snake}_morphism(
+                        changed |= self.__propagate_{type_snake}_morphism{suffix}(
                             parents, morphism, retain_own,
                         );
                     }}
@@ -2791,7 +2848,7 @@ fn display_propagate_model_morphisms_fn<'a>(
             }}
 
             #[allow(unused_variables, unused_mut)]
-            fn __propagate_{type_snake}_morphism(
+            fn __propagate_{type_snake}_morphism{suffix}(
                 &mut self,
                 parents: [u32; {parent_len}],
                 MorphismWithSignature {{ morph, dom, cod }}: &MorphismWithSignature,
@@ -2805,15 +2862,27 @@ fn display_propagate_model_morphisms_fn<'a>(
     })
 }
 
+fn propagation_includes(plan: Option<&PropagationPlan>, rel: &FlatInRel) -> bool {
+    plan.is_none_or(|plan| match rel {
+        FlatInRel::Rel(rel) => plan.relations.contains(rel),
+        FlatInRel::RelWithDiagonals { .. } | FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => {
+            false
+        }
+    })
+}
+
 fn display_recompute_model_indices_fn<'a>(
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
+    plan: Option<&'a PropagationPlan>,
+    suffix: &'a str,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let parented_indices: Vec<_> = index_selection
             .indices
             .iter()
             .filter(|(rel, _)| ctx.has_shared_indices(rel))
+            .filter(|(rel, _)| propagation_includes(plan, rel))
             .flat_map(|(rel, indices)| {
                 indices
                     .iter()
@@ -2861,26 +2930,31 @@ fn display_recompute_model_indices_fn<'a>(
         let propagation_functions = ctx
             .signature()
             .iter_model_decls()
-            .map(|(_, ids)| display_propagate_model_morphisms_fn(ids.type_, ctx, index_selection))
+            .filter(|(_, ids)| plan.is_none_or(|plan| plan.models.contains(&ids.type_)))
+            .map(|(_, ids)| {
+                display_propagate_model_morphisms_fn(ids.type_, ctx, index_selection, plan, suffix)
+            })
             .format("\n");
         let propagate = ctx
             .signature()
             .iter_model_decls()
             .filter(|(_, ids)| ctx.signature().type_(ids.type_).parents.is_empty())
+            .filter(|(_, ids)| plan.is_none_or(|plan| plan.models.contains(&ids.type_)))
             .map(|(_, ids)| {
                 let type_snake = display_type(ids.type_, ctx).to_string().to_case(Snake);
-                format!("self.__propagate_{type_snake}_morphisms([], false);")
+                format!("self.__propagate_{type_snake}_morphisms{suffix}([], false);")
             })
             .format("\n");
         let invalidate = iter_flat_rels(ctx.signature())
             .filter(|rel| ctx.has_shared_indices(&FlatInRel::Rel(*rel)))
+            .filter(|rel| propagation_includes(plan, &FlatInRel::Rel(*rel)))
             .map(|rel| indices::invalidate(rel, index_selection, ctx))
             .format("\n")
             .to_string();
         writedoc! {f, "
             {propagation_functions}
 
-            fn recompute_model_indices(&mut self) {{
+            fn recompute_model_indices{suffix}(&mut self) {{
                 {invalidate}
                 {initialize}
                 {propagate}
@@ -2895,6 +2969,7 @@ fn display_module_env_var<'a>(
     ram_module: &'a RamModule,
     ctx: &'a RustGenCtx<'a>,
     indices: &'a IndexSelection,
+    program: &'a RamProgram,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let env_struct_name = display_module_env_struct_name(ram_module);
@@ -2904,10 +2979,16 @@ fn display_module_env_var<'a>(
                 FmtFn(move |f| {
                     let field_name = display_index_field_name(&flat_in_rel, &index, ctx);
                     let expr = display_index_expr(&flat_in_rel, &index, ctx);
-                    if indices.is_primary(&flat_in_rel, &index) {
+                    if let Some(id) =
+                        native_indices::find(&program.native_indices, &flat_in_rel, &index)
+                    {
+                        let age = index.age;
+                        write!(f, "{field_name}: &native_input_{id}.{age},")
+                    } else if indices.is_primary(&flat_in_rel, &index) {
                         write!(f, "{field_name}: {expr},")
                     } else {
-                        write!(f, "{field_name}: &|| {expr},")
+                        let field = display_all_index_field_name(&flat_in_rel, &index, ctx);
+                        write!(f, "{field_name}: self.{field}.prepared(),")
                     }
                 })
             })
@@ -2934,17 +3015,18 @@ fn display_module_env_var<'a>(
 }
 
 fn display_close_until_fn<'a>(
-    ram_modules: &'a [RamModule],
+    program: &'a RamProgram,
     ctx: &'a RustGenCtx<'a>,
     indices: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let module_calls = ram_modules
+        let module_calls = program
+            .modules
             .iter()
             .map(|ram_module| {
                 FmtFn(move |f: &mut Formatter| -> Result {
                     let name = ram_module.name.as_str();
-                    let env_var = display_module_env_var(ram_module, ctx, indices);
+                    let env_var = display_module_env_var(ram_module, ctx, indices, program);
                     writedoc! {f, r#"
                         {env_var}
                         {name}(env);
@@ -2953,10 +3035,28 @@ fn display_close_until_fn<'a>(
             })
             .format("\n");
 
-        let propagate = match ctx.model_mode() {
-            ModelMode::Native => "self.recompute_model_indices();",
-            ModelMode::Desugared => "",
-        };
+        let prepare = FmtFn(|f| {
+            let plan = &program.preparations[0];
+            if !plan.propagation.relations.is_empty() {
+                writeln!(f, "self.recompute_model_indices_stratum_0();")?;
+            }
+            for (rel, index) in plan.indices.union(&plan.support_indices) {
+                if native_indices::find(&program.native_indices, rel, index).is_some()
+                    && !plan.support_indices.contains(&(rel.clone(), index.clone()))
+                {
+                    continue;
+                }
+                write!(f, "{}", indices::prepare(rel, index, indices, ctx))?;
+            }
+            for id in &program.preparations[0].native_indices {
+                writeln!(f, "self.__prepare_native_index_{id}();")?;
+                writeln!(
+                    f,
+                    "let native_input_{id} = self.__native_input_{id}.consume(0);"
+                )?;
+            }
+            Ok(())
+        });
         writedoc! {f, "
             /// Closes the model under all axioms until `condition` is satisfied.
             /// Depending on the axioms and `condition`, this may run indefinitely.
@@ -2965,8 +3065,12 @@ fn display_close_until_fn<'a>(
             #[allow(dead_code)]
             pub fn close_until(&mut self, condition: impl Fn(&Self) -> bool) -> bool
             {{
-            self.canonicalize();
-            if condition(self) {{
+            self.__close_until(Some(&condition))
+            }}
+
+            fn __close_until(&mut self, condition: Option<&dyn Fn(&Self) -> bool>) -> bool {{
+            self.__canonicalize_relations();
+            if self.__check_condition(condition) {{
             return true;
             }}
 
@@ -2975,15 +3079,14 @@ fn display_close_until_fn<'a>(
 
             loop {{
 
+            {prepare}
             {module_calls}
 
             self.move_new_to_old();
             delta.apply_equalities(self);
             self.__canonicalize_relations();
             delta.apply_tuples(self);
-            {propagate}
-
-            if condition(self) {{
+            if self.__check_condition(condition) {{
             self.__pending_delta = delta;
             return true;
             }}
@@ -2992,6 +3095,7 @@ fn display_close_until_fn<'a>(
             delta.apply_func_defs (self);
             if !self.is_dirty() {{
             self.__pending_delta = delta;
+            self.canonicalize();
             return false;
             }}
             }}
@@ -3008,7 +3112,15 @@ fn display_close_fn() -> impl Display {
             /// Depending on the axioms and the model, this may run indefinitely.
             #[allow(dead_code)]
             pub fn close(&mut self) {{
-                self.close_until(|_: &Self| false);
+                self.__close_until(None);
+            }}
+
+            fn __check_condition(&mut self, condition: Option<&dyn Fn(&Self) -> bool>) -> bool {{
+                if let Some(condition) = condition {{
+                    self.canonicalize();
+                    return condition(self);
+                }}
+                false
             }}
         "}
     })
@@ -3018,6 +3130,7 @@ fn display_new_fn<'a>(
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
     codegen: Option<&'a stratified::Codegen<'a>>,
+    native_plans: &'a [NativeIndexPreparation],
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         writeln!(f, "/// Creates an empty model.").unwrap();
@@ -3025,6 +3138,7 @@ fn display_new_fn<'a>(
         writeln!(f, "pub fn new() -> Self {{").unwrap();
         writeln!(f, "Self {{").unwrap();
         writeln!(f, "__pending_delta: ModelDelta::new(),")?;
+        write!(f, "{}", native_indices::init(native_plans))?;
         if let Some(codegen) = codegen {
             write!(f, "{}", codegen.init(index_selection))?;
         }
@@ -3399,6 +3513,7 @@ fn display_theory_struct<'a>(
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
     codegen: Option<&'a stratified::Codegen<'a>>,
+    native_plans: &'a [NativeIndexPreparation],
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let index_fields = index_selection
@@ -3450,6 +3565,7 @@ fn display_theory_struct<'a>(
             .format("\n");
 
         let scheduler_fields = FmtFn(move |f| {
+            write!(f, "{}", native_indices::fields(native_plans, ctx))?;
             if let Some(codegen) = codegen {
                 write!(f, "{}", codegen.fields(ctx, index_selection))?;
             }
@@ -3473,16 +3589,17 @@ fn display_theory_struct<'a>(
 
 fn display_theory_impl<'a>(
     name: &'a str,
-    ram_modules: &'a [RamModule],
+    program: &'a RamProgram,
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
     codegen: Option<&'a stratified::Codegen<'a>>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
+        let ram_modules = program.modules.as_slice();
         writeln!(f, "impl {} {{", name)?;
         write!(f, "{}", indices::accessors(index_selection, ctx))?;
 
-        let new_fn = display_new_fn(ctx, index_selection, codegen);
+        let new_fn = display_new_fn(ctx, index_selection, codegen, &program.native_indices);
         write!(f, "{}", new_fn)?;
         writeln!(f, "")?;
 
@@ -3495,7 +3612,7 @@ fn display_theory_impl<'a>(
                 write!(f, "{}", codegen.close())?;
             }
             None => {
-                let close_until_fn = display_close_until_fn(ram_modules, ctx, index_selection);
+                let close_until_fn = display_close_until_fn(program, ctx, index_selection);
                 write!(f, "{close_until_fn}")?;
             }
         }
@@ -3596,9 +3713,27 @@ fn display_theory_impl<'a>(
 
         match ctx.model_mode() {
             ModelMode::Native => {
+                write!(
+                    f,
+                    "{}",
+                    native_indices::methods(&program.native_indices, index_selection, ctx)
+                )?;
                 let recompute_model_indices_fn =
-                    display_recompute_model_indices_fn(ctx, index_selection);
+                    display_recompute_model_indices_fn(ctx, index_selection, None, "");
                 write!(f, "{recompute_model_indices_fn}")?;
+                for (s, plan) in program.preparations.iter().enumerate() {
+                    if plan.propagation.relations.is_empty() {
+                        continue;
+                    }
+                    let suffix = format!("_stratum_{s}");
+                    let recompute = display_recompute_model_indices_fn(
+                        ctx,
+                        index_selection,
+                        Some(&plan.propagation),
+                        &suffix,
+                    );
+                    write!(f, "{recompute}")?;
+                }
             }
             ModelMode::Desugared => {}
         }
@@ -3613,7 +3748,6 @@ fn display_theory_impl<'a>(
 
 fn display_rule_modules<'a>(
     ram_modules: &'a [RamModule],
-    index_selection: &'a IndexSelection,
     ctx: &'a RustGenCtx<'a>,
     symbol_prefix: &'a str,
 ) -> impl 'a + Display {
@@ -3621,7 +3755,7 @@ fn display_rule_modules<'a>(
         .iter()
         .map(move |ram_module| {
             FmtFn(move |f| {
-                let lib = display_ram_module(ram_module, index_selection, ctx, symbol_prefix);
+                let lib = display_ram_module(ram_module, ctx, symbol_prefix);
                 let ram_module_name = ram_module.name.as_str();
                 writedoc! {f, "
                     mod {ram_module_name} {{
@@ -3650,13 +3784,13 @@ pub fn display_module<'a>(
         match build_type {
             BuildType::Component => {}
             BuildType::Module => {
-                display_rule_modules(ram_modules, index_selection, ctx, symbol_prefix).fmt(f)?;
+                display_rule_modules(ram_modules, ctx, symbol_prefix).fmt(f)?;
             }
         }
 
         let module_env_structs = ram_modules
             .iter()
-            .map(|ram_module| display_module_env_struct(ram_module, ctx, index_selection))
+            .map(|ram_module| display_module_env_struct(ram_module, ctx))
             .format("\n");
         writeln!(f, "{module_env_structs}")?;
 
@@ -3699,9 +3833,15 @@ pub fn display_module<'a>(
 
         let codegen = match &program.schedule {
             RuleSchedule::Simultaneous => None,
-            RuleSchedule::Stratified(strata) => Some(stratified::Codegen::new(strata, ram_modules)),
+            RuleSchedule::Stratified(strata) => Some(stratified::Codegen::new(strata, program)),
         };
-        let theory_struct = display_theory_struct(name, ctx, index_selection, codegen.as_ref());
+        let theory_struct = display_theory_struct(
+            name,
+            ctx,
+            index_selection,
+            codegen.as_ref(),
+            &program.native_indices,
+        );
         write!(f, "{}", theory_struct)?;
 
         let model_delta_impl = display_model_delta_impl(ctx);
@@ -3709,7 +3849,7 @@ pub fn display_module<'a>(
         write!(f, "\n")?;
 
         let theory_impl =
-            display_theory_impl(name, ram_modules, ctx, index_selection, codegen.as_ref());
+            display_theory_impl(name, program, ctx, index_selection, codegen.as_ref());
         write!(f, "{}", theory_impl)?;
 
         let dynamic_impl = dynamic::display_dynamic_impl(name, ctx, index_selection);
