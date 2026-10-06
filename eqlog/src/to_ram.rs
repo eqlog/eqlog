@@ -225,12 +225,13 @@ pub fn flat_rule_groups_to_ram(
         .into_iter()
         .map(|group| flat_rule_group_to_ram(group, index_selection))
         .collect();
-    let (preparations, native_indices) =
+    let (preparations, model_preparations, native_indices) =
         plan_index_preparation(&modules, &schedule, index_selection, signature, mode);
     RamProgram {
         modules,
         schedule,
         preparations,
+        model_preparations,
         native_indices,
     }
 }

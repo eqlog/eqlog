@@ -3609,7 +3609,7 @@ fn display_theory_impl<'a>(
         match codegen {
             Some(codegen) => {
                 write!(f, "{}", codegen.methods(ram_modules, ctx, index_selection))?;
-                write!(f, "{}", codegen.close())?;
+                write!(f, "{}", codegen.close(ctx, index_selection))?;
             }
             None => {
                 let close_until_fn = display_close_until_fn(program, ctx, index_selection);
@@ -3722,7 +3722,11 @@ fn display_theory_impl<'a>(
                     display_recompute_model_indices_fn(ctx, index_selection, None, "");
                 write!(f, "{recompute_model_indices_fn}")?;
                 for (s, plan) in program.preparations.iter().enumerate() {
-                    if plan.propagation.relations.is_empty() {
+                    let scoped = match &program.schedule {
+                        RuleSchedule::Simultaneous => false,
+                        RuleSchedule::Stratified(schedule) => schedule.strata[s].model.is_some(),
+                    };
+                    if scoped || plan.propagation.relations.is_empty() {
                         continue;
                     }
                     let suffix = format!("_stratum_{s}");
@@ -3733,6 +3737,10 @@ fn display_theory_impl<'a>(
                         &suffix,
                     );
                     write!(f, "{recompute}")?;
+                }
+                for (m, plan) in program.model_preparations.values().enumerate() {
+                    let suffix = format!("_model_{m}");
+                    write!(f, "{}", display_recompute_model_indices_fn(ctx, index_selection, Some(&plan.propagation), &suffix))?;
                 }
             }
             ModelMode::Desugared => {}

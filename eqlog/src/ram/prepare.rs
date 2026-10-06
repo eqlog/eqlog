@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::{IndexPreparation, NativeIndexPreparation, PropagationPlan, RamModule};
+use super::{IndexPreparation, NativeIndexPreparation, PropagationPlan, RamModule, RamStmt};
 use crate::algebra::signature::{MorphismMemberTypes, Signature, TypeId};
 use crate::flat_eqlog::{
     morphism_preservation_rules, FlatInRel, FlatOutRel, FlatRel, IndexAge, IndexSelection,
@@ -155,77 +155,147 @@ pub fn plan_index_preparation(
     indices: &IndexSelection,
     signature: &Signature,
     mode: ModelMode,
-) -> (Vec<IndexPreparation>, Vec<NativeIndexPreparation>) {
-    let groups: Vec<Vec<usize>> = match schedule {
-        RuleSchedule::Simultaneous => vec![(0..modules.len()).collect()],
-        RuleSchedule::Stratified(plan) => plan
-            .strata
-            .iter()
-            .map(|stratum| stratum.groups.clone())
-            .collect(),
+) -> (
+    Vec<IndexPreparation>,
+    BTreeMap<TypeId, IndexPreparation>,
+    Vec<NativeIndexPreparation>,
+) {
+    let groups: Vec<(Option<TypeId>, Vec<usize>)> = match schedule {
+        RuleSchedule::Simultaneous => vec![(None, (0..modules.len()).collect())],
+        RuleSchedule::Stratified(plan) => {
+            let mut groups: Vec<_> = plan
+                .strata
+                .iter()
+                .map(|stratum| (None, stratum.groups.clone()))
+                .collect();
+            let mut models: BTreeMap<TypeId, Vec<usize>> = BTreeMap::new();
+            for stratum in &plan.strata {
+                if let Some(model) = stratum.model {
+                    models.entry(model).or_default().extend(&stratum.groups);
+                }
+            }
+            groups.extend(
+                models
+                    .into_iter()
+                    .map(|(model, groups)| (Some(model), groups)),
+            );
+            groups
+        }
     };
     let mut native = Vec::new();
     let mut native_ids = BTreeMap::new();
-    let preparations = groups
-        .into_iter()
-        .map(|groups| {
-            let inputs: BTreeSet<_> = groups
-                .into_iter()
-                .flat_map(|i| modules[i].input_indices())
-                .collect();
-            let mut required_native = BTreeSet::new();
-            for (rel, index) in &inputs {
-                match mode {
-                    ModelMode::Desugared => continue,
-                    ModelMode::Native => {}
-                }
-                if indices.is_primary(rel, index) {
-                    continue;
-                }
-                let relation = match rel {
-                    FlatInRel::Rel(rel) => rel,
-                    FlatInRel::RelWithDiagonals { .. }
-                    | FlatInRel::TypeSet(_)
-                    | FlatInRel::Equality(_) => continue,
-                };
-                if relation.is_model_membership_relation() {
-                    continue;
-                }
-                let Some(parent) = relation.parent_model_type(signature) else {
-                    continue;
-                };
-                let index = IndexSpec {
-                    age: IndexAge::Old,
-                    order: index.order.clone(),
-                };
-                let key = (rel.clone(), index.clone());
-                let id = *native_ids.entry(key).or_insert_with(|| {
-                    let id = native.len();
-                    let mut models = signature.type_(parent).parents.clone();
-                    models.push(parent);
-                    let support_indices = support_indices(rel, &models, signature, indices);
-                    native.push(NativeIndexPreparation {
-                        rel: rel.clone(),
-                        index,
-                        models,
-                        support_indices,
-                    });
-                    id
-                });
-                required_native.insert(id);
-            }
-            let support_indices = required_native
+    let mut preparations = Vec::new();
+    let mut model_preparations = BTreeMap::new();
+    for (model, plan) in groups.into_iter().map(|(model, groups)| {
+        let mut inputs: BTreeSet<_> = groups
+            .iter()
+            .flat_map(|&i| modules[i].input_indices())
+            .collect();
+        if model.is_some() {
+            for stmt in groups
                 .iter()
-                .flat_map(|&id| native[id].support_indices.iter().cloned())
-                .collect();
-            let propagation = propagation_plan(&inputs, signature, indices, mode);
+                .flat_map(|&i| &modules[i].routines)
+                .flat_map(|routine| &routine.stmts)
+            {
+                match stmt {
+                    RamStmt::Insert(stmt) => match stmt.rel {
+                        FlatOutRel::Rel(rel) => {
+                            let rel = FlatInRel::Rel(rel);
+                            for age in [IndexAge::Old, IndexAge::New] {
+                                inputs.insert((rel.clone(), indices.primary(&rel, age).clone()));
+                            }
+                        }
+                        FlatOutRel::Equality(_) | FlatOutRel::FuncDomain(_) => {}
+                    },
+                    RamStmt::DefineSet(_) | RamStmt::Iter(_) | RamStmt::GuardInhabited(_) => {}
+                }
+            }
+        }
+        if let Some(model) = model {
+            let ids = signature.ids_for_model_type(model).unwrap();
+            for func in [ids.dom, ids.cod] {
+                let rel = FlatInRel::Rel(crate::flat_eqlog::FlatRel::Func(func));
+                for age in [IndexAge::Old, IndexAge::New] {
+                    inputs.insert((rel.clone(), indices.primary(&rel, age).clone()));
+                }
+            }
+        }
+        let mut required_native = BTreeSet::new();
+        for (rel, index) in &inputs {
+            match mode {
+                ModelMode::Desugared => continue,
+                ModelMode::Native => {}
+            }
+            if indices.is_primary(rel, index) {
+                continue;
+            }
+            let relation = match rel {
+                FlatInRel::Rel(rel) => rel,
+                FlatInRel::RelWithDiagonals { .. }
+                | FlatInRel::TypeSet(_)
+                | FlatInRel::Equality(_) => continue,
+            };
+            if relation.is_model_membership_relation() {
+                continue;
+            }
+            let Some(parent) = relation.parent_model_type(signature) else {
+                continue;
+            };
+            let index = IndexSpec {
+                age: IndexAge::Old,
+                order: index.order.clone(),
+            };
+            let key = (rel.clone(), index.clone());
+            let id = *native_ids.entry(key).or_insert_with(|| {
+                let id = native.len();
+                let mut models = signature.type_(parent).parents.clone();
+                models.push(parent);
+                let support_indices = support_indices(rel, &models, signature, indices);
+                native.push(NativeIndexPreparation {
+                    rel: rel.clone(),
+                    index,
+                    models,
+                    support_indices,
+                });
+                id
+            });
+            required_native.insert(id);
+        }
+        let prepared_support = required_native
+            .iter()
+            .flat_map(|&id| native[id].support_indices.iter().cloned())
+            .collect();
+        let mut propagation = propagation_plan(&inputs, signature, indices, mode);
+        if let Some(model) = model {
+            propagation.models.insert(model);
+            let dom = signature.ids_for_model_type(model).unwrap().dom;
+            propagation
+                .graph_indices
+                .entry(model)
+                .or_default()
+                .extend(support_indices(
+                    &FlatInRel::Rel(crate::flat_eqlog::FlatRel::Func(dom)),
+                    &[model],
+                    signature,
+                    indices,
+                ));
+        }
+        (
+            model,
             IndexPreparation {
                 indices: inputs,
                 native_indices: required_native,
-                support_indices,
+                support_indices: prepared_support,
                 propagation,
+            },
+        )
+    }) {
+        match model {
+            Some(model) => {
+                model_preparations.insert(model, plan);
             }
-        })
-        .collect();
-    (preparations, native)
+            None => preparations.push(plan),
+        }
+    }
+    (preparations, model_preparations, native)
 }

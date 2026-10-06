@@ -1,3 +1,4 @@
+use convert_case::{Case, Casing};
 use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Display;
@@ -8,12 +9,12 @@ use super::indices::{projection, source_relation};
 use super::native_indices;
 use super::{
     display_all_index_field_name, display_index_field_name, display_index_type,
-    display_module_env_struct_name, display_out_set_field_name, module_env_in_rels,
-    module_env_out_rels, RustGenCtx,
+    display_module_env_struct_name, display_morphism_components, display_out_set_field_name,
+    display_type, module_env_in_rels, module_env_out_rels, RustGenCtx,
 };
 use crate::algebra::signature::TypeId;
 use crate::flat_eqlog::{
-    FlatInRel, FlatRel, IndexAge, IndexSelection, IndexSpec, Schedule, StratifiedPlan, Stratum,
+    FlatInRel, IndexAge, IndexSelection, IndexSpec, Schedule, StratifiedPlan, Stratum,
 };
 use crate::fmt_util::FmtFn;
 use crate::ram::{IndexPreparation, NativeIndexPreparation, RamModule, RamProgram};
@@ -27,6 +28,7 @@ pub struct Codegen<'s> {
     old_indices: BTreeSet<(FlatInRel, IndexSpec)>,
     preparations: &'s [IndexPreparation],
     native_indices: &'s [NativeIndexPreparation],
+    model_preparations: &'s BTreeMap<TypeId, IndexPreparation>,
 }
 
 fn input_key(rel: FlatInRel, mut index: IndexSpec) -> (FlatInRel, IndexSpec) {
@@ -49,7 +51,9 @@ impl<'s> Codegen<'s> {
                 let source = source_relation(rel);
                 let i = self.inputs[&source];
                 let count = scope_prefix(&source, model, ctx);
-                if count == 0 { continue; }
+                if count == 0 {
+                    continue;
+                }
                 let arity = source.arity(ctx.signature()).len() - count;
                 fields.insert(format!("__scope_input_{i}"), (count, arity));
                 let arity = rel.arity(ctx.signature()).len() - scope_prefix(rel, model, ctx);
@@ -96,6 +100,7 @@ impl<'s> Codegen<'s> {
                 .collect(),
             preparations: &program.preparations,
             native_indices: &program.native_indices,
+            model_preparations: &program.model_preparations,
             old_indices,
             inputs: inputs
                 .into_iter()
@@ -218,14 +223,8 @@ impl<'s> Codegen<'s> {
                     .map(|(rel, _)| source_relation(rel))
                     .collect();
                 if let Some(model) = stratum.model {
-                    let owners = model_owners(model, ctx, selection);
                     let count = ctx.signature().type_(model).parents.len() + 1;
                     writedoc! {f, "
-                        fn __run_stratum_{s}(&mut self, delta: &mut ModelDelta) -> bool {{
-                            let mut active = false;
-                            for owners in {owners} {{ active |= self.__run_stratum_{s}_at(owners, delta); }}
-                            active
-                        }}
                         fn __run_stratum_{s}_at(&mut self, owners: [u32; {count}], delta: &mut ModelDelta) -> bool {{
                             let mut dirty = !self.__stratum_{s}_initialized.contains(&owners);
                     "}?;
@@ -236,7 +235,8 @@ impl<'s> Codegen<'s> {
                             let mut dirty = !self.__stratum_initialized[{s}];
                     "}?;
                 }
-                if !self.preparations[s].propagation.relations.is_empty() {
+                if stratum.model.is_none() && !self.preparations[s].propagation.relations.is_empty()
+                {
                     writeln!(f, "self.recompute_model_indices_stratum_{s}();")?;
                 }
                 for rel in inputs {
@@ -252,12 +252,18 @@ impl<'s> Codegen<'s> {
                         ctx,
                     );
                     if ctx.has_shared_indices(&rel) {
-                        writeln!(f, "self.__rule_input_{i}.publish_shared(&self.{old}.union(&self.{new}));")?;
+                        writeln!(
+                            f,
+                            "self.__rule_input_{i}.publish_shared(&self.{old}.union(&self.{new}));"
+                        )?;
                     } else {
-                        writeln!(f, "self.__rule_input_{i}.publish(&self.{old}, &self.{new});")?;
+                        writeln!(
+                            f,
+                            "self.__rule_input_{i}.publish(&self.{old}, &self.{new});"
+                        )?;
                     }
                     if let Some(model) = stratum.model {
-                                                consume_scoped(
+                        consume_scoped(
                             f,
                             &format!("__scope_input_{i}"),
                             &format!("self.__rule_input_{i}.current()"),
@@ -271,7 +277,10 @@ impl<'s> Codegen<'s> {
                             ctx,
                         )?;
                     } else {
-                        writeln!(f, "let input_{i} = self.__rule_input_{i}.consume(({s}, Vec::new()));")?;
+                        writeln!(
+                            f,
+                            "let input_{i} = self.__rule_input_{i}.consume(({s}, Vec::new()));"
+                        )?;
                     }
                     writeln!(f, "dirty |= !input_{i}.new.is_empty();")?;
                 }
@@ -286,9 +295,13 @@ impl<'s> Codegen<'s> {
                     write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
                 }
                 for id in &self.preparations[s].native_indices {
-                    writeln!(f, "self.__prepare_native_index_{id}();")?;
+                    if stratum.model.is_some() {
+                        writeln!(f, "self.__extend_native_index_{id}();")?;
+                    } else {
+                        writeln!(f, "self.__prepare_native_index_{id}();")?;
+                    }
                     if let Some(model) = stratum.model {
-                                                consume_scoped(
+                        consume_scoped(
                             f,
                             &format!("__scope_native_{id}"),
                             &format!("self.__native_input_{id}.current()"),
@@ -342,7 +355,7 @@ impl<'s> Codegen<'s> {
                             self.__rule_index_{j}_versions.publish_shared(&index_{j});
                         "}?;
                         if let Some(model) = stratum.model {
-                                                        consume_scoped(
+                            consume_scoped(
                                 f,
                                 &format!("__scope_index_{j}"),
                                 &format!("&index_{j}"),
@@ -408,11 +421,58 @@ impl<'s> Codegen<'s> {
                     }}
                 "}?;
             }
+            for (&model, &m) in &self.models {
+                let plan = &self.model_preparations[&model];
+                let name = display_type(model, ctx).to_string().to_case(Case::Snake);
+                let count = ctx.signature().type_(model).parents.len();
+                writedoc! {f, "
+                    fn __transport_component_{m}(&mut self, parents: [u32; {count}], morphisms: &[MorphismWithSignature], retain_own: bool) -> bool {{
+                        if morphisms.is_empty() {{ return false; }}
+                        let mut changed = false;
+                "}?;
+                for &rel in &plan.propagation.relations {
+                    let rel = FlatInRel::Rel(rel);
+                    let old = display_all_index_field_name(
+                        &rel,
+                        selection.primary(&rel, IndexAge::Old),
+                        ctx,
+                    );
+                    let new = display_all_index_field_name(
+                        &rel,
+                        selection.primary(&rel, IndexAge::New),
+                        ctx,
+                    );
+                    writeln!(
+                        f,
+                        "self.{new} = self.{old}.union(&self.{new}); self.{old}.clear();"
+                    )?;
+                }
+                writeln!(f, "for morphism in morphisms {{ changed |= self.__propagate_{name}_morphism_model_{m}(parents, morphism, retain_own); }}")?;
+                for (rel, index) in &plan.support_indices {
+                    write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
+                }
+                for id in &plan.native_indices {
+                    let native = &self.native_indices[*id];
+                    if let Some(level) = native.models.iter().position(|&typ| typ == model) {
+                        writedoc! {f, "
+                            self.__extend_native_index_{id}();
+                            let mut index = self.__native_input_{id}.current().clone();
+                            for morphism in morphisms {{ changed |= self.__native_{id}_morphism_{level}(parents, morphism, &mut index, retain_own); }}
+                            self.__native_input_{id}.publish_shared(&index);
+                        "}?;
+                    }
+                }
+                writeln!(f, "changed }}")?;
+            }
             Ok(())
         })
     }
 
-    pub fn close(&self) -> impl Display + '_ {
+    pub fn close<'a>(
+        &'a self,
+        ctx: &'a RustGenCtx<'a>,
+        selection: &'a IndexSelection,
+    ) -> impl Display + 'a {
         FmtFn(move |f| {
             writedoc! {f, "
                 /// Closes the model until the condition holds or all rules are satisfied.
@@ -428,7 +488,7 @@ impl<'s> Codegen<'s> {
                     let mut delta = std::mem::replace(&mut self.__pending_delta, ModelDelta::new());
                     loop {{
             "}?;
-            emit_schedule(f, self.body, None, 0)?;
+            emit_schedule(f, self.body, None, 0, None, self, ctx, selection)?;
             writedoc! {f, "
                         self.move_new_to_old();
                         delta.apply_func_defs(self);
@@ -510,46 +570,29 @@ fn consume_scoped(
     "}
 }
 
-fn model_owners<'a>(
-    model: TypeId,
-    ctx: &'a RustGenCtx<'a>,
-    selection: &'a IndexSelection,
-) -> impl Display + 'a {
-    FmtFn(move |f| {
-        let rel = if ctx.signature().type_(model).parents.is_empty() {
-            FlatInRel::TypeSet(model)
-        } else {
-            FlatInRel::Rel(FlatRel::ModelMember(model))
-        };
-        let index = selection.primary(&rel, IndexAge::Old);
-        let old = display_all_index_field_name(&rel, index, ctx);
-        let new = display_all_index_field_name(&rel, selection.primary(&rel, IndexAge::New), ctx);
-        let args = index.order.iter().map(|i| format!("owner{i}")).join(", ");
-        let owners = (0..index.order.len())
-            .map(|i| format!("owner{i}"))
-            .join(", ");
-        write!(
-            f,
-            "self.{old}.union(&self.{new}).iter().map(|[{args}]| [{owners}]).collect::<Vec<_>>()"
-        )
-    })
-}
-
 fn emit_schedule(
     f: &mut std::fmt::Formatter<'_>,
     schedule: &Schedule,
     active: Option<usize>,
     depth: usize,
+    scope: Option<TypeId>,
+    codegen: &Codegen<'_>,
+    ctx: &RustGenCtx<'_>,
+    selection: &IndexSelection,
 ) -> std::fmt::Result {
     match schedule {
         Schedule::Sequence(children) => {
             for child in children {
-                emit_schedule(f, child, active, depth)?;
+                emit_schedule(f, child, active, depth, scope, codegen, ctx, selection)?;
             }
         }
         Schedule::Rules(id) => {
             let s = id.0;
-            writeln!(f, "if self.__run_stratum_{s}(&mut delta) {{")?;
+            if scope.is_some() {
+                writeln!(f, "if self.__run_stratum_{s}_at(owners, &mut delta) {{")?;
+            } else {
+                writeln!(f, "if self.__run_stratum_{s}(&mut delta) {{")?;
+            }
             if let Some(active) = active {
                 writeln!(f, "active_{active} = true;")?;
             }
@@ -563,12 +606,80 @@ fn emit_schedule(
         }
         Schedule::Saturate(body) => {
             writeln!(f, "loop {{ let mut active_{depth} = false;")?;
-            emit_schedule(f, body, Some(depth), depth + 1)?;
+            emit_schedule(
+                f,
+                body,
+                Some(depth),
+                depth + 1,
+                scope,
+                codegen,
+                ctx,
+                selection,
+            )?;
             writeln!(f, "if !active_{depth} {{ break; }}")?;
             if let Some(active) = active {
                 writeln!(f, "active_{active} = true;")?;
             }
             writeln!(f, "}}")?;
+        }
+        Schedule::ModelComponents { model, body } => {
+            let m = codegen.models[model];
+            let plan = &codegen.model_preparations[model];
+            writeln!(
+                f,
+                "{{ self.recompute_model_indices_model_{m}(); let parents = [];"
+            )?;
+            for (rel, index) in &plan.support_indices {
+                write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
+            }
+            for id in &plan.native_indices {
+                writeln!(f, "self.__prepare_native_index_{id}();")?;
+            }
+            for (rel, index) in plan
+                .propagation
+                .graph_indices
+                .get(model)
+                .into_iter()
+                .flatten()
+            {
+                write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
+            }
+            write!(
+                f,
+                "{}",
+                display_morphism_components(*model, ctx, selection, true)
+            )?;
+            writedoc! {f, "
+                for component in components {{
+                    loop {{
+                        let mut active_{depth} = false;
+                        for &object in &component.objects {{
+                            let owners = [object];
+            "}?;
+            emit_schedule(
+                f,
+                body,
+                Some(depth),
+                depth + 1,
+                Some(*model),
+                codegen,
+                ctx,
+                selection,
+            )?;
+            writedoc! {f, "
+                        }}
+                        active_{depth} |= self.__transport_component_{m}(parents, &component.internal, true);
+                        if !active_{depth} {{ break; }}
+            "}?;
+            if let Some(active) = active {
+                writeln!(f, "active_{active} = true;")?;
+            }
+            writedoc! {f, "
+                    }}
+                    self.__transport_component_{m}(parents, &component.outgoing, false);
+                }}
+            }}
+            "}?;
         }
     }
     Ok(())

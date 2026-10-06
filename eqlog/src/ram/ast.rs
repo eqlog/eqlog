@@ -97,6 +97,7 @@ pub struct RamProgram {
     pub modules: Vec<RamModule>,
     pub schedule: RuleSchedule,
     pub preparations: Vec<IndexPreparation>,
+    pub model_preparations: BTreeMap<TypeId, IndexPreparation>,
     pub native_indices: Vec<NativeIndexPreparation>,
 }
 

@@ -1,5 +1,7 @@
 type Atom;
 pred enabled(Atom);
+pred unlock(World, Atom, Atom);
+pred query(World, Atom);
 
 model World {
     pred born();
@@ -13,4 +15,17 @@ model World {
     rule finish { if reached(x); then marked(x); }
     rule ambient_input { if enabled(x); then seed(x); }
     rule at_birth { then born(); }
+}
+
+rule gated {
+    if w: World;
+    if w.reached(x);
+    if unlock(w, x, y);
+    then w.seed(y);
+}
+
+rule inverse {
+    if query(w, y);
+    if w.edge(x, y);
+    then w.seed(x);
 }

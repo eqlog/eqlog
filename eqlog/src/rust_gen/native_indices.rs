@@ -75,6 +75,13 @@ pub(super) fn methods<'a>(
                     self.__native_{id}_model_0([], &mut index, false);
                     self.__native_input_{id}.publish_shared(&index);
                 }}
+
+                fn __extend_native_index_{id}(&mut self) {{
+                    let owned = self.{old}.union(&self.{new});
+                    let index = self.__native_seed_{id}.update(&owned, {project});
+                    let index = self.__native_input_{id}.current().union(&index);
+                    self.__native_input_{id}.publish_shared(&index);
+                }}
             "}?;
             for (level, &model) in plan.models.iter().enumerate() {
                 let model_id = level;

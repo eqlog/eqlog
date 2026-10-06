@@ -30,6 +30,8 @@ fn local_rules_receive_bound_model_parameters() {
     assert!(generated.contains("history.publish_shared(current)"));
     assert!(generated
         .contains("BTreeMap<[u32; 1], eqlog_runtime::__private::RelationVersions<PrefixTree2, (usize, Vec<u32>)>>"));
+    assert!(generated.contains("self.__transport_component_0(parents, &component.internal, true)"));
+    assert!(generated.contains("self.__transport_component_0(parents, &component.outgoing, false)"));
 }
 
 fn stratum_of(generated: &str, rule: &str) -> usize {

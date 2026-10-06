@@ -6,7 +6,9 @@ use eqlog_runtime::{PrefixTree1, PrefixTree2};
 fn model_consumers_share_filtered_ambient_views() {
     let mut versions = RelationVersions::new();
     let mut rows = PrefixTree1::new();
-    for i in 0..100 { rows.insert([i]); }
+    for i in 0..100 {
+        rows.insert([i]);
+    }
     versions.publish_shared(&rows);
     versions.consume((0, vec![10]));
     versions.consume((0, vec![20]));

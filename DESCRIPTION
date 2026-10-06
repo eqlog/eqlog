@@ -3,14 +3,23 @@ Schedule member rules within model components
 Represent rule scheduling as a tree so ordered strata can run inside
 recursive model components without losing consumption checkpoints.
 
-Infer model owners from inputs and outputs after equality elimination,
+Infer model owners from inputs and outputs after equality 
+elimination,
 so explicit receivers and member rules use the same scope analysis.
 
-Bind owner parameters before index selection and RAM lowering to avoid
+Bind owner parameters before index selection and RAM lowering to 
+avoid
 scanning unrelated models when invoking member rules.
 
 Keep consumption checkpoints per model and static stratum. Publish 
 shared
-member subtrees and maintain one latest secondary index across readers.
+member subtrees and maintain one latest secondary index across 
+readers.
 
 Keep simultaneous scheduling as the default.
+
+Close compatible model rules inside runtime morphism components. 
+Keep
+ambient feedback global, and transport shared primary and secondary 
+trees
+within cycles and onward after a component reaches its fixed point.
