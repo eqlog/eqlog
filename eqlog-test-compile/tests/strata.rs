@@ -59,7 +59,7 @@ fn allocation_feedback_wraps_an_ordered_inner_schedule() {
     let recursive = stratum_of(&generated, "recursive");
     let request = stratum_of(&generated, "request");
     assert!(feedback < first && first < second && second < recursive && recursive < request);
-    assert!(generated.contains(&format!("while self.__run_stratum_{recursive}")));
+    assert!(generated.contains("if !active_0 { break; }"));
     assert!(generated.contains(&format!("if self.__run_stratum_{first}")));
 
     config.options.scheduling_mode = SchedulingMode::Simultaneous;

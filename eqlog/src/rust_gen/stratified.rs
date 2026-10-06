@@ -10,12 +10,15 @@ use super::{
     display_module_env_struct_name, display_out_set_field_name, module_env_in_rels,
     module_env_out_rels, RustGenCtx,
 };
-use crate::flat_eqlog::{FlatInRel, IndexAge, IndexSelection, IndexSpec, Stratum};
+use crate::flat_eqlog::{
+    FlatInRel, IndexAge, IndexSelection, IndexSpec, Schedule, StratifiedPlan, Stratum,
+};
 use crate::fmt_util::FmtFn;
 use crate::ram::{IndexPreparation, NativeIndexPreparation, RamModule, RamProgram};
 
 pub struct Codegen<'s> {
     strata: &'s [Stratum],
+    body: &'s Schedule,
     inputs: BTreeMap<FlatInRel, usize>,
     indices: BTreeMap<(FlatInRel, IndexSpec), usize>,
     old_indices: BTreeSet<(FlatInRel, IndexSpec)>,
@@ -29,7 +32,7 @@ fn input_key(rel: FlatInRel, mut index: IndexSpec) -> (FlatInRel, IndexSpec) {
 }
 
 impl<'s> Codegen<'s> {
-    pub fn new(strata: &'s [Stratum], program: &'s RamProgram) -> Self {
+    pub fn new(plan: &'s StratifiedPlan, program: &'s RamProgram) -> Self {
         let indices: BTreeSet<_> = program
             .preparations
             .iter()
@@ -45,7 +48,8 @@ impl<'s> Codegen<'s> {
             .map(|(rel, _)| source_relation(rel))
             .collect();
         Self {
-            strata,
+            strata: &plan.strata,
+            body: &plan.body,
             preparations: &program.preparations,
             native_indices: &program.native_indices,
             old_indices,
@@ -284,20 +288,7 @@ impl<'s> Codegen<'s> {
                     let mut delta = std::mem::replace(&mut self.__pending_delta, ModelDelta::new());
                     loop {{
             "}?;
-            for (s, stratum) in self.strata.iter().enumerate() {
-                if stratum.recursive {
-                    writeln!(f, "while self.__run_stratum_{s}(&mut delta) {{")?;
-                } else {
-                    writeln!(f, "if self.__run_stratum_{s}(&mut delta) {{")?;
-                }
-                writedoc! {f, "
-                    if self.__check_condition(condition) {{
-                        self.__pending_delta = delta;
-                        return true;
-                    }}
-                }}
-                "}?;
-            }
+            emit_schedule(f, self.body, None, 0)?;
             writedoc! {f, "
                         self.move_new_to_old();
                         delta.apply_func_defs(self);
@@ -316,4 +307,43 @@ impl<'s> Codegen<'s> {
             "}
         })
     }
+}
+
+fn emit_schedule(
+    f: &mut std::fmt::Formatter<'_>,
+    schedule: &Schedule,
+    active: Option<usize>,
+    depth: usize,
+) -> std::fmt::Result {
+    match schedule {
+        Schedule::Sequence(children) => {
+            for child in children {
+                emit_schedule(f, child, active, depth)?;
+            }
+        }
+        Schedule::Rules(id) => {
+            let s = id.0;
+            writeln!(f, "if self.__run_stratum_{s}(&mut delta) {{")?;
+            if let Some(active) = active {
+                writeln!(f, "active_{active} = true;")?;
+            }
+            writedoc! {f, "
+                if self.__check_condition(condition) {{
+                    self.__pending_delta = delta;
+                    return true;
+                }}
+            }}
+            "}?;
+        }
+        Schedule::Saturate(body) => {
+            writeln!(f, "loop {{ let mut active_{depth} = false;")?;
+            emit_schedule(f, body, Some(depth), depth + 1)?;
+            writeln!(f, "if !active_{depth} {{ break; }}")?;
+            if let Some(active) = active {
+                writeln!(f, "active_{active} = true;")?;
+            }
+            writeln!(f, "}}")?;
+        }
+    }
+    Ok(())
 }

@@ -8,12 +8,25 @@ use crate::options::{ModelMode, SchedulingMode};
 
 pub enum RuleSchedule {
     Simultaneous,
-    Stratified(Vec<Stratum>),
+    Stratified(StratifiedPlan),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StratumId(pub usize);
+
+pub struct StratifiedPlan {
+    pub strata: Vec<Stratum>,
+    pub body: Schedule,
+}
+
+pub enum Schedule {
+    Sequence(Vec<Schedule>),
+    Rules(StratumId),
+    Saturate(Box<Schedule>),
 }
 
 pub struct Stratum {
     pub groups: Vec<usize>,
-    pub recursive: bool,
 }
 
 pub fn schedule_rule_groups(
@@ -37,7 +50,11 @@ fn resource(rel: &FlatInRel) -> FlatInRel {
     }
 }
 
-fn strata(groups: &[FlatRuleGroup], signature: &Signature, model_mode: ModelMode) -> Vec<Stratum> {
+fn strata(
+    groups: &[FlatRuleGroup],
+    signature: &Signature,
+    model_mode: ModelMode,
+) -> StratifiedPlan {
     let resources: Vec<_> = iter_flat_rels(signature)
         .map(FlatInRel::Rel)
         .chain(signature.iter_types().map(FlatInRel::TypeSet))
@@ -114,13 +131,25 @@ fn strata(groups: &[FlatRuleGroup], signature: &Signature, model_mode: ModelMode
             }
         }
     }
-    components(&edges)
+    let mut body = Vec::new();
+    let strata = components(&edges)
         .into_iter()
-        .map(|groups| {
+        .enumerate()
+        .map(|(id, groups)| {
             let recursive = groups.len() > 1 || edges[groups[0]].contains(&groups[0]);
-            Stratum { groups, recursive }
+            let leaf = Schedule::Rules(StratumId(id));
+            body.push(if recursive {
+                Schedule::Saturate(Box::new(leaf))
+            } else {
+                leaf
+            });
+            Stratum { groups }
         })
-        .collect()
+        .collect();
+    StratifiedPlan {
+        strata,
+        body: Schedule::Sequence(body),
+    }
 }
 
 fn components(edges: &[Vec<usize>]) -> Vec<Vec<usize>> {

@@ -158,7 +158,8 @@ pub fn plan_index_preparation(
 ) -> (Vec<IndexPreparation>, Vec<NativeIndexPreparation>) {
     let groups: Vec<Vec<usize>> = match schedule {
         RuleSchedule::Simultaneous => vec![(0..modules.len()).collect()],
-        RuleSchedule::Stratified(strata) => strata
+        RuleSchedule::Stratified(plan) => plan
+            .strata
             .iter()
             .map(|stratum| stratum.groups.clone())
             .collect(),

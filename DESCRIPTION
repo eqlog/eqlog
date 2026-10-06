@@ -1,0 +1,6 @@
+Schedule member rules within model components
+
+Represent rule scheduling as a tree so ordered strata can run inside
+recursive model components without losing consumption checkpoints.
+
+Keep simultaneous scheduling as the default.
