@@ -206,6 +206,24 @@ pub fn select_indices<'a>(
     signature: &Signature,
     model_mode: ModelMode,
 ) -> IndexSelection {
+    let rules: Vec<_> = rules.into_iter().collect();
+    let mut scoped_prefixes = BTreeMap::new();
+    for rule in &rules {
+        if rule.scope.model().is_none() {
+            continue;
+        }
+        for stmt in &rule.premise {
+            let rel = match &stmt.rel {
+                FlatInRel::Rel(rel) | FlatInRel::RelWithDiagonals { rel, .. } => rel,
+                FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => continue,
+            };
+            if let Some(model) = rel.parent_model_type(signature) {
+                let prefix = signature.type_(model).parents.len() + 1;
+                scoped_prefixes.insert(stmt.rel.clone(), prefix);
+                scoped_prefixes.insert(FlatInRel::Rel(*rel), prefix);
+            }
+        }
+    }
     let native_propagation = match model_mode {
         ModelMode::Native => true,
         ModelMode::Desugared => false,
@@ -327,7 +345,7 @@ pub fn select_indices<'a>(
         }));
     }
 
-    let queries: BTreeMap<(FlatInRel, QuerySpec), Vec<IndexSpec>> = query_specs
+    let mut queries: BTreeMap<(FlatInRel, QuerySpec), Vec<IndexSpec>> = query_specs
         .into_iter()
         .chunk_by(|(rel, _query_spec)| rel.clone())
         .into_iter()
@@ -359,6 +377,21 @@ pub fn select_indices<'a>(
             })
         })
         .collect();
+
+    // Bound owners must expose a shared subtree. Unbound reverse queries keep
+    // their own orders, including membership lookups from an element.
+    for ((rel, query), indices) in &mut queries {
+        if let Some(&prefix) = scoped_prefixes.get(rel) {
+            if query.projections.is_empty() || (0..prefix).all(|i| query.projections.contains(&i)) {
+                for index in indices {
+                    let order = (0..prefix)
+                        .chain(index.order.iter().copied().filter(|&i| i >= prefix))
+                        .collect::<Vec<_>>();
+                    index.order = order.into();
+                }
+            }
+        }
+    }
 
     // Compute indices map from queries map
     let mut indices: BTreeMap<FlatInRel, Vec<IndexSpec>> = BTreeMap::new();

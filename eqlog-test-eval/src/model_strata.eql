@@ -2,6 +2,7 @@ type Atom;
 pred enabled(Atom);
 
 model World {
+    pred born();
     pred seed(Atom);
     pred edge(Atom, Atom);
     pred reached(Atom);
@@ -11,4 +12,5 @@ model World {
     rule step { if reached(x); if edge(x, y); then reached(y); }
     rule finish { if reached(x); then marked(x); }
     rule ambient_input { if enabled(x); then seed(x); }
+    rule at_birth { then born(); }
 }

@@ -27,6 +27,9 @@ fn local_rules_receive_bound_model_parameters() {
     assert!(generated.contains("__owners: [u32; 1]"));
     let routine = function_body(&generated, "start_0_0");
     assert!(routine.contains("env.__owners[0]"));
+    assert!(generated.contains("history.publish_shared(current)"));
+    assert!(generated
+        .contains("BTreeMap<[u32; 1], eqlog_runtime::__private::RelationVersions<PrefixTree2, (usize, Vec<u32>)>>"));
 }
 
 fn stratum_of(generated: &str, rule: &str) -> usize {
@@ -246,7 +249,7 @@ fn separated_readers_advance_one_typed_secondary_index() {
     assert_eq!(
         generated
             .matches(&format!(
-                "{field}_versions: eqlog_runtime::__private::RelationVersions<PrefixTree2>,"
+                "{field}_versions: eqlog_runtime::__private::RelationVersions<PrefixTree2, (usize, Vec<u32>)>,"
             ))
             .count(),
         1

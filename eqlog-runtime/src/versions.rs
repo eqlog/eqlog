@@ -129,14 +129,14 @@ pub struct RelationView<T> {
 }
 
 /// Consumers advance to shared published roots, never to independently updated copies.
-pub struct RelationVersions<T> {
+pub struct RelationVersions<T, Consumer = usize> {
     current: Rc<Version<T>>,
     empty: Rc<Version<T>>,
-    seen: BTreeMap<usize, Rc<Version<T>>>,
+    seen: BTreeMap<Consumer, Rc<Version<T>>>,
     views: BTreeMap<u64, RelationView<Option<T>>>,
 }
 
-impl<T: SnapshotSet> RelationVersions<T> {
+impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
     pub fn new() -> Self {
         let current = Rc::new(Version {
             id: 0,
@@ -223,14 +223,14 @@ impl<T: SnapshotSet> RelationVersions<T> {
     }
 
     /// The caller must commit the resulting work before allowing an early exit.
-    pub fn consume(&mut self, consumer: usize) -> RelationView<T> {
+    pub fn consume(&mut self, consumer: Consumer) -> RelationView<T> {
         self.consume_required::<true, true>(consumer)
     }
 
     /// An unused age need not materialize a difference tree.
     pub fn consume_required<const OLD: bool, const NEW: bool>(
         &mut self,
-        consumer: usize,
+        consumer: Consumer,
     ) -> RelationView<T> {
         let seen = self.seen.get(&consumer).unwrap_or(&self.empty);
         let view = self.views.entry(seen.id).or_insert_with(|| RelationView {

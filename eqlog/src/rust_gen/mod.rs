@@ -3140,7 +3140,7 @@ fn display_new_fn<'a>(
         writeln!(f, "__pending_delta: ModelDelta::new(),")?;
         write!(f, "{}", native_indices::init(native_plans))?;
         if let Some(codegen) = codegen {
-            write!(f, "{}", codegen.init(index_selection))?;
+            write!(f, "{}", codegen.init(index_selection, ctx))?;
         }
         for typ in ctx.signature().iter_types() {
             let type_snake = display_type(typ, ctx).to_string().to_case(Snake);

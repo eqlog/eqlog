@@ -3,6 +3,27 @@ use eqlog_runtime::wbtree::map::WBTreeMap;
 use eqlog_runtime::{PrefixTree1, PrefixTree2};
 
 #[test]
+fn model_consumers_share_filtered_ambient_views() {
+    let mut versions = RelationVersions::new();
+    let mut rows = PrefixTree1::new();
+    for i in 0..100 { rows.insert([i]); }
+    versions.publish_shared(&rows);
+    versions.consume((0, vec![10]));
+    versions.consume((0, vec![20]));
+    rows.remove([5]);
+    rows.insert([100]);
+    versions.publish_shared(&rows);
+    let first = versions.consume((0, vec![10]));
+    let second = versions.consume((0, vec![20]));
+    assert!(SnapshotSet::shares_root(&first.old, &second.old));
+    assert!(SnapshotSet::shares_root(&first.new, &second.new));
+    rows.insert([101]);
+    versions.publish_shared(&rows);
+    let pending = versions.consume((0, vec![20]));
+    assert!(pending.new.contains([101]));
+}
+
+#[test]
 fn consumers_advance_to_the_same_root_even_after_a_storage_rebuild() {
     let mut versions = RelationVersions::new();
     let mut rows = PrefixTree1::new();

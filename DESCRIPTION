@@ -9,4 +9,8 @@ so explicit receivers and member rules use the same scope analysis.
 Bind owner parameters before index selection and RAM lowering to avoid
 scanning unrelated models when invoking member rules.
 
+Keep consumption checkpoints per model and static stratum. Publish 
+shared
+member subtrees and maintain one latest secondary index across readers.
+
 Keep simultaneous scheduling as the default.
