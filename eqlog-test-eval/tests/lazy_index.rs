@@ -74,43 +74,59 @@ fn off_diagonal_removals_do_not_remove_a_valid_projection() {
 }
 
 #[test]
-fn consumers_share_index_roots_even_when_the_same_snapshot_changes_age() {
+fn maintenance_uses_the_latest_shared_index_while_consumers_keep_their_checkpoints() {
     let mut rows = PrefixTree2::new();
-    rows.insert([0, 1]);
-    rows.insert([2, 3]);
+    rows.insert([1, 10]);
+    rows.insert([2, 20]);
+    let mut seed = IndexSeed::<PrefixTree2, PrefixTree2>::new();
     let mut versions = RelationVersions::new();
-    let mut first_seed = IndexSeed::<PrefixTree2, PrefixTree2>::new();
-    let mut second_seed = IndexSeed::<PrefixTree2, PrefixTree2>::new();
-    let project = |[x, y]: [u32; 2]| Some([y, x]);
-    versions.publish(&rows, PrefixTree2::empty());
-    let first = versions.consume(0).new_index(7, &mut first_seed, project);
-    let second = versions.consume(1).new_index(7, &mut second_seed, |_| {
-        panic!("shared snapshot should hit cache")
-    });
-    let old = versions.consume(0).old_index(7, &mut second_seed, |_| {
-        panic!("age change should hit cache")
-    });
-    assert!(SnapshotSet::shares_root(&first, &second));
-    assert!(SnapshotSet::shares_root(&first, &old));
+    let visited = Cell::new(0);
+    let project = |[x, y]: [u32; 2]| {
+        visited.set(visited.get() + 1);
+        Some([y, x])
+    };
+    versions.publish_shared(&seed.update(&rows, project));
+    let initial = versions.consume(0).new;
+    let initial_c = versions.consume(2).new;
+    assert!(SnapshotSet::shares_root(&initial, &initial_c));
+    assert_eq!(visited.get(), 2);
 
-    rows.remove([0, 1]);
-    rows.insert([0, 0]);
-    versions.publish(&rows, PrefixTree2::empty());
-    let first_view = versions.consume(0);
-    let second_view = versions.consume(1);
-    let first = first_view.old_index(7, &mut first_seed, project);
-    let second = second_view.old_index(7, &mut second_seed, |_| {
-        panic!("filtered old should be shared")
-    });
-    assert!(SnapshotSet::shares_root(&first, &second));
-    assert_eq!(first.iter().collect::<Vec<_>>(), vec![[3, 2]]);
-    assert_eq!(
-        first_view
-            .new_index(7, &mut first_seed, project)
-            .iter()
-            .collect::<Vec<_>>(),
-        vec![[0, 0]]
-    );
+    rows.insert([3, 10]);
+    versions.publish_shared(&seed.update(&rows, project));
+    let a = versions.consume(0);
+    assert_eq!(visited.get(), 3);
+    assert!(SnapshotSet::shares_root(&a.old, &initial));
+    assert_eq!(a.new.iter().collect::<Vec<_>>(), vec![[10, 3]]);
+    let after_a = versions.current().clone();
+
+    rows.insert([4, 20]);
+    assert_eq!(visited.get(), 3);
+    versions.publish_shared(&seed.update(&rows, project));
+    let c = versions.consume(2);
+    assert_eq!(visited.get(), 4);
+    assert!(SnapshotSet::shares_root(&c.old, &initial));
+    assert_eq!(c.new.iter().collect::<Vec<_>>(), vec![[10, 3], [20, 4]]);
+
+    versions
+        .publish_shared(&seed.update(&rows, |_| panic!("A can reuse the index maintained by C")));
+    let a = versions.consume(0);
+    assert!(SnapshotSet::shares_root(&a.old, &after_a));
+    assert_eq!(a.new.iter().collect::<Vec<_>>(), vec![[20, 4]]);
+    assert!(SnapshotSet::shares_root(
+        &versions.consume(0).old,
+        &versions.consume(2).old,
+    ));
+
+    rows.remove([3, 10]);
+    rows.insert([3, 20]);
+    versions.publish_shared(&seed.update(&rows, project));
+    assert_eq!(visited.get(), 6);
+    let a = versions.consume(0);
+    let c = versions.consume(2);
+    assert!(!a.old.contains([10, 3]));
+    assert_eq!(a.new.iter().collect::<Vec<_>>(), vec![[20, 3]]);
+    assert!(SnapshotSet::shares_root(&a.old, &c.old));
+    assert!(SnapshotSet::shares_root(&a.new, &c.new));
 }
 
 #[test]

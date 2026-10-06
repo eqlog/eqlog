@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
-use crate::lazy_index::{IndexSeed, SnapshotIndices};
 use crate::{
     PrefixTree0, PrefixTree1, PrefixTree2, PrefixTree3, PrefixTree4, PrefixTree5, PrefixTree6,
     PrefixTree7, PrefixTree8, PrefixTree9,
@@ -121,35 +120,12 @@ snapshot_set!(
 struct Version<T> {
     id: u64,
     rows: T,
-    indices: SnapshotIndices,
 }
 
 #[derive(Clone)]
 pub struct RelationView<T> {
     pub old: T,
     pub new: T,
-    old_indices: SnapshotIndices,
-    new_indices: SnapshotIndices,
-}
-
-impl<T: SnapshotSet> RelationView<T> {
-    pub fn old_index<I: SnapshotSet + 'static>(
-        &self,
-        id: usize,
-        seed: &mut IndexSeed<T, I>,
-        project: impl Fn(T::Row) -> Option<I::Row>,
-    ) -> I {
-        self.old_indices.get(id, &self.old, seed, project)
-    }
-
-    pub fn new_index<I: SnapshotSet + 'static>(
-        &self,
-        id: usize,
-        seed: &mut IndexSeed<T, I>,
-        project: impl Fn(T::Row) -> Option<I::Row>,
-    ) -> I {
-        self.new_indices.get(id, &self.new, seed, project)
-    }
 }
 
 /// Consumers advance to shared published roots, never to independently updated copies.
@@ -157,7 +133,7 @@ pub struct RelationVersions<T> {
     current: Rc<Version<T>>,
     empty: Rc<Version<T>>,
     seen: BTreeMap<usize, Rc<Version<T>>>,
-    views: BTreeMap<u64, RelationView<T>>,
+    views: BTreeMap<u64, RelationView<Option<T>>>,
 }
 
 impl<T: SnapshotSet> RelationVersions<T> {
@@ -165,7 +141,6 @@ impl<T: SnapshotSet> RelationVersions<T> {
         let current = Rc::new(Version {
             id: 0,
             rows: T::empty(),
-            indices: SnapshotIndices::default(),
         });
         Self {
             empty: current.clone(),
@@ -173,6 +148,10 @@ impl<T: SnapshotSet> RelationVersions<T> {
             current,
             views: BTreeMap::new(),
         }
+    }
+
+    pub fn current(&self) -> &T {
+        &self.current.rows
     }
 
     /// Storage maintenance can rebuild an equal tree or move rows between ages.
@@ -214,7 +193,6 @@ impl<T: SnapshotSet> RelationVersions<T> {
                 .checked_add(1)
                 .expect("relation version overflow"),
             rows,
-            indices: SnapshotIndices::default(),
         });
         self.views.clear();
     }
@@ -240,48 +218,55 @@ impl<T: SnapshotSet> RelationVersions<T> {
                 .checked_add(1)
                 .expect("relation version overflow"),
             rows: rows.clone(),
-            indices: SnapshotIndices::default(),
         });
         self.views.clear();
     }
 
     /// The caller must commit the resulting work before allowing an early exit.
     pub fn consume(&mut self, consumer: usize) -> RelationView<T> {
+        self.consume_required::<true, true>(consumer)
+    }
+
+    /// An unused age need not materialize a difference tree.
+    pub fn consume_required<const OLD: bool, const NEW: bool>(
+        &mut self,
+        consumer: usize,
+    ) -> RelationView<T> {
         let seen = self.seen.get(&consumer).unwrap_or(&self.empty);
-        let view = self
-            .views
-            .entry(seen.id)
-            .or_insert_with(|| {
-                // Removing obsolete IDs is safe; replacing them by their roots here
-                // would hide joins that only became possible after an equality.
-                let mut old = seen.rows.clone();
-                let mut removed = false;
-                seen.rows.visit_difference(&self.current.rows, &mut |row| {
-                    removed = true;
-                    old.remove_row(row);
-                });
-                let (new, new_indices) = if seen.rows.is_empty() {
-                    (self.current.rows.clone(), self.current.indices.clone())
-                } else {
-                    // Rules need this tree, and difference can reuse whole added subtrees.
-                    (
-                        self.current.rows.difference(&seen.rows),
-                        SnapshotIndices::default(),
-                    )
-                };
-                RelationView {
-                    old,
-                    new,
-                    old_indices: if removed {
-                        SnapshotIndices::default()
+        let view = self.views.entry(seen.id).or_insert_with(|| RelationView {
+            old: None,
+            new: None,
+        });
+        let old = if OLD {
+            view.old
+                .get_or_insert_with(|| {
+                    // Removing obsolete IDs is safe; replacing them by their roots here
+                    // would hide joins that only became possible after an equality.
+                    let mut old = seen.rows.clone();
+                    seen.rows.visit_difference(&self.current.rows, &mut |row| {
+                        old.remove_row(row);
+                    });
+                    old
+                })
+                .clone()
+        } else {
+            T::empty()
+        };
+        let new = if NEW {
+            view.new
+                .get_or_insert_with(|| {
+                    if seen.rows.is_empty() {
+                        self.current.rows.clone()
                     } else {
-                        seen.indices.clone()
-                    },
-                    new_indices,
-                }
-            })
-            .clone();
+                        // Rules need this tree, and difference can reuse whole added subtrees.
+                        self.current.rows.difference(&seen.rows)
+                    }
+                })
+                .clone()
+        } else {
+            T::empty()
+        };
         self.seen.insert(consumer, self.current.clone());
-        view
+        RelationView { old, new }
     }
 }

@@ -162,3 +162,70 @@ fn strata_prepare_only_their_inputs_and_transport_dependencies() {
     assert!(generated.contains(&format!("fn __propagate_child_morphisms_stratum_{nested}")));
     assert!(function_body(&generated, "close").contains("__close_until(None)"));
 }
+
+#[test]
+fn separated_readers_advance_one_typed_secondary_index() {
+    let input = TempDir::new("eqlog-shared-index-source").unwrap();
+    let output = TempDir::new("eqlog-shared-index-output").unwrap();
+    fs::write(
+        input.path().join("theory.eql"),
+        include_str!("../../eqlog-test-eval/src/shared_index.eql"),
+    )
+    .unwrap();
+    process(&Config {
+        in_dir: input.path().to_owned(),
+        out_dir: output.path().to_owned(),
+        component_build: None,
+        options: CompileOptions {
+            scheduling_mode: SchedulingMode::Stratified,
+            ..CompileOptions::default()
+        },
+    })
+    .unwrap();
+    let generated = fs::read_to_string(output.path().join("theory.eql.rs")).unwrap();
+    let a = stratum_of(&generated, "a");
+    let b = stratum_of(&generated, "b");
+    let c = stratum_of(&generated, "c");
+    assert!(a < b && b < c);
+    let body_a = function_body(&generated, &format!("__run_stratum_{a}"));
+    let body_b = function_body(&generated, &format!("__run_stratum_{b}"));
+    let body_c = function_body(&generated, &format!("__run_stratum_{c}"));
+    let index_a = body_a
+        .split_once("edge_old_order_1_0: &index_")
+        .unwrap()
+        .1
+        .split_once('.')
+        .unwrap()
+        .0;
+    let index_c = body_c
+        .split_once("edge_old_order_1_0: &index_")
+        .unwrap()
+        .1
+        .split_once('.')
+        .unwrap()
+        .0;
+    assert_eq!(index_a, index_c);
+    let field = format!("__rule_index_{index_a}");
+    let update = format!("self.{field}.update(self.__rule_input_");
+    assert!(body_a.contains(&update));
+    assert!(body_c.contains(&update));
+    assert!(!body_b.contains(&field));
+    assert_eq!(
+        generated
+            .matches(&format!(
+                "{field}: eqlog_runtime::__private::IndexSeed<PrefixTree2, PrefixTree2>,"
+            ))
+            .count(),
+        1
+    );
+    assert_eq!(
+        generated
+            .matches(&format!(
+                "{field}_versions: eqlog_runtime::__private::RelationVersions<PrefixTree2>,"
+            ))
+            .count(),
+        1
+    );
+    assert!(!generated.contains(&format!("{field}_old:")));
+    assert!(!generated.contains(&format!("{field}_new:")));
+}

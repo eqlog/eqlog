@@ -18,6 +18,7 @@ pub struct Codegen<'s> {
     strata: &'s [Stratum],
     inputs: BTreeMap<FlatInRel, usize>,
     indices: BTreeMap<(FlatInRel, IndexSpec), usize>,
+    old_indices: BTreeSet<(FlatInRel, IndexSpec)>,
     preparations: &'s [IndexPreparation],
     native_indices: &'s [NativeIndexPreparation],
 }
@@ -33,7 +34,11 @@ impl<'s> Codegen<'s> {
             .preparations
             .iter()
             .flat_map(|plan| plan.indices.iter().cloned())
-            .map(|(rel, index)| input_key(rel, index))
+            .collect();
+        let old_indices = indices
+            .iter()
+            .filter(|(_, index)| index.age == IndexAge::Old)
+            .cloned()
             .collect();
         let inputs: BTreeSet<_> = indices
             .iter()
@@ -43,12 +48,16 @@ impl<'s> Codegen<'s> {
             strata,
             preparations: &program.preparations,
             native_indices: &program.native_indices,
+            old_indices,
             inputs: inputs
                 .into_iter()
                 .enumerate()
                 .map(|(i, key)| (key, i))
                 .collect(),
             indices: indices
+                .into_iter()
+                .map(|(rel, index)| input_key(rel, index))
+                .collect::<BTreeSet<_>>()
                 .into_iter()
                 .enumerate()
                 .map(|(i, key)| (key, i))
@@ -80,8 +89,9 @@ impl<'s> Codegen<'s> {
                 let source = source_relation(rel);
                 let source_type = display_index_type(&source, ctx);
                 let target = display_index_type(rel, ctx);
-                for age in [IndexAge::Old, IndexAge::New] {
-                    writeln!(f, "__rule_index_{i}_{age}: eqlog_runtime::__private::IndexSeed<{source_type}, {target}>,")?;
+                writeln!(f, "__rule_index_{i}: eqlog_runtime::__private::IndexSeed<{source_type}, {target}>,")?;
+                if self.old_indices.contains(&(rel.clone(), index.clone())) {
+                    writeln!(f, "__rule_index_{i}_versions: eqlog_runtime::__private::RelationVersions<{target}>,")?;
                 }
             }
             Ok(())
@@ -104,10 +114,14 @@ impl<'s> Codegen<'s> {
                 {
                     continue;
                 }
-                for age in [IndexAge::Old, IndexAge::New] {
+                writeln!(
+                    f,
+                    "__rule_index_{i}: eqlog_runtime::__private::IndexSeed::new(),"
+                )?;
+                if self.old_indices.contains(&(rel.clone(), index.clone())) {
                     writeln!(
                         f,
-                        "__rule_index_{i}_{age}: eqlog_runtime::__private::IndexSeed::new(),"
+                        "__rule_index_{i}_versions: eqlog_runtime::__private::RelationVersions::new(),"
                     )?;
                 }
             }
@@ -169,20 +183,44 @@ impl<'s> Codegen<'s> {
                         "let native_input_{id} = self.__native_input_{id}.consume({s});"
                     )?;
                 }
-                for (rel, index) in &self.preparations[s].indices {
+                let required_indices: BTreeSet<_> = self.preparations[s]
+                    .indices
+                    .iter()
+                    .cloned()
+                    .map(|(rel, index)| input_key(rel, index))
+                    .collect();
+                for (rel, index) in &required_indices {
                     if native_indices::find(self.native_indices, rel, index).is_some() {
                         continue;
                     }
-                    if selection.is_primary(&rel, &index) {
+                    if selection.is_primary(rel, index) {
                         continue;
                     }
-                    let source = source_relation(&rel);
+                    let source = source_relation(rel);
                     let i = self.inputs[&source];
                     let j = self.indices[&input_key(rel.clone(), index.clone())];
                     let primary = selection.primary(&source, IndexAge::Old);
-                    let project = projection(&rel, &index, primary);
-                    let age = index.age;
-                    writeln!(f, "let index_{j}_{age} = input_{i}.{age}_index({j}, &mut self.__rule_index_{j}_{age}, {project});")?;
+                    let project = projection(rel, index, primary);
+                    if self.old_indices.contains(&(rel.clone(), index.clone())) {
+                        let old = self.preparations[s]
+                            .indices
+                            .contains(&(rel.clone(), index.clone()));
+                        let new = self.preparations[s].indices.contains(&(
+                            rel.clone(),
+                            IndexSpec {
+                                age: IndexAge::New,
+                                order: index.order.clone(),
+                            },
+                        ));
+                        writedoc! {f, "
+                            let index_{j} = self.__rule_index_{j}.update(self.__rule_input_{i}.current(), {project});
+                            self.__rule_index_{j}_versions.publish_shared(&index_{j});
+                            let index_{j} = self.__rule_index_{j}_versions.consume_required::<{old}, {new}>({s});
+                        "}?;
+                    } else {
+                        // A delta-only reader does not need the full relation reordered.
+                        writeln!(f, "let index_{j} = self.__rule_index_{j}.update(&input_{i}.new, {project});")?;
+                    }
                 }
                 for &m in &stratum.groups {
                     let module = &modules[m];
@@ -201,8 +239,13 @@ impl<'s> Codegen<'s> {
                         } else if selection.is_primary(&rel, &index) {
                             writeln!(f, "{field}: &input_{i}.{age},")?;
                         } else {
-                            let j = self.indices[&input_key(rel.clone(), index.clone())];
-                            writeln!(f, "{field}: &index_{j}_{age},")?;
+                            let key = input_key(rel.clone(), index.clone());
+                            let j = self.indices[&key];
+                            if self.old_indices.contains(&key) {
+                                writeln!(f, "{field}: &index_{j}.{age},")?;
+                            } else {
+                                writeln!(f, "{field}: &index_{j},")?;
+                            }
                         }
                     }
                     for rel in module_env_out_rels(module) {

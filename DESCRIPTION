@@ -10,10 +10,14 @@ and application dependencies for nested models. Propagate secondary
 orders from owned tuples so inherited subtrees remain shared. Refresh
 all public views on return and before close_until callbacks.
 
-Retain source snapshots and catch up secondary indices with borrowed,
-sharing-aware differences. Share unchanged snapshots and derived indices
-between consumers. Public queries outside evaluation remain lazy.
+Retain one typed maintenance state per secondary order and catch up with
+borrowed, sharing-aware differences. Keep per-stratum consumption
+checkpoints separately so later readers reuse the latest maintained
+tree while seeing all changes since their own previous evaluation.
+Share typed old/new views between matching checkpoints without type
+erasure, and build secondary views only for the ages consumed by rules.
+Public queries outside evaluation remain lazy.
 
-Cover index selection, late graph edges, cycles, inherited subtree
-sharing, equality replacements, and both scheduling modes. Leave
-canonicalization-aware branch updates for separate work.
+Cover separated readers, index selection, late graph edges, cycles,
+inherited subtree sharing, equality replacements, and both scheduling
+modes. Leave canonicalization-aware branch updates for separate work.

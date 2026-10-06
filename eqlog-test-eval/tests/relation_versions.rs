@@ -85,6 +85,36 @@ fn equality_replacements_are_unseen_and_filtered_old_views_are_shared() {
 }
 
 #[test]
+fn separately_requested_ages_share_views_and_advance_their_consumers() {
+    let mut versions = RelationVersions::new();
+    let mut rows = PrefixTree2::new();
+    rows.insert([0, 1]);
+    rows.insert([2, 3]);
+    versions.publish_shared(&rows);
+    for consumer in 0..3 {
+        versions.consume(consumer);
+    }
+
+    rows.remove([0, 1]);
+    rows.insert([0, 0]);
+    versions.publish_shared(&rows);
+    let old_only = versions.consume_required::<true, false>(0);
+    let new_only = versions.consume_required::<false, true>(1);
+    let both = versions.consume(2);
+    assert_eq!(old_only.old.iter().collect::<Vec<_>>(), vec![[2, 3]]);
+    assert_eq!(new_only.new.iter().collect::<Vec<_>>(), vec![[0, 0]]);
+    assert!(old_only.new.is_empty());
+    assert!(new_only.old.is_empty());
+    assert!(SnapshotSet::shares_root(&old_only.old, &both.old));
+    assert!(SnapshotSet::shares_root(&new_only.new, &both.new));
+    for consumer in 0..3 {
+        let next = versions.consume(consumer);
+        assert!(next.new.is_empty());
+        assert!(SnapshotSet::shares_root(&next.old, &rows));
+    }
+}
+
+#[test]
 fn mapped_snapshots_share_roots_without_materializing_empty_differences() {
     let mut rows = PrefixTree2::new();
     let mut mapping = PrefixTree2::new();

@@ -1,33 +1,6 @@
-use std::any::Any;
 use std::cell::{OnceCell, RefCell};
-use std::collections::BTreeMap;
-use std::rc::Rc;
 
 use crate::versions::SnapshotSet;
-
-#[derive(Clone, Default)]
-pub(crate) struct SnapshotIndices(Rc<RefCell<BTreeMap<usize, Box<dyn Any>>>>);
-
-impl SnapshotIndices {
-    pub(crate) fn get<P: SnapshotSet, I: SnapshotSet + 'static>(
-        &self,
-        id: usize,
-        source: &P,
-        seed: &mut IndexSeed<P, I>,
-        project: impl Fn(P::Row) -> Option<I::Row>,
-    ) -> I {
-        let mut indices = self.0.borrow_mut();
-        let index = indices
-            .entry(id)
-            .or_insert_with(|| Box::new(seed.update(source, project)))
-            .downcast_ref::<I>()
-            .expect("index IDs must have a unique type")
-            .clone();
-        seed.source = source.clone();
-        seed.index = index.clone();
-        index
-    }
-}
 
 /// Retains the source alongside the index so skipped updates need no edit log.
 pub struct IndexSeed<P, I> {
