@@ -3,4 +3,7 @@ Schedule member rules within model components
 Represent rule scheduling as a tree so ordered strata can run inside
 recursive model components without losing consumption checkpoints.
 
+Infer model owners from inputs and outputs after equality elimination,
+so explicit receivers and member rules use the same scope analysis.
+
 Keep simultaneous scheduling as the default.

@@ -4,6 +4,7 @@ mod diagonals;
 mod index_selection;
 mod morphisms;
 mod schedule;
+mod scope;
 mod semi_naive;
 mod sort;
 
@@ -18,6 +19,7 @@ pub use diagonals::*;
 pub use index_selection::*;
 pub use morphisms::*;
 pub use schedule::*;
+pub use scope::*;
 pub use semi_naive::*;
 pub use sort::*;
 
@@ -78,6 +80,7 @@ pub fn functionality_rule(
     }];
 
     FlatRule {
+        scope: RuleScope::Global,
         name: rule_name.into(),
         premise,
         conclusion,

@@ -73,6 +73,7 @@ pub fn eliminate_equalities_ifs(flat_rule: &FlatRule) -> FlatRule {
         .collect();
 
     FlatRule {
+        scope: RuleScope::Global,
         premise,
         conclusion,
         name: flat_rule.name.clone(),
@@ -118,6 +119,7 @@ pub fn to_semi_naive(flat_rule: &FlatRule) -> Vec<FlatRule> {
                 .collect();
 
             FlatRule {
+                scope: flat_rule.scope.clone(),
                 premise,
                 conclusion: flat_rule.conclusion.clone(),
                 name: format!("{original_name}_{}", i),
