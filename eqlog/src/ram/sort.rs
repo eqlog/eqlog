@@ -7,7 +7,10 @@ use crate::ram::*;
 
 use super::RamStmt;
 
-fn collect_stmt_dependencies(stmts: &[RamStmt]) -> Vec<BTreeSet<usize>> {
+fn collect_stmt_dependencies(
+    stmts: &[RamStmt],
+    parameters: &BTreeSet<Arc<str>>,
+) -> Vec<BTreeSet<usize>> {
     let mut set_var_def_sites: BTreeMap<SetVarName, usize> = BTreeMap::new();
     let mut el_var_def_sites: BTreeMap<Arc<str>, usize> = BTreeMap::new();
 
@@ -34,10 +37,14 @@ fn collect_stmt_dependencies(stmts: &[RamStmt]) -> Vec<BTreeSet<usize>> {
                             .expect("Variable must be defined before use");
                         dependencies.insert(set_def_site);
 
-                        let el_def_site = *el_var_def_sites
-                            .get(&first_column_var.name)
-                            .expect("Variable must be defined before use");
-                        dependencies.insert(el_def_site);
+                        if let Some(&el_def_site) = el_var_def_sites.get(&first_column_var.name) {
+                            dependencies.insert(el_def_site);
+                        } else {
+                            assert!(
+                                parameters.contains(&first_column_var.name),
+                                "Variable must be defined before use"
+                            );
+                        }
                     }
                 }
             }
@@ -98,8 +105,8 @@ fn ram_stmt_cost(stmt: &RamStmt) -> usize {
     }
 }
 
-pub fn sort_ram_stmts(stmts: &[RamStmt]) -> Vec<RamStmt> {
-    let mut dependencies = collect_stmt_dependencies(stmts);
+pub fn sort_ram_stmts(stmts: &[RamStmt], parameters: &BTreeSet<Arc<str>>) -> Vec<RamStmt> {
+    let mut dependencies = collect_stmt_dependencies(stmts, parameters);
 
     let mut reverse_dependencies = vec![Vec::new(); stmts.len()];
     for i in 0..stmts.len() {

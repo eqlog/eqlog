@@ -18,8 +18,9 @@ pub struct QuerySpec {
 
 fn premise_query_specs<'a>(
     premise: &'a [FlatIfStmt],
+    owners: &[FlatVar],
 ) -> impl 'a + Iterator<Item = (FlatInRel, QuerySpec)> {
-    let mut fixed_vars: BTreeSet<FlatVar> = BTreeSet::new();
+    let mut fixed_vars: BTreeSet<FlatVar> = owners.iter().cloned().collect();
     premise.into_iter().map(move |stmt| {
         let FlatIfStmt { rel, args, age } = stmt;
         let projections: BTreeSet<usize> = stmt
@@ -214,7 +215,7 @@ pub fn select_indices<'a>(
     query_specs.extend(
         rules
             .into_iter()
-            .flat_map(|rule| premise_query_specs(rule.premise.as_slice())),
+            .flat_map(|rule| premise_query_specs(rule.premise.as_slice(), rule.scope.owners())),
     );
 
     // Query specs to generate public API functions.

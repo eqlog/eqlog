@@ -4,6 +4,31 @@ use eqlog::{process, CompileOptions, Config, SchedulingMode};
 use indoc::indoc;
 use tempdir::TempDir;
 
+#[test]
+fn local_rules_receive_bound_model_parameters() {
+    let input = TempDir::new("eqlog-model-scope-source").unwrap();
+    let output = TempDir::new("eqlog-model-scope-output").unwrap();
+    fs::write(
+        input.path().join("theory.eql"),
+        include_str!("../../eqlog-test-eval/src/model_strata.eql"),
+    )
+    .unwrap();
+    process(&Config {
+        in_dir: input.path().to_owned(),
+        out_dir: output.path().to_owned(),
+        component_build: None,
+        options: CompileOptions {
+            scheduling_mode: SchedulingMode::Stratified,
+            ..CompileOptions::default()
+        },
+    })
+    .unwrap();
+    let generated = fs::read_to_string(output.path().join("theory.eql.rs")).unwrap();
+    assert!(generated.contains("__owners: [u32; 1]"));
+    let routine = function_body(&generated, "start_0_0");
+    assert!(routine.contains("env.__owners[0]"));
+}
+
 fn stratum_of(generated: &str, rule: &str) -> usize {
     let call = format!("{rule}(env);");
     generated

@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Display;
 
@@ -10,8 +11,9 @@ use super::{
     display_module_env_struct_name, display_out_set_field_name, module_env_in_rels,
     module_env_out_rels, RustGenCtx,
 };
+use crate::algebra::signature::TypeId;
 use crate::flat_eqlog::{
-    FlatInRel, IndexAge, IndexSelection, IndexSpec, Schedule, StratifiedPlan, Stratum,
+    FlatInRel, FlatRel, IndexAge, IndexSelection, IndexSpec, Schedule, StratifiedPlan, Stratum,
 };
 use crate::fmt_util::FmtFn;
 use crate::ram::{IndexPreparation, NativeIndexPreparation, RamModule, RamProgram};
@@ -226,11 +228,18 @@ impl<'s> Codegen<'s> {
                         writeln!(f, "let index_{j} = self.__rule_index_{j}.update(&input_{i}.new, {project});")?;
                     }
                 }
+                if let Some(model) = stratum.model {
+                    let owners = model_owners(model, ctx, selection);
+                    writeln!(f, "let owners = {owners}; for owners in owners {{")?;
+                }
                 for &m in &stratum.groups {
                     let module = &modules[m];
                     let env = display_module_env_struct_name(module);
                     let name = &module.name;
                     writeln!(f, "let env = {env} {{ phantom: std::marker::PhantomData,")?;
+                    if stratum.model.is_some() {
+                        writeln!(f, "__owners: owners,")?;
+                    }
                     for (rel, index) in module_env_in_rels(module) {
                         let field = display_index_field_name(&rel, &index, ctx);
                         let age = match index.age {
@@ -257,6 +266,9 @@ impl<'s> Codegen<'s> {
                         writeln!(f, "{field}: &mut delta.{field},")?;
                     }
                     writeln!(f, "}}; {name}(env);")?;
+                }
+                if stratum.model.is_some() {
+                    writeln!(f, "}}")?;
                 }
                 writeln!(f, "}}")?;
                 writedoc! {f, "
@@ -307,6 +319,31 @@ impl<'s> Codegen<'s> {
             "}
         })
     }
+}
+
+fn model_owners<'a>(
+    model: TypeId,
+    ctx: &'a RustGenCtx<'a>,
+    selection: &'a IndexSelection,
+) -> impl Display + 'a {
+    FmtFn(move |f| {
+        let rel = if ctx.signature().type_(model).parents.is_empty() {
+            FlatInRel::TypeSet(model)
+        } else {
+            FlatInRel::Rel(FlatRel::ModelMember(model))
+        };
+        let index = selection.primary(&rel, IndexAge::Old);
+        let old = display_all_index_field_name(&rel, index, ctx);
+        let new = display_all_index_field_name(&rel, selection.primary(&rel, IndexAge::New), ctx);
+        let args = index.order.iter().map(|i| format!("owner{i}")).join(", ");
+        let owners = (0..index.order.len())
+            .map(|i| format!("owner{i}"))
+            .join(", ");
+        write!(
+            f,
+            "self.{old}.union(&self.{new}).iter().map(|[{args}]| [{owners}]).collect::<Vec<_>>()"
+        )
+    })
 }
 
 fn emit_schedule(

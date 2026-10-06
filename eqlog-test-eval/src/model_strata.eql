@@ -1,0 +1,14 @@
+type Atom;
+pred enabled(Atom);
+
+model World {
+    pred seed(Atom);
+    pred edge(Atom, Atom);
+    pred reached(Atom);
+    pred marked(Atom);
+
+    rule start { if seed(x); then reached(x); }
+    rule step { if reached(x); if edge(x, y); then reached(y); }
+    rule finish { if reached(x); then marked(x); }
+    rule ambient_input { if enabled(x); then seed(x); }
+}

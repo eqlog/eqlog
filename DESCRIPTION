@@ -6,4 +6,7 @@ recursive model components without losing consumption checkpoints.
 Infer model owners from inputs and outputs after equality elimination,
 so explicit receivers and member rules use the same scope analysis.
 
+Bind owner parameters before index selection and RAM lowering to avoid
+scanning unrelated models when invoking member rules.
+
 Keep simultaneous scheduling as the default.

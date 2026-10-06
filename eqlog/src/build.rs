@@ -518,7 +518,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     let mut flat_rule_groups = flatten(&flatten_ctx, &config.options);
     infer_rule_scopes(&mut flat_rule_groups, &signature);
     let schedule = schedule_rule_groups(
-        &flat_rule_groups,
+        &mut flat_rule_groups,
         &signature,
         config.options.model_mode,
         config.options.scheduling_mode,

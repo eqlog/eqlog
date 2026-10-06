@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::algebra::signature::Signature;
+use crate::algebra::signature::{Signature, TypeId};
 use crate::flat_eqlog::{
-    iter_flat_rels, morphism_preservation_rules, FlatInRel, FlatOutRel, FlatRuleGroup,
+    iter_flat_rels, morphism_preservation_rules, FlatInRel, FlatOutRel, FlatRuleGroup, RuleScope,
 };
 use crate::options::{ModelMode, SchedulingMode};
 
@@ -27,14 +27,21 @@ pub enum Schedule {
 
 pub struct Stratum {
     pub groups: Vec<usize>,
+    pub model: Option<TypeId>,
 }
 
 pub fn schedule_rule_groups(
-    groups: &[FlatRuleGroup],
+    groups: &mut [FlatRuleGroup],
     signature: &Signature,
     model_mode: ModelMode,
     scheduling_mode: SchedulingMode,
 ) -> RuleSchedule {
+    let scoped = scheduling_mode == SchedulingMode::Stratified && model_mode == ModelMode::Native;
+    if !scoped {
+        for rule in groups.iter_mut().flat_map(|group| &mut group.rules) {
+            rule.scope = RuleScope::Global;
+        }
+    }
     match scheduling_mode {
         SchedulingMode::Simultaneous => RuleSchedule::Simultaneous,
         SchedulingMode::Stratified => {
@@ -51,7 +58,7 @@ fn resource(rel: &FlatInRel) -> FlatInRel {
 }
 
 fn strata(
-    groups: &[FlatRuleGroup],
+    groups: &mut [FlatRuleGroup],
     signature: &Signature,
     model_mode: ModelMode,
 ) -> StratifiedPlan {
@@ -135,15 +142,37 @@ fn strata(
     let strata = components(&edges)
         .into_iter()
         .enumerate()
-        .map(|(id, groups)| {
-            let recursive = groups.len() > 1 || edges[groups[0]].contains(&groups[0]);
+        .map(|(id, members)| {
+            let recursive = members.len() > 1 || edges[members[0]].contains(&members[0]);
+            let model = groups[members[0]]
+                .rules
+                .first()
+                .and_then(|rule| rule.scope.model());
+            let model = model.filter(|model| {
+                members.iter().all(|&i| {
+                    groups[i]
+                        .rules
+                        .iter()
+                        .all(|rule| rule.scope.model() == Some(*model))
+                })
+            });
+            if model.is_none() {
+                for &i in &members {
+                    for rule in &mut groups[i].rules {
+                        rule.scope = RuleScope::Global;
+                    }
+                }
+            }
             let leaf = Schedule::Rules(StratumId(id));
             body.push(if recursive {
                 Schedule::Saturate(Box::new(leaf))
             } else {
                 leaf
             });
-            Stratum { groups }
+            Stratum {
+                groups: members,
+                model,
+            }
         })
         .collect();
     StratifiedPlan {

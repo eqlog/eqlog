@@ -123,6 +123,12 @@ pub struct NativeIndexPreparation {
 }
 
 impl RamModule {
+    pub fn owner_count(&self) -> usize {
+        self.routines
+            .first()
+            .map_or(0, |routine| routine.flat_rule.scope.owners().len())
+    }
+
     pub fn input_indices(&self) -> BTreeSet<(FlatInRel, IndexSpec)> {
         self.routines
             .iter()

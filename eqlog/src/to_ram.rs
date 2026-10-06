@@ -6,7 +6,19 @@ use std::collections::{BTreeMap, BTreeSet};
 
 fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> RamRoutine {
     let mut stmts: Vec<RamStmt> = Vec::new();
-    let mut defined_vars: BTreeMap<FlatVar, ElVar> = BTreeMap::new();
+    let mut defined_vars: BTreeMap<FlatVar, ElVar> = flat_rule
+        .scope
+        .owners()
+        .iter()
+        .map(|owner| {
+            (
+                owner.clone(),
+                ElVar {
+                    name: owner.name.clone(),
+                },
+            )
+        })
+        .collect();
 
     for (stmt_index, flat_stmt) in flat_rule.premise.iter().enumerate() {
         let arg_set: BTreeSet<FlatVar> = flat_stmt.args.iter().cloned().collect();
@@ -185,7 +197,14 @@ fn flat_rule_group_to_ram(
         .map(|flat_rule| {
             let mut routine = flat_rule_to_ram(flat_rule, index_selection);
             make_ram_lazy(routine.stmts.as_mut_slice());
-            routine.stmts = sort_ram_stmts(routine.stmts.as_slice());
+            let parameters = routine
+                .flat_rule
+                .scope
+                .owners()
+                .iter()
+                .map(|owner| owner.name.clone())
+                .collect();
+            routine.stmts = sort_ram_stmts(routine.stmts.as_slice(), &parameters);
             routine
         })
         .collect();
