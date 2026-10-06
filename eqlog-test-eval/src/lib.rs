@@ -1,4 +1,11 @@
 use eqlog_runtime::eqlog_mod;
+eqlog_mod!(shared_index);
+#[cfg(test)]
+mod shared_index_test;
+eqlog_mod!(prepared_native);
+eqlog_mod!(lazy_indices);
+#[cfg(test)]
+mod lazy_indices_test;
 eqlog_mod!(strata);
 #[cfg(test)]
 mod strata_test;

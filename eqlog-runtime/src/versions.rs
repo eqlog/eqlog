@@ -7,18 +7,30 @@ use crate::{
 };
 
 pub trait SnapshotSet: Clone {
+    type Row: Copy;
     fn empty() -> Self;
     fn is_empty(&self) -> bool;
     fn shares_root(&self, other: &Self) -> bool;
     fn union(&self, other: &Self) -> Self;
     fn difference(&self, other: &Self) -> Self;
-    fn remove_rows(&mut self, rows: &Self);
-    fn insert_rows(&mut self, rows: &Self);
+    fn visit_difference(&self, other: &Self, visit: &mut impl FnMut(Self::Row));
+    fn insert_row(&mut self, row: Self::Row);
+    fn remove_row(&mut self, row: Self::Row);
 }
 
 macro_rules! snapshot_set {
-    ($tree:ident, $left:ident, $right:ident, $shares:expr) => {
+    ($tree:ident, $arity:literal, $left:ident, $right:ident, $shares:expr) => {
         impl SnapshotSet for $tree {
+            type Row = [u32; $arity];
+            fn visit_difference(&self, other: &Self, visit: &mut impl FnMut(Self::Row)) {
+                self.visit_difference(other, visit);
+            }
+            fn insert_row(&mut self, row: Self::Row) {
+                self.insert(row);
+            }
+            fn remove_row(&mut self, row: Self::Row) {
+                self.remove(row);
+            }
             fn empty() -> Self {
                 Self::new()
             }
@@ -36,30 +48,74 @@ macro_rules! snapshot_set {
             fn difference(&self, other: &Self) -> Self {
                 self.difference(other)
             }
-            fn remove_rows(&mut self, rows: &Self) {
-                for row in rows.iter() {
-                    self.remove(row);
-                }
-            }
-            fn insert_rows(&mut self, rows: &Self) {
-                for row in rows.iter() {
-                    self.insert(row);
-                }
-            }
         }
     };
 }
 
-snapshot_set!(PrefixTree0, left, right, left.0 == right.0);
-snapshot_set!(PrefixTree1, left, right, left.set.shares_root(&right.set));
-snapshot_set!(PrefixTree2, left, right, left.map.shares_root(&right.map));
-snapshot_set!(PrefixTree3, left, right, left.map.shares_root(&right.map));
-snapshot_set!(PrefixTree4, left, right, left.map.shares_root(&right.map));
-snapshot_set!(PrefixTree5, left, right, left.map.shares_root(&right.map));
-snapshot_set!(PrefixTree6, left, right, left.map.shares_root(&right.map));
-snapshot_set!(PrefixTree7, left, right, left.map.shares_root(&right.map));
-snapshot_set!(PrefixTree8, left, right, left.map.shares_root(&right.map));
-snapshot_set!(PrefixTree9, left, right, left.map.shares_root(&right.map));
+snapshot_set!(PrefixTree0, 0, left, right, left.0 == right.0);
+snapshot_set!(
+    PrefixTree1,
+    1,
+    left,
+    right,
+    left.set.shares_root(&right.set)
+);
+snapshot_set!(
+    PrefixTree2,
+    2,
+    left,
+    right,
+    left.map.shares_root(&right.map)
+);
+snapshot_set!(
+    PrefixTree3,
+    3,
+    left,
+    right,
+    left.map.shares_root(&right.map)
+);
+snapshot_set!(
+    PrefixTree4,
+    4,
+    left,
+    right,
+    left.map.shares_root(&right.map)
+);
+snapshot_set!(
+    PrefixTree5,
+    5,
+    left,
+    right,
+    left.map.shares_root(&right.map)
+);
+snapshot_set!(
+    PrefixTree6,
+    6,
+    left,
+    right,
+    left.map.shares_root(&right.map)
+);
+snapshot_set!(
+    PrefixTree7,
+    7,
+    left,
+    right,
+    left.map.shares_root(&right.map)
+);
+snapshot_set!(
+    PrefixTree8,
+    8,
+    left,
+    right,
+    left.map.shares_root(&right.map)
+);
+snapshot_set!(
+    PrefixTree9,
+    9,
+    left,
+    right,
+    left.map.shares_root(&right.map)
+);
 
 struct Version<T> {
     id: u64,
@@ -77,7 +133,7 @@ pub struct RelationVersions<T> {
     current: Rc<Version<T>>,
     empty: Rc<Version<T>>,
     seen: BTreeMap<usize, Rc<Version<T>>>,
-    views: BTreeMap<u64, RelationView<T>>,
+    views: BTreeMap<u64, RelationView<Option<T>>>,
 }
 
 impl<T: SnapshotSet> RelationVersions<T> {
@@ -94,6 +150,10 @@ impl<T: SnapshotSet> RelationVersions<T> {
         }
     }
 
+    pub fn current(&self) -> &T {
+        &self.current.rows
+    }
+
     /// Storage maintenance can rebuild an equal tree or move rows between ages.
     /// Only actual differences may fork the published root and its subtrees.
     pub fn publish(&mut self, old: &T, new: &T) {
@@ -107,19 +167,25 @@ impl<T: SnapshotSet> RelationVersions<T> {
         if self.current.rows.shares_root(&candidate) {
             return;
         }
-        let removed = self.current.rows.difference(&candidate);
-        let added = candidate.difference(&self.current.rows);
-        if removed.is_empty() && added.is_empty() {
-            return;
-        }
+        let mut changed = false;
         let rows = if self.current.rows.is_empty() {
+            changed = !candidate.is_empty();
             candidate
         } else {
             let mut rows = self.current.rows.clone();
-            rows.remove_rows(&removed);
-            rows.insert_rows(&added);
+            self.current.rows.visit_difference(&candidate, &mut |row| {
+                changed = true;
+                rows.remove_row(row);
+            });
+            candidate.visit_difference(&self.current.rows, &mut |row| {
+                changed = true;
+                rows.insert_row(row);
+            });
             rows
         };
+        if !changed {
+            return;
+        }
         self.current = Rc::new(Version {
             id: self
                 .current
@@ -131,27 +197,76 @@ impl<T: SnapshotSet> RelationVersions<T> {
         self.views.clear();
     }
 
+    /// Transported indices already share their owned and inherited subtrees.
+    /// Replaying their tuple edits would sever that sharing between models.
+    pub fn publish_shared(&mut self, rows: &T) {
+        if self.current.rows.shares_root(rows) {
+            return;
+        }
+        let mut changed = false;
+        self.current
+            .rows
+            .visit_difference(rows, &mut |_| changed = true);
+        rows.visit_difference(&self.current.rows, &mut |_| changed = true);
+        if !changed {
+            return;
+        }
+        self.current = Rc::new(Version {
+            id: self
+                .current
+                .id
+                .checked_add(1)
+                .expect("relation version overflow"),
+            rows: rows.clone(),
+        });
+        self.views.clear();
+    }
+
     /// The caller must commit the resulting work before allowing an early exit.
     pub fn consume(&mut self, consumer: usize) -> RelationView<T> {
+        self.consume_required::<true, true>(consumer)
+    }
+
+    /// An unused age need not materialize a difference tree.
+    pub fn consume_required<const OLD: bool, const NEW: bool>(
+        &mut self,
+        consumer: usize,
+    ) -> RelationView<T> {
         let seen = self.seen.get(&consumer).unwrap_or(&self.empty);
-        let view = self
-            .views
-            .entry(seen.id)
-            .or_insert_with(|| {
-                // Removing obsolete IDs is safe; replacing them by their roots here
-                // would hide joins that only became possible after an equality.
-                let removed = seen.rows.difference(&self.current.rows);
-                let mut old = seen.rows.clone();
-                if !removed.is_empty() {
-                    old.remove_rows(&removed);
-                }
-                RelationView {
-                    old,
-                    new: self.current.rows.difference(&seen.rows),
-                }
-            })
-            .clone();
+        let view = self.views.entry(seen.id).or_insert_with(|| RelationView {
+            old: None,
+            new: None,
+        });
+        let old = if OLD {
+            view.old
+                .get_or_insert_with(|| {
+                    // Removing obsolete IDs is safe; replacing them by their roots here
+                    // would hide joins that only became possible after an equality.
+                    let mut old = seen.rows.clone();
+                    seen.rows.visit_difference(&self.current.rows, &mut |row| {
+                        old.remove_row(row);
+                    });
+                    old
+                })
+                .clone()
+        } else {
+            T::empty()
+        };
+        let new = if NEW {
+            view.new
+                .get_or_insert_with(|| {
+                    if seen.rows.is_empty() {
+                        self.current.rows.clone()
+                    } else {
+                        // Rules need this tree, and difference can reuse whole added subtrees.
+                        self.current.rows.difference(&seen.rows)
+                    }
+                })
+                .clone()
+        } else {
+            T::empty()
+        };
         self.seen.insert(consumer, self.current.clone());
-        view
+        RelationView { old, new }
     }
 }

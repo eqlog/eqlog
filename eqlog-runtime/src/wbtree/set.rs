@@ -60,6 +60,12 @@ impl WBTreeSet {
                 .difference_shared(&other.map, |_element, (), ()| None),
         }
     }
+
+    pub fn difference_iter<'a>(&'a self, other: &'a Self) -> impl Iterator<Item = u32> + 'a {
+        self.map
+            .difference_entries(&other.map)
+            .filter_map(|(key, _, right)| right.is_none().then_some(key))
+    }
 }
 
 impl fmt::Debug for WBTreeSet {

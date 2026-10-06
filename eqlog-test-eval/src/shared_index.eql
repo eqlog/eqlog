@@ -1,0 +1,30 @@
+type El;
+pred edge(El, El);
+pred start(El);
+pred gate(El);
+pred ready(El);
+pred result(El);
+pred forward_result(El);
+
+rule forward {
+    if start(x);
+    if edge(x, y);
+    then forward_result(y);
+}
+
+rule a {
+    if start(y);
+    if edge(x, y);
+    then gate(x);
+}
+
+rule b {
+    if gate(x);
+    then ready(x);
+}
+
+rule c {
+    if ready(y);
+    if edge(x, y);
+    then result(x);
+}

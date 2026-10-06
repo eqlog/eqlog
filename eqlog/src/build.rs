@@ -523,14 +523,15 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
         config.options.scheduling_mode,
     );
     let flat_rules_iter = flat_rule_groups.iter().flat_map(|group| group.rules.iter());
-    let mut index_selection =
-        select_indices(flat_rules_iter, &signature, config.options.model_mode);
-    match config.options.scheduling_mode {
-        SchedulingMode::Simultaneous => {}
-        SchedulingMode::Stratified => index_selection.complete_ages(),
-    }
+    let index_selection = select_indices(flat_rules_iter, &signature, config.options.model_mode);
 
-    let ram_program = flat_rule_groups_to_ram(flat_rule_groups, schedule, &index_selection);
+    let ram_program = flat_rule_groups_to_ram(
+        flat_rule_groups,
+        schedule,
+        &index_selection,
+        &signature,
+        config.options.model_mode,
+    );
 
     let theory_name_len = theory_name.len();
     let symbol_prefix = format!("eql_{theory_name_len}_{theory_name}");
@@ -568,13 +569,8 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
             let rule_out_file_name = format!("{symbol_prefix}_{module_name}.rs");
             let rule_out_file = component_out_dir.join(rule_out_file_name);
 
-            let rule_lib = display_ram_module(
-                ram_module,
-                &index_selection,
-                &rust_gen_ctx,
-                symbol_prefix.as_str(),
-            )
-            .to_string();
+            let rule_lib =
+                display_ram_module(ram_module, &rust_gen_ctx, symbol_prefix.as_str()).to_string();
 
             compile_component_rlib(
                 rule_out_file.as_path(),

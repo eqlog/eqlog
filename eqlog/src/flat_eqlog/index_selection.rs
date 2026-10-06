@@ -171,22 +171,21 @@ pub struct IndexSelection {
 }
 
 impl IndexSelection {
-    pub fn complete_ages(&mut self) {
-        // A consumer's age partition differs from the storage maintenance round.
-        for indices in self.indices.values_mut() {
-            let other_ages: Vec<_> = indices
-                .iter()
-                .map(|index| IndexSpec {
-                    order: index.order.clone(),
-                    age: match index.age {
-                        IndexAge::New => IndexAge::Old,
-                        IndexAge::Old => IndexAge::New,
-                    },
-                })
-                .collect();
-            indices.extend(other_ages);
-            indices.sort();
-            indices.dedup();
+    pub fn primary(&self, rel: &FlatInRel, age: IndexAge) -> &IndexSpec {
+        let query = match age {
+            IndexAge::Old => QuerySpec::all_old(),
+            IndexAge::New => QuerySpec::all_new(),
+        };
+        let indices = &self.queries[&(rel.clone(), query)];
+        assert_eq!(indices.len(), 1);
+        &indices[0]
+    }
+
+    pub fn is_primary(&self, rel: &FlatInRel, index: &IndexSpec) -> bool {
+        match rel {
+            FlatInRel::RelWithDiagonals { .. } => false,
+            FlatInRel::Rel(_) | FlatInRel::TypeSet(_) => self.primary(rel, index.age) == index,
+            FlatInRel::Equality(_) => unreachable!("equalities have no tuple indices"),
         }
     }
 }
@@ -245,6 +244,7 @@ pub fn select_indices<'a>(
         [
             (rel.clone(), QuerySpec::all()),
             (rel.clone(), QuerySpec::all_new()),
+            (rel.clone(), QuerySpec::all_old()),
         ]
     }));
 
@@ -367,22 +367,7 @@ pub fn select_indices<'a>(
             .or_insert_with(Vec::new)
             .extend(index_specs.iter().cloned());
     }
-    for (rel, index_specs) in &mut indices {
-        // Inheritance can make old source tuples new at their destination, so
-        // both ages need the same column orders to partition the visible facts.
-        if native_propagation && rel.parent_model_type(signature).is_some() {
-            let other_ages: Vec<_> = index_specs
-                .iter()
-                .map(|index| IndexSpec {
-                    order: index.order.clone(),
-                    age: match index.age {
-                        IndexAge::New => IndexAge::Old,
-                        IndexAge::Old => IndexAge::New,
-                    },
-                })
-                .collect();
-            index_specs.extend(other_ages);
-        }
+    for index_specs in indices.values_mut() {
         index_specs.sort();
         index_specs.dedup();
     }

@@ -1,4 +1,6 @@
-use crate::flat_eqlog::{FlatInRel, FlatOutRel, FlatRule, IndexSpec, RuleSchedule};
+use crate::algebra::signature::TypeId;
+use crate::flat_eqlog::{FlatInRel, FlatOutRel, FlatRel, FlatRule, IndexSpec, RuleSchedule};
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
@@ -94,4 +96,46 @@ pub struct RamProgram {
     // Keep group order through lowering so the schedule also indexes modules.
     pub modules: Vec<RamModule>,
     pub schedule: RuleSchedule,
+    pub preparations: Vec<IndexPreparation>,
+    pub native_indices: Vec<NativeIndexPreparation>,
+}
+
+pub struct IndexPreparation {
+    pub indices: BTreeSet<(FlatInRel, IndexSpec)>,
+    pub native_indices: BTreeSet<usize>,
+    pub support_indices: BTreeSet<(FlatInRel, IndexSpec)>,
+    pub propagation: PropagationPlan,
+}
+
+#[derive(Default)]
+pub struct PropagationPlan {
+    pub relations: BTreeSet<FlatRel>,
+    pub models: BTreeSet<TypeId>,
+    pub graph_indices: BTreeMap<TypeId, BTreeSet<(FlatInRel, IndexSpec)>>,
+    pub map_indices: BTreeMap<(TypeId, FlatInRel), BTreeSet<(FlatInRel, IndexSpec)>>,
+}
+
+pub struct NativeIndexPreparation {
+    pub rel: FlatInRel,
+    pub index: IndexSpec,
+    pub models: Vec<TypeId>,
+    pub support_indices: BTreeSet<(FlatInRel, IndexSpec)>,
+}
+
+impl RamModule {
+    pub fn input_indices(&self) -> BTreeSet<(FlatInRel, IndexSpec)> {
+        self.routines
+            .iter()
+            .flat_map(|routine| &routine.stmts)
+            .filter_map(|stmt| match stmt {
+                RamStmt::DefineSet(stmt) => match &stmt.expr {
+                    InSetExpr::GetIndex(index) => {
+                        Some((index.rel.clone(), index.index_spec.clone()))
+                    }
+                    InSetExpr::Restrict(_) => None,
+                },
+                RamStmt::Iter(_) | RamStmt::Insert(_) | RamStmt::GuardInhabited(_) => None,
+            })
+            .collect()
+    }
 }

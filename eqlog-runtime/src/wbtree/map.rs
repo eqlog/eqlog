@@ -5,6 +5,9 @@ use std::rc::Rc;
 
 use crate::{Error, Fuel, PrefixTree2};
 
+mod difference;
+pub use difference::Difference;
+
 #[derive(Clone)]
 pub struct WBTreeMap<V: Clone> {
     root: Option<Rc<Node<V>>>,
@@ -731,6 +734,12 @@ impl<V: Clone> Node<V> {
 }
 
 impl<V: Clone> WBTreeMap<V> {
+    /// Visits unequal structure without constructing split or result trees.
+    /// Equal keys are paired so callers can compare nested values themselves.
+    pub fn difference_entries<'a>(&'a self, other: &'a Self) -> Difference<'a, V> {
+        Difference::new(self, other)
+    }
+
     pub(crate) fn shares_root(&self, other: &Self) -> bool {
         match (&self.root, &other.root) {
             (None, None) => true,

@@ -32,32 +32,7 @@ pub fn display_module_env_struct_name<'a>(ram_module: &'a RamModule) -> impl 'a 
 }
 
 pub fn module_env_in_rels(ram_module: &RamModule) -> BTreeSet<(FlatInRel, IndexSpec)> {
-    ram_module
-        .routines
-        .iter()
-        .flat_map(|routine| {
-            routine
-                .stmts
-                .iter()
-                .filter_map(|stmt| -> Option<(FlatInRel, IndexSpec)> {
-                    let define_set_stmt = match stmt {
-                        RamStmt::DefineSet(define_set_stmt) => define_set_stmt,
-                        RamStmt::Iter(_) | RamStmt::Insert(_) | RamStmt::GuardInhabited(_) => {
-                            return None;
-                        }
-                    };
-
-                    let GetIndexExpr { rel, index_spec } = match &define_set_stmt.expr {
-                        InSetExpr::GetIndex(get_index_expr) => get_index_expr,
-                        InSetExpr::Restrict(_) => {
-                            return None;
-                        }
-                    };
-
-                    Some((rel.clone(), index_spec.clone()))
-                })
-        })
-        .collect()
+    ram_module.input_indices()
 }
 
 pub fn module_env_out_rels(ram_module: &RamModule) -> BTreeSet<FlatOutRel> {
@@ -342,7 +317,6 @@ fn display_module_main_fn<'a>(
 
 pub fn display_ram_module<'a>(
     ram_module: &'a RamModule,
-    _index_selection: &'a IndexSelection,
     ctx: &'a RustGenCtx<'a>,
     symbol_prefix: &'a str,
 ) -> impl 'a + Display {

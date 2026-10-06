@@ -1,0 +1,25 @@
+type El;
+pred edge(El, El);
+pred start(El);
+pred end(El);
+pred forward(El);
+pred backward(El);
+pred diagonal(El);
+
+rule forward_step {
+    if start(x);
+    if edge(x, y);
+    then forward(y);
+}
+
+rule backward_step {
+    if end(y);
+    if edge(x, y);
+    then backward(x);
+}
+
+rule diagonal_step {
+    if start(x);
+    if edge(x, x);
+    then diagonal(x);
+}
