@@ -1,25 +1,23 @@
 Schedule member rules within model components
 
-Represent rule scheduling as a tree so ordered strata can run inside
-recursive model components without losing consumption checkpoints.
+Represent rule schedules as trees so ordered strata can run inside
+recursive model components. Infer local rule scopes before index
+selection and bind their owner parameters before lowering to RAM.
 
-Infer model owners from inputs and outputs after equality 
-elimination,
-so explicit receivers and member rules use the same scope analysis.
+Keep consumption checkpoints per model and static stratum. Publish
+shared member subtrees and maintain one latest secondary index across
+readers so separate consumers do not rebuild equivalent trees.
 
-Bind owner parameters before index selection and RAM lowering to 
-avoid
-scanning unrelated models when invoking member rules.
+Close compatible rules within runtime morphism components, carrying
+both primary and secondary trees onward after each component closes.
+Keep ambient feedback in the global schedule. Nest child traversals
+inside enclosing component loops and rebuild child graphs on visits
+because outer transport can change their topology.
 
-Keep consumption checkpoints per model and static stratum. Publish 
-shared
-member subtrees and maintain one latest secondary index across 
-readers.
+Discard scoped consumption checkpoints after model merges while
+retaining the latest shared indices. Preserve interrupted closure and
+the outer allocation loop. Keep simultaneous scheduling as default.
 
-Keep simultaneous scheduling as the default.
-
-Close compatible model rules inside runtime morphism components. 
-Keep
-ambient feedback global, and transport shared primary and secondary 
-trees
-within cycles and onward after a component reaches its fixed point.
+Test acyclic and cyclic transport, secondary index propagation, late
+morphisms, nested graph changes, model merges, ambient fallback, and
+interrupted evaluation in native and desugared evaluation modes.

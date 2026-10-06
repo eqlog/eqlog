@@ -2,6 +2,15 @@ type Atom;
 pred enabled(Atom);
 pred unlock(World, Atom, Atom);
 pred query(World, Atom);
+pred requested_edge(World, World);
+func connect(World, World) -> Mor(World);
+
+rule install_edge {
+    if requested_edge(a, b);
+    then connect(a, b)!;
+    then dom(connect(a, b)) = a;
+    then cod(connect(a, b)) = b;
+}
 
 model World {
     pred born();
@@ -29,3 +38,31 @@ rule inverse {
     if w.edge(x, y);
     then w.seed(x);
 }
+
+model Nest {
+    pred child_unlock(Child, Atom, Atom);
+    model Child {
+        pred child_seed(Atom);
+        pred child_reached(Atom);
+        rule child_start { if child_seed(x); then child_reached(x); }
+    }
+    rule child_step {
+        if child_unlock(c, x, y);
+        if c.child_reached(x);
+        then c.child_seed(y);
+    }
+}
+
+pred ambient_reached(Fallback, Atom);
+model Fallback {
+    pred initial(Atom);
+    pred middle(Atom);
+    pred completed(Atom);
+    rule fallback_start { if initial(x); then middle(x); }
+}
+rule escape_model {
+    if f: Fallback;
+    if f.middle(x);
+    then ambient_reached(f, x);
+}
+rule return_to_model { if ambient_reached(f, x); then f.completed(x); }

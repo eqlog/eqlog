@@ -126,6 +126,7 @@ impl<'s> Codegen<'s> {
         FmtFn(move |f| {
             let count = self.strata.len();
             writeln!(f, "__stratum_initialized: [bool; {count}],")?;
+            writeln!(f, "__model_owners_changed: bool,")?;
             for (s, stratum) in self.strata.iter().enumerate() {
                 if let Some(model) = stratum.model {
                     let count = ctx.signature().type_(model).parents.len() + 1;
@@ -171,6 +172,7 @@ impl<'s> Codegen<'s> {
         FmtFn(move |f| {
             let count = self.strata.len();
             writeln!(f, "__stratum_initialized: [false; {count}],")?;
+            writeln!(f, "__model_owners_changed: false,")?;
             for (s, stratum) in self.strata.iter().enumerate() {
                 if stratum.model.is_some() {
                     writeln!(
@@ -423,47 +425,85 @@ impl<'s> Codegen<'s> {
             }
             for (&model, &m) in &self.models {
                 let plan = &self.model_preparations[&model];
-                let name = display_type(model, ctx).to_string().to_case(Case::Snake);
-                let count = ctx.signature().type_(model).parents.len();
-                writedoc! {f, "
-                    fn __transport_component_{m}(&mut self, parents: [u32; {count}], morphisms: &[MorphismWithSignature], retain_own: bool) -> bool {{
+                for (layer, model) in ctx
+                    .signature()
+                    .type_(model)
+                    .parents
+                    .iter()
+                    .copied()
+                    .chain(std::iter::once(model))
+                    .enumerate()
+                {
+                    let name = display_type(model, ctx).to_string().to_case(Case::Snake);
+                    let count = ctx.signature().type_(model).parents.len();
+                    writedoc! {f, "
+                    fn __transport_component_{m}_{layer}(&mut self, parents: [u32; {count}], morphisms: &[MorphismWithSignature], retain_own: bool) -> bool {{
                         if morphisms.is_empty() {{ return false; }}
                         let mut changed = false;
                 "}?;
-                for &rel in &plan.propagation.relations {
-                    let rel = FlatInRel::Rel(rel);
-                    let old = display_all_index_field_name(
-                        &rel,
-                        selection.primary(&rel, IndexAge::Old),
-                        ctx,
-                    );
-                    let new = display_all_index_field_name(
-                        &rel,
-                        selection.primary(&rel, IndexAge::New),
-                        ctx,
-                    );
-                    writeln!(
-                        f,
-                        "self.{new} = self.{old}.union(&self.{new}); self.{old}.clear();"
-                    )?;
-                }
-                writeln!(f, "for morphism in morphisms {{ changed |= self.__propagate_{name}_morphism_model_{m}(parents, morphism, retain_own); }}")?;
-                for (rel, index) in &plan.support_indices {
-                    write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
-                }
-                for id in &plan.native_indices {
-                    let native = &self.native_indices[*id];
-                    if let Some(level) = native.models.iter().position(|&typ| typ == model) {
-                        writedoc! {f, "
+                    for &rel in &plan.propagation.relations {
+                        let rel = FlatInRel::Rel(rel);
+                        let old = display_all_index_field_name(
+                            &rel,
+                            selection.primary(&rel, IndexAge::Old),
+                            ctx,
+                        );
+                        let new = display_all_index_field_name(
+                            &rel,
+                            selection.primary(&rel, IndexAge::New),
+                            ctx,
+                        );
+                        writeln!(
+                            f,
+                            "self.{new} = self.{old}.union(&self.{new}); self.{old}.clear();"
+                        )?;
+                    }
+                    writeln!(f, "for morphism in morphisms {{ changed |= self.__propagate_{name}_morphism_model_{m}(parents, morphism, retain_own); }}")?;
+                    for (rel, index) in &plan.support_indices {
+                        write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
+                    }
+                    for id in &plan.native_indices {
+                        let native = &self.native_indices[*id];
+                        if let Some(level) = native.models.iter().position(|&typ| typ == model) {
+                            writedoc! {f, "
                             self.__extend_native_index_{id}();
                             let mut index = self.__native_input_{id}.current().clone();
                             for morphism in morphisms {{ changed |= self.__native_{id}_morphism_{level}(parents, morphism, &mut index, retain_own); }}
                             self.__native_input_{id}.publish_shared(&index);
                         "}?;
+                        }
                     }
+                    writeln!(f, "changed }}")?;
                 }
-                writeln!(f, "changed }}")?;
             }
+            writedoc! {f, "
+                fn __refresh_model_consumers(&mut self) {{
+                    if !self.__model_owners_changed {{ return; }}
+                    self.__model_owners_changed = false;
+            "}?;
+            for (s, stratum) in self.strata.iter().enumerate() {
+                if stratum.model.is_some() {
+                    writeln!(f, "self.__stratum_{s}_initialized.clear();")?;
+                }
+            }
+            for field in self.scoped_histories(ctx, selection).keys() {
+                writeln!(f, "self.{field}.clear();")?;
+            }
+            for i in self.inputs.values() {
+                writeln!(
+                    f,
+                    "self.__rule_input_{i}.retain_consumers(|(_, owners)| owners.is_empty());"
+                )?;
+            }
+            for ((rel, index), i) in &self.indices {
+                if self.old_indices.contains(&(rel.clone(), index.clone()))
+                    && !selection.is_primary(rel, index)
+                    && native_indices::find(self.native_indices, rel, index).is_none()
+                {
+                    writeln!(f, "self.__rule_index_{i}_versions.retain_consumers(|(_, owners)| owners.is_empty());")?;
+                }
+            }
+            writeln!(f, "}}")?;
             Ok(())
         })
     }
@@ -541,11 +581,7 @@ fn consume_scoped(
         return writeln!(f, "let {name} = self.{global}.consume_required::<{old}, {new}>(({stratum}, owners.to_vec()));");
     }
     let key = (0..prefix).map(|i| format!("owners[{i}]")).join(", ");
-    let mut current = if prefix == 0 {
-        source.to_string()
-    } else {
-        format!("({source})")
-    };
+    let mut current = format!("({source})");
     for i in 0..prefix {
         let dim = arity - i - 1;
         current = format!("{current}.get(owners[{i}]).unwrap_or_else(|| PrefixTree{dim}::empty())");
@@ -622,12 +658,13 @@ fn emit_schedule(
             }
             writeln!(f, "}}")?;
         }
-        Schedule::ModelComponents { model, body } => {
+        Schedule::ModelComponents { models, body } => {
+            let model = models.last().expect("model traversal needs a target");
             let m = codegen.models[model];
             let plan = &codegen.model_preparations[model];
             writeln!(
                 f,
-                "{{ self.recompute_model_indices_model_{m}(); let parents = [];"
+                "{{ self.__refresh_model_consumers(); self.recompute_model_indices_model_{m}(); let parents = [];"
             )?;
             for (rel, index) in &plan.support_indices {
                 write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
@@ -635,52 +672,103 @@ fn emit_schedule(
             for id in &plan.native_indices {
                 writeln!(f, "self.__prepare_native_index_{id}();")?;
             }
-            for (rel, index) in plan
-                .propagation
-                .graph_indices
-                .get(model)
-                .into_iter()
-                .flatten()
-            {
-                write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
-            }
-            write!(
-                f,
-                "{}",
-                display_morphism_components(*model, ctx, selection, true)
+            emit_components(
+                f, models, 0, body, active, depth, "false", codegen, ctx, selection,
             )?;
-            writedoc! {f, "
-                for component in components {{
-                    loop {{
-                        let mut active_{depth} = false;
-                        for &object in &component.objects {{
-                            let owners = [object];
-            "}?;
-            emit_schedule(
-                f,
-                body,
-                Some(depth),
-                depth + 1,
-                Some(*model),
-                codegen,
-                ctx,
-                selection,
-            )?;
-            writedoc! {f, "
-                        }}
-                        active_{depth} |= self.__transport_component_{m}(parents, &component.internal, true);
-                        if !active_{depth} {{ break; }}
-            "}?;
-            if let Some(active) = active {
-                writeln!(f, "active_{active} = true;")?;
-            }
-            writedoc! {f, "
-                    }}
-                    self.__transport_component_{m}(parents, &component.outgoing, false);
-                }}
-            }}
-            "}?;
+            writeln!(f, "}}")?;
         }
     }
     Ok(())
+}
+
+fn emit_components(
+    f: &mut std::fmt::Formatter<'_>,
+    models: &[TypeId],
+    layer: usize,
+    body: &Schedule,
+    active: Option<usize>,
+    depth: usize,
+    retain_own: &str,
+    codegen: &Codegen<'_>,
+    ctx: &RustGenCtx<'_>,
+    selection: &IndexSelection,
+) -> std::fmt::Result {
+    let target = *models.last().unwrap();
+    let m = codegen.models[&target];
+    let model = models[layer];
+    let plan = &codegen.model_preparations[&target];
+    for (rel, index) in plan
+        .propagation
+        .graph_indices
+        .get(&model)
+        .into_iter()
+        .flatten()
+    {
+        write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
+    }
+    // Transport in an enclosing cycle can change this graph between visits.
+    write!(
+        f,
+        "{}",
+        display_morphism_components(model, ctx, selection, true)
+    )?;
+    writeln!(f, "for component in components {{")?;
+    if layer + 1 < models.len() {
+        writeln!(
+            f,
+            "let retain_component_{depth} = {retain_own} || !component.internal.is_empty();"
+        )?;
+    }
+    writedoc! {f, "
+            loop {{
+                let mut active_{depth} = false;
+                for &object in &component.objects {{
+    "}?;
+    let owners = (0..layer)
+        .map(|i| format!("parents[{i}]"))
+        .chain(std::iter::once("object".to_string()))
+        .join(", ");
+    if layer + 1 == models.len() {
+        writeln!(f, "let owners = [{owners}];")?;
+        emit_schedule(
+            f,
+            body,
+            Some(depth),
+            depth + 1,
+            Some(target),
+            codegen,
+            ctx,
+            selection,
+        )?;
+    } else {
+        writeln!(f, "let parents = [{owners}];")?;
+        emit_components(
+            f,
+            models,
+            layer + 1,
+            body,
+            Some(depth),
+            depth + 1,
+            &format!("retain_component_{depth}"),
+            codegen,
+            ctx,
+            selection,
+        )?;
+    }
+    writedoc! {f, "
+                }}
+                active_{depth} |= self.__transport_component_{m}_{layer}(parents, &component.internal, true);
+                if !active_{depth} {{ break; }}
+    "}?;
+    if let Some(active) = active {
+        writeln!(f, "active_{active} = true;")?;
+    }
+    writeln!(f, "}}")?;
+    if let Some(active) = active {
+        write!(f, "active_{active} |= ")?;
+    }
+    writeln!(
+        f,
+        "self.__transport_component_{m}_{layer}(parents, &component.outgoing, {retain_own}); }}"
+    )
 }

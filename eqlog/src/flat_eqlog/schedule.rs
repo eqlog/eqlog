@@ -23,7 +23,10 @@ pub enum Schedule {
     Sequence(Vec<Schedule>),
     Rules(StratumId),
     Saturate(Box<Schedule>),
-    ModelComponents { model: TypeId, body: Box<Schedule> },
+    ModelComponents {
+        models: Vec<TypeId>,
+        body: Box<Schedule>,
+    },
 }
 
 pub struct Stratum {
@@ -146,16 +149,14 @@ fn strata(
                 .rules
                 .first()
                 .and_then(|rule| rule.scope.model());
-            let model = model
-                .filter(|model| signature.type_(*model).parents.is_empty())
-                .filter(|model| {
-                    members.iter().all(|&i| {
-                        groups[i]
-                            .rules
-                            .iter()
-                            .all(|rule| rule.scope.model() == Some(*model))
-                    })
-                });
+            let model = model.filter(|model| {
+                members.iter().all(|&i| {
+                    groups[i]
+                        .rules
+                        .iter()
+                        .all(|rule| rule.scope.model() == Some(*model))
+                })
+            });
             if model.is_none() {
                 for &i in &members {
                     for rule in &mut groups[i].rules {
@@ -173,7 +174,7 @@ fn strata(
         strata,
         body: Schedule::Sequence(Vec::new()),
     };
-    nest_model_components(&mut plan, groups, &edges);
+    nest_model_components(&mut plan, groups, &edges, signature);
     plan
 }
 
@@ -181,6 +182,7 @@ fn nest_model_components(
     plan: &mut StratifiedPlan,
     groups: &mut [FlatRuleGroup],
     edges: &[Vec<usize>],
+    signature: &Signature,
 ) {
     let mut stratum_of = vec![0; groups.len()];
     for (s, stratum) in plan.strata.iter().enumerate() {
@@ -251,7 +253,13 @@ fn nest_model_components(
                     let members = &units[component[0]];
                     match plan.strata[members[0]].model {
                         Some(model) => Schedule::ModelComponents {
-                            model,
+                            models: signature
+                                .type_(model)
+                                .parents
+                                .iter()
+                                .copied()
+                                .chain(std::iter::once(model))
+                                .collect(),
                             body: Box::new(Schedule::Sequence(
                                 members.iter().map(|&s| leaf(s)).collect(),
                             )),

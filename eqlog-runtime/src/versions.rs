@@ -154,6 +154,10 @@ impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
         &self.current.rows
     }
 
+    pub fn retain_consumers(&mut self, mut retain: impl FnMut(&Consumer) -> bool) {
+        self.seen.retain(|consumer, _| retain(consumer));
+    }
+
     /// Storage maintenance can rebuild an equal tree or move rows between ages.
     /// Only actual differences may fork the published root and its subtrees.
     pub fn publish(&mut self, old: &T, new: &T) {

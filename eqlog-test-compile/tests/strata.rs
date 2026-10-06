@@ -25,13 +25,20 @@ fn local_rules_receive_bound_model_parameters() {
     .unwrap();
     let generated = fs::read_to_string(output.path().join("theory.eql.rs")).unwrap();
     assert!(generated.contains("__owners: [u32; 1]"));
+    assert!(generated.contains("__owners: [u32; 2]"));
     let routine = function_body(&generated, "start_0_0");
     assert!(routine.contains("env.__owners[0]"));
     assert!(generated.contains("history.publish_shared(current)"));
     assert!(generated
         .contains("BTreeMap<[u32; 1], eqlog_runtime::__private::RelationVersions<PrefixTree2, (usize, Vec<u32>)>>"));
-    assert!(generated.contains("self.__transport_component_0(parents, &component.internal, true)"));
-    assert!(generated.contains("self.__transport_component_0(parents, &component.outgoing, false)"));
+    assert!(
+        generated.contains("self.__transport_component_0_0(parents, &component.internal, true)")
+    );
+    assert!(
+        generated.contains("self.__transport_component_0_0(parents, &component.outgoing, false)")
+    );
+    assert!(!function_body(&generated, "fallback_start_0_0").contains("env.__owners"));
+    assert!(!function_body(&generated, "return_to_model_0_0").contains("env.__owners"));
 }
 
 fn stratum_of(generated: &str, rule: &str) -> usize {

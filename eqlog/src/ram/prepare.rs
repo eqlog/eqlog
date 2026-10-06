@@ -268,6 +268,9 @@ pub fn plan_index_preparation(
         let mut propagation = propagation_plan(&inputs, signature, indices, mode);
         if let Some(model) = model {
             propagation.models.insert(model);
+            propagation
+                .models
+                .extend(signature.type_(model).parents.iter().copied());
             let dom = signature.ids_for_model_type(model).unwrap().dom;
             propagation
                 .graph_indices

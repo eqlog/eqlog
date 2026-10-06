@@ -1404,6 +1404,7 @@ fn display_equate_elements<'a>(
     typ: TypeId,
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
+    track_model_merges: bool,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let type_camel = format!("{}", display_type(typ, ctx)).to_case(UpperCamel);
@@ -1445,6 +1446,10 @@ fn display_equate_elements<'a>(
         } else {
             "/// Both elements must belong to the supplied enclosing models, outermost first."
         };
+        let invalidate_models = match ctx.signature().type_(typ).kind {
+            TypeKind::Model if track_model_merges => "self.__model_owners_changed = true;",
+            TypeKind::Model | TypeKind::Plain | TypeKind::Enum | TypeKind::Mor(_) => "",
+        };
 
         writedoc! {f, "
             /// Enforces the equality `lhs = rhs`.
@@ -1464,6 +1469,7 @@ fn display_equate_elements<'a>(
                 if lhs == rhs {{
                     return;
                 }}
+                {invalidate_models}
                 let lhs_weight = self.{type_snake}_weights[lhs.0 as usize];
                 let rhs_weight = self.{type_snake}_weights[rhs.0 as usize];
                 let (root, child) =
@@ -3635,7 +3641,8 @@ fn display_theory_impl<'a>(
                 display_new_element_fn_internal(typ, ctx, index_selection);
             writeln!(f, "{new_element_fn_internal}")?;
 
-            let equate_elements = display_equate_elements(typ, ctx, index_selection);
+            let equate_elements =
+                display_equate_elements(typ, ctx, index_selection, codegen.is_some());
             write!(f, "{}", equate_elements)?;
         }
 
@@ -3740,7 +3747,16 @@ fn display_theory_impl<'a>(
                 }
                 for (m, plan) in program.model_preparations.values().enumerate() {
                     let suffix = format!("_model_{m}");
-                    write!(f, "{}", display_recompute_model_indices_fn(ctx, index_selection, Some(&plan.propagation), &suffix))?;
+                    write!(
+                        f,
+                        "{}",
+                        display_recompute_model_indices_fn(
+                            ctx,
+                            index_selection,
+                            Some(&plan.propagation),
+                            &suffix
+                        )
+                    )?;
                 }
             }
             ModelMode::Desugared => {}
