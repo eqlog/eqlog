@@ -10,14 +10,21 @@ readers so separate consumers do not rebuild equivalent trees.
 
 Close compatible rules within runtime morphism components, carrying
 both primary and secondary trees onward after each component closes.
-Keep ambient feedback in the global schedule. Nest child traversals
-inside enclosing component loops and rebuild child graphs on visits
-because outer transport can change their topology.
+Place parent rule strata and child traversals in one dependency order
+inside each parent component. Close parent/child and sibling feedback
+at their common owner, while keeping ambient feedback global. Rebuild
+child graphs on visits because outer transport can change topology.
+
+Prepare descendant closure before parent rules read child relations,
+including secondary indices and children without local rules. Share
+checkpoints at the bound owner prefix and aggregate graph preparation
+for every nested traversal, including allocation-only bodies.
 
 Discard scoped consumption checkpoints after model merges while
 retaining the latest shared indices. Preserve interrupted closure and
 the outer allocation loop. Keep simultaneous scheduling as default.
 
-Test acyclic and cyclic transport, secondary index propagation, late
-morphisms, nested graph changes, model merges, ambient fallback, and
-interrupted evaluation in native and desugared evaluation modes.
+Test acyclic and cyclic transport, hierarchical rule ordering, parent
+and sibling feedback, secondary indices, late morphisms, nested graph
+changes, model merges, ambient fallback, and interrupted evaluation
+in native and desugared evaluation modes.

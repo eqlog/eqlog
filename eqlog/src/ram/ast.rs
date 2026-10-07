@@ -106,6 +106,7 @@ pub struct IndexPreparation {
     pub native_indices: BTreeSet<usize>,
     pub support_indices: BTreeSet<(FlatInRel, IndexSpec)>,
     pub propagation: PropagationPlan,
+    pub descendants: BTreeSet<TypeId>,
 }
 
 #[derive(Default)]

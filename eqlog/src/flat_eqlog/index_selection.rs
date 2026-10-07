@@ -209,18 +209,25 @@ pub fn select_indices<'a>(
     let rules: Vec<_> = rules.into_iter().collect();
     let mut scoped_prefixes = BTreeMap::new();
     for rule in &rules {
-        if rule.scope.model().is_none() {
+        let Some(scope) = rule.scope.model() else {
             continue;
-        }
+        };
+        let scope_len = signature.type_(scope).parents.len() + 1;
         for stmt in &rule.premise {
             let rel = match &stmt.rel {
                 FlatInRel::Rel(rel) | FlatInRel::RelWithDiagonals { rel, .. } => rel,
                 FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => continue,
             };
             if let Some(model) = rel.parent_model_type(signature) {
-                let prefix = signature.type_(model).parents.len() + 1;
-                scoped_prefixes.insert(stmt.rel.clone(), prefix);
-                scoped_prefixes.insert(FlatInRel::Rel(*rel), prefix);
+                let prefix = (signature.type_(model).parents.len() + 1).min(scope_len);
+                scoped_prefixes
+                    .entry(stmt.rel.clone())
+                    .or_insert_with(BTreeSet::new)
+                    .insert(prefix);
+                scoped_prefixes
+                    .entry(FlatInRel::Rel(*rel))
+                    .or_insert_with(BTreeSet::new)
+                    .insert(prefix);
             }
         }
     }
@@ -381,8 +388,16 @@ pub fn select_indices<'a>(
     // Bound owners must expose a shared subtree. Unbound reverse queries keep
     // their own orders, including membership lookups from an element.
     for ((rel, query), indices) in &mut queries {
-        if let Some(&prefix) = scoped_prefixes.get(rel) {
-            if query.projections.is_empty() || (0..prefix).all(|i| query.projections.contains(&i)) {
+        if let Some(prefixes) = scoped_prefixes.get(rel) {
+            if let Some(prefix) = prefixes
+                .iter()
+                .copied()
+                .filter(|&prefix| {
+                    query.projections.is_empty()
+                        || (0..prefix).all(|i| query.projections.contains(&i))
+                })
+                .max()
+            {
                 for index in indices {
                     let order = (0..prefix)
                         .chain(index.order.iter().copied().filter(|&i| i >= prefix))

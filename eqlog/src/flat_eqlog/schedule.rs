@@ -23,10 +23,7 @@ pub enum Schedule {
     Sequence(Vec<Schedule>),
     Rules(StratumId),
     Saturate(Box<Schedule>),
-    ModelComponents {
-        models: Vec<TypeId>,
-        body: Box<Schedule>,
-    },
+    ModelComponents { model: TypeId, body: Box<Schedule> },
 }
 
 pub struct Stratum {
@@ -142,138 +139,135 @@ fn strata(
             }
         }
     }
-    let strata: Vec<_> = components(&edges)
-        .into_iter()
-        .map(|members| {
-            let model = groups[members[0]]
-                .rules
-                .first()
-                .and_then(|rule| rule.scope.model());
-            let model = model.filter(|model| {
-                members.iter().all(|&i| {
-                    groups[i]
-                        .rules
-                        .iter()
-                        .all(|rule| rule.scope.model() == Some(*model))
-                })
-            });
-            if model.is_none() {
-                for &i in &members {
-                    for rule in &mut groups[i].rules {
+    for group in groups.iter_mut() {
+        let model = group.rules.first().and_then(|rule| rule.scope.model());
+        if group.rules.iter().any(|rule| rule.scope.model() != model) {
+            for rule in &mut group.rules {
+                rule.scope = RuleScope::Global;
+            }
+        }
+    }
+    let members: Vec<_> = (0..groups.len()).collect();
+    loop {
+        let mut strata = Vec::new();
+        match schedule_scope(None, &members, groups, &edges, signature, &mut strata) {
+            Ok(body) => return StratifiedPlan { strata, body },
+            Err(fallback) => {
+                // Ambient feedback cannot be closed with one owner bound.
+                for group in fallback {
+                    for rule in &mut groups[group].rules {
                         rule.scope = RuleScope::Global;
                     }
                 }
             }
-            Stratum {
-                groups: members,
-                model,
-            }
-        })
-        .collect();
-    let mut plan = StratifiedPlan {
-        strata,
-        body: Schedule::Sequence(Vec::new()),
-    };
-    nest_model_components(&mut plan, groups, &edges, signature);
-    plan
+        }
+    }
 }
 
-fn nest_model_components(
-    plan: &mut StratifiedPlan,
-    groups: &mut [FlatRuleGroup],
+fn schedule_scope(
+    scope: Option<TypeId>,
+    members: &[usize],
+    groups: &[FlatRuleGroup],
     edges: &[Vec<usize>],
     signature: &Signature,
-) {
-    let mut stratum_of = vec![0; groups.len()];
-    for (s, stratum) in plan.strata.iter().enumerate() {
-        for &group in &stratum.groups {
-            stratum_of[group] = s;
-        }
+    strata: &mut Vec<Stratum>,
+) -> Result<Schedule, Vec<usize>> {
+    let depth = scope.map_or(0, |model| signature.type_(model).parents.len() + 1);
+    let mut units = BTreeMap::new();
+    for &group in members {
+        let model = groups[group]
+            .rules
+            .first()
+            .and_then(|rule| rule.scope.model());
+        let child = model.filter(|model| Some(*model) != scope).map(|model| {
+            signature
+                .type_(model)
+                .parents
+                .get(depth)
+                .copied()
+                .unwrap_or(model)
+        });
+        let key = (child, if child.is_some() { 0 } else { group });
+        units.entry(key).or_insert_with(Vec::new).push(group);
     }
-    loop {
-        let mut units = BTreeMap::new();
-        for (s, stratum) in plan.strata.iter().enumerate() {
-            let key = (stratum.model, if stratum.model.is_some() { 0 } else { s });
-            units.entry(key).or_insert_with(Vec::new).push(s);
-        }
-        let units: Vec<Vec<usize>> = units.into_values().collect();
-        let mut unit_of = vec![0; plan.strata.len()];
-        for (u, strata) in units.iter().enumerate() {
-            for &s in strata {
-                unit_of[s] = u;
-            }
-        }
-        let mut unit_edges = vec![Vec::new(); units.len()];
-        for (source, targets) in edges.iter().enumerate() {
-            let source = unit_of[stratum_of[source]];
-            for &target in targets {
-                let target = unit_of[stratum_of[target]];
-                if source != target {
-                    unit_edges[source].push(target);
+    let units: Vec<_> = units
+        .into_iter()
+        .map(|((model, _), groups)| (model, groups))
+        .collect();
+    let unit_of: BTreeMap<_, _> = units
+        .iter()
+        .enumerate()
+        .flat_map(|(u, (_, groups))| groups.iter().map(move |&group| (group, u)))
+        .collect();
+    let mut unit_edges = vec![Vec::new(); units.len()];
+    for &source in members {
+        let source_unit = unit_of[&source];
+        for target in &edges[source] {
+            if let Some(&target_unit) = unit_of.get(target) {
+                if source_unit != target_unit || units[source_unit].0.is_none() {
+                    unit_edges[source_unit].push(target_unit);
                 }
             }
         }
-        let components = components(&unit_edges);
-        let mut retry = false;
-        for component in &components {
-            if component.len() == 1 {
-                continue;
-            }
-            // Contracting all rules for a model must not hide ambient feedback.
+    }
+    let components = components(&unit_edges);
+    if scope.is_none() {
+        let mut fallback = Vec::new();
+        for component in components.iter().filter(|component| component.len() > 1) {
             for &unit in component {
-                for &s in &units[unit] {
-                    if plan.strata[s].model.take().is_some() {
-                        retry = true;
-                        for &group in &plan.strata[s].groups {
-                            for rule in &mut groups[group].rules {
-                                rule.scope = RuleScope::Global;
-                            }
-                        }
+                if units[unit].0.is_none() {
+                    continue;
+                }
+                for &source in &units[unit].1 {
+                    if edges[source].iter().any(|target| {
+                        let target = unit_of[target];
+                        target != unit && component.contains(&target)
+                    }) {
+                        fallback.push(source);
                     }
                 }
             }
         }
-        if retry {
-            continue;
+        if !fallback.is_empty() {
+            return Err(fallback);
         }
-        let leaf = |s: usize| {
-            let members = &plan.strata[s].groups;
-            let node = Schedule::Rules(StratumId(s));
-            if members.len() > 1 || edges[members[0]].contains(&members[0]) {
-                Schedule::Saturate(Box::new(node))
-            } else {
-                node
-            }
-        };
-        plan.body = Schedule::Sequence(
-            components
-                .into_iter()
-                .map(|component| {
-                    assert_eq!(component.len(), 1, "uncontracted rule strata form a DAG");
-                    let members = &units[component[0]];
-                    match plan.strata[members[0]].model {
-                        Some(model) => Schedule::ModelComponents {
-                            models: signature
-                                .type_(model)
-                                .parents
-                                .iter()
-                                .copied()
-                                .chain(std::iter::once(model))
-                                .collect(),
-                            body: Box::new(Schedule::Sequence(
-                                members.iter().map(|&s| leaf(s)).collect(),
-                            )),
-                        },
-                        None => {
-                            assert_eq!(members.len(), 1);
-                            leaf(members[0])
-                        }
-                    }
-                })
-                .collect(),
-        );
-        return;
     }
+    let mut sequence = Vec::new();
+    for component in components {
+        let recursive = component.len() > 1 || unit_edges[component[0]].contains(&component[0]);
+        let mut children = Vec::new();
+        let mut rules = Vec::new();
+        for unit in component {
+            let (model, members) = &units[unit];
+            match model {
+                Some(model) => {
+                    let body =
+                        schedule_scope(Some(*model), members, groups, edges, signature, strata)?;
+                    children.push(Schedule::ModelComponents {
+                        model: *model,
+                        body: Box::new(body),
+                    });
+                }
+                None => rules.extend(members),
+            }
+        }
+        if !rules.is_empty() {
+            rules.sort_unstable();
+            let id = StratumId(strata.len());
+            strata.push(Stratum {
+                groups: rules,
+                model: scope,
+            });
+            children.insert(0, Schedule::Rules(id));
+        }
+        let body = Schedule::Sequence(children);
+        sequence.push(if recursive {
+            Schedule::Saturate(Box::new(body))
+        } else {
+            body
+        });
+    }
+    Ok(Schedule::Sequence(sequence))
 }
 
 fn components(edges: &[Vec<usize>]) -> Vec<Vec<usize>> {

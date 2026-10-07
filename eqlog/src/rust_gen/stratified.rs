@@ -55,15 +55,15 @@ impl<'s> Codegen<'s> {
                     continue;
                 }
                 let arity = source.arity(ctx.signature()).len() - count;
-                fields.insert(format!("__scope_input_{i}"), (count, arity));
+                fields.insert(format!("__scope_input_{i}_{count}"), (count, arity));
                 let arity = rel.arity(ctx.signature()).len() - scope_prefix(rel, model, ctx);
                 if let Some(id) = native_indices::find(self.native_indices, rel, index) {
-                    fields.insert(format!("__scope_native_{id}"), (count, arity));
+                    fields.insert(format!("__scope_native_{id}_{count}"), (count, arity));
                 } else if !selection.is_primary(rel, index) {
                     let key = input_key(rel.clone(), index.clone());
                     if self.old_indices.contains(&key) {
                         let j = self.indices[&key];
-                        fields.insert(format!("__scope_index_{j}"), (count, arity));
+                        fields.insert(format!("__scope_index_{j}_{count}"), (count, arity));
                     }
                 }
             }
@@ -89,12 +89,10 @@ impl<'s> Codegen<'s> {
         Self {
             strata: &plan.strata,
             body: &plan.body,
-            models: plan
-                .strata
-                .iter()
-                .filter_map(|stratum| stratum.model)
-                .collect::<BTreeSet<_>>()
-                .into_iter()
+            models: program
+                .model_preparations
+                .keys()
+                .copied()
                 .enumerate()
                 .map(|(i, model)| (model, i))
                 .collect(),
@@ -226,10 +224,18 @@ impl<'s> Codegen<'s> {
                     .collect();
                 if let Some(model) = stratum.model {
                     let count = ctx.signature().type_(model).parents.len() + 1;
+                    let retain = if self.preparations[s].descendants.is_empty() {
+                        ""
+                    } else {
+                        "retain_own: bool, "
+                    };
                     writedoc! {f, "
-                        fn __run_stratum_{s}_at(&mut self, owners: [u32; {count}], delta: &mut ModelDelta) -> bool {{
+                        fn __run_stratum_{s}_at(&mut self, owners: [u32; {count}], {retain}delta: &mut ModelDelta) -> bool {{
                             let mut dirty = !self.__stratum_{s}_initialized.contains(&owners);
                     "}?;
+                    if !self.preparations[s].descendants.is_empty() {
+                        writeln!(f, "self.__prepare_descendants_{s}(owners, retain_own);")?;
+                    }
                 } else {
                     writedoc! {f, "
                         fn __run_stratum_{s}(&mut self, delta: &mut ModelDelta) -> bool {{
@@ -425,39 +431,15 @@ impl<'s> Codegen<'s> {
             }
             for (&model, &m) in &self.models {
                 let plan = &self.model_preparations[&model];
-                for (layer, model) in ctx
-                    .signature()
-                    .type_(model)
-                    .parents
-                    .iter()
-                    .copied()
-                    .chain(std::iter::once(model))
-                    .enumerate()
-                {
+                for &model in &plan.propagation.models {
                     let name = display_type(model, ctx).to_string().to_case(Case::Snake);
                     let count = ctx.signature().type_(model).parents.len();
                     writedoc! {f, "
-                    fn __transport_component_{m}_{layer}(&mut self, parents: [u32; {count}], morphisms: &[MorphismWithSignature], retain_own: bool) -> bool {{
+                    fn __transport_component_{m}_{name}(&mut self, parents: [u32; {count}], morphisms: &[MorphismWithSignature], retain_own: bool) -> bool {{
                         if morphisms.is_empty() {{ return false; }}
                         let mut changed = false;
                 "}?;
-                    for &rel in &plan.propagation.relations {
-                        let rel = FlatInRel::Rel(rel);
-                        let old = display_all_index_field_name(
-                            &rel,
-                            selection.primary(&rel, IndexAge::Old),
-                            ctx,
-                        );
-                        let new = display_all_index_field_name(
-                            &rel,
-                            selection.primary(&rel, IndexAge::New),
-                            ctx,
-                        );
-                        writeln!(
-                            f,
-                            "self.{new} = self.{old}.union(&self.{new}); self.{old}.clear();"
-                        )?;
-                    }
+                    fold_primary_ages(f, plan, ctx, selection)?;
                     writeln!(f, "for morphism in morphisms {{ changed |= self.__propagate_{name}_morphism_model_{m}(parents, morphism, retain_own); }}")?;
                     for (rel, index) in &plan.support_indices {
                         write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
@@ -475,6 +457,44 @@ impl<'s> Codegen<'s> {
                     }
                     writeln!(f, "changed }}")?;
                 }
+            }
+            for (s, stratum) in self.strata.iter().enumerate() {
+                let plan = &self.preparations[s];
+                if plan.descendants.is_empty() {
+                    continue;
+                }
+                let model = stratum
+                    .model
+                    .expect("descendant preparation needs a bound owner");
+                let count = ctx.signature().type_(model).parents.len() + 1;
+                writeln!(f, "fn __prepare_descendants_{s}(&mut self, owners: [u32; {count}], retain_own: bool) {{")?;
+                fold_primary_ages(f, plan, ctx, selection)?;
+                for &child in &plan.descendants {
+                    let name = display_type(child, ctx).to_string().to_case(Case::Snake);
+                    writeln!(
+                        f,
+                        "self.__propagate_{name}_morphisms_stratum_{s}(owners, retain_own);"
+                    )?;
+                }
+                for (rel, index) in &plan.support_indices {
+                    write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
+                }
+                for id in &plan.native_indices {
+                    let native = &self.native_indices[*id];
+                    if native
+                        .models
+                        .get(count)
+                        .is_some_and(|child| plan.descendants.contains(child))
+                    {
+                        writedoc! {f, "
+                            self.__extend_native_index_{id}();
+                            let mut index = self.__native_input_{id}.current().clone();
+                            self.__native_{id}_model_{count}(owners, &mut index, retain_own);
+                            self.__native_input_{id}.publish_shared(&index);
+                        "}?;
+                    }
+                }
+                writeln!(f, "}}")?;
             }
             writedoc! {f, "
                 fn __refresh_model_consumers(&mut self) {{
@@ -528,7 +548,9 @@ impl<'s> Codegen<'s> {
                     let mut delta = std::mem::replace(&mut self.__pending_delta, ModelDelta::new());
                     loop {{
             "}?;
-            emit_schedule(f, self.body, None, 0, None, self, ctx, selection)?;
+            emit_schedule(
+                f, self.body, None, 0, None, None, "false", self, ctx, selection,
+            )?;
             writedoc! {f, "
                         self.move_new_to_old();
                         delta.apply_func_defs(self);
@@ -557,8 +579,13 @@ fn scope_prefix(rel: &FlatInRel, model: TypeId, ctx: &RustGenCtx<'_>) -> usize {
         FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => None,
     };
     parent.map_or(0, |parent| {
-        assert!(parent == model || ctx.signature().type_(model).parents.contains(&parent));
-        ctx.signature().type_(parent).parents.len() + 1
+        assert!(
+            parent == model
+                || ctx.signature().type_(model).parents.contains(&parent)
+                || ctx.signature().type_(parent).parents.contains(&model)
+        );
+        (ctx.signature().type_(parent).parents.len() + 1)
+            .min(ctx.signature().type_(model).parents.len() + 1)
     })
 }
 
@@ -580,6 +607,7 @@ fn consume_scoped(
     if prefix == 0 {
         return writeln!(f, "let {name} = self.{global}.consume_required::<{old}, {new}>(({stratum}, owners.to_vec()));");
     }
+    let field = format!("{field}_{prefix}");
     let key = (0..prefix).map(|i| format!("owners[{i}]")).join(", ");
     let mut current = format!("({source})");
     for i in 0..prefix {
@@ -606,12 +634,32 @@ fn consume_scoped(
     "}
 }
 
+fn fold_primary_ages(
+    f: &mut std::fmt::Formatter<'_>,
+    plan: &IndexPreparation,
+    ctx: &RustGenCtx<'_>,
+    selection: &IndexSelection,
+) -> std::fmt::Result {
+    for &rel in &plan.propagation.relations {
+        let rel = FlatInRel::Rel(rel);
+        let old = display_all_index_field_name(&rel, selection.primary(&rel, IndexAge::Old), ctx);
+        let new = display_all_index_field_name(&rel, selection.primary(&rel, IndexAge::New), ctx);
+        writeln!(
+            f,
+            "self.{new} = self.{old}.union(&self.{new}); self.{old}.clear();"
+        )?;
+    }
+    Ok(())
+}
+
 fn emit_schedule(
     f: &mut std::fmt::Formatter<'_>,
     schedule: &Schedule,
     active: Option<usize>,
     depth: usize,
     scope: Option<TypeId>,
+    root: Option<TypeId>,
+    retain_own: &str,
     codegen: &Codegen<'_>,
     ctx: &RustGenCtx<'_>,
     selection: &IndexSelection,
@@ -619,13 +667,23 @@ fn emit_schedule(
     match schedule {
         Schedule::Sequence(children) => {
             for child in children {
-                emit_schedule(f, child, active, depth, scope, codegen, ctx, selection)?;
+                emit_schedule(
+                    f, child, active, depth, scope, root, retain_own, codegen, ctx, selection,
+                )?;
             }
         }
         Schedule::Rules(id) => {
             let s = id.0;
             if scope.is_some() {
-                writeln!(f, "if self.__run_stratum_{s}_at(owners, &mut delta) {{")?;
+                let retain = if codegen.preparations[s].descendants.is_empty() {
+                    String::new()
+                } else {
+                    format!("{retain_own}, ")
+                };
+                writeln!(
+                    f,
+                    "if self.__run_stratum_{s}_at(owners, {retain}&mut delta) {{"
+                )?;
             } else {
                 writeln!(f, "if self.__run_stratum_{s}(&mut delta) {{")?;
             }
@@ -648,6 +706,8 @@ fn emit_schedule(
                 Some(depth),
                 depth + 1,
                 scope,
+                root,
+                retain_own,
                 codegen,
                 ctx,
                 selection,
@@ -658,22 +718,32 @@ fn emit_schedule(
             }
             writeln!(f, "}}")?;
         }
-        Schedule::ModelComponents { models, body } => {
-            let model = models.last().expect("model traversal needs a target");
-            let m = codegen.models[model];
-            let plan = &codegen.model_preparations[model];
-            writeln!(
-                f,
-                "{{ self.__refresh_model_consumers(); self.recompute_model_indices_model_{m}(); let parents = [];"
-            )?;
-            for (rel, index) in &plan.support_indices {
-                write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
-            }
-            for id in &plan.native_indices {
-                writeln!(f, "self.__prepare_native_index_{id}();")?;
+        Schedule::ModelComponents { model, body } => {
+            writeln!(f, "{{")?;
+            if root.is_none() {
+                let m = codegen.models[model];
+                let plan = &codegen.model_preparations[model];
+                writeln!(f, "self.__refresh_model_consumers(); self.recompute_model_indices_model_{m}(); let parents = [];")?;
+                for (rel, index) in &plan.support_indices {
+                    write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
+                }
+                for id in &plan.native_indices {
+                    writeln!(f, "self.__prepare_native_index_{id}();")?;
+                }
+            } else {
+                writeln!(f, "let parents = owners;")?;
             }
             emit_components(
-                f, models, 0, body, active, depth, "false", codegen, ctx, selection,
+                f,
+                *model,
+                root.unwrap_or(*model),
+                body,
+                active,
+                depth,
+                retain_own,
+                codegen,
+                ctx,
+                selection,
             )?;
             writeln!(f, "}}")?;
         }
@@ -683,8 +753,8 @@ fn emit_schedule(
 
 fn emit_components(
     f: &mut std::fmt::Formatter<'_>,
-    models: &[TypeId],
-    layer: usize,
+    model: TypeId,
+    root: TypeId,
     body: &Schedule,
     active: Option<usize>,
     depth: usize,
@@ -693,10 +763,10 @@ fn emit_components(
     ctx: &RustGenCtx<'_>,
     selection: &IndexSelection,
 ) -> std::fmt::Result {
-    let target = *models.last().unwrap();
-    let m = codegen.models[&target];
-    let model = models[layer];
-    let plan = &codegen.model_preparations[&target];
+    let m = codegen.models[&root];
+    let name = display_type(model, ctx).to_string().to_case(Case::Snake);
+    let parent_count = ctx.signature().type_(model).parents.len();
+    let plan = &codegen.model_preparations[&root];
     for (rel, index) in plan
         .propagation
         .graph_indices
@@ -713,51 +783,32 @@ fn emit_components(
         display_morphism_components(model, ctx, selection, true)
     )?;
     writeln!(f, "for component in components {{")?;
-    if layer + 1 < models.len() {
-        writeln!(
-            f,
-            "let retain_component_{depth} = {retain_own} || !component.internal.is_empty();"
-        )?;
-    }
+    writeln!(f, "#[allow(unused_variables)] let retain_component_{depth} = {retain_own} || !component.internal.is_empty();")?;
     writedoc! {f, "
             loop {{
                 let mut active_{depth} = false;
                 for &object in &component.objects {{
     "}?;
-    let owners = (0..layer)
+    let owners = (0..parent_count)
         .map(|i| format!("parents[{i}]"))
         .chain(std::iter::once("object".to_string()))
         .join(", ");
-    if layer + 1 == models.len() {
-        writeln!(f, "let owners = [{owners}];")?;
-        emit_schedule(
-            f,
-            body,
-            Some(depth),
-            depth + 1,
-            Some(target),
-            codegen,
-            ctx,
-            selection,
-        )?;
-    } else {
-        writeln!(f, "let parents = [{owners}];")?;
-        emit_components(
-            f,
-            models,
-            layer + 1,
-            body,
-            Some(depth),
-            depth + 1,
-            &format!("retain_component_{depth}"),
-            codegen,
-            ctx,
-            selection,
-        )?;
-    }
+    writeln!(f, "let owners = [{owners}];")?;
+    emit_schedule(
+        f,
+        body,
+        Some(depth),
+        depth + 1,
+        Some(model),
+        Some(root),
+        &format!("retain_component_{depth}"),
+        codegen,
+        ctx,
+        selection,
+    )?;
     writedoc! {f, "
                 }}
-                active_{depth} |= self.__transport_component_{m}_{layer}(parents, &component.internal, true);
+                active_{depth} |= self.__transport_component_{m}_{name}(parents, &component.internal, true);
                 if !active_{depth} {{ break; }}
     "}?;
     if let Some(active) = active {
@@ -769,6 +820,6 @@ fn emit_components(
     }
     writeln!(
         f,
-        "self.__transport_component_{m}_{layer}(parents, &component.outgoing, {retain_own}); }}"
+        "self.__transport_component_{m}_{name}(parents, &component.outgoing, {retain_own}); }}"
     )
 }

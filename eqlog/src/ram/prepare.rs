@@ -4,7 +4,7 @@ use super::{IndexPreparation, NativeIndexPreparation, PropagationPlan, RamModule
 use crate::algebra::signature::{MorphismMemberTypes, Signature, TypeId};
 use crate::flat_eqlog::{
     morphism_preservation_rules, FlatInRel, FlatOutRel, FlatRel, IndexAge, IndexSelection,
-    IndexSpec, RuleSchedule,
+    IndexSpec, RuleSchedule, Schedule, Stratum,
 };
 use crate::options::ModelMode;
 
@@ -149,6 +149,44 @@ fn support_indices(
     result
 }
 
+#[derive(Clone, Default)]
+struct ModelGroups {
+    groups: Vec<usize>,
+    traversals: BTreeSet<TypeId>,
+}
+
+fn model_groups(
+    schedule: &Schedule,
+    strata: &[Stratum],
+    nested: bool,
+    models: &mut BTreeMap<TypeId, ModelGroups>,
+) -> ModelGroups {
+    match schedule {
+        Schedule::Rules(id) => ModelGroups {
+            groups: strata[id.0].groups.clone(),
+            traversals: BTreeSet::new(),
+        },
+        Schedule::Sequence(children) => {
+            let mut result = ModelGroups::default();
+            for child in children {
+                let child = model_groups(child, strata, nested, models);
+                result.groups.extend(child.groups);
+                result.traversals.extend(child.traversals);
+            }
+            result
+        }
+        Schedule::Saturate(body) => model_groups(body, strata, nested, models),
+        Schedule::ModelComponents { model, body } => {
+            let mut groups = model_groups(body, strata, true, models);
+            groups.traversals.insert(*model);
+            if !nested {
+                assert!(models.insert(*model, groups.clone()).is_none());
+            }
+            groups
+        }
+    }
+}
+
 pub fn plan_index_preparation(
     modules: &[RamModule],
     schedule: &RuleSchedule,
@@ -160,20 +198,30 @@ pub fn plan_index_preparation(
     BTreeMap<TypeId, IndexPreparation>,
     Vec<NativeIndexPreparation>,
 ) {
-    let groups: Vec<(Option<TypeId>, Vec<usize>)> = match schedule {
-        RuleSchedule::Simultaneous => vec![(None, (0..modules.len()).collect())],
+    let groups: Vec<(Option<TypeId>, ModelGroups)> = match schedule {
+        RuleSchedule::Simultaneous => vec![(
+            None,
+            ModelGroups {
+                groups: (0..modules.len()).collect(),
+                traversals: BTreeSet::new(),
+            },
+        )],
         RuleSchedule::Stratified(plan) => {
             let mut groups: Vec<_> = plan
                 .strata
                 .iter()
-                .map(|stratum| (None, stratum.groups.clone()))
+                .map(|stratum| {
+                    (
+                        None,
+                        ModelGroups {
+                            groups: stratum.groups.clone(),
+                            traversals: BTreeSet::new(),
+                        },
+                    )
+                })
                 .collect();
-            let mut models: BTreeMap<TypeId, Vec<usize>> = BTreeMap::new();
-            for stratum in &plan.strata {
-                if let Some(model) = stratum.model {
-                    models.entry(model).or_default().extend(&stratum.groups);
-                }
-            }
+            let mut models = BTreeMap::new();
+            model_groups(&plan.body, &plan.strata, false, &mut models);
             groups.extend(
                 models
                     .into_iter()
@@ -186,7 +234,7 @@ pub fn plan_index_preparation(
     let mut native_ids = BTreeMap::new();
     let mut preparations = Vec::new();
     let mut model_preparations = BTreeMap::new();
-    for (model, plan) in groups.into_iter().map(|(model, groups)| {
+    for (model, ModelGroups { groups, traversals }) in groups {
         let mut inputs: BTreeSet<_> = groups
             .iter()
             .flat_map(|&i| modules[i].input_indices())
@@ -211,7 +259,7 @@ pub fn plan_index_preparation(
                 }
             }
         }
-        if let Some(model) = model {
+        for &model in &traversals {
             let ids = signature.ids_for_model_type(model).unwrap();
             for func in [ids.dom, ids.cod] {
                 let rel = FlatInRel::Rel(crate::flat_eqlog::FlatRel::Func(func));
@@ -266,7 +314,7 @@ pub fn plan_index_preparation(
             .flat_map(|&id| native[id].support_indices.iter().cloned())
             .collect();
         let mut propagation = propagation_plan(&inputs, signature, indices, mode);
-        if let Some(model) = model {
+        for &model in &traversals {
             propagation.models.insert(model);
             propagation
                 .models
@@ -283,21 +331,50 @@ pub fn plan_index_preparation(
                     indices,
                 ));
         }
-        (
-            model,
-            IndexPreparation {
-                indices: inputs,
-                native_indices: required_native,
-                support_indices: prepared_support,
-                propagation,
-            },
-        )
-    }) {
+        let plan = IndexPreparation {
+            indices: inputs,
+            native_indices: required_native,
+            support_indices: prepared_support,
+            propagation,
+            descendants: BTreeSet::new(),
+        };
         match model {
             Some(model) => {
                 model_preparations.insert(model, plan);
             }
             None => preparations.push(plan),
+        }
+    }
+    match schedule {
+        RuleSchedule::Simultaneous => {}
+        RuleSchedule::Stratified(plan) => {
+            for (stratum, preparation) in plan.strata.iter().zip(&mut preparations) {
+                let Some(model) = stratum.model else {
+                    continue;
+                };
+                let depth = signature.type_(model).parents.len() + 1;
+                for (input, _) in &preparation.indices {
+                    let rel = match input {
+                        FlatInRel::Rel(rel) | FlatInRel::RelWithDiagonals { rel, .. } => rel,
+                        FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => continue,
+                    };
+                    if rel.is_model_membership_relation() {
+                        continue;
+                    }
+                    let Some(parent) = rel.parent_model_type(signature) else {
+                        continue;
+                    };
+                    if signature.type_(parent).parents.contains(&model) {
+                        let child = signature
+                            .type_(parent)
+                            .parents
+                            .get(depth)
+                            .copied()
+                            .unwrap_or(parent);
+                        preparation.descendants.insert(child);
+                    }
+                }
+            }
         }
     }
     (preparations, model_preparations, native)

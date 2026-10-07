@@ -31,14 +31,12 @@ fn local_rules_receive_bound_model_parameters() {
     assert!(generated.contains("history.publish_shared(current)"));
     assert!(generated
         .contains("BTreeMap<[u32; 1], eqlog_runtime::__private::RelationVersions<PrefixTree2, (usize, Vec<u32>)>>"));
-    assert!(
-        generated.contains("self.__transport_component_0_0(parents, &component.internal, true)")
-    );
-    assert!(
-        generated.contains("self.__transport_component_0_0(parents, &component.outgoing, false)")
-    );
+    assert!(generated
+        .contains("self.__transport_component_0_world(parents, &component.internal, true)"));
+    assert!(generated
+        .contains("self.__transport_component_0_world(parents, &component.outgoing, false)"));
     assert!(!function_body(&generated, "fallback_start_0_0").contains("env.__owners"));
-    assert!(!function_body(&generated, "return_to_model_0_0").contains("env.__owners"));
+    assert!(function_body(&generated, "return_to_model_0_0").contains("env.__owners"));
 }
 
 fn stratum_of(generated: &str, rule: &str) -> usize {
@@ -49,9 +47,60 @@ fn stratum_of(generated: &str, rule: &str) -> usize {
         .find_map(|body| {
             let (number, body) = body.split_once('(').unwrap();
             let body = body.split("pub fn close_until").next().unwrap();
-            body.contains(&call).then(|| number.parse().unwrap())
+            body.contains(&call)
+                .then(|| number.trim_end_matches("_at").parse().unwrap())
         })
         .unwrap_or_else(|| panic!("no stratum invokes {rule}"))
+}
+
+#[test]
+fn parent_rules_and_child_traversals_share_one_model_schedule() {
+    let input = TempDir::new("eqlog-hierarchy-source").unwrap();
+    let output = TempDir::new("eqlog-hierarchy-output").unwrap();
+    fs::write(
+        input.path().join("theory.eql"),
+        include_str!("../../eqlog-test-eval/src/model_hierarchy.eql"),
+    )
+    .unwrap();
+    process(&Config {
+        in_dir: input.path().to_owned(),
+        out_dir: output.path().to_owned(),
+        component_build: None,
+        options: CompileOptions {
+            scheduling_mode: SchedulingMode::Stratified,
+            ..CompileOptions::default()
+        },
+    })
+    .unwrap();
+    let generated = fs::read_to_string(output.path().join("theory.eql.rs")).unwrap();
+    let close = function_body(&generated, "__close_until");
+    assert_eq!(
+        close.matches("self.recompute_model_indices_model_").count(),
+        1
+    );
+    let parent = stratum_of(&generated, "prepare");
+    let child = stratum_of(&generated, "receive");
+    let parent_call = close
+        .find(&format!("self.__run_stratum_{parent}_at"))
+        .unwrap();
+    let child_call = close
+        .find(&format!("self.__run_stratum_{child}_at"))
+        .unwrap();
+    assert!(parent_call < child_call);
+    for rule in [
+        "observe_child",
+        "observe_sibling",
+        "reverse_child",
+        "reverse_any_child",
+        "reverse_passive",
+    ] {
+        let s = stratum_of(&generated, rule);
+        let body = function_body(&generated, &format!("__run_stratum_{s}_at"));
+        let prepare = body
+            .find(&format!("self.__prepare_descendants_{s}"))
+            .unwrap();
+        assert!(prepare < body.find(".publish").unwrap());
+    }
 }
 
 #[test]

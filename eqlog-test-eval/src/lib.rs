@@ -1,7 +1,10 @@
 use eqlog_runtime::eqlog_mod;
 eqlog_mod!(model_strata);
+eqlog_mod!(model_hierarchy);
 #[cfg(test)]
 mod model_strata_test;
+#[cfg(test)]
+mod model_hierarchy_test;
 eqlog_mod!(shared_index);
 #[cfg(test)]
 mod shared_index_test;

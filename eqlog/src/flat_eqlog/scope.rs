@@ -58,8 +58,14 @@ fn infer_scope(rule: &FlatRule, signature: &Signature) -> RuleScope {
         let Some(parent) = rel.parent_model_type(signature) else {
             continue;
         };
-        let prefix = signature.type_(parent).parents.len() + 1;
-        if prefix > count || args[..prefix] != owners[..prefix] {
+        if parent != model
+            && !signature.type_(parent).parents.contains(&model)
+            && !signature.type_(model).parents.contains(&parent)
+        {
+            return RuleScope::Global;
+        }
+        let prefix = (signature.type_(parent).parents.len() + 1).min(count);
+        if args[..prefix] != owners[..prefix] {
             return RuleScope::Global;
         }
     }

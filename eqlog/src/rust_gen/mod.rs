@@ -3733,10 +3733,31 @@ fn display_theory_impl<'a>(
                         RuleSchedule::Simultaneous => false,
                         RuleSchedule::Stratified(schedule) => schedule.strata[s].model.is_some(),
                     };
-                    if scoped || plan.propagation.relations.is_empty() {
+                    let suffix = format!("_stratum_{s}");
+                    if scoped {
+                        for &model in &plan.propagation.models {
+                            if plan.descendants.iter().any(|child| {
+                                *child == model
+                                    || ctx.signature().type_(model).parents.contains(child)
+                            }) {
+                                write!(
+                                    f,
+                                    "{}",
+                                    display_propagate_model_morphisms_fn(
+                                        model,
+                                        ctx,
+                                        index_selection,
+                                        Some(&plan.propagation),
+                                        &suffix
+                                    )
+                                )?;
+                            }
+                        }
                         continue;
                     }
-                    let suffix = format!("_stratum_{s}");
+                    if plan.propagation.relations.is_empty() {
+                        continue;
+                    }
                     let recompute = display_recompute_model_indices_fn(
                         ctx,
                         index_selection,
