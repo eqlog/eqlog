@@ -15,6 +15,9 @@ mod lazy_indices_test;
 eqlog_mod!(strata);
 #[cfg(test)]
 mod strata_test;
+eqlog_mod!(strata_levels);
+#[cfg(test)]
+mod strata_levels_test;
 eqlog_mod!(equational_monoid);
 eqlog_mod!(monoid);
 eqlog_mod!(pointed);

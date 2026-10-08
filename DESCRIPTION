@@ -15,6 +15,11 @@ inside each parent component. Close parent/child and sibling feedback
 at their common owner, while keeping ambient feedback global. Rebuild
 child graphs on visits because outer transport can change topology.
 
+Group independent dependency components at the same longest-path
+level into one stratum so they share consumption checkpoints. Close
+recursive levels before their consumers while retaining nested model
+traversals and the outer allocation loop.
+
 Prepare descendant closure before parent rules read child relations,
 including secondary indices and children without local rules. Share
 checkpoints at the bound owner prefix and aggregate graph preparation

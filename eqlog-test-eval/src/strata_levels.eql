@@ -1,0 +1,26 @@
+type El;
+
+pred seed(El);
+pred edge(El, El);
+pred left(El);
+pred right(El);
+pred right_next(El);
+pred joined(El);
+pred reach_left(El);
+pred reach_right(El);
+pred return_right(El);
+pred reached(El);
+pred result(El);
+
+rule make_left { if seed(x); then left(x); }
+rule make_right { if seed(x); then right(x); }
+rule next_right { if right(x); then right_next(x); }
+rule join { if left(x); if right_next(x); then joined(x); }
+
+rule seed_left { if seed(x); then reach_left(x); }
+rule seed_right { if seed(x); then reach_right(x); }
+rule walk_left { if reach_left(x); if edge(x, y); then reach_left(y); }
+rule right_out { if reach_right(x); then return_right(x); }
+rule right_back { if return_right(x); if edge(x, y); then reach_right(y); }
+rule summarize { if reach_left(x); if reach_right(x); then reached(x); }
+rule output { if seed(x); if joined(x); if reached(x); then result(x); }

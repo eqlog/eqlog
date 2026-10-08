@@ -233,11 +233,19 @@ fn schedule_scope(
         }
     }
     let mut sequence = Vec::new();
-    for component in components {
-        let recursive = component.len() > 1 || unit_edges[component[0]].contains(&component[0]);
+    for level in component_levels(&components, &unit_edges) {
+        let recursive = level.iter().any(|&i| {
+            let component = &components[i];
+            component.len() > 1 || unit_edges[component[0]].contains(&component[0])
+        });
+        let mut units_at_level: Vec<_> = level
+            .iter()
+            .flat_map(|&i| components[i].iter().copied())
+            .collect();
+        units_at_level.sort_unstable();
         let mut children = Vec::new();
         let mut rules = Vec::new();
-        for unit in component {
+        for unit in units_at_level {
             let (model, members) = &units[unit];
             match model {
                 Some(model) => {
@@ -268,6 +276,37 @@ fn schedule_scope(
         });
     }
     Ok(Schedule::Sequence(sequence))
+}
+
+fn component_levels(components: &[Vec<usize>], edges: &[Vec<usize>]) -> Vec<Vec<usize>> {
+    let mut component_of = vec![0; edges.len()];
+    for (i, component) in components.iter().enumerate() {
+        for &unit in component {
+            component_of[unit] = i;
+        }
+    }
+    let mut level_of = vec![0; components.len()];
+    // Components are topologically ordered. Equal levels can share consumption
+    // checkpoints without delaying a consumer's access to its producers' output.
+    for (i, component) in components.iter().enumerate() {
+        for &unit in component {
+            for &target in &edges[unit] {
+                let target = component_of[target];
+                if target != i {
+                    assert!(i < target);
+                    level_of[target] = level_of[target].max(level_of[i] + 1);
+                }
+            }
+        }
+    }
+    let mut levels = Vec::new();
+    for (i, level) in level_of.into_iter().enumerate() {
+        if levels.len() <= level {
+            levels.resize_with(level + 1, Vec::new);
+        }
+        levels[level].push(i);
+    }
+    levels
 }
 
 fn components(edges: &[Vec<usize>]) -> Vec<Vec<usize>> {

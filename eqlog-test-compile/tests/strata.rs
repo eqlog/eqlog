@@ -54,6 +54,42 @@ fn stratum_of(generated: &str, rule: &str) -> usize {
 }
 
 #[test]
+fn dependency_levels_share_inputs_without_delaying_consumers() {
+    let input = TempDir::new("eqlog-levels-source").unwrap();
+    let output = TempDir::new("eqlog-levels-output").unwrap();
+    fs::write(
+        input.path().join("theory.eql"),
+        include_str!("../../eqlog-test-eval/src/strata_levels.eql"),
+    )
+    .unwrap();
+    process(&Config {
+        in_dir: input.path().to_owned(),
+        out_dir: output.path().to_owned(),
+        component_build: None,
+        options: CompileOptions {
+            scheduling_mode: SchedulingMode::Stratified,
+            ..CompileOptions::default()
+        },
+    })
+    .unwrap();
+    let generated = fs::read_to_string(output.path().join("theory.eql.rs")).unwrap();
+    for (level, rules) in [
+        ["make_left", "make_right", "seed_left", "seed_right"].as_slice(),
+        ["next_right", "walk_left", "right_out", "right_back"].as_slice(),
+        ["join", "summarize"].as_slice(),
+        ["output"].as_slice(),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        for rule in rules {
+            assert_eq!(stratum_of(&generated, rule), level, "{rule}");
+        }
+    }
+    assert_eq!(generated.matches("fn __run_stratum_").count(), 4);
+}
+
+#[test]
 fn parent_rules_and_child_traversals_share_one_model_schedule() {
     let input = TempDir::new("eqlog-hierarchy-source").unwrap();
     let output = TempDir::new("eqlog-hierarchy-output").unwrap();
@@ -80,6 +116,11 @@ fn parent_rules_and_child_traversals_share_one_model_schedule() {
     );
     let parent = stratum_of(&generated, "prepare");
     let child = stratum_of(&generated, "receive");
+    assert_eq!(child, stratum_of(&generated, "copy_pair"));
+    let finish = stratum_of(&generated, "finish");
+    assert_eq!(finish, stratum_of(&generated, "pair_seen"));
+    assert!(child < finish);
+    assert_ne!(parent, child);
     let parent_call = close
         .find(&format!("self.__run_stratum_{parent}_at"))
         .unwrap();
@@ -195,12 +236,13 @@ fn strata_prepare_only_their_inputs_and_transport_dependencies() {
         pred result(Container, Atom);
         pred nested_result(Container, Atom);
         rule ambient { if a(x); then b(x); }
-        rule first { if forward(c, x); if c.pair(x, y); then result(c, y); }
-        rule second { if backward(c, y); if c.pair(x, y); then result(c, x); }
+        rule first { if b(x); if forward(c, x); if c.pair(x, y); then result(c, y); }
+        rule second { if b(y); if backward(c, y); if c.pair(x, y); then result(c, x); }
         rule third {
             if c: Container;
             if child: c.Child;
             if child.nested(x);
+            if b(x);
             then nested_result(c, x);
         }
     "},
