@@ -21,6 +21,8 @@ pub struct StratifiedPlan {
 
 pub enum Schedule {
     Sequence(Vec<Schedule>),
+    // Shared reads and additive outputs permit independent execution clocks.
+    Independent(Vec<Schedule>),
     Rules(StratumId),
     Saturate(Box<Schedule>),
     ModelComponents { model: TypeId, body: Box<Schedule> },
@@ -29,6 +31,13 @@ pub enum Schedule {
 pub struct Stratum {
     pub groups: Vec<usize>,
     pub model: Option<TypeId>,
+    pub stable_inputs: BTreeSet<FlatInRel>,
+}
+
+struct Dependencies {
+    reads: Vec<BTreeSet<FlatInRel>>,
+    writes: Vec<BTreeSet<FlatInRel>>,
+    edges: Vec<Vec<usize>>,
 }
 
 pub fn schedule_rule_groups(
@@ -103,6 +112,7 @@ fn strata(
         }
     }
     let mut edges = vec![Vec::new(); groups.len()];
+    let mut effective_writes = Vec::new();
     for (source, group) in groups.iter().enumerate() {
         let mut writes = BTreeSet::new();
         for output in group.rules.iter().flat_map(|rule| &rule.conclusion) {
@@ -138,7 +148,13 @@ fn strata(
                 edges[source].push(target);
             }
         }
+        effective_writes.push(writes);
     }
+    let dependencies = Dependencies {
+        reads,
+        writes: effective_writes,
+        edges,
+    };
     for group in groups.iter_mut() {
         let model = group.rules.first().and_then(|rule| rule.scope.model());
         if group.rules.iter().any(|rule| rule.scope.model() != model) {
@@ -150,7 +166,14 @@ fn strata(
     let members: Vec<_> = (0..groups.len()).collect();
     loop {
         let mut strata = Vec::new();
-        match schedule_scope(None, &members, groups, &edges, signature, &mut strata) {
+        match schedule_scope(
+            None,
+            &members,
+            groups,
+            &dependencies,
+            signature,
+            &mut strata,
+        ) {
             Ok(body) => return StratifiedPlan { strata, body },
             Err(fallback) => {
                 // Ambient feedback cannot be closed with one owner bound.
@@ -168,10 +191,11 @@ fn schedule_scope(
     scope: Option<TypeId>,
     members: &[usize],
     groups: &[FlatRuleGroup],
-    edges: &[Vec<usize>],
+    dependencies: &Dependencies,
     signature: &Signature,
     strata: &mut Vec<Stratum>,
 ) -> Result<Schedule, Vec<usize>> {
+    let edges = &dependencies.edges;
     let depth = scope.map_or(0, |model| signature.type_(model).parents.len() + 1);
     let mut units = BTreeMap::new();
     for &group in members {
@@ -232,25 +256,29 @@ fn schedule_scope(
             return Err(fallback);
         }
     }
-    let mut sequence = Vec::new();
-    for level in component_levels(&components, &unit_edges) {
-        let recursive = level.iter().any(|&i| {
-            let component = &components[i];
-            component.len() > 1 || unit_edges[component[0]].contains(&component[0])
-        });
-        let mut units_at_level: Vec<_> = level
+    let mut bodies = Vec::new();
+    for component in &components {
+        let recursive = component.len() > 1 || unit_edges[component[0]].contains(&component[0]);
+        let writes: BTreeSet<_> = component
             .iter()
-            .flat_map(|&i| components[i].iter().copied())
+            .flat_map(|&unit| &units[unit].1)
+            .flat_map(|&group| dependencies.writes[group].iter().cloned())
             .collect();
-        units_at_level.sort_unstable();
+        let traverses_models = component.iter().any(|&unit| units[unit].0.is_some());
         let mut children = Vec::new();
-        let mut rules = Vec::new();
-        for unit in units_at_level {
+        let mut rules: Vec<usize> = Vec::new();
+        for &unit in component {
             let (model, members) = &units[unit];
             match model {
                 Some(model) => {
-                    let body =
-                        schedule_scope(Some(*model), members, groups, edges, signature, strata)?;
+                    let body = schedule_scope(
+                        Some(*model),
+                        members,
+                        groups,
+                        dependencies,
+                        signature,
+                        strata,
+                    )?;
                     children.push(Schedule::ModelComponents {
                         model: *model,
                         body: Box::new(body),
@@ -261,52 +289,137 @@ fn schedule_scope(
         }
         if !rules.is_empty() {
             rules.sort_unstable();
+            let stable_inputs = rules
+                .iter()
+                .flat_map(|&group| dependencies.reads[group].iter())
+                .filter(|rel| recursive && !writes.contains(*rel))
+                .filter(|rel| {
+                    // A traversal may expose inherited tuples even if no rule
+                    // in this component writes their relation directly.
+                    !traverses_models
+                        || match rel {
+                            FlatInRel::Rel(rel) => rel.parent_model_type(signature).is_none(),
+                            FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => true,
+                            FlatInRel::RelWithDiagonals { .. } => {
+                                unreachable!("resources are normalized")
+                            }
+                        }
+                })
+                .cloned()
+                .collect();
             let id = StratumId(strata.len());
             strata.push(Stratum {
                 groups: rules,
                 model: scope,
+                stable_inputs,
             });
             children.insert(0, Schedule::Rules(id));
         }
         let body = Schedule::Sequence(children);
-        sequence.push(if recursive {
+        bodies.push(Some(if recursive {
             Schedule::Saturate(Box::new(body))
         } else {
             body
-        });
+        }));
     }
-    Ok(Schedule::Sequence(sequence))
-}
-
-fn component_levels(components: &[Vec<usize>], edges: &[Vec<usize>]) -> Vec<Vec<usize>> {
-    let mut component_of = vec![0; edges.len()];
+    let mut component_of = vec![0; units.len()];
     for (i, component) in components.iter().enumerate() {
         for &unit in component {
             component_of[unit] = i;
         }
     }
-    let mut level_of = vec![0; components.len()];
-    // Components are topologically ordered. Equal levels can share consumption
-    // checkpoints without delaying a consumer's access to its producers' output.
-    for (i, component) in components.iter().enumerate() {
-        for &unit in component {
-            for &target in &edges[unit] {
-                let target = component_of[target];
-                if target != i {
-                    assert!(i < target);
-                    level_of[target] = level_of[target].max(level_of[i] + 1);
-                }
+    let mut incoming = vec![BTreeSet::new(); components.len()];
+    let mut adjacent = vec![BTreeSet::new(); components.len()];
+    for (unit, targets) in unit_edges.iter().enumerate() {
+        let source = component_of[unit];
+        for &target in targets {
+            let target = component_of[target];
+            if source != target {
+                incoming[target].insert(source);
+                adjacent[source].insert(target);
+                adjacent[target].insert(source);
             }
         }
     }
-    let mut levels = Vec::new();
-    for (i, level) in level_of.into_iter().enumerate() {
-        if levels.len() <= level {
-            levels.resize_with(level + 1, Vec::new);
-        }
-        levels[level].push(i);
+    Ok(order_components(&incoming, &adjacent, &mut bodies))
+}
+
+fn sequence(mut children: Vec<Schedule>) -> Schedule {
+    if children.len() == 1 {
+        children.pop().unwrap()
+    } else {
+        Schedule::Sequence(children)
     }
-    levels
+}
+
+fn independent(mut children: Vec<Schedule>) -> Schedule {
+    if children.len() == 1 {
+        children.pop().unwrap()
+    } else {
+        Schedule::Independent(children)
+    }
+}
+
+fn order_components(
+    incoming: &[BTreeSet<usize>],
+    adjacent: &[BTreeSet<usize>],
+    bodies: &mut [Option<Schedule>],
+) -> Schedule {
+    let mut unseen: BTreeSet<_> = (0..bodies.len()).collect();
+    let mut visited = vec![false; bodies.len()];
+    let incoming: Vec<Vec<_>> = incoming
+        .iter()
+        .map(|set| set.iter().copied().collect())
+        .collect();
+    let mut branches = Vec::new();
+    while let Some(start) = unseen.pop_first() {
+        let mut region = BTreeSet::new();
+        let mut pending = vec![start];
+        while let Some(node) = pending.pop() {
+            region.insert(node);
+            for &next in &adjacent[node] {
+                if unseen.remove(&next) {
+                    pending.push(next);
+                }
+            }
+        }
+        // Visiting a consumer's prerequisites depth first keeps producer
+        // pipelines together. An explicit stack also handles long chains.
+        let mut ordered = Vec::new();
+        for start in region.into_iter().rev() {
+            if visited[start] {
+                continue;
+            }
+            visited[start] = true;
+            let mut stack = vec![(start, 0)];
+            while let Some((node, next)) = stack.last_mut() {
+                if let Some(&source) = incoming[*node].get(*next) {
+                    *next += 1;
+                    if !visited[source] {
+                        visited[source] = true;
+                        stack.push((source, 0));
+                    }
+                } else {
+                    ordered.push(*node);
+                    stack.pop();
+                }
+            }
+        }
+        let mut steps = Vec::new();
+        let mut batch = BTreeSet::new();
+        let mut children = Vec::new();
+        for node in ordered {
+            if incoming[node].iter().any(|source| batch.contains(source)) {
+                steps.push(independent(std::mem::take(&mut children)));
+                batch.clear();
+            }
+            batch.insert(node);
+            children.push(bodies[node].take().unwrap());
+        }
+        steps.push(independent(children));
+        branches.push(sequence(steps));
+    }
+    independent(branches)
 }
 
 fn components(edges: &[Vec<usize>]) -> Vec<Vec<usize>> {
@@ -359,4 +472,49 @@ fn components(edges: &[Vec<usize>]) -> Vec<Vec<usize>> {
         components.push(component);
     }
     components
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{order_components, Schedule, StratumId};
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn deep_join_pipelines_do_not_require_recursive_graph_traversal() {
+        let count = 20_000;
+        let mut incoming = vec![BTreeSet::new(); count];
+        let mut adjacent = vec![BTreeSet::new(); count];
+        for consumer in (1..count).step_by(2) {
+            incoming[consumer].insert(consumer - 1);
+            if consumer > 1 {
+                incoming[consumer].insert(consumer - 2);
+            }
+            for &source in &incoming[consumer] {
+                adjacent[source].insert(consumer);
+                adjacent[consumer].insert(source);
+            }
+        }
+        let mut bodies: Vec<_> = (0..count)
+            .map(|id| Some(Schedule::Rules(StratumId(id))))
+            .collect();
+        let schedule = order_components(&incoming, &adjacent, &mut bodies);
+        let mut pending = vec![schedule];
+        let mut seen = vec![false; count];
+        while let Some(schedule) = pending.pop() {
+            match schedule {
+                Schedule::Rules(id) => {
+                    assert!(!seen[id.0]);
+                    assert!(incoming[id.0].iter().all(|&source| seen[source]));
+                    seen[id.0] = true;
+                }
+                Schedule::Sequence(children) | Schedule::Independent(children) => {
+                    pending.extend(children.into_iter().rev());
+                }
+                Schedule::Saturate(_) | Schedule::ModelComponents { .. } => {
+                    panic!("an acyclic rule graph needs no recursive or model blocks");
+                }
+            }
+        }
+        assert!(seen.into_iter().all(|seen| seen));
+    }
 }

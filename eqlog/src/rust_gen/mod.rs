@@ -3728,43 +3728,50 @@ fn display_theory_impl<'a>(
                 let recompute_model_indices_fn =
                     display_recompute_model_indices_fn(ctx, index_selection, None, "");
                 write!(f, "{recompute_model_indices_fn}")?;
-                for (s, plan) in program.preparations.iter().enumerate() {
+                for (s, preparation) in program.preparations.iter().enumerate() {
                     let scoped = match &program.schedule {
                         RuleSchedule::Simultaneous => false,
                         RuleSchedule::Stratified(schedule) => schedule.strata[s].model.is_some(),
                     };
-                    let suffix = format!("_stratum_{s}");
-                    if scoped {
-                        for &model in &plan.propagation.models {
-                            if plan.descendants.iter().any(|child| {
-                                *child == model
-                                    || ctx.signature().type_(model).parents.contains(child)
-                            }) {
-                                write!(
-                                    f,
-                                    "{}",
-                                    display_propagate_model_morphisms_fn(
-                                        model,
-                                        ctx,
-                                        index_selection,
-                                        Some(&plan.propagation),
-                                        &suffix
-                                    )
-                                )?;
-                            }
-                        }
-                        continue;
-                    }
-                    if plan.propagation.relations.is_empty() {
-                        continue;
-                    }
-                    let recompute = display_recompute_model_indices_fn(
-                        ctx,
-                        index_selection,
-                        Some(&plan.propagation),
-                        &suffix,
+                    let plans = std::iter::once((format!("_stratum_{s}"), preparation)).chain(
+                        preparation
+                            .stable
+                            .iter()
+                            .map(|plan| (format!("_stratum_stable_{s}"), plan.as_ref())),
                     );
-                    write!(f, "{recompute}")?;
+                    for (suffix, plan) in plans {
+                        if scoped {
+                            for &model in &plan.propagation.models {
+                                if plan.descendants.iter().any(|child| {
+                                    *child == model
+                                        || ctx.signature().type_(model).parents.contains(child)
+                                }) {
+                                    write!(
+                                        f,
+                                        "{}",
+                                        display_propagate_model_morphisms_fn(
+                                            model,
+                                            ctx,
+                                            index_selection,
+                                            Some(&plan.propagation),
+                                            &suffix
+                                        )
+                                    )?;
+                                }
+                            }
+                            continue;
+                        }
+                        if plan.propagation.relations.is_empty() {
+                            continue;
+                        }
+                        let recompute = display_recompute_model_indices_fn(
+                            ctx,
+                            index_selection,
+                            Some(&plan.propagation),
+                            &suffix,
+                        );
+                        write!(f, "{recompute}")?;
+                    }
                 }
                 for (m, plan) in program.model_preparations.values().enumerate() {
                     let suffix = format!("_model_{m}");
@@ -3880,6 +3887,9 @@ pub fn display_module<'a>(
             RuleSchedule::Simultaneous => None,
             RuleSchedule::Stratified(strata) => Some(stratified::Codegen::new(strata, program)),
         };
+        if let Some(codegen) = &codegen {
+            write!(f, "{}", codegen.loop_input_types(index_selection, ctx))?;
+        }
         let theory_struct = display_theory_struct(
             name,
             ctx,

@@ -37,6 +37,55 @@ fn input_key(rel: FlatInRel, mut index: IndexSpec) -> (FlatInRel, IndexSpec) {
 }
 
 impl<'s> Codegen<'s> {
+    fn has_stable_inputs(&self, s: usize) -> bool {
+        self.preparations[s]
+            .indices
+            .iter()
+            .any(|(rel, _)| self.strata[s].stable_inputs.contains(&source_relation(rel)))
+    }
+
+    pub fn loop_input_types<'a>(
+        &'a self,
+        selection: &'a IndexSelection,
+        ctx: &'a RustGenCtx<'a>,
+    ) -> impl Display + 'a {
+        FmtFn(move |f| {
+            for (s, stratum) in self.strata.iter().enumerate() {
+                let mut fields = BTreeMap::new();
+                for (rel, index) in &self.preparations[s].indices {
+                    let source = source_relation(rel);
+                    if !stratum.stable_inputs.contains(&source) {
+                        continue;
+                    }
+                    let i = self.inputs[&source];
+                    fields.insert(format!("input_{i}"), source);
+                    if let Some(id) = native_indices::find(self.native_indices, rel, index) {
+                        fields.insert(format!("native_input_{id}"), rel.clone());
+                    } else if !selection.is_primary(rel, index) {
+                        let key = input_key(rel.clone(), index.clone());
+                        if self.old_indices.contains(&key) {
+                            let j = self.indices[&key];
+                            fields.insert(format!("index_{j}"), rel.clone());
+                        }
+                    }
+                }
+                if fields.is_empty() {
+                    continue;
+                }
+                writeln!(f, "#[derive(Default)] struct __StableInputs{s} {{")?;
+                if self.preparations[s].stable.is_some() {
+                    writeln!(f, "propagated: bool,")?;
+                }
+                for (name, rel) in fields {
+                    let typ = display_index_type(&rel, ctx);
+                    writeln!(f, "{name}: Option<{typ}>,")?;
+                }
+                writeln!(f, "}}")?;
+            }
+            Ok(())
+        })
+    }
+
     fn scoped_histories(
         &self,
         ctx: &RustGenCtx<'_>,
@@ -222,26 +271,46 @@ impl<'s> Codegen<'s> {
                     .iter()
                     .map(|(rel, _)| source_relation(rel))
                     .collect();
+                let stable = if self.has_stable_inputs(s) {
+                    format!("stable: &mut __StableInputs{s}, ")
+                } else {
+                    String::new()
+                };
                 if let Some(model) = stratum.model {
                     let count = ctx.signature().type_(model).parents.len() + 1;
-                    let retain = if self.preparations[s].descendants.is_empty() {
+                    let retain = if !self.preparations[s].reads_descendants() {
                         ""
                     } else {
                         "retain_own: bool, "
                     };
                     writedoc! {f, "
-                        fn __run_stratum_{s}_at(&mut self, owners: [u32; {count}], {retain}delta: &mut ModelDelta) -> bool {{
+                        fn __run_stratum_{s}_at(&mut self, owners: [u32; {count}], {retain}{stable}delta: &mut ModelDelta) -> bool {{
                             let mut dirty = !self.__stratum_{s}_initialized.contains(&owners);
                     "}?;
-                    if !self.preparations[s].descendants.is_empty() {
-                        writeln!(f, "self.__prepare_descendants_{s}(owners, retain_own);")?;
-                    }
                 } else {
                     writedoc! {f, "
-                        fn __run_stratum_{s}(&mut self, delta: &mut ModelDelta) -> bool {{
+                        fn __run_stratum_{s}(&mut self, {stable}delta: &mut ModelDelta) -> bool {{
                             #[allow(unused_mut)]
                             let mut dirty = !self.__stratum_initialized[{s}];
                     "}?;
+                }
+                if let Some(plan) = &self.preparations[s].stable {
+                    writeln!(f, "if !stable.propagated {{")?;
+                    if stratum.model.is_none() {
+                        writeln!(f, "self.recompute_model_indices_stratum_stable_{s}();")?;
+                    } else if !plan.descendants.is_empty() {
+                        writeln!(
+                            f,
+                            "self.__prepare_descendants_stable_{s}(owners, retain_own);"
+                        )?;
+                    }
+                    for (rel, index) in &plan.support_indices {
+                        write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
+                    }
+                    writeln!(f, "stable.propagated = true; }}")?;
+                }
+                if !self.preparations[s].descendants.is_empty() {
+                    writeln!(f, "self.__prepare_descendants_{s}(owners, retain_own);")?;
                 }
                 if stratum.model.is_none() && !self.preparations[s].propagation.relations.is_empty()
                 {
@@ -249,6 +318,10 @@ impl<'s> Codegen<'s> {
                 }
                 for rel in inputs {
                     let i = self.inputs[&rel];
+                    let stable = stratum.stable_inputs.contains(&rel);
+                    if stable {
+                        begin_stable_input(f, &format!("input_{i}"), &rel, ctx)?;
+                    }
                     let old = display_all_index_field_name(
                         &rel,
                         selection.primary(&rel, IndexAge::Old),
@@ -290,6 +363,16 @@ impl<'s> Codegen<'s> {
                             "let input_{i} = self.__rule_input_{i}.consume(({s}, Vec::new()));"
                         )?;
                     }
+                    if stable {
+                        end_stable_input(
+                            f,
+                            &format!("input_{i}"),
+                            &format!("self.__rule_input_{i}.current()"),
+                            &rel,
+                            stratum.model,
+                            ctx,
+                        )?;
+                    }
                     writeln!(f, "dirty |= !input_{i}.new.is_empty();")?;
                 }
                 writeln!(f, "if !dirty {{ return false; }}")?;
@@ -303,6 +386,11 @@ impl<'s> Codegen<'s> {
                     write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
                 }
                 for id in &self.preparations[s].native_indices {
+                    let rel = &self.native_indices[*id].rel;
+                    let stable = stratum.stable_inputs.contains(&source_relation(rel));
+                    if stable {
+                        begin_stable_input(f, &format!("native_input_{id}"), rel, ctx)?;
+                    }
                     if stratum.model.is_some() {
                         writeln!(f, "self.__extend_native_index_{id}();")?;
                     } else {
@@ -328,6 +416,16 @@ impl<'s> Codegen<'s> {
                             "let native_input_{id} = self.__native_input_{id}.consume({s});"
                         )?;
                     }
+                    if stable {
+                        end_stable_input(
+                            f,
+                            &format!("native_input_{id}"),
+                            &format!("self.__native_input_{id}.current()"),
+                            rel,
+                            stratum.model,
+                            ctx,
+                        )?;
+                    }
                 }
                 let required_indices: BTreeSet<_> = self.preparations[s]
                     .indices
@@ -347,7 +445,11 @@ impl<'s> Codegen<'s> {
                     let j = self.indices[&input_key(rel.clone(), index.clone())];
                     let primary = selection.primary(&source, IndexAge::Old);
                     let project = projection(rel, index, primary);
+                    let stable = stratum.stable_inputs.contains(&source);
                     if self.old_indices.contains(&(rel.clone(), index.clone())) {
+                        if stable {
+                            begin_stable_input(f, &format!("index_{j}"), rel, ctx)?;
+                        }
                         let old = self.preparations[s]
                             .indices
                             .contains(&(rel.clone(), index.clone()));
@@ -379,9 +481,24 @@ impl<'s> Codegen<'s> {
                         } else {
                             writeln!(f, "let index_{j} = self.__rule_index_{j}_versions.consume_required::<{old}, {new}>(({s}, Vec::new()));")?;
                         }
+                        if stable {
+                            end_stable_input(
+                                f,
+                                &format!("index_{j}"),
+                                &format!("self.__rule_index_{j}_versions.current()"),
+                                rel,
+                                stratum.model,
+                                ctx,
+                            )?;
+                        }
                     } else {
                         // A delta-only reader does not need the full relation reordered.
-                        writeln!(f, "let index_{j} = self.__rule_index_{j}.update(&input_{i}.new, {project});")?;
+                        if stable {
+                            let typ = display_index_type(rel, ctx);
+                            writeln!(f, "let index_{j} = if input_{i}.new.is_empty() {{ {typ}::new() }} else {{ self.__rule_index_{j}.update(&input_{i}.new, {project}) }};")?;
+                        } else {
+                            writeln!(f, "let index_{j} = self.__rule_index_{j}.update(&input_{i}.new, {project});")?;
+                        }
                     }
                 }
                 for &m in &stratum.groups {
@@ -459,42 +576,57 @@ impl<'s> Codegen<'s> {
                 }
             }
             for (s, stratum) in self.strata.iter().enumerate() {
-                let plan = &self.preparations[s];
-                if plan.descendants.is_empty() {
-                    continue;
-                }
-                let model = stratum
-                    .model
-                    .expect("descendant preparation needs a bound owner");
-                let count = ctx.signature().type_(model).parents.len() + 1;
-                writeln!(f, "fn __prepare_descendants_{s}(&mut self, owners: [u32; {count}], retain_own: bool) {{")?;
-                fold_primary_ages(f, plan, ctx, selection)?;
-                for &child in &plan.descendants {
-                    let name = display_type(child, ctx).to_string().to_case(Case::Snake);
-                    writeln!(
-                        f,
-                        "self.__propagate_{name}_morphisms_stratum_{s}(owners, retain_own);"
-                    )?;
-                }
-                for (rel, index) in &plan.support_indices {
-                    write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
-                }
-                for id in &plan.native_indices {
-                    let native = &self.native_indices[*id];
-                    if native
-                        .models
-                        .get(count)
-                        .is_some_and(|child| plan.descendants.contains(child))
-                    {
-                        writedoc! {f, "
-                            self.__extend_native_index_{id}();
-                            let mut index = self.__native_input_{id}.current().clone();
-                            self.__native_{id}_model_{count}(owners, &mut index, retain_own);
-                            self.__native_input_{id}.publish_shared(&index);
-                        "}?;
+                let preparation = &self.preparations[s];
+                let plans = std::iter::once((s.to_string(), preparation)).chain(
+                    preparation
+                        .stable
+                        .iter()
+                        .map(|plan| (format!("stable_{s}"), plan.as_ref())),
+                );
+                for (suffix, plan) in plans {
+                    if plan.descendants.is_empty() {
+                        continue;
                     }
+                    let model = stratum
+                        .model
+                        .expect("descendant preparation needs a bound owner");
+                    let count = ctx.signature().type_(model).parents.len() + 1;
+                    writeln!(f, "fn __prepare_descendants_{suffix}(&mut self, owners: [u32; {count}], retain_own: bool) {{")?;
+                    fold_primary_ages(f, plan, ctx, selection)?;
+                    for &child in &plan.descendants {
+                        let name = display_type(child, ctx).to_string().to_case(Case::Snake);
+                        writeln!(
+                            f,
+                            "self.__propagate_{name}_morphisms_stratum_{suffix}(owners, retain_own);"
+                        )?;
+                    }
+                    for (rel, index) in &plan.support_indices {
+                        write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
+                    }
+                    for id in &plan.native_indices {
+                        if plan
+                            .stable
+                            .as_ref()
+                            .is_some_and(|stable| stable.native_indices.contains(id))
+                        {
+                            continue;
+                        }
+                        let native = &self.native_indices[*id];
+                        if native
+                            .models
+                            .get(count)
+                            .is_some_and(|child| plan.descendants.contains(child))
+                        {
+                            writedoc! {f, "
+                                self.__extend_native_index_{id}();
+                                let mut index = self.__native_input_{id}.current().clone();
+                                self.__native_{id}_model_{count}(owners, &mut index, retain_own);
+                                self.__native_input_{id}.publish_shared(&index);
+                            "}?;
+                        }
+                    }
+                    writeln!(f, "}}")?;
                 }
-                writeln!(f, "}}")?;
             }
             writedoc! {f, "
                 fn __refresh_model_consumers(&mut self) {{
@@ -569,6 +701,65 @@ impl<'s> Codegen<'s> {
             "}
         })
     }
+}
+
+fn begin_stable_input(
+    f: &mut std::fmt::Formatter<'_>,
+    name: &str,
+    rel: &FlatInRel,
+    ctx: &RustGenCtx<'_>,
+) -> std::fmt::Result {
+    let typ = display_index_type(rel, ctx);
+    writedoc! {f, "
+        let {name} = if let Some(current) = &stable.{name} {{
+            eqlog_runtime::__private::RelationView {{ old: current.clone(), new: {typ}::new() }}
+        }} else {{
+    "}
+}
+
+fn end_stable_input(
+    f: &mut std::fmt::Formatter<'_>,
+    name: &str,
+    source: &str,
+    rel: &FlatInRel,
+    model: Option<TypeId>,
+    ctx: &RustGenCtx<'_>,
+) -> std::fmt::Result {
+    let prefix = model.map_or(0, |model| scope_prefix(rel, model, ctx));
+    let arity = rel.arity(ctx.signature()).len();
+    let mut current = format!("({source})");
+    for i in 0..prefix {
+        let dim = arity - i - 1;
+        current = format!("{current}.get(owners[{i}]).unwrap_or_else(|| PrefixTree{dim}::empty())");
+    }
+    writeln!(f, "let full = {current}.clone();")?;
+    for i in (0..prefix).rev() {
+        let dim = arity - i;
+        writeln!(f, "let full = {{ let mut tree = PrefixTree{dim}::new(); tree.insert_restriction(owners[{i}], full); tree }};")?;
+    }
+    writeln!(f, "stable.{name} = Some(full); {name} }};")
+}
+
+fn emit_loop_inputs(
+    f: &mut std::fmt::Formatter<'_>,
+    schedule: &Schedule,
+    codegen: &Codegen<'_>,
+) -> std::fmt::Result {
+    match schedule {
+        Schedule::Rules(id) => {
+            let s = id.0;
+            if codegen.has_stable_inputs(s) {
+                writeln!(f, "let mut stable_{s} = __StableInputs{s}::default();")?;
+            }
+        }
+        Schedule::Sequence(children) | Schedule::Independent(children) => {
+            for child in children {
+                emit_loop_inputs(f, child, codegen)?;
+            }
+        }
+        Schedule::Saturate(_) | Schedule::ModelComponents { .. } => {}
+    }
+    Ok(())
 }
 
 fn scope_prefix(rel: &FlatInRel, model: TypeId, ctx: &RustGenCtx<'_>) -> usize {
@@ -665,7 +856,7 @@ fn emit_schedule(
     selection: &IndexSelection,
 ) -> std::fmt::Result {
     match schedule {
-        Schedule::Sequence(children) => {
+        Schedule::Sequence(children) | Schedule::Independent(children) => {
             for child in children {
                 emit_schedule(
                     f, child, active, depth, scope, root, retain_own, codegen, ctx, selection,
@@ -674,18 +865,23 @@ fn emit_schedule(
         }
         Schedule::Rules(id) => {
             let s = id.0;
+            let stable = if codegen.has_stable_inputs(s) {
+                format!("&mut stable_{s}, ")
+            } else {
+                String::new()
+            };
             if scope.is_some() {
-                let retain = if codegen.preparations[s].descendants.is_empty() {
+                let retain = if !codegen.preparations[s].reads_descendants() {
                     String::new()
                 } else {
                     format!("{retain_own}, ")
                 };
                 writeln!(
                     f,
-                    "if self.__run_stratum_{s}_at(owners, {retain}&mut delta) {{"
+                    "if self.__run_stratum_{s}_at(owners, {retain}{stable}&mut delta) {{"
                 )?;
             } else {
-                writeln!(f, "if self.__run_stratum_{s}(&mut delta) {{")?;
+                writeln!(f, "if self.__run_stratum_{s}({stable}&mut delta) {{")?;
             }
             if let Some(active) = active {
                 writeln!(f, "active_{active} = true;")?;
@@ -699,6 +895,8 @@ fn emit_schedule(
             "}?;
         }
         Schedule::Saturate(body) => {
+            writeln!(f, "{{")?;
+            emit_loop_inputs(f, body, codegen)?;
             writeln!(f, "loop {{ let mut active_{depth} = false;")?;
             emit_schedule(
                 f,
@@ -716,7 +914,7 @@ fn emit_schedule(
             if let Some(active) = active {
                 writeln!(f, "active_{active} = true;")?;
             }
-            writeln!(f, "}}")?;
+            writeln!(f, "}} }}")?;
         }
         Schedule::ModelComponents { model, body } => {
             writeln!(f, "{{")?;
@@ -809,12 +1007,14 @@ fn emit_components(
     writedoc! {f, "
                 }}
                 active_{depth} |= self.__transport_component_{m}_{name}(parents, &component.internal, true);
-                if !active_{depth} {{ break; }}
     "}?;
     if let Some(active) = active {
-        writeln!(f, "active_{active} = true;")?;
+        writeln!(f, "active_{active} |= active_{depth};")?;
     }
-    writeln!(f, "}}")?;
+    writeln!(
+        f,
+        "if component.internal.is_empty() || !active_{depth} {{ break; }} }}"
+    )?;
     if let Some(active) = active {
         write!(f, "active_{active} |= ")?;
     }

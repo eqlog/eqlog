@@ -54,12 +54,12 @@ fn stratum_of(generated: &str, rule: &str) -> usize {
 }
 
 #[test]
-fn dependency_levels_share_inputs_without_delaying_consumers() {
-    let input = TempDir::new("eqlog-levels-source").unwrap();
-    let output = TempDir::new("eqlog-levels-output").unwrap();
+fn independent_pipelines_keep_separate_loops_and_shared_output_producers() {
+    let input = TempDir::new("eqlog-independent-source").unwrap();
+    let output = TempDir::new("eqlog-independent-output").unwrap();
     fs::write(
         input.path().join("theory.eql"),
-        include_str!("../../eqlog-test-eval/src/strata_levels.eql"),
+        include_str!("../../eqlog-test-eval/src/independent_strata.eql"),
     )
     .unwrap();
     process(&Config {
@@ -73,20 +73,91 @@ fn dependency_levels_share_inputs_without_delaying_consumers() {
     })
     .unwrap();
     let generated = fs::read_to_string(output.path().join("theory.eql.rs")).unwrap();
-    for (level, rules) in [
-        ["make_left", "make_right", "seed_left", "seed_right"].as_slice(),
-        ["next_right", "walk_left", "right_out", "right_back"].as_slice(),
-        ["join", "summarize"].as_slice(),
-        ["output"].as_slice(),
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        for rule in rules {
-            assert_eq!(stratum_of(&generated, rule), level, "{rule}");
+    let close = function_body(&generated, "__close_until");
+    let call = |rule| format!("self.__run_stratum_{}(", stratum_of(&generated, rule));
+    let position = |rule| close.find(&call(rule)).unwrap();
+    for rule in [
+        "make_left",
+        "make_right",
+        "next_right",
+        "mark",
+        "finish_mark",
+        "emit_seed",
+        "emit_alternate",
+    ] {
+        assert_eq!(enclosing_loops(close, &call(rule)), 1, "{rule}");
+    }
+    for rule in ["walk_left", "right_out", "right_back", "reverse"] {
+        assert_eq!(enclosing_loops(close, &call(rule)), 2, "{rule}");
+    }
+    assert_ne!(
+        stratum_of(&generated, "make_left"),
+        stratum_of(&generated, "make_right")
+    );
+    assert_eq!(
+        stratum_of(&generated, "right_out"),
+        stratum_of(&generated, "right_back")
+    );
+    assert!(position("emit_seed") < position("finish_out"));
+    assert!(position("emit_alternate") < position("finish_out"));
+    assert!(position("make_right") < position("next_right"));
+    assert!(position("next_right") < position("join"));
+    assert!(position("make_left") < position("join"));
+    let before = &close[..position("mark")];
+    let after = &close[position("finish_mark")..];
+    for rule in [
+        "make_left",
+        "make_right",
+        "walk_left",
+        "right_out",
+        "emit_seed",
+    ] {
+        assert!(
+            before.contains(&call(rule)) || after.contains(&call(rule)),
+            "{rule}"
+        );
+    }
+    let s = stratum_of(&generated, "reverse");
+    let reverse = function_body(&generated, &format!("__run_stratum_{s}"));
+    assert!(reverse.contains("if let Some(current) = &stable.index_"));
+    assert!(reverse.contains("if let Some(current) = &stable.input_"));
+    let initializer = format!("let mut stable_{s} = __StableInputs{s}::default()");
+    assert_eq!(enclosing_loops(close, &initializer), 1);
+    for rule in ["global_step", "mixed_step"] {
+        let s = stratum_of(&generated, rule);
+        let body = function_body(&generated, &format!("__run_stratum_{s}"));
+        let preparation = format!("self.recompute_model_indices_stratum_stable_{s}()");
+        assert!(body.find("if !stable.propagated").unwrap() < body.find(&preparation).unwrap());
+        let stable = function_body(
+            &generated,
+            &format!("recompute_model_indices_stratum_stable_{s}"),
+        );
+        assert!(stable.contains("link_"));
+    }
+    let s = stratum_of(&generated, "mixed_step");
+    let dynamic = function_body(&generated, &format!("recompute_model_indices_stratum_{s}"));
+    assert!(dynamic.contains("local_reach_"));
+    assert!(!dynamic.contains("link_"));
+    let s = stratum_of(&generated, "descend");
+    let body = function_body(&generated, &format!("__run_stratum_{s}_at"));
+    assert!(body.contains(&format!(
+        "self.__prepare_descendants_stable_{s}(owners, retain_own)"
+    )));
+}
+
+fn enclosing_loops(body: &str, needle: &str) -> usize {
+    let end = body.find(needle).unwrap();
+    let mut blocks = Vec::new();
+    for (i, ch) in body[..end].char_indices() {
+        match ch {
+            '{' => blocks.push(body[..i].trim_end().ends_with("loop")),
+            '}' => {
+                blocks.pop().unwrap();
+            }
+            _ => {}
         }
     }
-    assert_eq!(generated.matches("fn __run_stratum_").count(), 4);
+    blocks.into_iter().filter(|is_loop| *is_loop).count()
 }
 
 #[test]
@@ -116,9 +187,9 @@ fn parent_rules_and_child_traversals_share_one_model_schedule() {
     );
     let parent = stratum_of(&generated, "prepare");
     let child = stratum_of(&generated, "receive");
-    assert_eq!(child, stratum_of(&generated, "copy_pair"));
+    assert_ne!(child, stratum_of(&generated, "copy_pair"));
     let finish = stratum_of(&generated, "finish");
-    assert_eq!(finish, stratum_of(&generated, "pair_seen"));
+    assert_ne!(finish, stratum_of(&generated, "pair_seen"));
     assert!(child < finish);
     assert_ne!(parent, child);
     let parent_call = close

@@ -107,6 +107,17 @@ pub struct IndexPreparation {
     pub support_indices: BTreeSet<(FlatInRel, IndexSpec)>,
     pub propagation: PropagationPlan,
     pub descendants: BTreeSet<TypeId>,
+    pub stable: Option<Box<IndexPreparation>>,
+}
+
+impl IndexPreparation {
+    pub fn reads_descendants(&self) -> bool {
+        !self.descendants.is_empty()
+            || self
+                .stable
+                .as_ref()
+                .is_some_and(|plan| !plan.descendants.is_empty())
+    }
 }
 
 #[derive(Default)]

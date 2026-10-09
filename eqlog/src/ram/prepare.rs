@@ -166,7 +166,7 @@ fn model_groups(
             groups: strata[id.0].groups.clone(),
             traversals: BTreeSet::new(),
         },
-        Schedule::Sequence(children) => {
+        Schedule::Sequence(children) | Schedule::Independent(children) => {
             let mut result = ModelGroups::default();
             for child in children {
                 let child = model_groups(child, strata, nested, models);
@@ -337,6 +337,7 @@ pub fn plan_index_preparation(
             support_indices: prepared_support,
             propagation,
             descendants: BTreeSet::new(),
+            stable: None,
         };
         match model {
             Some(model) => {
@@ -349,33 +350,99 @@ pub fn plan_index_preparation(
         RuleSchedule::Simultaneous => {}
         RuleSchedule::Stratified(plan) => {
             for (stratum, preparation) in plan.strata.iter().zip(&mut preparations) {
-                let Some(model) = stratum.model else {
+                let stable_indices: BTreeSet<_> = preparation
+                    .indices
+                    .iter()
+                    .filter(|(rel, _)| {
+                        let source = match rel {
+                            FlatInRel::RelWithDiagonals { rel, .. } => FlatInRel::Rel(*rel),
+                            FlatInRel::Rel(_) | FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => {
+                                rel.clone()
+                            }
+                        };
+                        stratum.stable_inputs.contains(&source)
+                    })
+                    .cloned()
+                    .collect();
+                let dynamic_indices = preparation
+                    .indices
+                    .difference(&stable_indices)
+                    .cloned()
+                    .collect();
+                preparation.descendants = descendants(&dynamic_indices, stratum.model, signature);
+                let stable_propagation =
+                    propagation_plan(&stable_indices, signature, indices, mode);
+                if stable_propagation.relations.is_empty() {
                     continue;
-                };
-                let depth = signature.type_(model).parents.len() + 1;
-                for (input, _) in &preparation.indices {
-                    let rel = match input {
-                        FlatInRel::Rel(rel) | FlatInRel::RelWithDiagonals { rel, .. } => rel,
-                        FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => continue,
-                    };
-                    if rel.is_model_membership_relation() {
-                        continue;
-                    }
-                    let Some(parent) = rel.parent_model_type(signature) else {
-                        continue;
-                    };
-                    if signature.type_(parent).parents.contains(&model) {
-                        let child = signature
-                            .type_(parent)
-                            .parents
-                            .get(depth)
-                            .copied()
-                            .unwrap_or(parent);
-                        preparation.descendants.insert(child);
-                    }
                 }
+                let stable_native: BTreeSet<_> = preparation
+                    .native_indices
+                    .iter()
+                    .copied()
+                    .filter(|&id| stratum.stable_inputs.contains(&native[id].rel))
+                    .collect();
+                let stable_support = stable_native
+                    .iter()
+                    .flat_map(|&id| native[id].support_indices.iter().cloned())
+                    .collect();
+                preparation.support_indices = preparation
+                    .native_indices
+                    .difference(&stable_native)
+                    .flat_map(|&id| native[id].support_indices.iter().cloned())
+                    .collect();
+                preparation.propagation =
+                    propagation_plan(&dynamic_indices, signature, indices, mode);
+                // Graph and image inputs already closed on entry remain available
+                // to dynamic propagation without rebuilding their inherited trees.
+                preparation
+                    .propagation
+                    .relations
+                    .retain(|rel| !stable_propagation.relations.contains(rel));
+                preparation.stable = Some(Box::new(IndexPreparation {
+                    descendants: descendants(&stable_indices, stratum.model, signature),
+                    indices: stable_indices,
+                    native_indices: stable_native,
+                    support_indices: stable_support,
+                    propagation: stable_propagation,
+                    stable: None,
+                }));
             }
         }
     }
     (preparations, model_preparations, native)
+}
+
+fn descendants(
+    inputs: &BTreeSet<(FlatInRel, IndexSpec)>,
+    model: Option<TypeId>,
+    signature: &Signature,
+) -> BTreeSet<TypeId> {
+    let mut result = BTreeSet::new();
+    let Some(model) = model else {
+        return result;
+    };
+    let depth = signature.type_(model).parents.len() + 1;
+    for (input, _) in inputs {
+        let rel = match input {
+            FlatInRel::Rel(rel) | FlatInRel::RelWithDiagonals { rel, .. } => rel,
+            FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => continue,
+        };
+        if rel.is_model_membership_relation() {
+            continue;
+        }
+        let Some(parent) = rel.parent_model_type(signature) else {
+            continue;
+        };
+        if signature.type_(parent).parents.contains(&model) {
+            result.insert(
+                signature
+                    .type_(parent)
+                    .parents
+                    .get(depth)
+                    .copied()
+                    .unwrap_or(parent),
+            );
+        }
+    }
+    result
 }
