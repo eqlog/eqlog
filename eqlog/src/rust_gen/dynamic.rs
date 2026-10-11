@@ -168,11 +168,11 @@ impl DynamicContext<'_> {
                 let expression = display_index_expr(&flat, index, self.ctx);
                 let order = index.order.iter().join(", ");
                 writedoc! {f, "
-                        rows: eqlog_runtime::__private::RelationIndex {{
-                            order: vec![{order}],
-                            table: eqlog_runtime::__private::Table::from((*{expression}).clone()),
-                        }},
-                    "}?;
+                    rows: eqlog_runtime::__private::RelationIndex {{
+                        order: vec![{order}],
+                        table: eqlog_runtime::__private::Table::from((*{expression}).clone()),
+                    }},
+                "}?;
                 writeln!(f, "}},")?;
             }
             writedoc! {f, "
@@ -233,10 +233,10 @@ impl DynamicContext<'_> {
                 let order = index.order.iter().join(", ");
                 let own = display_own_index_field_name(flat, index, self.ctx);
                 writedoc! {f, "
-                        let index = eqlog_runtime::__private::relation_data(source, eqlog_runtime::RelationId({id}))?
-                            .reindex(&[{order}], &[])?;
-                        model.{own} = (&index).try_into()?;
-                    "}?;
+                    let index = eqlog_runtime::__private::relation_data(source, eqlog_runtime::RelationId({id}))?
+                        .reindex(&[{order}], &[])?;
+                    model.{own} = (&index).try_into()?;
+                "}?;
                 if self.ctx.has_shared_indices(flat) {
                     let all = display_all_index_field_name(flat, index, self.ctx);
                     writeln!(f, "model.{all} = model.{own}.clone();")?;

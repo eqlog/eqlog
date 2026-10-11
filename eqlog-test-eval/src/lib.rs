@@ -4,16 +4,19 @@ eqlog_mod!(recursive_component);
 mod recursive_component_test;
 #[cfg(test)]
 mod long_pipeline {
-    include!(concat!(env!("OUT_DIR"), "/long_pipeline/long_pipeline.eql.rs"));
+    include!(concat!(
+        env!("OUT_DIR"),
+        "/long_pipeline/long_pipeline.eql.rs"
+    ));
 }
 #[cfg(test)]
 mod long_pipeline_test;
 eqlog_mod!(model_strata);
 eqlog_mod!(model_hierarchy);
 #[cfg(test)]
-mod model_strata_test;
-#[cfg(test)]
 mod model_hierarchy_test;
+#[cfg(test)]
+mod model_strata_test;
 eqlog_mod!(shared_index);
 #[cfg(test)]
 mod shared_index_test;

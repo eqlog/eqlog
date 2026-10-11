@@ -1201,10 +1201,7 @@ fn display_enum_cases_fn<'a>(enum_decl: EnumDeclId, ctx: &'a RustGenCtx<'a>) -> 
                     let ctor_arg_vars = ctor_arg_vars.format(", ");
                     let tuple_vars = tuple_vars.map(display_var).format(", ");
 
-                    // TODO: We probably want to use an index insted of a linear search here.
-                    // However, this function is not needed during the close method, so those
-                    // indices should only exist when the host program uses this function, probably
-                    // lazily. But we don't have machinery for index lifetimes yet.
+                    // TODO: Use a lazy inverse index to avoid scanning constructor tuples.
                     writedoc! {f, "
                         .chain(self.iter_{ctor_name_snake}().filter_map(move |({tuple_vars})| {{
                             if el == {result_var} {{
@@ -1667,7 +1664,6 @@ fn display_model_delta_apply_def_fn<'a>(
             })
             .format("\n");
 
-        // allow(unused_variables) is there for theories without functions.
         writedoc! {f, "
             #[allow(unused_variables)]
             fn apply_func_defs(&mut self, model: &mut Model) {{

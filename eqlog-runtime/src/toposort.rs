@@ -22,8 +22,8 @@ pub struct MorphismComponent {
 /// once after their source component is closed. Isolated objects are included
 /// because they can contain nested morphism graphs.
 ///
-/// Domains use (object, morphism) order and
-/// codomains use (morphism, object) order. Incomplete morphisms are omitted.
+/// Domains use (object, morphism) order and codomains use (morphism, object)
+/// order. Incomplete morphisms are omitted.
 pub fn morphism_components(
     dom_order_1_0: &PrefixTree2,
     cod_order_0_1: &PrefixTree2,

@@ -541,7 +541,7 @@ impl<'s> Codegen<'s> {
                     let source = source_relation(rel);
                     let i = self.inputs[&source];
                     let j = self.indices[&input_key(rel.clone(), index.clone())];
-                    let primary = selection.primary(&source, IndexAge::Old);
+                    let primary = selection.current_primary(&source);
                     let project = projection(rel, index, primary);
                     let stable = stratum.stable_inputs.contains(&source);
                     if self.old_indices.contains(&(rel.clone(), index.clone())) {

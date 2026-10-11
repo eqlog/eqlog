@@ -91,11 +91,12 @@ impl Model {
                     type_: TypeId(type_),
                     index,
                 };
-                if model.root(el)? != el || !indexed.insert(index) {
+                if model.root(el)? != el {
                     return Err(Error::InvalidModel(
                         "carrier index must contain only representatives".into(),
                     ));
                 }
+                indexed.insert(index);
             }
             let roots = model.elements_from_equalities(TypeId(type_));
             if indexed != roots.collect() {
@@ -119,7 +120,6 @@ impl Model {
         for (id, descriptor) in model.signature.relations() {
             let data = &model.relations[id.0];
             data.rows.check(descriptor.arity.len())?;
-            let mut seen = BTreeSet::new();
             for tuple in data.tuples() {
                 if tuple.len() != descriptor.arity.len() {
                     return Err(Error::ArityMismatch {
@@ -131,14 +131,13 @@ impl Model {
                     let element = Element { type_, index };
                     model.canonical &= model.root(element)? == element;
                 }
-                model.canonical &= seen.insert(tuple);
             }
         }
         Ok(model)
     }
 
     /// Returns whether equality updates have been applied to all stored facts.
-    /// Canonical models have no pending uprooted elements or duplicate tuples,
+    /// Canonical models have no pending uprooted elements,
     /// and every tuple contains only representatives. Rules may still be pending.
     pub fn is_canonical(&self) -> bool {
         self.canonical

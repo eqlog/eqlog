@@ -111,7 +111,6 @@ fn dynamic_canonicalization_deduplicates_aliases_and_preserves_column_order() {
     data.rows.table.insert(&[alias, z.0]);
     data.rows.table.insert(&[root, alias]);
     let gate = signature.relation_named("gate").unwrap();
-    relations[gate.0].rows.table.insert(&[]);
     let mut dynamic = from_parts(signature, types, relations).unwrap();
     assert!(!dynamic.is_canonical());
     dynamic.canonicalize();

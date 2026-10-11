@@ -241,9 +241,7 @@ pub fn plan_index_preparation(
                     RamStmt::Insert(stmt) => match stmt.rel {
                         FlatOutRel::Rel(rel) => {
                             let rel = FlatInRel::Rel(rel);
-                            for age in [IndexAge::Old, IndexAge::New] {
-                                inputs.insert((rel.clone(), indices.primary(&rel, age).clone()));
-                            }
+                            inputs.insert((rel.clone(), indices.current_primary(&rel).clone()));
                         }
                         FlatOutRel::Equality(_) | FlatOutRel::FuncDomain(_) => {}
                     },
@@ -255,9 +253,7 @@ pub fn plan_index_preparation(
             let ids = signature.ids_for_model_type(model).unwrap();
             for func in [ids.dom, ids.cod] {
                 let rel = FlatInRel::Rel(FlatRel::Func(func));
-                for age in [IndexAge::Old, IndexAge::New] {
-                    inputs.insert((rel.clone(), indices.primary(&rel, age).clone()));
-                }
+                inputs.insert((rel.clone(), indices.current_primary(&rel).clone()));
             }
         }
         let mut required_native = BTreeSet::new();
