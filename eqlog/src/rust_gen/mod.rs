@@ -3043,18 +3043,18 @@ fn display_close_until_fn<'a>(
 
         let prepare = FmtFn(|f| {
             let plan = &program.preparations[0];
-            if !plan.propagation.relations.is_empty() {
+            if !plan.native.propagation.relations.is_empty() {
                 writeln!(f, "self.recompute_model_indices_stratum_0();")?;
             }
-            for (rel, index) in plan.indices.union(&plan.support_indices) {
+            for (rel, index) in plan.indices.union(&plan.native.support_indices) {
                 if native_indices::find(&program.native_indices, rel, index).is_some()
-                    && !plan.support_indices.contains(&(rel.clone(), index.clone()))
+                    && !plan.native.support_indices.contains(&(rel.clone(), index.clone()))
                 {
                     continue;
                 }
                 write!(f, "{}", indices::prepare(rel, index, indices, ctx))?;
             }
-            for id in &program.preparations[0].native_indices {
+            for id in &plan.native.native_indices {
                 writeln!(f, "self.__prepare_native_index_{id}();")?;
                 writeln!(
                     f,
@@ -3733,11 +3733,11 @@ fn display_theory_impl<'a>(
                         RuleSchedule::Simultaneous => false,
                         RuleSchedule::Stratified(schedule) => schedule.strata[s].model.is_some(),
                     };
-                    let plans = std::iter::once((format!("_stratum_{s}"), preparation)).chain(
+                    let plans = std::iter::once((format!("_stratum_{s}"), &preparation.native)).chain(
                         preparation
                             .stable
                             .iter()
-                            .map(|plan| (format!("_stratum_stable_{s}"), plan.as_ref())),
+                            .map(|plan| (format!("_stratum_stable_{s}"), plan)),
                     );
                     for (suffix, plan) in plans {
                         if scoped {

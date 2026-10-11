@@ -155,13 +155,29 @@ fn merging_nested_owners_replays_the_combined_inputs() {
 }
 
 #[test]
-fn ambient_feedback_keeps_its_dependency_order() {
+fn rules_crossing_ambient_and_model_scopes_keep_their_dependency_order() {
     let mut m = ModelStrata::new();
     let a = m.new_fallback();
     let x = m.new_atom();
     m.insert_initial(a, x);
     m.close();
     assert!(m.completed(a, x));
+}
+
+#[test]
+fn ambient_and_member_rules_close_a_feedback_cycle() {
+    let mut m = ModelStrata::new();
+    let f = m.new_feedback();
+    let x = m.new_atom();
+    let y = m.new_atom();
+    let z = m.new_atom();
+    m.insert_feedback_seed(f, x);
+    m.insert_feedback_next(f, x, y);
+    m.insert_feedback_next(f, y, z);
+    m.close();
+    assert!(m.feedback_completed(f, x));
+    assert!(m.feedback_completed(f, y));
+    assert!(m.feedback_completed(f, z));
 }
 
 #[test]

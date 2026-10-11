@@ -66,3 +66,23 @@ rule escape_model {
     then ambient_reached(f, x);
 }
 rule return_to_model { if ambient_reached(f, x); then f.completed(x); }
+
+pred ambient_feedback(Feedback, Atom);
+model Feedback {
+    pred feedback_seed(Atom);
+    pred feedback_middle(Atom);
+    pred feedback_completed(Atom);
+    pred feedback_next(Atom, Atom);
+    rule feedback_begin { if feedback_seed(x); then feedback_middle(x); }
+    rule feedback_advance {
+        if feedback_completed(x);
+        if feedback_next(x, y);
+        then feedback_seed(y);
+    }
+}
+rule feedback_escape {
+    if f: Feedback;
+    if f.feedback_middle(x);
+    then ambient_feedback(f, x);
+}
+rule feedback_return { if ambient_feedback(f, x); then f.feedback_completed(x); }

@@ -1,37 +1,20 @@
-Schedule member rules within model components
+Evaluate member rules in morphism dependency order
 
-Represent rule schedules as trees so ordered strata can run inside
-recursive model components. Infer local rule scopes before index
-selection and bind their owner parameters before lowering to RAM.
+Run local rule schedules within model graph components, propagating
+results onward after each component closes. Order parent rules and
+child traversals together so nested feedback closes at its common
+owner. Keep feedback through ambient relations in global evaluation.
 
-Keep consumption checkpoints per model and static stratum. Publish
-shared member subtrees and maintain one latest secondary index across
-readers so separate consumers do not rebuild equivalent trees.
+Give independent rule components separate schedules and repeat only
+recursive components. Reuse stable input trees and inherited indices
+within each rule loop to avoid reconstructing unchanged deltas.
 
-Close compatible rules within runtime morphism components, carrying
-both primary and secondary trees onward after each component closes.
-Place parent rule strata and child traversals in one dependency order
-inside each parent component. Close parent/child and sibling feedback
-at their common owner, while keeping ambient feedback global. Rebuild
-child graphs on visits because outer transport can change topology.
+Bind model owners before index selection. Keep consumption checkpoints
+per stratum and owner while sharing snapshots and the latest secondary
+indices across readers. Refresh owner checkpoints after model merges
+and child graphs after transport. Preserve interrupted closure and
+deferred allocation; simultaneous scheduling remains the default.
 
-Keep independent pipelines together and put fixed-point loops only
-around recursive dependency components. Shared inputs and additive
-outputs do not force independent rules to share a clock. Cache stable
-loop inputs in typed local state so later rounds reuse their full
-trees with empty deltas, preserving per-reader entry checkpoints.
-Prepare their inherited indices once per loop visit as well.
-
-Prepare descendant closure before parent rules read child relations,
-including secondary indices and children without local rules. Share
-checkpoints at the bound owner prefix and aggregate graph preparation
-for every nested traversal, including allocation-only bodies.
-
-Discard scoped consumption checkpoints after model merges while
-retaining the latest shared indices. Preserve interrupted closure and
-the outer allocation loop. Keep simultaneous scheduling as default.
-
-Test acyclic and cyclic transport, hierarchical rule ordering, parent
-and sibling feedback, secondary indices, late morphisms, nested graph
-changes, model merges, ambient fallback, and interrupted evaluation
-in native and desugared evaluation modes.
+Test rule ordering, nested propagation, feedback, late graph changes,
+model merges, and interrupted evaluation across native/desugared and
+naive/semi-naive configurations.

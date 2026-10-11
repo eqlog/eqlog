@@ -2,7 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::algebra::signature::{Signature, TypeId};
 use crate::flat_eqlog::{
-    iter_flat_rels, morphism_preservation_rules, FlatInRel, FlatOutRel, FlatRuleGroup, RuleScope,
+    infer_rule_scopes, iter_flat_rels, morphism_preservation_rules, FlatInRel, FlatOutRel,
+    FlatRuleGroup, RuleScope,
 };
 use crate::options::{ModelMode, SchedulingMode};
 
@@ -21,7 +22,7 @@ pub struct StratifiedPlan {
 
 pub enum Schedule {
     Sequence(Vec<Schedule>),
-    // Shared reads and additive outputs permit independent execution clocks.
+    // Children have no write-to-read dependencies; shared inputs and outputs are allowed.
     Independent(Vec<Schedule>),
     Rules(StratumId),
     Saturate(Box<Schedule>),
@@ -47,7 +48,9 @@ pub fn schedule_rule_groups(
     scheduling_mode: SchedulingMode,
 ) -> RuleSchedule {
     let scoped = scheduling_mode == SchedulingMode::Stratified && model_mode == ModelMode::Native;
-    if !scoped {
+    if scoped {
+        infer_rule_scopes(groups, signature);
+    } else {
         for rule in groups.iter_mut().flat_map(|group| &mut group.rules) {
             rule.scope = RuleScope::Global;
         }
@@ -315,7 +318,7 @@ fn schedule_scope(
             });
             children.insert(0, Schedule::Rules(id));
         }
-        let body = Schedule::Sequence(children);
+        let body = sequence(children);
         bodies.push(Some(if recursive {
             Schedule::Saturate(Box::new(body))
         } else {

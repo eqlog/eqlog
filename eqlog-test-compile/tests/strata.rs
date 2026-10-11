@@ -37,6 +37,7 @@ fn local_rules_receive_bound_model_parameters() {
         .contains("self.__transport_component_0_world(parents, &component.outgoing, false)"));
     assert!(!function_body(&generated, "fallback_start_0_0").contains("env.__owners"));
     assert!(function_body(&generated, "return_to_model_0_0").contains("env.__owners"));
+    assert!(!function_body(&generated, "feedback_begin_0_0").contains("env.__owners"));
 }
 
 fn stratum_of(generated: &str, rule: &str) -> usize {
@@ -127,7 +128,7 @@ fn independent_pipelines_keep_separate_loops_and_shared_output_producers() {
         let s = stratum_of(&generated, rule);
         let body = function_body(&generated, &format!("__run_stratum_{s}"));
         let preparation = format!("self.recompute_model_indices_stratum_stable_{s}()");
-        assert!(body.find("if !stable.propagated").unwrap() < body.find(&preparation).unwrap());
+        assert!(block_body(body, "if !stable.propagated").contains(&preparation));
         let stable = function_body(
             &generated,
             &format!("recompute_model_indices_stratum_stable_{s}"),
@@ -190,7 +191,6 @@ fn parent_rules_and_child_traversals_share_one_model_schedule() {
     assert_ne!(child, stratum_of(&generated, "copy_pair"));
     let finish = stratum_of(&generated, "finish");
     assert_ne!(finish, stratum_of(&generated, "pair_seen"));
-    assert!(child < finish);
     assert_ne!(parent, child);
     let parent_call = close
         .find(&format!("self.__run_stratum_{parent}_at"))
@@ -198,7 +198,11 @@ fn parent_rules_and_child_traversals_share_one_model_schedule() {
     let child_call = close
         .find(&format!("self.__run_stratum_{child}_at"))
         .unwrap();
+    let finish_call = close
+        .find(&format!("self.__run_stratum_{finish}_at"))
+        .unwrap();
     assert!(parent_call < child_call);
+    assert!(child_call < finish_call);
     for rule in [
         "observe_child",
         "observe_sibling",
@@ -213,6 +217,66 @@ fn parent_rules_and_child_traversals_share_one_model_schedule() {
             .unwrap();
         assert!(prepare < body.find(".publish").unwrap());
     }
+}
+
+#[test]
+fn descendant_helpers_prepare_secondary_indices_once() {
+    let input = TempDir::new("eqlog-descendant-indices-source").unwrap();
+    let output = TempDir::new("eqlog-descendant-indices-output").unwrap();
+    fs::write(
+        input.path().join("theory.eql"),
+        indoc! {"
+        type Atom;
+        model Parent {
+            model Child { pred pair(Atom, Atom); }
+            pred reach(Child, Atom);
+            pred query(Child, Atom);
+            pred result(Child, Atom);
+            rule forward {
+                if reach(c, x);
+                if c.pair(x, y);
+                then reach(c, y);
+            }
+            rule backward {
+                if reach(c, y);
+                if c.pair(x, y);
+                then reach(c, x);
+            }
+            rule inspect {
+                if query(c, x);
+                if c.pair(x, y);
+                if c.pair(z, y);
+                then result(c, z);
+            }
+        }
+    "},
+    )
+    .unwrap();
+    process(&Config {
+        in_dir: input.path().to_owned(),
+        out_dir: output.path().to_owned(),
+        component_build: None,
+        options: CompileOptions {
+            scheduling_mode: SchedulingMode::Stratified,
+            ..CompileOptions::default()
+        },
+    })
+    .unwrap();
+    let generated = fs::read_to_string(output.path().join("theory.eql.rs")).unwrap();
+    let recursive = stratum_of(&generated, "forward");
+    assert_eq!(recursive, stratum_of(&generated, "backward"));
+    let body = function_body(&generated, &format!("__run_stratum_{recursive}_at"));
+    let helper = format!("__prepare_descendants_stable_{recursive}");
+    assert!(block_body(body, "if !stable.propagated").contains(&format!("self.{helper}(")));
+    assert!(function_body(&generated, &helper).contains(".prepare("));
+    assert!(!body.contains(".prepare("));
+
+    let dynamic = stratum_of(&generated, "inspect");
+    let body = function_body(&generated, &format!("__run_stratum_{dynamic}_at"));
+    let helper = format!("__prepare_descendants_{dynamic}");
+    assert!(body.contains(&format!("self.{helper}(")));
+    assert!(function_body(&generated, &helper).contains(".prepare("));
+    assert!(!body.contains(".prepare("));
 }
 
 #[test]
@@ -256,7 +320,12 @@ fn allocation_feedback_wraps_an_ordered_inner_schedule() {
     let second = stratum_of(&generated, "second");
     let recursive = stratum_of(&generated, "recursive");
     let request = stratum_of(&generated, "request");
-    assert!(feedback < first && first < second && second < recursive && recursive < request);
+    let close = function_body(&generated, "__close_until");
+    let position = |s| close.find(&format!("self.__run_stratum_{s}(")).unwrap();
+    assert!(position(feedback) < position(first));
+    assert!(position(first) < position(second));
+    assert!(position(second) < position(recursive));
+    assert!(position(recursive) < position(request));
     assert!(generated.contains("if !active_0 { break; }"));
     assert!(generated.contains(&format!("if self.__run_stratum_{first}")));
 
@@ -269,8 +338,11 @@ fn allocation_feedback_wraps_an_ordered_inner_schedule() {
 }
 
 fn function_body<'a>(generated: &'a str, name: &str) -> &'a str {
-    let signature = format!("fn {name}(");
-    let rest = generated.split_once(&signature).unwrap().1;
+    block_body(generated, &format!("fn {name}("))
+}
+
+fn block_body<'a>(generated: &'a str, prefix: &str) -> &'a str {
+    let rest = generated.split_once(prefix).unwrap().1;
     let body = rest.split_once('{').unwrap().1;
     let mut depth = 1;
     for (end, ch) in body.char_indices() {
@@ -283,7 +355,7 @@ fn function_body<'a>(generated: &'a str, name: &str) -> &'a str {
             return &body[..end];
         }
     }
-    panic!("unterminated function {name}");
+    panic!("unterminated block after {prefix}");
 }
 
 #[test]
@@ -385,7 +457,10 @@ fn separated_readers_advance_one_typed_secondary_index() {
     let a = stratum_of(&generated, "a");
     let b = stratum_of(&generated, "b");
     let c = stratum_of(&generated, "c");
-    assert!(a < b && b < c);
+    let close = function_body(&generated, "__close_until");
+    let position = |s| close.find(&format!("self.__run_stratum_{s}(")).unwrap();
+    assert!(position(a) < position(b));
+    assert!(position(b) < position(c));
     let body_a = function_body(&generated, &format!("__run_stratum_{a}"));
     let body_b = function_body(&generated, &format!("__run_stratum_{b}"));
     let body_c = function_body(&generated, &format!("__run_stratum_{c}"));

@@ -1,6 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::{IndexPreparation, NativeIndexPreparation, PropagationPlan, RamModule, RamStmt};
+use super::{
+    IndexPreparation, NativeIndexPreparation, NativePreparation, PropagationPlan, RamModule,
+    RamStmt,
+};
 use crate::algebra::signature::{MorphismMemberTypes, Signature, TypeId};
 use crate::flat_eqlog::{
     morphism_preservation_rules, FlatInRel, FlatOutRel, FlatRel, IndexAge, IndexSelection,
@@ -195,7 +198,7 @@ pub fn plan_index_preparation(
     mode: ModelMode,
 ) -> (
     Vec<IndexPreparation>,
-    BTreeMap<TypeId, IndexPreparation>,
+    BTreeMap<TypeId, NativePreparation>,
     Vec<NativeIndexPreparation>,
 ) {
     let groups: Vec<(Option<TypeId>, ModelGroups)> = match schedule {
@@ -262,7 +265,7 @@ pub fn plan_index_preparation(
         for &model in &traversals {
             let ids = signature.ids_for_model_type(model).unwrap();
             for func in [ids.dom, ids.cod] {
-                let rel = FlatInRel::Rel(crate::flat_eqlog::FlatRel::Func(func));
+                let rel = FlatInRel::Rel(FlatRel::Func(func));
                 for age in [IndexAge::Old, IndexAge::New] {
                     inputs.insert((rel.clone(), indices.primary(&rel, age).clone()));
                 }
@@ -325,7 +328,7 @@ pub fn plan_index_preparation(
                 .entry(model)
                 .or_default()
                 .extend(support_indices(
-                    &FlatInRel::Rel(crate::flat_eqlog::FlatRel::Func(dom)),
+                    &FlatInRel::Rel(FlatRel::Func(dom)),
                     &[model],
                     signature,
                     indices,
@@ -333,15 +336,17 @@ pub fn plan_index_preparation(
         }
         let plan = IndexPreparation {
             indices: inputs,
-            native_indices: required_native,
-            support_indices: prepared_support,
-            propagation,
-            descendants: BTreeSet::new(),
+            native: NativePreparation {
+                native_indices: required_native,
+                support_indices: prepared_support,
+                propagation,
+                descendants: BTreeSet::new(),
+            },
             stable: None,
         };
         match model {
             Some(model) => {
-                model_preparations.insert(model, plan);
+                model_preparations.insert(model, plan.native);
             }
             None => preparations.push(plan),
         }
@@ -369,13 +374,15 @@ pub fn plan_index_preparation(
                     .difference(&stable_indices)
                     .cloned()
                     .collect();
-                preparation.descendants = descendants(&dynamic_indices, stratum.model, signature);
+                preparation.native.descendants =
+                    descendants(&dynamic_indices, stratum.model, signature);
                 let stable_propagation =
                     propagation_plan(&stable_indices, signature, indices, mode);
                 if stable_propagation.relations.is_empty() {
                     continue;
                 }
                 let stable_native: BTreeSet<_> = preparation
+                    .native
                     .native_indices
                     .iter()
                     .copied()
@@ -385,27 +392,31 @@ pub fn plan_index_preparation(
                     .iter()
                     .flat_map(|&id| native[id].support_indices.iter().cloned())
                     .collect();
-                preparation.support_indices = preparation
+                preparation
+                    .native
                     .native_indices
-                    .difference(&stable_native)
+                    .retain(|id| !stable_native.contains(id));
+                preparation.native.support_indices = preparation
+                    .native
+                    .native_indices
+                    .iter()
                     .flat_map(|&id| native[id].support_indices.iter().cloned())
                     .collect();
-                preparation.propagation =
+                preparation.native.propagation =
                     propagation_plan(&dynamic_indices, signature, indices, mode);
                 // Graph and image inputs already closed on entry remain available
                 // to dynamic propagation without rebuilding their inherited trees.
                 preparation
+                    .native
                     .propagation
                     .relations
                     .retain(|rel| !stable_propagation.relations.contains(rel));
-                preparation.stable = Some(Box::new(IndexPreparation {
+                preparation.stable = Some(NativePreparation {
                     descendants: descendants(&stable_indices, stratum.model, signature),
-                    indices: stable_indices,
                     native_indices: stable_native,
                     support_indices: stable_support,
                     propagation: stable_propagation,
-                    stable: None,
-                }));
+                });
             }
         }
     }

@@ -516,7 +516,6 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     }
     let flatten_ctx = FlattenCtx::new(&ast, module, &signature, &rule_structures);
     let mut flat_rule_groups = flatten(&flatten_ctx, &config.options);
-    infer_rule_scopes(&mut flat_rule_groups, &signature);
     let schedule = schedule_rule_groups(
         &mut flat_rule_groups,
         &signature,

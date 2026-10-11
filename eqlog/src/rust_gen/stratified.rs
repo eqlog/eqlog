@@ -17,7 +17,9 @@ use crate::flat_eqlog::{
     FlatInRel, IndexAge, IndexSelection, IndexSpec, Schedule, StratifiedPlan, Stratum,
 };
 use crate::fmt_util::FmtFn;
-use crate::ram::{IndexPreparation, NativeIndexPreparation, RamModule, RamProgram};
+use crate::ram::{
+    IndexPreparation, NativeIndexPreparation, NativePreparation, RamModule, RamProgram,
+};
 
 pub struct Codegen<'s> {
     strata: &'s [Stratum],
@@ -28,7 +30,7 @@ pub struct Codegen<'s> {
     old_indices: BTreeSet<(FlatInRel, IndexSpec)>,
     preparations: &'s [IndexPreparation],
     native_indices: &'s [NativeIndexPreparation],
-    model_preparations: &'s BTreeMap<TypeId, IndexPreparation>,
+    model_preparations: &'s BTreeMap<TypeId, NativePreparation>,
 }
 
 fn input_key(rel: FlatInRel, mut index: IndexSpec) -> (FlatInRel, IndexSpec) {
@@ -304,16 +306,18 @@ impl<'s> Codegen<'s> {
                             "self.__prepare_descendants_stable_{s}(owners, retain_own);"
                         )?;
                     }
-                    for (rel, index) in &plan.support_indices {
-                        write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
+                    if plan.descendants.is_empty() {
+                        for (rel, index) in &plan.support_indices {
+                            write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
+                        }
                     }
                     writeln!(f, "stable.propagated = true; }}")?;
                 }
-                if !self.preparations[s].descendants.is_empty() {
+                let native = &self.preparations[s].native;
+                if !native.descendants.is_empty() {
                     writeln!(f, "self.__prepare_descendants_{s}(owners, retain_own);")?;
                 }
-                if stratum.model.is_none() && !self.preparations[s].propagation.relations.is_empty()
-                {
+                if stratum.model.is_none() && !native.propagation.relations.is_empty() {
                     writeln!(f, "self.recompute_model_indices_stratum_{s}();")?;
                 }
                 for rel in inputs {
@@ -382,10 +386,12 @@ impl<'s> Codegen<'s> {
                     writeln!(f, "self.__stratum_initialized[{s}] = true;")?;
                 }
                 writeln!(f, "{{")?;
-                for (rel, index) in &self.preparations[s].support_indices {
-                    write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
+                if native.descendants.is_empty() {
+                    for (rel, index) in &native.support_indices {
+                        write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
+                    }
                 }
-                for id in &self.preparations[s].native_indices {
+                for id in self.preparations[s].native_indices() {
                     let rel = &self.native_indices[*id].rel;
                     let stable = stratum.stable_inputs.contains(&source_relation(rel));
                     if stable {
@@ -577,11 +583,11 @@ impl<'s> Codegen<'s> {
             }
             for (s, stratum) in self.strata.iter().enumerate() {
                 let preparation = &self.preparations[s];
-                let plans = std::iter::once((s.to_string(), preparation)).chain(
+                let plans = std::iter::once((s.to_string(), &preparation.native)).chain(
                     preparation
                         .stable
                         .iter()
-                        .map(|plan| (format!("stable_{s}"), plan.as_ref())),
+                        .map(|plan| (format!("stable_{s}"), plan)),
                 );
                 for (suffix, plan) in plans {
                     if plan.descendants.is_empty() {
@@ -604,13 +610,6 @@ impl<'s> Codegen<'s> {
                         write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
                     }
                     for id in &plan.native_indices {
-                        if plan
-                            .stable
-                            .as_ref()
-                            .is_some_and(|stable| stable.native_indices.contains(id))
-                        {
-                            continue;
-                        }
                         let native = &self.native_indices[*id];
                         if native
                             .models
@@ -680,9 +679,7 @@ impl<'s> Codegen<'s> {
                     let mut delta = std::mem::replace(&mut self.__pending_delta, ModelDelta::new());
                     loop {{
             "}?;
-            emit_schedule(
-                f, self.body, None, 0, None, None, "false", self, ctx, selection,
-            )?;
+            emit_schedule(f, self.body, None, 0, None, "false", self, ctx, selection)?;
             writedoc! {f, "
                         self.move_new_to_old();
                         delta.apply_func_defs(self);
@@ -827,7 +824,7 @@ fn consume_scoped(
 
 fn fold_primary_ages(
     f: &mut std::fmt::Formatter<'_>,
-    plan: &IndexPreparation,
+    plan: &NativePreparation,
     ctx: &RustGenCtx<'_>,
     selection: &IndexSelection,
 ) -> std::fmt::Result {
@@ -848,7 +845,6 @@ fn emit_schedule(
     schedule: &Schedule,
     active: Option<usize>,
     depth: usize,
-    scope: Option<TypeId>,
     root: Option<TypeId>,
     retain_own: &str,
     codegen: &Codegen<'_>,
@@ -859,7 +855,7 @@ fn emit_schedule(
         Schedule::Sequence(children) | Schedule::Independent(children) => {
             for child in children {
                 emit_schedule(
-                    f, child, active, depth, scope, root, retain_own, codegen, ctx, selection,
+                    f, child, active, depth, root, retain_own, codegen, ctx, selection,
                 )?;
             }
         }
@@ -870,7 +866,7 @@ fn emit_schedule(
             } else {
                 String::new()
             };
-            if scope.is_some() {
+            if codegen.strata[s].model.is_some() {
                 let retain = if !codegen.preparations[s].reads_descendants() {
                     String::new()
                 } else {
@@ -903,7 +899,6 @@ fn emit_schedule(
                 body,
                 Some(depth),
                 depth + 1,
-                scope,
                 root,
                 retain_own,
                 codegen,
@@ -997,7 +992,6 @@ fn emit_components(
         body,
         Some(depth),
         depth + 1,
-        Some(model),
         Some(root),
         &format!("retain_component_{depth}"),
         codegen,
