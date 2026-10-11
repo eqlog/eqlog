@@ -22,21 +22,14 @@ pub struct MorphismComponent {
 /// once after their source component is closed. Isolated objects are included
 /// because they can contain nested morphism graphs.
 ///
-/// Inputs are disjoint old/new sets. Domains use (object, morphism) order and
+/// Domains use (object, morphism) order and
 /// codomains use (morphism, object) order. Incomplete morphisms are omitted.
 pub fn morphism_components(
-    dom_new_order_1_0: &PrefixTree2,
-    dom_old_order_1_0: &PrefixTree2,
-    cod_new_order_0_1: &PrefixTree2,
-    cod_old_order_0_1: &PrefixTree2,
-    obj_old_order_0: &PrefixTree1,
-    obj_new_order_0: &PrefixTree1,
+    dom_order_1_0: &PrefixTree2,
+    cod_order_0_1: &PrefixTree2,
+    obj_order_0: &PrefixTree1,
 ) -> Vec<MorphismComponent> {
-    let objects: Vec<_> = obj_old_order_0
-        .union(obj_new_order_0)
-        .iter()
-        .map(|[object]| object)
-        .collect();
+    let objects: Vec<_> = obj_order_0.iter().map(|[object]| object).collect();
     let indices: BTreeMap<_, _> = objects
         .iter()
         .enumerate()
@@ -45,10 +38,8 @@ pub fn morphism_components(
     let mut outgoing = vec![Vec::new(); objects.len()];
     let mut incoming = vec![Vec::new(); objects.len()];
     let mut morphisms = Vec::new();
-    for [dom, morph] in dom_new_order_1_0.iter().chain(dom_old_order_1_0.iter()) {
-        let cods = cod_new_order_0_1
-            .get(morph)
-            .or_else(|| cod_old_order_0_1.get(morph));
+    for [dom, morph] in dom_order_1_0.iter() {
+        let cods = cod_order_0_1.get(morph);
         let Some(cods) = cods else {
             continue;
         };
@@ -124,10 +115,8 @@ mod tests {
 
     #[test]
     fn components_separate_cycles_from_incoming_and_outgoing_morphisms() {
-        let mut dom_new = PrefixTree2::new();
-        let mut dom_old = PrefixTree2::new();
-        let mut cod_new = PrefixTree2::new();
-        let mut cod_old = PrefixTree2::new();
+        let mut dom = PrefixTree2::new();
+        let mut cod = PrefixTree2::new();
         let mut objects = PrefixTree1::new();
         for object in 0..7 {
             objects.insert([object]);
@@ -137,24 +126,12 @@ mod tests {
             .enumerate()
         {
             let morph = morph as u32;
-            if morph % 2 == 0 {
-                dom_new.insert([source, morph]);
-                cod_old.insert([morph, target]);
-            } else {
-                dom_old.insert([source, morph]);
-                cod_new.insert([morph, target]);
-            }
+            dom.insert([source, morph]);
+            cod.insert([morph, target]);
         }
-        dom_new.insert([3, 100]);
-        cod_new.insert([101, 0]);
-        let components = morphism_components(
-            &dom_new,
-            &dom_old,
-            &cod_new,
-            &cod_old,
-            &objects,
-            PrefixTree1::empty(),
-        );
+        dom.insert([3, 100]);
+        cod.insert([101, 0]);
+        let components = morphism_components(&dom, &cod, &objects);
         let positions: BTreeMap<_, _> = components
             .iter()
             .enumerate()
@@ -183,9 +160,6 @@ mod tests {
         assert!(morphism_components(
             PrefixTree2::empty(),
             PrefixTree2::empty(),
-            PrefixTree2::empty(),
-            PrefixTree2::empty(),
-            PrefixTree1::empty(),
             PrefixTree1::empty(),
         )
         .is_empty());
@@ -203,14 +177,7 @@ mod tests {
                 cod.insert([object, object]);
             }
         }
-        let components = morphism_components(
-            &dom,
-            PrefixTree2::empty(),
-            &cod,
-            PrefixTree2::empty(),
-            &objects,
-            PrefixTree1::empty(),
-        );
+        let components = morphism_components(&dom, &cod, &objects);
         assert_eq!(components.len(), 10_000);
         for (i, component) in components.iter().enumerate() {
             assert_eq!(component.objects, vec![i as u32]);

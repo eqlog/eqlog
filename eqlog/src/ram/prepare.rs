@@ -96,13 +96,11 @@ fn support_indices(
 ) -> BTreeSet<(FlatInRel, IndexSpec)> {
     let mut result = BTreeSet::new();
     let mut add = |rel: FlatInRel, order: Vec<usize>| {
-        for age in [IndexAge::Old, IndexAge::New] {
-            let index = indices.indices[&rel]
-                .iter()
-                .find(|index| index.age == age && index.order.as_ref() == order.as_slice())
-                .expect("native graph queries must have selected their indices");
-            result.insert((rel.clone(), index.clone()));
-        }
+        let index = indices.indices[&rel]
+            .iter()
+            .find(|index| index.order.as_ref() == order.as_slice())
+            .expect("native graph queries must have selected their indices");
+        result.insert((rel.clone(), index.clone()));
     };
     let arity = rel.arity(signature);
     let parent_cols = match rel {
@@ -201,37 +199,28 @@ pub fn plan_index_preparation(
     BTreeMap<TypeId, NativePreparation>,
     Vec<NativeIndexPreparation>,
 ) {
-    let groups: Vec<(Option<TypeId>, ModelGroups)> = match schedule {
-        RuleSchedule::Simultaneous => vec![(
-            None,
-            ModelGroups {
-                groups: (0..modules.len()).collect(),
-                traversals: BTreeSet::new(),
-            },
-        )],
-        RuleSchedule::Stratified(plan) => {
-            let mut groups: Vec<_> = plan
-                .strata
-                .iter()
-                .map(|stratum| {
-                    (
-                        None,
-                        ModelGroups {
-                            groups: stratum.groups.clone(),
-                            traversals: BTreeSet::new(),
-                        },
-                    )
-                })
-                .collect();
-            let mut models = BTreeMap::new();
-            model_groups(&plan.body, &plan.strata, false, &mut models);
-            groups.extend(
-                models
-                    .into_iter()
-                    .map(|(model, groups)| (Some(model), groups)),
-            );
-            groups
-        }
+    let groups: Vec<(Option<TypeId>, ModelGroups)> = {
+        let mut groups: Vec<_> = schedule
+            .strata
+            .iter()
+            .map(|stratum| {
+                (
+                    None,
+                    ModelGroups {
+                        groups: stratum.groups.clone(),
+                        traversals: BTreeSet::new(),
+                    },
+                )
+            })
+            .collect();
+        let mut models = BTreeMap::new();
+        model_groups(&schedule.body, &schedule.strata, false, &mut models);
+        groups.extend(
+            models
+                .into_iter()
+                .map(|(model, groups)| (Some(model), groups)),
+        );
+        groups
     };
     let mut native = Vec::new();
     let mut native_ids = BTreeMap::new();
@@ -351,74 +340,67 @@ pub fn plan_index_preparation(
             None => preparations.push(plan),
         }
     }
-    match schedule {
-        RuleSchedule::Simultaneous => {}
-        RuleSchedule::Stratified(plan) => {
-            for (stratum, preparation) in plan.strata.iter().zip(&mut preparations) {
-                let stable_indices: BTreeSet<_> = preparation
-                    .indices
-                    .iter()
-                    .filter(|(rel, _)| {
-                        let source = match rel {
-                            FlatInRel::RelWithDiagonals { rel, .. } => FlatInRel::Rel(*rel),
-                            FlatInRel::Rel(_) | FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => {
-                                rel.clone()
-                            }
-                        };
-                        stratum.stable_inputs.contains(&source)
-                    })
-                    .cloned()
-                    .collect();
-                let dynamic_indices = preparation
-                    .indices
-                    .difference(&stable_indices)
-                    .cloned()
-                    .collect();
-                preparation.native.descendants =
-                    descendants(&dynamic_indices, stratum.model, signature);
-                let stable_propagation =
-                    propagation_plan(&stable_indices, signature, indices, mode);
-                if stable_propagation.relations.is_empty() {
-                    continue;
-                }
-                let stable_native: BTreeSet<_> = preparation
-                    .native
-                    .native_indices
-                    .iter()
-                    .copied()
-                    .filter(|&id| stratum.stable_inputs.contains(&native[id].rel))
-                    .collect();
-                let stable_support = stable_native
-                    .iter()
-                    .flat_map(|&id| native[id].support_indices.iter().cloned())
-                    .collect();
-                preparation
-                    .native
-                    .native_indices
-                    .retain(|id| !stable_native.contains(id));
-                preparation.native.support_indices = preparation
-                    .native
-                    .native_indices
-                    .iter()
-                    .flat_map(|&id| native[id].support_indices.iter().cloned())
-                    .collect();
-                preparation.native.propagation =
-                    propagation_plan(&dynamic_indices, signature, indices, mode);
-                // Graph and image inputs already closed on entry remain available
-                // to dynamic propagation without rebuilding their inherited trees.
-                preparation
-                    .native
-                    .propagation
-                    .relations
-                    .retain(|rel| !stable_propagation.relations.contains(rel));
-                preparation.stable = Some(NativePreparation {
-                    descendants: descendants(&stable_indices, stratum.model, signature),
-                    native_indices: stable_native,
-                    support_indices: stable_support,
-                    propagation: stable_propagation,
-                });
-            }
+    for (stratum, preparation) in schedule.strata.iter().zip(&mut preparations) {
+        let stable_indices: BTreeSet<_> = preparation
+            .indices
+            .iter()
+            .filter(|(rel, _)| {
+                let source = match rel {
+                    FlatInRel::RelWithDiagonals { rel, .. } => FlatInRel::Rel(*rel),
+                    FlatInRel::Rel(_) | FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => {
+                        rel.clone()
+                    }
+                };
+                stratum.stable_inputs.contains(&source)
+            })
+            .cloned()
+            .collect();
+        let dynamic_indices = preparation
+            .indices
+            .difference(&stable_indices)
+            .cloned()
+            .collect();
+        preparation.native.descendants = descendants(&dynamic_indices, stratum.model, signature);
+        let stable_propagation = propagation_plan(&stable_indices, signature, indices, mode);
+        if stable_propagation.relations.is_empty() {
+            continue;
         }
+        let stable_native: BTreeSet<_> = preparation
+            .native
+            .native_indices
+            .iter()
+            .copied()
+            .filter(|&id| stratum.stable_inputs.contains(&native[id].rel))
+            .collect();
+        let stable_support = stable_native
+            .iter()
+            .flat_map(|&id| native[id].support_indices.iter().cloned())
+            .collect();
+        preparation
+            .native
+            .native_indices
+            .retain(|id| !stable_native.contains(id));
+        preparation.native.support_indices = preparation
+            .native
+            .native_indices
+            .iter()
+            .flat_map(|&id| native[id].support_indices.iter().cloned())
+            .collect();
+        preparation.native.propagation =
+            propagation_plan(&dynamic_indices, signature, indices, mode);
+        // Graph and image inputs already closed on entry remain available
+        // to dynamic propagation without rebuilding their inherited trees.
+        preparation
+            .native
+            .propagation
+            .relations
+            .retain(|rel| !stable_propagation.relations.contains(rel));
+        preparation.stable = Some(NativePreparation {
+            descendants: descendants(&stable_indices, stratum.model, signature),
+            native_indices: stable_native,
+            support_indices: stable_support,
+            propagation: stable_propagation,
+        });
     }
     (preparations, model_preparations, native)
 }

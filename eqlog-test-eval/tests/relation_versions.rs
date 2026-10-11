@@ -9,18 +9,18 @@ fn model_consumers_share_filtered_ambient_views() {
     for i in 0..100 {
         rows.insert([i]);
     }
-    versions.publish_shared(&rows);
+    versions.publish(&rows);
     versions.consume((0, vec![10]));
     versions.consume((0, vec![20]));
     rows.remove([5]);
     rows.insert([100]);
-    versions.publish_shared(&rows);
+    versions.publish(&rows);
     let first = versions.consume((0, vec![10]));
     let second = versions.consume((0, vec![20]));
     assert!(SnapshotSet::shares_root(&first.old, &second.old));
     assert!(SnapshotSet::shares_root(&first.new, &second.new));
     rows.insert([101]);
-    versions.publish_shared(&rows);
+    versions.publish(&rows);
     let pending = versions.consume((0, vec![20]));
     assert!(pending.new.contains([101]));
 }
@@ -32,7 +32,7 @@ fn consumers_advance_to_the_same_root_even_after_a_storage_rebuild() {
     for i in 0..100 {
         rows.insert([i]);
     }
-    versions.publish(&rows, PrefixTree1::empty());
+    versions.publish(&rows);
     versions.consume(0);
     versions.consume(1);
     let first = versions.consume(0);
@@ -45,7 +45,7 @@ fn consumers_advance_to_the_same_root_even_after_a_storage_rebuild() {
         rebuilt.insert([i]);
     }
     assert!(!SnapshotSet::shares_root(&rows, &rebuilt));
-    versions.publish(PrefixTree1::empty(), &rebuilt);
+    versions.publish(&rebuilt);
     let unchanged = versions.consume(0);
     assert!(SnapshotSet::shares_root(&first.old, &unchanged.old));
     assert!(unchanged.new.is_empty());
@@ -57,19 +57,19 @@ fn a_lagging_consumer_keeps_its_snapshot_and_sees_all_intervening_changes() {
     let mut rows = PrefixTree2::new();
     rows.insert([0, 0]);
     rows.insert([1, 1]);
-    versions.publish(&rows, PrefixTree2::empty());
+    versions.publish(&rows);
     versions.consume(0);
     versions.consume(1);
     let original = versions.consume(0).old;
 
     rows.insert([0, 2]);
-    versions.publish(&rows, PrefixTree2::empty());
+    versions.publish(&rows);
     assert_eq!(
         versions.consume(0).new.iter().collect::<Vec<_>>(),
         vec![[0, 2]]
     );
     rows.insert([0, 3]);
-    versions.publish(&rows, PrefixTree2::empty());
+    versions.publish(&rows);
     let lagging = versions.consume(1);
     assert!(SnapshotSet::shares_root(&original, &lagging.old));
     assert_eq!(lagging.new.iter().collect::<Vec<_>>(), vec![[0, 2], [0, 3]]);
@@ -93,12 +93,12 @@ fn equality_replacements_are_unseen_and_filtered_old_views_are_shared() {
     let mut rows = PrefixTree2::new();
     rows.insert([0, 1]);
     rows.insert([2, 3]);
-    versions.publish(&rows, PrefixTree2::empty());
+    versions.publish(&rows);
     versions.consume(0);
     versions.consume(1);
     rows.remove([0, 1]);
     rows.insert([0, 0]);
-    versions.publish(&rows, PrefixTree2::empty());
+    versions.publish(&rows);
     let first = versions.consume(0);
     let second = versions.consume(1);
     assert_eq!(first.old.iter().collect::<Vec<_>>(), vec![[2, 3]]);
@@ -113,14 +113,14 @@ fn separately_requested_ages_share_views_and_advance_their_consumers() {
     let mut rows = PrefixTree2::new();
     rows.insert([0, 1]);
     rows.insert([2, 3]);
-    versions.publish_shared(&rows);
+    versions.publish(&rows);
     for consumer in 0..3 {
         versions.consume(consumer);
     }
 
     rows.remove([0, 1]);
     rows.insert([0, 0]);
-    versions.publish_shared(&rows);
+    versions.publish(&rows);
     let old_only = versions.consume_required::<true, false>(0);
     let new_only = versions.consume_required::<false, true>(1);
     let both = versions.consume(2);
@@ -149,7 +149,7 @@ fn mapped_snapshots_share_roots_without_materializing_empty_differences() {
         map: rows.map.mapped(mapping),
     };
     let mut versions = RelationVersions::new();
-    versions.publish(PrefixTree2::empty(), &mapped);
+    versions.publish(&mapped);
     let first = versions.consume(0);
     assert!(SnapshotSet::shares_root(&first.new, &mapped));
     let second = versions.consume(0);
@@ -159,7 +159,7 @@ fn mapped_snapshots_share_roots_without_materializing_empty_differences() {
     for row in mapped.iter() {
         rebuilt.insert(row);
     }
-    versions.publish(&rebuilt, PrefixTree2::empty());
+    versions.publish(&rebuilt);
     assert!(SnapshotSet::shares_root(&versions.consume(0).old, &mapped));
 }
 
@@ -177,12 +177,12 @@ fn materialized_deltas_reuse_whole_added_prefixes() {
     let mut versions = RelationVersions::new();
     let mut rows = PrefixTree2::new();
     rows.insert([0, 0]);
-    versions.publish(&rows, PrefixTree2::empty());
+    versions.publish(&rows);
     versions.consume(0);
     for i in 0..1000 {
         rows.insert([1, i]);
     }
-    versions.publish(&rows, PrefixTree2::empty());
+    versions.publish(&rows);
     let lagging = versions.consume(0);
     let fresh = versions.consume(1);
     assert_eq!(lagging.new.iter().count(), 1000);

@@ -85,14 +85,14 @@ fn maintenance_uses_the_latest_shared_index_while_consumers_keep_their_checkpoin
         visited.set(visited.get() + 1);
         Some([y, x])
     };
-    versions.publish_shared(&seed.update(&rows, project));
+    versions.publish(&seed.update(&rows, project));
     let initial = versions.consume(0).new;
     let initial_c = versions.consume(2).new;
     assert!(SnapshotSet::shares_root(&initial, &initial_c));
     assert_eq!(visited.get(), 2);
 
     rows.insert([3, 10]);
-    versions.publish_shared(&seed.update(&rows, project));
+    versions.publish(&seed.update(&rows, project));
     let a = versions.consume(0);
     assert_eq!(visited.get(), 3);
     assert!(SnapshotSet::shares_root(&a.old, &initial));
@@ -101,14 +101,13 @@ fn maintenance_uses_the_latest_shared_index_while_consumers_keep_their_checkpoin
 
     rows.insert([4, 20]);
     assert_eq!(visited.get(), 3);
-    versions.publish_shared(&seed.update(&rows, project));
+    versions.publish(&seed.update(&rows, project));
     let c = versions.consume(2);
     assert_eq!(visited.get(), 4);
     assert!(SnapshotSet::shares_root(&c.old, &initial));
     assert_eq!(c.new.iter().collect::<Vec<_>>(), vec![[10, 3], [20, 4]]);
 
-    versions
-        .publish_shared(&seed.update(&rows, |_| panic!("A can reuse the index maintained by C")));
+    versions.publish(&seed.update(&rows, |_| panic!("A can reuse the index maintained by C")));
     let a = versions.consume(0);
     assert!(SnapshotSet::shares_root(&a.old, &after_a));
     assert_eq!(a.new.iter().collect::<Vec<_>>(), vec![[20, 4]]);
@@ -119,7 +118,7 @@ fn maintenance_uses_the_latest_shared_index_while_consumers_keep_their_checkpoin
 
     rows.remove([3, 10]);
     rows.insert([3, 20]);
-    versions.publish_shared(&seed.update(&rows, project));
+    versions.publish(&seed.update(&rows, project));
     assert_eq!(visited.get(), 6);
     let a = versions.consume(0);
     let c = versions.consume(2);

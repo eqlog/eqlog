@@ -172,6 +172,27 @@ pub struct IndexSelection {
 }
 
 impl IndexSelection {
+    /// Storage has one current tree per order; ages belong to rule inputs.
+    pub fn current_indices(&self) -> impl Iterator<Item = (&FlatInRel, &IndexSpec)> {
+        self.indices.iter().flat_map(|(rel, indices)| {
+            indices
+                .iter()
+                .unique_by(|index| &index.order)
+                .map(move |index| (rel, index))
+        })
+    }
+
+    pub fn current_primary(&self, rel: &FlatInRel) -> &IndexSpec {
+        self.primary(rel, IndexAge::Old)
+    }
+
+    pub fn current_query(&self, rel: &FlatInRel, query: QuerySpec) -> &IndexSpec {
+        assert_eq!(query.age, QueryAge::All);
+        let indices = &self.queries[&(rel.clone(), query)];
+        assert!(indices.iter().all(|index| index.order == indices[0].order));
+        &indices[0]
+    }
+
     pub fn primary(&self, rel: &FlatInRel, age: IndexAge) -> &IndexSpec {
         let query = match age {
             IndexAge::Old => QuerySpec::all_old(),

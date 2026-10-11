@@ -613,7 +613,7 @@ fn dynamic_functions_match_compiled_lookups_with_pending_aliases() {
 }
 
 #[test]
-fn dynamic_function_evaluation_prefers_new_results_to_old_results() {
+fn dynamic_and_compiled_function_evaluation_agree_before_and_after_closure() {
     let mut compiled = PartialMagma::new();
     let x = compiled.new_el();
     let y = compiled.new_el();
@@ -623,17 +623,26 @@ fn dynamic_function_evaluation_prefers_new_results_to_old_results() {
     let new_result = compiled.new_el();
     compiled.insert_mul(x, y, new_result);
     assert!(new_result.0 > old_result.0);
-    assert_eq!(compiled.mul(x, y), Some(new_result));
+    assert_eq!(compiled.mul(x, y), Some(old_result));
     let mut dynamic = compiled.to_dynamic();
     let mul = dynamic.signature().relation_named("mul").unwrap();
     let args = [
         handle::<PartialMagma>("El", x.0),
         handle::<PartialMagma>("El", y.0),
     ];
-    let expected = handle::<PartialMagma>("El", new_result.0);
+    let expected = handle::<PartialMagma>("El", old_result.0);
     assert_eq!(dynamic.eval(mul, &args).unwrap(), Some(expected));
     assert_eq!(dynamic.define(mul, &args).unwrap(), expected);
     assert_eq!(dynamic.tuples(mul).unwrap().count(), 2);
+    compiled.close();
+    assert!(compiled.are_equal_el(old_result, new_result));
+    assert_eq!(compiled.iter_mul().count(), 1);
+    let dynamic = compiled.to_dynamic();
+    let result = compiled.mul(x, y).unwrap();
+    assert_eq!(
+        dynamic.eval(mul, &args).unwrap(),
+        Some(handle::<PartialMagma>("El", result.0))
+    );
 }
 
 #[test]

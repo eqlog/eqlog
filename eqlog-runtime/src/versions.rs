@@ -11,7 +11,6 @@ pub trait SnapshotSet: Clone {
     fn empty() -> Self;
     fn is_empty(&self) -> bool;
     fn shares_root(&self, other: &Self) -> bool;
-    fn union(&self, other: &Self) -> Self;
     fn difference(&self, other: &Self) -> Self;
     fn visit_difference(&self, other: &Self, visit: &mut impl FnMut(Self::Row));
     fn insert_row(&mut self, row: Self::Row);
@@ -41,9 +40,6 @@ macro_rules! snapshot_set {
                 let $left = self;
                 let $right = other;
                 $shares
-            }
-            fn union(&self, other: &Self) -> Self {
-                self.union(other)
             }
             fn difference(&self, other: &Self) -> Self {
                 self.difference(other)
@@ -158,52 +154,9 @@ impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
         self.seen.retain(|consumer, _| retain(consumer));
     }
 
-    /// Storage maintenance can rebuild an equal tree or move rows between ages.
-    /// Only actual differences may fork the published root and its subtrees.
-    pub fn publish(&mut self, old: &T, new: &T) {
-        let candidate = if new.is_empty() {
-            old.clone()
-        } else if old.is_empty() {
-            new.clone()
-        } else {
-            old.union(new)
-        };
-        if self.current.rows.shares_root(&candidate) {
-            return;
-        }
-        let mut changed = false;
-        let rows = if self.current.rows.is_empty() {
-            changed = !candidate.is_empty();
-            candidate
-        } else {
-            let mut rows = self.current.rows.clone();
-            self.current.rows.visit_difference(&candidate, &mut |row| {
-                changed = true;
-                rows.remove_row(row);
-            });
-            candidate.visit_difference(&self.current.rows, &mut |row| {
-                changed = true;
-                rows.insert_row(row);
-            });
-            rows
-        };
-        if !changed {
-            return;
-        }
-        self.current = Rc::new(Version {
-            id: self
-                .current
-                .id
-                .checked_add(1)
-                .expect("relation version overflow"),
-            rows,
-        });
-        self.views.clear();
-    }
-
-    /// Transported indices already share their owned and inherited subtrees.
-    /// Replaying their tuple edits would sever that sharing between models.
-    pub fn publish_shared(&mut self, rows: &T) {
+    /// Keep supplied trees shared with storage and other consumers. Equal rebuilt
+    /// trees retain the previous published root so checkpoints do not diverge.
+    pub fn publish(&mut self, rows: &T) {
         if self.current.rows.shares_root(rows) {
             return;
         }

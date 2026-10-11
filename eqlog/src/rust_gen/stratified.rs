@@ -14,7 +14,7 @@ use super::{
 };
 use crate::algebra::signature::TypeId;
 use crate::flat_eqlog::{
-    FlatInRel, FlatOutRel, IndexAge, IndexSelection, IndexSpec, Schedule, StratifiedPlan, Stratum,
+    FlatInRel, FlatOutRel, IndexAge, IndexSelection, IndexSpec, RuleSchedule, Schedule, Stratum,
 };
 use crate::fmt_util::FmtFn;
 use crate::ram::{
@@ -74,10 +74,7 @@ impl<'s> Codegen<'s> {
                         let i = self.inputs[&rel];
                         let arity =
                             rel.arity(ctx.signature()).len() - scope_prefix(&rel, model, ctx);
-                        writeln!(
-                            f,
-                            "input_{i}_old: PrefixTree{arity}, input_{i}_new: PrefixTree{arity},"
-                        )?;
+                        writeln!(f, "input_{i}: PrefixTree{arity},")?;
                     }
                     writeln!(f, "}}")?;
                 }
@@ -168,7 +165,7 @@ impl<'s> Codegen<'s> {
         fields
     }
 
-    pub fn new(plan: &'s StratifiedPlan, program: &'s RamProgram) -> Self {
+    pub fn new(plan: &'s RuleSchedule, program: &'s RamProgram) -> Self {
         let indices: BTreeSet<_> = program
             .preparations
             .iter()
@@ -387,14 +384,12 @@ impl<'s> Codegen<'s> {
                     let mut snapshots = Vec::new();
                     for rel in &inputs {
                         let i = self.inputs[rel];
-                        for (age, name) in [(IndexAge::Old, "old"), (IndexAge::New, "new")] {
-                            let field =
-                                display_all_index_field_name(rel, selection.primary(rel, age), ctx);
-                            let source = scoped_tree(&format!("&self.{field}"), rel, model, ctx);
-                            writeln!(f, "let input_{i}_{name} = {source};")?;
-                            unchanged.push(format!("eqlog_runtime::__private::SnapshotSet::shares_root(input_{i}_{name}, &_previous.input_{i}_{name})"));
-                            snapshots.push(format!("input_{i}_{name}: input_{i}_{name}.clone()"));
-                        }
+                        let field =
+                            display_all_index_field_name(rel, selection.current_primary(rel), ctx);
+                        let source = scoped_tree(&format!("&self.{field}"), rel, model, ctx);
+                        writeln!(f, "let input_{i} = {source};")?;
+                        unchanged.push(format!("eqlog_runtime::__private::SnapshotSet::shares_root(input_{i}, &_previous.input_{i})"));
+                        snapshots.push(format!("input_{i}: input_{i}.clone()"));
                     }
                     let unchanged = unchanged.join(" && ");
                     let snapshots = snapshots.join(", ");
@@ -408,17 +403,26 @@ impl<'s> Codegen<'s> {
                         let checkpoint = __OwnerInputs{s} {{ {snapshots} }};
                         self.__owner_inputs_{s}.insert(owners, checkpoint);
                     "}?;
-                    let possible: BTreeSet<_> = stratum.groups.iter()
+                    let possible: BTreeSet<_> = stratum
+                        .groups
+                        .iter()
                         .flat_map(|&m| &modules[m].routines)
                         .map(|routine| {
-                            let sources: BTreeSet<_> = routine.input_indices().iter()
-                                .map(|(rel, _)| self.inputs[&source_relation(rel)]).collect();
+                            let sources: BTreeSet<_> = routine
+                                .input_indices()
+                                .iter()
+                                .map(|(rel, _)| self.inputs[&source_relation(rel)])
+                                .collect();
                             if sources.is_empty() {
                                 "true".to_owned()
                             } else {
-                                sources.iter().map(|i| format!("(!input_{i}_old.is_empty() || !input_{i}_new.is_empty())")).join(" && ")
+                                sources
+                                    .iter()
+                                    .map(|i| format!("!input_{i}.is_empty()"))
+                                    .join(" && ")
                             }
-                        }).collect();
+                        })
+                        .collect();
                     if !possible.contains("true") {
                         let possible = if possible.is_empty() {
                             "false".to_owned()
@@ -434,27 +438,9 @@ impl<'s> Codegen<'s> {
                     if stable {
                         begin_stable_input(f, &format!("input_{i}"), &rel, ctx)?;
                     }
-                    let old = display_all_index_field_name(
-                        &rel,
-                        selection.primary(&rel, IndexAge::Old),
-                        ctx,
-                    );
-                    let new = display_all_index_field_name(
-                        &rel,
-                        selection.primary(&rel, IndexAge::New),
-                        ctx,
-                    );
-                    if ctx.has_shared_indices(&rel) {
-                        writeln!(
-                            f,
-                            "self.__rule_input_{i}.publish_shared(&self.{old}.union(&self.{new}));"
-                        )?;
-                    } else {
-                        writeln!(
-                            f,
-                            "self.__rule_input_{i}.publish(&self.{old}, &self.{new});"
-                        )?;
-                    }
+                    let current =
+                        display_all_index_field_name(&rel, selection.current_primary(&rel), ctx);
+                    writeln!(f, "self.__rule_input_{i}.publish(&self.{current});")?;
                     if let Some(model) = stratum.model {
                         consume_scoped(
                             f,
@@ -574,7 +560,7 @@ impl<'s> Codegen<'s> {
                         ));
                         writedoc! {f, "
                             let index_{j} = self.__rule_index_{j}.update(self.__rule_input_{i}.current(), {project});
-                            self.__rule_index_{j}_versions.publish_shared(&index_{j});
+                            self.__rule_index_{j}_versions.publish(&index_{j});
                         "}?;
                         if let Some(model) = stratum.model {
                             consume_scoped(
@@ -701,7 +687,6 @@ impl<'s> Codegen<'s> {
                         if morphisms.is_empty() {{ return false; }}
                         let mut changed = false;
                 "}?;
-                    fold_primary_ages(f, plan, ctx, selection)?;
                     writeln!(f, "for morphism in morphisms {{ changed |= self.__propagate_{name}_morphism_model_{m}(parents, morphism, retain_own); }}")?;
                     for (rel, index) in &plan.support_indices {
                         write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
@@ -713,7 +698,7 @@ impl<'s> Codegen<'s> {
                             self.__extend_native_index_{id}();
                             let mut index = self.__native_input_{id}.current().clone();
                             for morphism in morphisms {{ changed |= self.__native_{id}_morphism_{level}(parents, morphism, &mut index, retain_own); }}
-                            self.__native_input_{id}.publish_shared(&index);
+                            self.__native_input_{id}.publish(&index);
                         "}?;
                         }
                     }
@@ -737,7 +722,6 @@ impl<'s> Codegen<'s> {
                         .expect("descendant preparation needs a bound owner");
                     let count = ctx.signature().type_(model).parents.len() + 1;
                     writeln!(f, "fn __prepare_descendants_{suffix}(&mut self, owners: [u32; {count}], retain_own: bool) {{")?;
-                    fold_primary_ages(f, plan, ctx, selection)?;
                     for &child in &plan.descendants {
                         let name = display_type(child, ctx).to_string().to_case(Case::Snake);
                         writeln!(
@@ -759,7 +743,7 @@ impl<'s> Codegen<'s> {
                                 self.__extend_native_index_{id}();
                                 let mut index = self.__native_input_{id}.current().clone();
                                 self.__native_{id}_model_{count}(owners, &mut index, retain_own);
-                                self.__native_input_{id}.publish_shared(&index);
+                                self.__native_input_{id}.publish(&index);
                             "}?;
                         }
                     }
@@ -877,21 +861,15 @@ impl<'s> Codegen<'s> {
                     loop {{
             "}?;
             emit_schedule(f, self.body, None, 0, None, "false", self, ctx, selection)?;
-            // Consumer snapshots advance within the schedule; storage ages only
-            // separate completed rule evaluation from the next allocation round.
             writedoc! {f, "
-                        self.move_new_to_old();
+                        self.__allocated = false;
                         delta.apply_func_defs(self);
-                        if !self.is_dirty() {{
+                        if !self.__allocated {{
                             std::mem::swap(&mut self.__pending_delta, &mut delta);
                             self.canonicalize();
                             return false;
                         }}
                         self.__canonicalize_relations();
-                        if self.__check_condition(condition) {{
-                            std::mem::swap(&mut self.__pending_delta, &mut delta);
-                            return true;
-                        }}
                     }}
                 }}
             "}
@@ -1024,7 +1002,7 @@ fn consume_scoped(
         let {name} = {{
             let current = {current};
             let history = self.{field}.entry([{key}]).or_insert_with(eqlog_runtime::__private::RelationVersions::new);
-            history.publish_shared(current);
+            history.publish(current);
             let view = history.consume_required::<{old}, {new}>(({stratum}, owners.to_vec()));
     "}?;
     for age in ["old", "new"] {
@@ -1038,24 +1016,6 @@ fn consume_scoped(
             eqlog_runtime::__private::RelationView {{ old, new }}
         }};
     "}
-}
-
-fn fold_primary_ages(
-    f: &mut std::fmt::Formatter<'_>,
-    plan: &NativePreparation,
-    ctx: &RustGenCtx<'_>,
-    selection: &IndexSelection,
-) -> std::fmt::Result {
-    for &rel in &plan.propagation.relations {
-        let rel = FlatInRel::Rel(rel);
-        let old = display_all_index_field_name(&rel, selection.primary(&rel, IndexAge::Old), ctx);
-        let new = display_all_index_field_name(&rel, selection.primary(&rel, IndexAge::New), ctx);
-        writeln!(
-            f,
-            "self.{new} = self.{old}.union(&self.{new}); self.{old}.clear();"
-        )?;
-    }
-    Ok(())
 }
 
 fn emit_schedule(

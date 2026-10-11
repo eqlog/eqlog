@@ -6,14 +6,13 @@ use indoc::writedoc;
 use itertools::Itertools;
 
 use crate::algebra::signature::{FuncId, TypeId, TypeKind};
-use crate::flat_eqlog::{
-    iter_flat_rels, FlatInRel, FlatRel, IndexAge, IndexSelection, IndexSpec, QuerySpec,
-};
+use crate::flat_eqlog::{iter_flat_rels, FlatInRel, FlatRel, IndexSelection};
 use crate::fmt_util::FmtFn;
 
 use super::{
-    display_all_index_field_name, display_element_index_field_name, display_index_expr,
-    display_index_field_name, display_own_index_field_name, display_weight_static_name, RustGenCtx,
+    display_all_index_field_name, display_current_index_field_name,
+    display_element_index_field_name, display_index_expr, display_own_index_field_name,
+    display_weight_static_name, RustGenCtx,
 };
 
 struct DynamicContext<'a> {
@@ -134,17 +133,6 @@ impl DynamicContext<'_> {
         })
     }
 
-    fn primary(&self, rel: FlatInRel, age: IndexAge) -> &IndexSpec {
-        self.indices
-            .queries
-            .get(&(rel, QuerySpec::all()))
-            .expect("primary index query")
-            .iter()
-            .filter(|index| index.age == age)
-            .exactly_one()
-            .expect("one primary index per age")
-    }
-
     fn export(&self) -> impl Display + '_ {
         FmtFn(move |f| {
             writedoc! {f, "
@@ -156,15 +144,12 @@ impl DynamicContext<'_> {
             for typ in self.ctx.signature().iter_types() {
                 let snake = self.ctx.type_name(typ).to_case(Case::Snake);
                 let rel = FlatInRel::TypeSet(typ);
-                let new =
-                    display_index_expr(&rel, self.primary(rel.clone(), IndexAge::New), self.ctx);
-                let old =
-                    display_index_expr(&rel, self.primary(rel.clone(), IndexAge::Old), self.ctx);
+                let elements =
+                    display_index_expr(&rel, self.indices.current_primary(&rel), self.ctx);
                 writedoc! {f, "
                     eqlog_runtime::__private::TypeData {{
                         equalities: self.{snake}_equalities.retype(),
-                        new: (*{new}).clone(),
-                        old: (*{old}).clone(),
+                        elements: (*{elements}).clone(),
                         weights: self.{snake}_weights.clone(),
                         uprooted: self.{snake}_uprooted.iter().map(|el| el.0).collect(),
                     }},
@@ -177,18 +162,17 @@ impl DynamicContext<'_> {
                     f,
                     "eqlog_runtime::__private::RelationData {{ weight: {weight},"
                 )?;
-                for age in [IndexAge::New, IndexAge::Old] {
-                    let flat = FlatInRel::Rel(rel);
-                    let index = self.primary(flat.clone(), age);
-                    let expression = display_index_expr(&flat, index, self.ctx);
-                    let order = index.order.iter().join(", ");
-                    writedoc! {f, "
-                        {age}: eqlog_runtime::__private::RelationIndex {{
+
+                let flat = FlatInRel::Rel(rel);
+                let index = self.indices.current_primary(&flat);
+                let expression = display_index_expr(&flat, index, self.ctx);
+                let order = index.order.iter().join(", ");
+                writedoc! {f, "
+                        rows: eqlog_runtime::__private::RelationIndex {{
                             order: vec![{order}],
                             table: eqlog_runtime::__private::Table::from((*{expression}).clone()),
                         }},
                     "}?;
-                }
                 writeln!(f, "}},")?;
             }
             writedoc! {f, "
@@ -215,16 +199,16 @@ impl DynamicContext<'_> {
                 let camel = self.ctx.type_name(typ).to_case(Case::UpperCamel);
                 let type_ = self.type_(typ);
                 let rel = FlatInRel::TypeSet(typ);
-                let new = display_index_field_name(
+                let elements = display_current_index_field_name(
                     &rel,
-                    self.primary(rel.clone(), IndexAge::New),
+                    self.indices.current_primary(&rel),
                     self.ctx,
                 );
                 writedoc! {f, "
                     let data = eqlog_runtime::__private::type_data(source, {type_})?;
                     model.{snake}_equalities = data.equalities.retype();
                     model.{snake}_weights = vec![0; data.equalities.len()];
-                    model.{new} = data.new.union(&data.old);
+                    model.{elements} = data.elements.clone();
                     model.{snake}_uprooted = (0..data.equalities.len() as u32)
                         .filter(|&index| data.equalities.root_const(index) != index)
                         .map({camel})
@@ -235,7 +219,7 @@ impl DynamicContext<'_> {
                 .enumerate()
                 .map(|(id, rel)| (rel, id))
                 .collect();
-            for (flat, indices) in &self.indices.indices {
+            for (flat, index) in self.indices.current_indices() {
                 let rel = match flat {
                     FlatInRel::Rel(rel) => *rel,
                     FlatInRel::RelWithDiagonals { .. }
@@ -243,25 +227,19 @@ impl DynamicContext<'_> {
                     | FlatInRel::Equality(_) => continue,
                 };
                 let id = relations[&rel];
-                for index in indices {
-                    if !self.indices.is_primary(flat, index) {
-                        continue;
-                    }
-                    match index.age {
-                        IndexAge::Old => continue,
-                        IndexAge::New => {}
-                    }
-                    let order = index.order.iter().join(", ");
-                    let own = display_own_index_field_name(flat, index, self.ctx);
-                    writedoc! {f, "
+                if !self.indices.is_primary(flat, index) {
+                    continue;
+                }
+                let order = index.order.iter().join(", ");
+                let own = display_own_index_field_name(flat, index, self.ctx);
+                writedoc! {f, "
                         let index = eqlog_runtime::__private::relation_data(source, eqlog_runtime::RelationId({id}))?
                             .reindex(&[{order}], &[])?;
                         model.{own} = (&index).try_into()?;
                     "}?;
-                    if self.ctx.has_shared_indices(flat) {
-                        let all = display_all_index_field_name(flat, index, self.ctx);
-                        writeln!(f, "model.{all} = model.{own}.clone();")?;
-                    }
+                if self.ctx.has_shared_indices(flat) {
+                    let all = display_all_index_field_name(flat, index, self.ctx);
+                    writeln!(f, "model.{all} = model.{own}.clone();")?;
                 }
             }
             for (id, rel) in iter_flat_rels(self.ctx.signature()).enumerate() {

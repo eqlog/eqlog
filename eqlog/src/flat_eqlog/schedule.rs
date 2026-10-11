@@ -7,15 +7,10 @@ use crate::flat_eqlog::{
 };
 use crate::options::{ModelMode, SchedulingMode};
 
-pub enum RuleSchedule {
-    Simultaneous,
-    Stratified(StratifiedPlan),
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StratumId(pub usize);
 
-pub struct StratifiedPlan {
+pub struct RuleSchedule {
     pub strata: Vec<Stratum>,
     pub body: Schedule,
 }
@@ -56,30 +51,15 @@ pub fn schedule_rule_groups(
         }
     }
     match scheduling_mode {
-        SchedulingMode::Simultaneous => RuleSchedule::Simultaneous,
-        SchedulingMode::Stratified => {
-            let plan = strata(groups, signature, model_mode);
-            // One global recursive component already has a single consumption
-            // clock; physical old/new sets provide exactly that clock.
-            let single_loop = match &plan.body {
-                Schedule::Saturate(body) => match body.as_ref() {
-                    Schedule::Rules(id) => plan.strata[id.0].model.is_none(),
-                    Schedule::Sequence(_)
-                    | Schedule::Independent(_)
-                    | Schedule::Saturate(_)
-                    | Schedule::ModelComponents { .. } => false,
-                },
-                Schedule::Rules(_)
-                | Schedule::Sequence(_)
-                | Schedule::Independent(_)
-                | Schedule::ModelComponents { .. } => false,
-            };
-            if single_loop {
-                RuleSchedule::Simultaneous
-            } else {
-                RuleSchedule::Stratified(plan)
-            }
-        }
+        SchedulingMode::Simultaneous => RuleSchedule {
+            strata: vec![Stratum {
+                groups: (0..groups.len()).collect(),
+                model: None,
+                stable_inputs: BTreeSet::new(),
+            }],
+            body: Schedule::Saturate(Box::new(Schedule::Rules(StratumId(0)))),
+        },
+        SchedulingMode::Stratified => strata(groups, signature, model_mode),
     }
 }
 
@@ -94,7 +74,7 @@ fn strata(
     groups: &mut [FlatRuleGroup],
     signature: &Signature,
     model_mode: ModelMode,
-) -> StratifiedPlan {
+) -> RuleSchedule {
     let resources: Vec<_> = iter_flat_rels(signature)
         .map(FlatInRel::Rel)
         .chain(signature.iter_types().map(FlatInRel::TypeSet))
@@ -197,7 +177,7 @@ fn strata(
             signature,
             &mut strata,
         ) {
-            Ok(body) => return StratifiedPlan { strata, body },
+            Ok(body) => return RuleSchedule { strata, body },
             Err(fallback) => {
                 // Ambient feedback cannot be closed with one owner bound.
                 for group in fallback {

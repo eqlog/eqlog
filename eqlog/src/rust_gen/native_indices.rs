@@ -10,7 +10,7 @@ use super::{
     parent_prefix_len, MorphismIndexColumnKind, RustGenCtx,
 };
 use crate::algebra::signature::TypeId;
-use crate::flat_eqlog::{FlatInRel, IndexAge, IndexSelection, IndexSpec};
+use crate::flat_eqlog::{FlatInRel, IndexSelection, IndexSpec};
 use crate::fmt_util::FmtFn;
 use crate::ram::NativeIndexPreparation;
 
@@ -60,27 +60,20 @@ pub(super) fn methods<'a>(
     FmtFn(move |f| {
         for (id, plan) in plans.iter().enumerate() {
             let typ = display_index_type(&plan.rel, ctx);
-            let primary = indices.primary(&plan.rel, IndexAge::Old);
-            let old = display_own_index_field_name(&plan.rel, primary, ctx);
-            let new = display_own_index_field_name(
-                &plan.rel,
-                indices.primary(&plan.rel, IndexAge::New),
-                ctx,
-            );
+            let primary = indices.current_primary(&plan.rel);
+            let owned = display_own_index_field_name(&plan.rel, primary, ctx);
             let project = projection(&plan.rel, &plan.index, primary);
             writedoc! {f, "
                 fn __prepare_native_index_{id}(&mut self) {{
-                    let owned = self.{old}.union(&self.{new});
-                    let mut index = self.__native_seed_{id}.update(&owned, {project});
+                    let mut index = self.__native_seed_{id}.update(&self.{owned}, {project});
                     self.__native_{id}_model_0([], &mut index, false);
-                    self.__native_input_{id}.publish_shared(&index);
+                    self.__native_input_{id}.publish(&index);
                 }}
 
                 fn __extend_native_index_{id}(&mut self) {{
-                    let owned = self.{old}.union(&self.{new});
-                    let index = self.__native_seed_{id}.update(&owned, {project});
+                    let index = self.__native_seed_{id}.update(&self.{owned}, {project});
                     let index = self.__native_input_{id}.current().union(&index);
-                    self.__native_input_{id}.publish_shared(&index);
+                    self.__native_input_{id}.publish(&index);
                 }}
             "}?;
             for (level, &model) in plan.models.iter().enumerate() {

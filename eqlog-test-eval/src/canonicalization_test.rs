@@ -7,7 +7,7 @@ use crate::canonicalization::Canonicalization;
 use crate::member_parents::MemberParents;
 use crate::morphism_preservation::MorphismPreservation;
 
-fn assert_same_pending_work(left: &Model, right: &Model) {
+fn assert_same_canonical_facts(left: &Model, right: &Model) {
     assert!(left.is_canonical());
     assert!(right.is_canonical());
     assert_eq!(left.signature(), right.signature());
@@ -15,12 +15,8 @@ fn assert_same_pending_work(left: &Model, right: &Model) {
         let left = type_data(left, type_).unwrap();
         let right = type_data(right, type_).unwrap();
         assert_eq!(
-            left.new.iter().collect::<Vec<_>>(),
-            right.new.iter().collect::<Vec<_>>()
-        );
-        assert_eq!(
-            left.old.iter().collect::<Vec<_>>(),
-            right.old.iter().collect::<Vec<_>>()
+            left.elements.iter().collect::<Vec<_>>(),
+            right.elements.iter().collect::<Vec<_>>()
         );
         assert!(left.uprooted.is_empty());
         assert!(right.uprooted.is_empty());
@@ -29,12 +25,8 @@ fn assert_same_pending_work(left: &Model, right: &Model) {
         let left = relation_data(left, relation).unwrap();
         let right = relation_data(right, relation).unwrap();
         assert_eq!(
-            left.new.tuples().collect::<BTreeSet<_>>(),
-            right.new.tuples().collect()
-        );
-        assert_eq!(
-            left.old.tuples().collect::<BTreeSet<_>>(),
-            right.old.tuples().collect()
+            left.rows.tuples().collect::<BTreeSet<_>>(),
+            right.rows.tuples().collect()
         );
     }
 }
@@ -60,11 +52,11 @@ fn canonicalization_preserves_matches_across_closure_and_external_edits() {
         dynamic.canonicalize();
         let once = dynamic.clone();
         dynamic.canonicalize();
-        assert_same_pending_work(&once, &dynamic);
+        assert_same_canonical_facts(&once, &dynamic);
         model.canonicalize();
-        assert_same_pending_work(&model.to_dynamic(), &dynamic);
+        assert_same_canonical_facts(&model.to_dynamic(), &dynamic);
         model.canonicalize();
-        assert_same_pending_work(&model.to_dynamic(), &dynamic);
+        assert_same_canonical_facts(&model.to_dynamic(), &dynamic);
         assert!(!model.joined(x));
         assert!(!model.loop_at(x));
 
@@ -88,7 +80,7 @@ fn canonicalization_preserves_matches_across_closure_and_external_edits() {
 }
 
 #[test]
-fn dynamic_canonicalization_preserves_old_collisions_and_physical_column_orders() {
+fn dynamic_canonicalization_deduplicates_aliases_and_preserves_column_order() {
     let signature = Canonicalization::dynamic_signature();
     let mut model = Canonicalization::new();
     let x = model.new_v();
@@ -112,37 +104,27 @@ fn dynamic_canonicalization_preserves_old_collisions_and_physical_column_orders(
         .collect();
     let edge = signature.relation_named("edge").unwrap();
     let data = &mut relations[edge.0];
-    data.old.order = vec![1, 0];
-    data.old.table = Table::new(2);
-    data.old.table.insert(&[z.0, root]);
-    data.old.table.insert(&[z.0, alias]);
-    data.old.table.insert(&[alias, z.0]);
-    data.new.table.insert(&[root, z.0]);
-    data.new.table.insert(&[alias, root]);
+    data.rows.order = vec![1, 0];
+    data.rows.table = Table::new(2);
+    data.rows.table.insert(&[z.0, root]);
+    data.rows.table.insert(&[z.0, alias]);
+    data.rows.table.insert(&[alias, z.0]);
+    data.rows.table.insert(&[root, alias]);
     let gate = signature.relation_named("gate").unwrap();
-    relations[gate.0].new.table.insert(&[]);
+    relations[gate.0].rows.table.insert(&[]);
     let mut dynamic = from_parts(signature, types, relations).unwrap();
     assert!(!dynamic.is_canonical());
     dynamic.canonicalize();
 
     let edge_data = relation_data(&dynamic, edge).unwrap();
-    assert_eq!(edge_data.old.order, [1, 0]);
-    assert_eq!(edge_data.new.order, [0, 1]);
+    assert_eq!(edge_data.rows.order, [1, 0]);
     assert_eq!(
-        edge_data.old.tuples().collect::<Vec<_>>(),
-        [vec![root, z.0]]
+        edge_data.rows.tuples().collect::<BTreeSet<_>>(),
+        BTreeSet::from([vec![root, z.0], vec![z.0, root], vec![root, root]])
     );
     assert_eq!(
-        edge_data.new.tuples().collect::<BTreeSet<_>>(),
-        BTreeSet::from([vec![z.0, root], vec![root, root]])
-    );
-    assert_eq!(
-        relation_data(&dynamic, gate).unwrap().old.tuples().count(),
+        relation_data(&dynamic, gate).unwrap().rows.tuples().count(),
         1
-    );
-    assert_eq!(
-        relation_data(&dynamic, gate).unwrap().new.tuples().count(),
-        0
     );
     let v = signature.type_named("V").unwrap();
     let weights = &type_data(&dynamic, v).unwrap().weights;
@@ -151,30 +133,7 @@ fn dynamic_canonicalization_preserves_old_collisions_and_physical_column_orders(
     assert_eq!(weights[z.0 as usize], 2 * edge_data.weight);
     let once = dynamic.clone();
     dynamic.canonicalize();
-    assert_same_pending_work(&once, &dynamic);
-}
-
-#[test]
-fn duplicate_partitions_need_canonicalization_even_without_equalities() {
-    let signature = Canonicalization::dynamic_signature();
-    let mut model = Canonicalization::new();
-    model.insert_gate();
-    model.close();
-    let snapshot = model.to_dynamic();
-    let types = signature
-        .types()
-        .map(|(id, _)| type_data(&snapshot, id).unwrap().clone())
-        .collect();
-    let mut relations: Vec<_> = signature
-        .relations()
-        .map(|(id, _)| relation_data(&snapshot, id).unwrap().clone())
-        .collect();
-    let gate = signature.relation_named("gate").unwrap();
-    relations[gate.0].new.table.insert(&[]);
-    let mut dynamic = from_parts(signature, types, relations).unwrap();
-    assert!(!dynamic.is_canonical());
-    dynamic.canonicalize();
-    assert_same_pending_work(&snapshot, &dynamic);
+    assert_same_canonical_facts(&once, &dynamic);
 }
 
 #[test]
@@ -191,7 +150,7 @@ fn canonicalization_leaves_function_equalities_for_closure() {
     let mut dynamic = model.to_dynamic();
     dynamic.canonicalize();
     model.canonicalize();
-    assert_same_pending_work(&model.to_dynamic(), &dynamic);
+    assert_same_canonical_facts(&model.to_dynamic(), &dynamic);
     assert!(!model.are_equal_v(u, v));
     assert_eq!(model.iter_value().count(), 2);
     assert_eq!(model.iter_v().count(), 3);
@@ -216,7 +175,7 @@ fn canonicalization_keeps_nested_member_handles_usable() {
     let mut dynamic = model.to_dynamic();
     dynamic.canonicalize();
     model.canonicalize();
-    assert_same_pending_work(&model.to_dynamic(), &dynamic);
+    assert_same_canonical_facts(&model.to_dynamic(), &dynamic);
     model.insert_inner_member_el(b, j, y);
     model.new_el(b, j);
     model.canonicalize();
@@ -238,9 +197,11 @@ fn canonicalization_refreshes_shared_views_without_consuming_pending_facts() {
     model.canonicalize();
     let once = model.to_dynamic();
     model.canonicalize();
-    assert_same_pending_work(&once, &model.to_dynamic());
+    assert_same_canonical_facts(&once, &model.to_dynamic());
     #[cfg(not(feature = "desugared"))]
     assert!(model.ready(target));
+    #[cfg(feature = "desugared")]
+    assert!(!model.ready(target));
     assert!(!model.observed(target));
     model.close();
     assert!(model.observed(target));
@@ -256,7 +217,7 @@ fn canonicalization_refreshes_shared_views_without_consuming_pending_facts() {
 }
 
 #[test]
-fn runtime_edits_retain_old_facts_between_closures() {
+fn runtime_edits_preserve_facts_and_consumer_checkpoints() {
     let mut model = Canonicalization::new();
     let signature = Canonicalization::dynamic_signature();
     let v = signature.type_named("V").unwrap();
@@ -274,24 +235,16 @@ fn runtime_edits_retain_old_facts_between_closures() {
     assert_eq!(model.define(value, &[x]).unwrap(), z);
     assert!(!model.insert(p, &[x]).unwrap());
     let after = model.to_dynamic();
-    assert_eq!(
-        type_data(&after, v).unwrap().old.iter().collect::<Vec<_>>(),
-        type_data(&before, v)
-            .unwrap()
-            .old
-            .iter()
-            .collect::<Vec<_>>()
-    );
-    assert_eq!(type_data(&after, v).unwrap().new.iter().count(), 2);
+    assert_eq!(after.elements(v).unwrap().count(), 3);
     assert_eq!(
         relation_data(&after, p)
             .unwrap()
-            .old
+            .rows
             .tuples()
             .collect::<Vec<_>>(),
         relation_data(&before, p)
             .unwrap()
-            .old
+            .rows
             .tuples()
             .collect::<Vec<_>>()
     );
@@ -318,7 +271,7 @@ fn runtime_edits_retain_old_facts_between_closures() {
             actual: 1
         })
     );
-    assert_same_pending_work(&after, &model.to_dynamic());
+    assert_same_canonical_facts(&after, &model.to_dynamic());
 
     model.insert(q, &[y]).unwrap();
     model.close();

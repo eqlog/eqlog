@@ -13,18 +13,25 @@ Bind model owners before index selection. Keep consumption checkpoints
 per stratum and owner while sharing snapshots and the latest secondary
 indices across readers. Refresh owner checkpoints after model merges
 and child graphs after transport. Preserve interrupted closure and
-deferred allocation; simultaneous scheduling remains the default.
+deferred allocation. Simultaneous scheduling remains the default and
+selects one global stratum in the same evaluator.
 Swap deferred work back on return so debug builds do not reserve a
 full delta temporary for every stratum in the closure stack frame.
 
-Advance storage ages once per allocation round and apply only each
-stratum's outputs. Skip relation canonicalization in rule steps that
-produce no equality merges. Skip consumer views for unchanged owners
-and rules blocked by empty inputs. Retain unrelated checkpoints when
-owners merge. Use the simultaneous evaluator when the schedule is one
-global recursive component, avoiding unnecessary version tracking.
+Store current relations and derive old/new views from each consumer's
+checkpoint. Publish shared storage roots directly so equivalent
+checkpoints keep sharing. Propagate current owned and inherited trees
+without repartitioning them into global ages. Dynamic models also store
+current facts; restoring one starts fresh consumer checkpoints.
+
+Apply only each stratum's outputs and allocate only after immediate
+closure. Skip relation canonicalization in rule steps that produce no
+equality merges. Skip consumer views for unchanged owners and rules
+blocked by empty inputs. Retain unrelated checkpoints when owners merge.
+Generate conclusion buffers only for outputs used by rules.
 
 Cover scope inference, long rule pipelines, nested propagation,
-feedback, sparse updates, late graph changes, model merges, and
-interrupted evaluation by executing generated evaluators across
+feedback, sparse updates, late graph changes, model merges,
+single-stratum rounds, dynamic restoration, and interrupted evaluation
+by executing generated evaluators across
 native/desugared and naive/semi-naive configurations.
