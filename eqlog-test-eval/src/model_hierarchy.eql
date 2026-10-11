@@ -1,0 +1,74 @@
+type Atom;
+
+model Container {
+    pred start(Atom);
+    pred ready(Atom);
+    pred next(Atom, Atom);
+    pred after_child(Atom);
+    pred after_sibling(Atom);
+    pred ask(Child, Atom);
+    pred ask_any(Atom);
+    pred answer(Atom);
+    pred answer_any(Atom);
+    pred passive_ask(Passive, Atom);
+    pred passive_answer(Atom);
+
+    rule prepare { if start(x); then ready(x); }
+    rule observe_child {
+        if c: Child;
+        if c.child_done(x);
+        then after_child(x);
+    }
+    rule observe_sibling {
+        if s: Sibling;
+        if s.sibling_done(x);
+        then after_sibling(x);
+    }
+    rule advance {
+        if after_sibling(x);
+        if next(x, y);
+        then start(y);
+    }
+    rule reverse_child {
+        if ask(c, y);
+        if c.child_copy_pair(x, y);
+        then answer(x);
+    }
+    rule reverse_any_child {
+        if ask_any(y);
+        if c: Child;
+        if c.child_copy_pair(x, y);
+        then answer_any(x);
+    }
+    rule reverse_passive {
+        if passive_ask(c, y);
+        if c.passive_pair(x, y);
+        then passive_answer(x);
+    }
+
+    model Child {
+        pred child_seed(Atom);
+        pred child_done(Atom);
+        pred child_pair(Atom, Atom);
+        pred child_copy_pair(Atom, Atom);
+        pred child_seen(Atom);
+        rule receive { if ready(x); then child_seed(x); }
+        rule finish { if child_seed(x); then child_done(x); }
+        rule copy_pair { if child_pair(x, y); then child_copy_pair(x, y); }
+        rule pair_seen { if child_copy_pair(x, _); then child_seen(x); }
+    }
+
+    model Sibling {
+        pred sibling_done(Atom);
+        rule from_child { if after_child(x); then sibling_done(x); }
+    }
+
+    model Passive {
+        pred passive_pair(Atom, Atom);
+    }
+
+    model AllocOnly {
+        func fresh() -> Atom;
+        rule allocate { then fresh()!; }
+    }
+}

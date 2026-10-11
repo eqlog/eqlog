@@ -318,7 +318,7 @@ impl Structure {
         let mut elements = Vec::new();
         for (type_, _) in model.signature().types() {
             let data = model.type_data(type_)?;
-            fuel.consume(1 + data.new.set.len() as u64 + data.old.set.len() as u64)?;
+            fuel.consume(1 + data.elements.set.len() as u64)?;
             elements.extend(model.elements(type_)?);
         }
         fuel.consume(sort_work(elements.len()).saturating_mul(3))?;
@@ -339,8 +339,7 @@ impl Structure {
             );
             fuel.consume(row_work)?;
             let data = model.relation_data(relation)?;
-            data.new.table.prepay_iteration(fuel)?;
-            data.old.table.prepay_iteration(fuel)?;
+            data.rows.table.prepay_iteration(fuel)?;
             let mut tuples = model.tuples(relation)?;
             let mut rows: Vec<Vec<usize>> = Vec::new();
             loop {

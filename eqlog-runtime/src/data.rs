@@ -4,13 +4,11 @@ use super::table::Table;
 use super::Error;
 use crate::{PrefixTree1, Unification};
 
-/// Stored equality and evaluation state for one type.
+/// Stored equality and carrier state for one type.
 #[derive(Clone, Debug)]
 pub struct TypeData {
     pub equalities: Unification<u32>,
-    /// Representatives allocated since the last evaluation step.
-    pub new: PrefixTree1,
-    pub old: PrefixTree1,
+    pub elements: PrefixTree1,
     /// Per-element costs used to choose which representative survives a merge.
     pub weights: Vec<usize>,
     /// Former representatives whose relation rows may need rewriting.
@@ -21,8 +19,7 @@ impl TypeData {
     pub fn new() -> Self {
         Self {
             equalities: Unification::new(),
-            new: PrefixTree1::new(),
-            old: PrefixTree1::new(),
+            elements: PrefixTree1::new(),
             weights: Vec::new(),
             uprooted: Vec::new(),
         }
@@ -94,11 +91,10 @@ impl RelationIndex {
     }
 }
 
-/// The new and old rows of a relation. Rows may contain equality aliases.
+/// The current rows of a relation. Rows may contain equality aliases.
 #[derive(Clone, Debug)]
 pub struct RelationData {
-    pub new: RelationIndex,
-    pub old: RelationIndex,
+    pub rows: RelationIndex,
     /// Cost per tuple column used to update element weights on insertion.
     pub weight: usize,
 }
@@ -106,26 +102,24 @@ pub struct RelationData {
 impl RelationData {
     pub fn new(arity: usize) -> Self {
         Self {
-            new: RelationIndex::new(arity),
-            old: RelationIndex::new(arity),
+            rows: RelationIndex::new(arity),
             weight: 1,
         }
     }
 
-    /// Iterates both partitions without resolving aliases or removing duplicates.
+    /// Iterates stored rows without resolving aliases.
     pub fn tuples(&self) -> impl Iterator<Item = Vec<u32>> + '_ {
-        self.new.tuples().chain(self.old.tuples())
+        self.rows.tuples()
     }
 
-    /// Builds an index over both partitions without changing element IDs.
+    /// Builds an index over the current rows without changing element IDs.
     ///
     /// `equalities[i]` names the first column equal to column `i`. An empty slice
     /// imposes no equalities. `order` permutes the remaining columns after repeated
     /// columns are removed. Matching stored indices retain their shared tree nodes.
     pub fn reindex(&self, order: &[usize], equalities: &[usize]) -> Result<Table, Error> {
-        let arity = self.new.table.arity();
-        self.new.check(arity)?;
-        self.old.check(arity)?;
+        let arity = self.rows.table.arity();
+        self.rows.check(arity)?;
         let columns: Vec<_> = if equalities.is_empty() {
             (0..arity).collect()
         } else {
@@ -144,24 +138,22 @@ impl RelationData {
         {
             return Err(Error::InvalidModel("invalid projected column order".into()));
         }
-        let build = |index: &RelationIndex| {
-            if columns.len() == arity && index.order == order {
-                return index.table.clone();
+        let index = &self.rows;
+        if columns.len() == arity && index.order == order {
+            return Ok(index.table.clone());
+        }
+        let mut table = Table::new(columns.len());
+        for tuple in index.tuples() {
+            if equalities
+                .iter()
+                .enumerate()
+                .any(|(i, &column)| tuple[i] != tuple[column])
+            {
+                continue;
             }
-            let mut table = Table::new(columns.len());
-            for tuple in index.tuples() {
-                if equalities
-                    .iter()
-                    .enumerate()
-                    .any(|(i, &column)| tuple[i] != tuple[column])
-                {
-                    continue;
-                }
-                let row: Vec<_> = order.iter().map(|&i| tuple[columns[i]]).collect();
-                table.insert(&row);
-            }
-            table
-        };
-        Ok(build(&self.new).union(&build(&self.old)))
+            let row: Vec<_> = order.iter().map(|&i| tuple[columns[i]]).collect();
+            table.insert(&row);
+        }
+        Ok(table)
     }
 }

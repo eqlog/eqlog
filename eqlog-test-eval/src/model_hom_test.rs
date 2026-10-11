@@ -745,7 +745,7 @@ fn isomorphism_fuel_accounts_for_physical_relation_storage() {
     // Each representation yields just [0, 0], despite its larger storage cost.
     for stored in [mapped, empty_branches, filtered] {
         let mut relation = relation.clone();
-        relation.new.table = Table::from(stored);
+        relation.rows.table = Table::from(stored);
         let model = from_parts(signature, vec![type_data.clone()], vec![relation]).unwrap();
         assert_eq!(model.tuples(RelationId(0)).unwrap().count(), 1);
         assert_eq!(
@@ -770,8 +770,8 @@ fn canonical_search_does_not_traverse_unused_alias_chains() {
     for i in 0..2_047 {
         type_data.equalities.union_roots_into(i, i + 1);
     }
-    type_data.new = PrefixTree1::new();
-    type_data.new.insert([2_047]);
+    type_data.elements = PrefixTree1::new();
+    type_data.elements.insert([2_047]);
     type_data.uprooted = (0..2_047).collect();
     let relation = relation_data(&model, RelationId(0)).unwrap().clone();
     let mut model = from_parts(signature, vec![type_data], vec![relation]).unwrap();

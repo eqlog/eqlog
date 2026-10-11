@@ -97,14 +97,38 @@ pub struct RamProgram {
     pub modules: Vec<RamModule>,
     pub schedule: RuleSchedule,
     pub preparations: Vec<IndexPreparation>,
+    pub model_preparations: BTreeMap<TypeId, NativePreparation>,
     pub native_indices: Vec<NativeIndexPreparation>,
 }
 
 pub struct IndexPreparation {
     pub indices: BTreeSet<(FlatInRel, IndexSpec)>,
+    pub native: NativePreparation,
+    pub stable: Option<NativePreparation>,
+}
+
+pub struct NativePreparation {
     pub native_indices: BTreeSet<usize>,
     pub support_indices: BTreeSet<(FlatInRel, IndexSpec)>,
     pub propagation: PropagationPlan,
+    pub descendants: BTreeSet<TypeId>,
+}
+
+impl IndexPreparation {
+    pub fn reads_descendants(&self) -> bool {
+        !self.native.descendants.is_empty()
+            || self
+                .stable
+                .as_ref()
+                .is_some_and(|plan| !plan.descendants.is_empty())
+    }
+
+    pub fn native_indices(&self) -> impl Iterator<Item = &usize> {
+        self.native
+            .native_indices
+            .iter()
+            .chain(self.stable.iter().flat_map(|plan| &plan.native_indices))
+    }
 }
 
 #[derive(Default)]
@@ -123,10 +147,24 @@ pub struct NativeIndexPreparation {
 }
 
 impl RamModule {
+    pub fn owner_count(&self) -> usize {
+        self.routines
+            .first()
+            .map_or(0, |routine| routine.flat_rule.scope.owners().len())
+    }
+
     pub fn input_indices(&self) -> BTreeSet<(FlatInRel, IndexSpec)> {
         self.routines
             .iter()
-            .flat_map(|routine| &routine.stmts)
+            .flat_map(RamRoutine::input_indices)
+            .collect()
+    }
+}
+
+impl RamRoutine {
+    pub fn input_indices(&self) -> BTreeSet<(FlatInRel, IndexSpec)> {
+        self.stmts
+            .iter()
             .filter_map(|stmt| match stmt {
                 RamStmt::DefineSet(stmt) => match &stmt.expr {
                     InSetExpr::GetIndex(index) => {

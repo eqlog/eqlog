@@ -86,16 +86,17 @@ impl Model {
                 ));
             }
             let mut indexed = BTreeSet::new();
-            for [index] in data.new.iter().chain(data.old.iter()) {
+            for [index] in data.elements.iter() {
                 let el = Element {
                     type_: TypeId(type_),
                     index,
                 };
-                if model.root(el)? != el || !indexed.insert(index) {
+                if model.root(el)? != el {
                     return Err(Error::InvalidModel(
-                        "carrier indices must partition the representatives".into(),
+                        "carrier index must contain only representatives".into(),
                     ));
                 }
+                indexed.insert(index);
             }
             let roots = model.elements_from_equalities(TypeId(type_));
             if indexed != roots.collect() {
@@ -118,9 +119,7 @@ impl Model {
         }
         for (id, descriptor) in model.signature.relations() {
             let data = &model.relations[id.0];
-            data.new.check(descriptor.arity.len())?;
-            data.old.check(descriptor.arity.len())?;
-            let mut seen = BTreeSet::new();
+            data.rows.check(descriptor.arity.len())?;
             for tuple in data.tuples() {
                 if tuple.len() != descriptor.arity.len() {
                     return Err(Error::ArityMismatch {
@@ -132,14 +131,13 @@ impl Model {
                     let element = Element { type_, index };
                     model.canonical &= model.root(element)? == element;
                 }
-                model.canonical &= seen.insert(tuple);
             }
         }
         Ok(model)
     }
 
     /// Returns whether equality updates have been applied to all stored facts.
-    /// Canonical models have no pending uprooted elements or duplicate tuples,
+    /// Canonical models have no pending uprooted elements,
     /// and every tuple contains only representatives. Rules may still be pending.
     pub fn is_canonical(&self) -> bool {
         self.canonical
@@ -147,9 +145,6 @@ impl Model {
 
     /// Rewrites and deduplicates facts using the current equality representatives.
     ///
-    /// Changed old facts become new so a later evaluation can find newly enabled
-    /// matches. Unchanged old facts remain old, and existing new facts remain
-    /// pending unless already present in old. Repeated calls preserve this work.
     /// Element handles remain valid. This does not run rules or enforce function
     /// axioms, and does not create elements or identify additional ones.
     pub fn canonicalize(&mut self) {
@@ -159,12 +154,8 @@ impl Model {
         let mut relations = Vec::with_capacity(self.relations.len());
         for (relation, descriptor) in self.signature.relations() {
             let data = &self.relations[relation.0];
-            let mut old = RelationIndex {
-                order: data.old.order.clone(),
-                table: Table::new(descriptor.arity.len()),
-            };
-            let mut new = RelationIndex {
-                order: data.new.order.clone(),
+            let mut rows = RelationIndex {
+                order: data.rows.order.clone(),
                 table: Table::new(descriptor.arity.len()),
             };
             let normalize = |row: &[u32]| -> Vec<u32> {
@@ -175,26 +166,11 @@ impl Model {
                     .map(|(&type_, &index)| self.root_unchecked(Element { type_, index }).index)
                     .collect()
             };
-            let mut pending = Vec::new();
-            for row in data.old.tuples() {
-                let canonical = normalize(&row);
-                if canonical == row {
-                    old.insert(&row);
-                } else {
-                    pending.push(canonical);
-                }
-            }
-            for row in data.new.tuples() {
-                pending.push(normalize(&row));
-            }
-            for row in pending {
-                if !old.contains(&row) {
-                    new.insert(&row);
-                }
+            for row in data.rows.tuples() {
+                rows.insert(&normalize(&row));
             }
             relations.push(RelationData {
-                new,
-                old,
+                rows,
                 weight: data.weight,
             });
         }
@@ -282,7 +258,7 @@ impl Model {
         };
         data.equalities.increase_size_to(len + 1);
         data.weights.push(0);
-        data.new.insert([element.index]);
+        data.elements.insert([element.index]);
         if let Some(relation) = self.signature.membership(type_) {
             let mut tuple = parents;
             tuple.push(element);
@@ -296,9 +272,8 @@ impl Model {
     pub fn elements(&self, type_: TypeId) -> Result<impl Iterator<Item = Element> + '_, Error> {
         let data = self.type_data(type_)?;
         Ok(data
-            .new
+            .elements
             .iter()
-            .chain(data.old.iter())
             .map(move |[index]| Element { type_, index }))
     }
 
@@ -357,8 +332,7 @@ impl Model {
             (rhs.index, lhs.index)
         };
         data.equalities.union_roots_into(child, root);
-        data.new.remove([child]);
-        data.old.remove([child]);
+        data.elements.remove([child]);
         data.uprooted.push(child);
         self.canonical = false;
         Ok(true)
@@ -392,7 +366,7 @@ impl Model {
             RelationKind::Predicate | RelationKind::Function(_) => {
                 let tuple: Vec<_> = tuple.iter().map(|el| el.index).collect();
                 let data = &self.relations[relation.0];
-                Ok(data.new.contains(&tuple) || data.old.contains(&tuple))
+                Ok(data.rows.contains(&tuple))
             }
         }
     }
@@ -429,21 +403,17 @@ impl Model {
         let arguments = self.check_tuple(domain, arguments)?;
         self.check_arguments(descriptor, &arguments)?;
         let data = &self.relations[function.0];
-        for index in [&data.new, &data.old] {
-            let result = index
-                .tuples()
-                .filter(|row| row.iter().zip(&arguments).all(|(&i, el)| i == el.index))
-                .map(|row| *row.last().expect("function has a result"))
-                .min()
-                .map(|index| Element {
-                    type_: *result_type,
-                    index,
-                });
-            if result.is_some() {
-                return Ok(result);
-            }
-        }
-        Ok(None)
+        let result = data
+            .rows
+            .tuples()
+            .filter(|row| row.iter().zip(&arguments).all(|(&i, el)| i == el.index))
+            .map(|row| *row.last().expect("function has a result"))
+            .min()
+            .map(|index| Element {
+                type_: *result_type,
+                index,
+            });
+        Ok(result)
     }
 
     /// Enforces that `function(arguments)` is defined, adjoining a new element if necessary.
@@ -718,10 +688,10 @@ impl Model {
     fn insert_row(&mut self, relation: RelationId, tuple: &[Element]) -> bool {
         let data = &mut self.relations[relation.0];
         let row: Vec<_> = tuple.iter().map(|el| el.index).collect();
-        if data.old.contains(&row) || data.new.contains(&row) {
+        if data.rows.contains(&row) {
             return false;
         }
-        data.new.insert(&row);
+        data.rows.insert(&row);
         for el in tuple {
             let weight = &mut self.types[el.type_.0].weights[el.index as usize];
             *weight = weight.saturating_add(data.weight);

@@ -1,4 +1,26 @@
 use crate::strata::Strata;
+use eqlog_runtime::CompiledModel;
+
+#[cfg(not(feature = "stratified"))]
+#[test]
+fn simultaneous_rules_share_one_round_checkpoint() {
+    let mut model = Strata::new();
+    let a = model.new_item();
+    model.insert_seed(a);
+
+    assert!(model.close_until(|model| model.ready(a)));
+    assert!(!model.reached(a));
+    assert!(model.close_until(|model| model.reached(a)));
+    assert!(!model.output(a));
+    assert!(model.close_until(|model| model.output(a)));
+    assert!(!model.staged(a));
+    assert!(model.close_until(|model| model.staged(a)));
+    assert!(model.witness(a).is_none());
+
+    model.close();
+    assert!(model.witnessed(a));
+    assert_eq!(model.iter_value().count(), 1);
+}
 
 #[test]
 fn incremental_strata_close_recursive_components_and_outer_allocation() {
@@ -83,4 +105,44 @@ fn external_canonicalization_preserves_unconsumed_equality_matches() {
     model.canonicalize();
     model.close();
     assert!(model.joined(a));
+}
+
+#[test]
+fn interrupted_allocation_round_resumes_without_duplicate_witnesses() {
+    let mut model = Strata::new();
+    let a = model.new_item();
+    model.insert_seed(a);
+    assert!(model.close_until(|model| model.witness(a).is_some()));
+    #[cfg(not(feature = "stratified"))]
+    assert!(model.witnessed(a));
+    let witness = model.witness(a).unwrap();
+    model.canonicalize();
+    model.close();
+    assert!(model.witnessed(a));
+    assert_eq!(model.witness(a), Some(witness));
+    assert_eq!(model.iter_value().count(), 1);
+}
+
+#[test]
+fn restored_model_replays_facts_after_interruption_and_equality() {
+    let mut model = Strata::new();
+    let a = model.new_item();
+    let b = model.new_item();
+    model.insert_left(a);
+    model.insert_right(b);
+    model.close();
+    model.insert_output(a);
+    assert!(model.close_until(|model| model.staged(a)));
+    assert!(model.witness(a).is_none());
+
+    let mut restored = Strata::from_dynamic(&model.to_dynamic()).unwrap();
+    restored.equate_item(a, b);
+    restored.canonicalize();
+    restored.canonicalize();
+    restored.close();
+    assert!(restored.joined(a));
+    assert!(restored.witnessed(b));
+    assert_eq!(restored.iter_value().count(), 1);
+    restored.close();
+    assert_eq!(restored.iter_value().count(), 1);
 }

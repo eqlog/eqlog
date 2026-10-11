@@ -65,6 +65,7 @@ fn display_flat_then_stmt<'a>(
 pub fn display_flat_rule<'a>(
     FlatRule {
         name,
+        scope: _,
         premise,
         conclusion,
     }: &'a FlatRule,

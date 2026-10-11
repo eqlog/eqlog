@@ -144,8 +144,31 @@ pub struct FlatThenStmt {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub enum RuleScope {
+    Global,
+    Model { model: TypeId, owners: Vec<FlatVar> },
+}
+
+impl RuleScope {
+    pub fn owners(&self) -> &[FlatVar] {
+        match self {
+            Self::Global => &[],
+            Self::Model { owners, .. } => owners,
+        }
+    }
+
+    pub fn model(&self) -> Option<TypeId> {
+        match self {
+            Self::Global => None,
+            Self::Model { model, .. } => Some(*model),
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct FlatRule {
     pub name: String,
+    pub scope: RuleScope,
     pub premise: Vec<FlatIfStmt>,
     pub conclusion: Vec<FlatThenStmt>,
 }

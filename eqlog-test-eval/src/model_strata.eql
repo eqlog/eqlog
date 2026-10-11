@@ -1,0 +1,128 @@
+type Atom;
+model Choice {
+    pred east(Atom);
+    pred west(Atom);
+    pred east_edge(Atom, Atom);
+    pred west_edge(Atom, Atom);
+    rule east_to_west { if east(x); if east_edge(x, y); then west(y); }
+    rule west_to_east { if west(x); if west_edge(x, y); then east(y); }
+}
+pred enabled(Atom);
+pred unlock(World, Atom, Atom);
+pred query(World, Atom);
+pred requested_edge(World, World);
+func connect(World, World) -> Mor(World);
+
+rule install_edge {
+    if requested_edge(a, b);
+    then connect(a, b)!;
+    then dom(connect(a, b)) = a;
+    then cod(connect(a, b)) = b;
+}
+
+model World {
+    pred born();
+    pred seed(Atom);
+    pred edge(Atom, Atom);
+    pred reached(Atom);
+    pred marked(Atom);
+
+    rule start { if seed(x); then reached(x); }
+    rule step { if reached(x); if edge(x, y); then reached(y); }
+    rule finish { if reached(x); then marked(x); }
+    rule ambient_input { if enabled(x); then seed(x); }
+    rule at_birth { then born(); }
+}
+
+rule gated {
+    if w: World;
+    if w.reached(x);
+    if unlock(w, x, y);
+    then w.seed(y);
+}
+
+rule inverse {
+    if query(w, y);
+    if w.edge(x, y);
+    then w.seed(x);
+}
+
+model Nest {
+    pred child_unlock(Child, Atom, Atom);
+    model Child {
+        pred child_seed(Atom);
+        pred child_reached(Atom);
+        rule child_start { if child_seed(x); then child_reached(x); }
+    }
+    rule child_step {
+        if child_unlock(c, x, y);
+        if c.child_reached(x);
+        then c.child_seed(y);
+    }
+}
+
+pred ambient_reached(Fallback, Atom);
+model Fallback {
+    pred initial(Atom);
+    pred middle(Atom);
+    pred completed(Atom);
+    rule fallback_start { if initial(x); then middle(x); }
+}
+rule escape_model {
+    if f: Fallback;
+    if f.middle(x);
+    then ambient_reached(f, x);
+}
+rule return_to_model { if ambient_reached(f, x); then f.completed(x); }
+
+pred ambient_feedback(Feedback, Atom);
+model Feedback {
+    pred feedback_seed(Atom);
+    pred feedback_middle(Atom);
+    pred feedback_completed(Atom);
+    pred feedback_next(Atom, Atom);
+    rule feedback_begin { if feedback_seed(x); then feedback_middle(x); }
+    rule feedback_advance {
+        if feedback_completed(x);
+        if feedback_next(x, y);
+        then feedback_seed(y);
+    }
+}
+rule feedback_escape {
+    if f: Feedback;
+    if f.feedback_middle(x);
+    then ambient_feedback(f, x);
+}
+rule feedback_return { if ambient_feedback(f, x); then f.feedback_completed(x); }
+
+model Scoped {
+    pred owned_seed(Atom);
+    pred owned_result(Atom);
+    pred cross_seed(Atom);
+    pred cross_result(Atom);
+    pred ambient_result(Atom);
+    pred export_seed(Atom);
+}
+pred scope_input(Atom);
+pred scope_output(Scoped, Atom);
+rule explicit_local {
+    if owner: Scoped;
+    if owner.owned_seed(x);
+    then owner.owned_result(x);
+}
+rule explicit_cross {
+    if source: Scoped;
+    if target: Scoped;
+    if source.cross_seed(x);
+    then target.cross_result(x);
+}
+rule explicit_ambient_read {
+    if owner: Scoped;
+    if scope_input(x);
+    then owner.ambient_result(x);
+}
+rule explicit_ambient_write {
+    if owner: Scoped;
+    if owner.export_seed(x);
+    then scope_output(owner, x);
+}

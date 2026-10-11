@@ -87,11 +87,18 @@ pub fn display_module_env_struct<'a>(
             .format("\n");
 
         let name = display_module_env_struct_name(ram_module);
+        let owners = if ram_module.owner_count() > 0 {
+            let count = ram_module.owner_count();
+            format!("__owners: [u32; {count}],")
+        } else {
+            String::new()
+        };
 
         writedoc! {f, "
             #[allow(unused)]
             pub struct {name}<'a> {{
             phantom: std::marker::PhantomData<&'a ()>,
+            {owners}
 
             {in_rels}
 
@@ -243,6 +250,16 @@ fn display_routine<'a>(
     FmtFn(move |f| {
         let name = name;
         let env_type = display_module_env_struct_name(ram_module);
+        let owners = flat_rule
+            .scope
+            .owners()
+            .iter()
+            .enumerate()
+            .map(|(i, owner)| {
+                let name = &owner.name;
+                format!("let {name} = env.__owners[{i}];")
+            })
+            .join("\n");
 
         let stmts_pre = stmts
             .iter()
@@ -263,6 +280,7 @@ fn display_routine<'a>(
         writedoc! {f, "
             {flat_rule_comment}
             fn {name}(env: &mut {env_type}) {{
+            {owners}
             {stmts_pre}
             {stmts_post}
             }}

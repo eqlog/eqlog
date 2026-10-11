@@ -55,6 +55,7 @@ pub fn category_rules(signature: &Signature) -> Vec<FlatRule> {
         let mut add = |premise: Vec<FlatIfStmt>, conclusions: Vec<FlatIfStmt>| {
             let index = rules.len();
             rules.push(FlatRule {
+                scope: super::RuleScope::Global,
                 name: format!("__category_{index}"),
                 premise,
                 conclusion: conclusions.into_iter().map(conclusion).collect(),

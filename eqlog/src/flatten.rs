@@ -612,6 +612,7 @@ fn flatten_rule(
                 let rule_name = format!("{name}_{}", rules.len());
                 let conclusion = flatten_surj_then(ctx.signature, rule, morphism, &el_vars);
                 rules.push(FlatRule {
+                    scope: RuleScope::Global,
                     name: rule_name,
                     premise: dom_matching_stmts.clone(),
                     conclusion,
@@ -624,6 +625,7 @@ fn flatten_rule(
                 if let Some((if_stmt, then_stmt)) = flatten_non_surj_then(rule, morphism, &el_vars)
                 {
                     rules.push(FlatRule {
+                        scope: RuleScope::Global,
                         name: rule_name,
                         premise: dom_matching_stmts,
                         conclusion: vec![then_stmt],

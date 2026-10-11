@@ -1250,9 +1250,8 @@ impl PrefixTree5 {
 impl PrefixTree6 {
     pub fn visit_difference(&self, other: &Self, visit: &mut impl FnMut([u32; 6])) {
         for (key, left, right) in self.map.difference_entries(&other.map) {
-            let mut suffix = |[el1, el2, el3, el4, el5]: [u32; 5]| {
-                visit([key, el1, el2, el3, el4, el5])
-            };
+            let mut suffix =
+                |[el1, el2, el3, el4, el5]: [u32; 5]| visit([key, el1, el2, el3, el4, el5]);
             match right {
                 Some(right) => left.visit_difference(right, &mut suffix),
                 None => {

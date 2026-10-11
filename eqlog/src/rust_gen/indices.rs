@@ -43,7 +43,7 @@ pub(super) fn prepare<'a>(
             return Ok(());
         }
         let source = source_relation(rel);
-        let primary = indices.primary(&source, index.age);
+        let primary = indices.current_primary(&source);
         let source_field = display_all_index_field_name(&source, primary, ctx);
         let field = display_all_index_field_name(rel, index, ctx);
         let project = projection(rel, index, primary);
@@ -113,33 +113,31 @@ pub(super) fn accessors<'a>(
     ctx: &'a RustGenCtx<'a>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        for (rel, specs) in &indices.indices {
-            for index in specs {
-                let typ = display_index_type(rel, ctx);
-                let source = source_relation(rel);
-                let primary = indices.primary(&source, index.age);
-                let project = projection(rel, index, primary);
-                let mut fields = vec![(
-                    display_all_index_field_name(rel, index, ctx).to_string(),
-                    display_all_index_field_name(&source, primary, ctx).to_string(),
-                )];
-                if ctx.has_shared_indices(rel) && indices.is_primary(rel, index) {
-                    fields.push((
-                        display_own_index_field_name(rel, index, ctx).to_string(),
-                        display_own_index_field_name(&source, primary, ctx).to_string(),
-                    ));
-                }
-                for (field, source) in fields {
-                    let expr = if indices.is_primary(rel, index) {
-                        format!("&self.{field}")
-                    } else {
-                        format!("self.{field}.get(&self.{source}, {project})")
-                    };
-                    writedoc! {f, "
+        for (rel, index) in indices.current_indices() {
+            let typ = display_index_type(rel, ctx);
+            let source = source_relation(rel);
+            let primary = indices.current_primary(&source);
+            let project = projection(rel, index, primary);
+            let mut fields = vec![(
+                display_all_index_field_name(rel, index, ctx).to_string(),
+                display_all_index_field_name(&source, primary, ctx).to_string(),
+            )];
+            if ctx.has_shared_indices(rel) && indices.is_primary(rel, index) {
+                fields.push((
+                    display_own_index_field_name(rel, index, ctx).to_string(),
+                    display_own_index_field_name(&source, primary, ctx).to_string(),
+                ));
+            }
+            for (field, source) in fields {
+                let expr = if indices.is_primary(rel, index) {
+                    format!("&self.{field}")
+                } else {
+                    format!("self.{field}.get(&self.{source}, {project})")
+                };
+                writedoc! {f, "
                         #[allow(dead_code)]
                         fn {field}(&self) -> &{typ} {{ {expr} }}
                     "}?;
-                }
             }
         }
         Ok(())
@@ -156,7 +154,11 @@ pub(super) fn invalidate<'a>(
             if source_relation(rel) != FlatInRel::Rel(relation) {
                 continue;
             }
-            for index in specs.iter().filter(|index| !indices.is_primary(rel, index)) {
+            for index in specs
+                .iter()
+                .unique_by(|index| &index.order)
+                .filter(|index| !indices.is_primary(rel, index))
+            {
                 let all = display_all_index_field_name(rel, index, ctx);
                 writeln!(f, "self.{all}.invalidate();")?;
             }

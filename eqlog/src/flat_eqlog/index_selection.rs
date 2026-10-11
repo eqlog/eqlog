@@ -18,8 +18,9 @@ pub struct QuerySpec {
 
 fn premise_query_specs<'a>(
     premise: &'a [FlatIfStmt],
+    owners: &[FlatVar],
 ) -> impl 'a + Iterator<Item = (FlatInRel, QuerySpec)> {
-    let mut fixed_vars: BTreeSet<FlatVar> = BTreeSet::new();
+    let mut fixed_vars: BTreeSet<FlatVar> = owners.iter().cloned().collect();
     premise.into_iter().map(move |stmt| {
         let FlatIfStmt { rel, args, age } = stmt;
         let projections: BTreeSet<usize> = stmt
@@ -171,6 +172,27 @@ pub struct IndexSelection {
 }
 
 impl IndexSelection {
+    /// Storage has one current tree per order; ages belong to rule inputs.
+    pub fn current_indices(&self) -> impl Iterator<Item = (&FlatInRel, &IndexSpec)> {
+        self.indices.iter().flat_map(|(rel, indices)| {
+            indices
+                .iter()
+                .unique_by(|index| &index.order)
+                .map(move |index| (rel, index))
+        })
+    }
+
+    pub fn current_primary(&self, rel: &FlatInRel) -> &IndexSpec {
+        self.primary(rel, IndexAge::Old)
+    }
+
+    pub fn current_query(&self, rel: &FlatInRel, query: QuerySpec) -> &IndexSpec {
+        assert_eq!(query.age, QueryAge::All);
+        let indices = &self.queries[&(rel.clone(), query)];
+        assert!(indices.iter().all(|index| index.order == indices[0].order));
+        &indices[0]
+    }
+
     pub fn primary(&self, rel: &FlatInRel, age: IndexAge) -> &IndexSpec {
         let query = match age {
             IndexAge::Old => QuerySpec::all_old(),
@@ -205,6 +227,31 @@ pub fn select_indices<'a>(
     signature: &Signature,
     model_mode: ModelMode,
 ) -> IndexSelection {
+    let rules: Vec<_> = rules.into_iter().collect();
+    let mut scoped_prefixes = BTreeMap::new();
+    for rule in &rules {
+        let Some(scope) = rule.scope.model() else {
+            continue;
+        };
+        let scope_len = signature.type_(scope).parents.len() + 1;
+        for stmt in &rule.premise {
+            let rel = match &stmt.rel {
+                FlatInRel::Rel(rel) | FlatInRel::RelWithDiagonals { rel, .. } => rel,
+                FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => continue,
+            };
+            if let Some(model) = rel.parent_model_type(signature) {
+                let prefix = (signature.type_(model).parents.len() + 1).min(scope_len);
+                scoped_prefixes
+                    .entry(stmt.rel.clone())
+                    .or_insert_with(BTreeSet::new)
+                    .insert(prefix);
+                scoped_prefixes
+                    .entry(FlatInRel::Rel(*rel))
+                    .or_insert_with(BTreeSet::new)
+                    .insert(prefix);
+            }
+        }
+    }
     let native_propagation = match model_mode {
         ModelMode::Native => true,
         ModelMode::Desugared => false,
@@ -214,7 +261,7 @@ pub fn select_indices<'a>(
     query_specs.extend(
         rules
             .into_iter()
-            .flat_map(|rule| premise_query_specs(rule.premise.as_slice())),
+            .flat_map(|rule| premise_query_specs(rule.premise.as_slice(), rule.scope.owners())),
     );
 
     // Query specs to generate public API functions.
@@ -326,7 +373,7 @@ pub fn select_indices<'a>(
         }));
     }
 
-    let queries: BTreeMap<(FlatInRel, QuerySpec), Vec<IndexSpec>> = query_specs
+    let mut queries: BTreeMap<(FlatInRel, QuerySpec), Vec<IndexSpec>> = query_specs
         .into_iter()
         .chunk_by(|(rel, _query_spec)| rel.clone())
         .into_iter()
@@ -358,6 +405,29 @@ pub fn select_indices<'a>(
             })
         })
         .collect();
+
+    // Bound owners must expose a shared subtree. Unbound reverse queries keep
+    // their own orders, including membership lookups from an element.
+    for ((rel, query), indices) in &mut queries {
+        if let Some(prefixes) = scoped_prefixes.get(rel) {
+            if let Some(prefix) = prefixes
+                .iter()
+                .copied()
+                .filter(|&prefix| {
+                    query.projections.is_empty()
+                        || (0..prefix).all(|i| query.projections.contains(&i))
+                })
+                .max()
+            {
+                for index in indices {
+                    let order = (0..prefix)
+                        .chain(index.order.iter().copied().filter(|&i| i >= prefix))
+                        .collect::<Vec<_>>();
+                    index.order = order.into();
+                }
+            }
+        }
+    }
 
     // Compute indices map from queries map
     let mut indices: BTreeMap<FlatInRel, Vec<IndexSpec>> = BTreeMap::new();

@@ -1,4 +1,22 @@
 use eqlog_runtime::eqlog_mod;
+eqlog_mod!(recursive_component);
+#[cfg(test)]
+mod recursive_component_test;
+#[cfg(test)]
+mod long_pipeline {
+    include!(concat!(
+        env!("OUT_DIR"),
+        "/long_pipeline/long_pipeline.eql.rs"
+    ));
+}
+#[cfg(test)]
+mod long_pipeline_test;
+eqlog_mod!(model_strata);
+eqlog_mod!(model_hierarchy);
+#[cfg(test)]
+mod model_hierarchy_test;
+#[cfg(test)]
+mod model_strata_test;
 eqlog_mod!(shared_index);
 #[cfg(test)]
 mod shared_index_test;
@@ -9,6 +27,9 @@ mod lazy_indices_test;
 eqlog_mod!(strata);
 #[cfg(test)]
 mod strata_test;
+eqlog_mod!(independent_strata);
+#[cfg(test)]
+mod independent_strata_test;
 eqlog_mod!(equational_monoid);
 eqlog_mod!(monoid);
 eqlog_mod!(pointed);

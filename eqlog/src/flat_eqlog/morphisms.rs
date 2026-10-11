@@ -89,6 +89,7 @@ pub fn morphism_preservation_rules(signature: &Signature) -> Vec<FlatRule> {
                 target[i] = image;
             }
             rules.push(FlatRule {
+                scope: super::RuleScope::Global,
                 name: format!("__preserve_{rel_index}_{depth}"),
                 premise,
                 conclusion: vec![FlatThenStmt {

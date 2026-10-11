@@ -23,7 +23,7 @@ pub enum ModelMode {
 /// How rule groups share a fixed-point schedule.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum SchedulingMode {
-    /// Evaluate all rule groups together in each round.
+    /// Evaluate all rule groups together in one global stratum.
     #[default]
     Simultaneous,
     /// Close dependency components before evaluating their consumers.
