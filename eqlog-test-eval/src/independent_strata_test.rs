@@ -123,7 +123,7 @@ fn stable_inherited_inputs_are_refreshed_between_loop_visits() {
 }
 
 #[test]
-fn a_parent_loop_prepares_stable_descendant_inputs() {
+fn parent_rules_read_inherited_child_relations_in_both_directions() {
     let mut m = IndependentStrata::new();
     let p = m.new_stable_box();
     let source = m.new_detail(p);
@@ -135,12 +135,24 @@ fn a_parent_loop_prepares_stable_descendant_inputs() {
     let b = m.new_el();
     let c = m.new_el();
     let d = m.new_el();
+    let e = m.new_el();
     m.insert_detail_link(p, source, a, b);
-    m.insert_detail_link(p, source, b, c);
-    m.insert_descended(p, target, c);
-    m.close();
-    assert!(m.descended(p, target, a));
-    m.insert_detail_link(p, source, d, a);
+    m.insert_detail_link(p, source, c, b);
+    m.insert_detail_link(p, source, c, d);
+    m.insert_descended(p, target, a);
+    m.insert_detail_query(p, target, a);
     m.close();
     assert!(m.descended(p, target, d));
+    assert!(m.detail_result(p, target, c));
+    assert!(!m.descended(p, target, e));
+    assert!(!m.detail_result(p, target, e));
+    assert!(!m.descended(p, source, d));
+    assert!(!m.detail_result(p, source, c));
+
+    m.insert_detail_link(p, source, e, b);
+    m.close();
+    assert!(m.descended(p, target, e));
+    assert!(m.detail_result(p, target, e));
+    assert!(!m.descended(p, source, e));
+    assert!(!m.detail_result(p, source, e));
 }

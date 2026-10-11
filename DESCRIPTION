@@ -14,7 +14,10 @@ per stratum and owner while sharing snapshots and the latest secondary
 indices across readers. Refresh owner checkpoints after model merges
 and child graphs after transport. Preserve interrupted closure and
 deferred allocation; simultaneous scheduling remains the default.
+Swap deferred work back on return so debug builds do not reserve a
+full delta temporary for every stratum in the closure stack frame.
 
-Test rule ordering, nested propagation, feedback, late graph changes,
-model merges, and interrupted evaluation across native/desugared and
+Cover scope inference, long rule pipelines, nested propagation,
+feedback, late graph changes, model merges, and interrupted evaluation
+by executing generated evaluators across native/desugared and
 naive/semi-naive configurations.

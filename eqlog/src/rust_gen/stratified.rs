@@ -684,13 +684,13 @@ impl<'s> Codegen<'s> {
                         self.move_new_to_old();
                         delta.apply_func_defs(self);
                         if !self.is_dirty() {{
-                            self.__pending_delta = delta;
+                            std::mem::swap(&mut self.__pending_delta, &mut delta);
                             self.canonicalize();
                             return false;
                         }}
                         self.__canonicalize_relations();
                         if self.__check_condition(condition) {{
-                            self.__pending_delta = delta;
+                            std::mem::swap(&mut self.__pending_delta, &mut delta);
                             return true;
                         }}
                     }}
@@ -882,9 +882,11 @@ fn emit_schedule(
             if let Some(active) = active {
                 writeln!(f, "active_{active} = true;")?;
             }
+            // Moving the full delta at each exit makes debug stack frames grow
+            // with the number of strata; swapping only passes references.
             writedoc! {f, "
                 if self.__check_condition(condition) {{
-                    self.__pending_delta = delta;
+                    std::mem::swap(&mut self.__pending_delta, &mut delta);
                     return true;
                 }}
             }}

@@ -44,10 +44,23 @@ model StableBox {
     pred local_reach(El);
     model Detail { pred detail_link(El, El); }
     pred descended(Detail, El);
+    pred detail_query(Detail, El);
+    pred detail_result(Detail, El);
     rule descend {
         if descended(d, y);
         if d.detail_link(x, y);
         then descended(d, x);
+    }
+    rule follow_detail_link {
+        if descended(d, x);
+        if d.detail_link(x, y);
+        then descended(d, y);
+    }
+    rule inspect_detail {
+        if detail_query(d, x);
+        if d.detail_link(x, y);
+        if d.detail_link(z, y);
+        then detail_result(d, z);
     }
 }
 pred global_reach(StableBox, El);

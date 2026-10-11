@@ -4,7 +4,9 @@
 - No unicode (e.g. emojis, em dashes) in comments, code, commit messages etc.
   Only if needed to test unicode support etc.
 - Most features should have tests.
-  Prefer integration tests via eqlog-test-eval/ and eqlot-test-compile/ over unit tests.
+  Use integration tests via eqlog-test-eval/ and eqlog-test-compile/.
+  Add unit tests only for code paths that cannot be covered by integration tests.
+  Test generated evaluators by executing them, not by inspecting generated Rust source.
 - For enums other than `Option`, use exhaustive `match` expressions listing every variant; no wildcard/default arms, `if let`, `let ... else`, or `matches!`.
   `Option` checks such as `if let Some(...)` are allowed.
 - Prefer fewer branches and shallow nesting.

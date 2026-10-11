@@ -1,4 +1,10 @@
 use eqlog_runtime::eqlog_mod;
+#[cfg(test)]
+mod long_pipeline {
+    include!(concat!(env!("OUT_DIR"), "/long_pipeline/long_pipeline.eql.rs"));
+}
+#[cfg(test)]
+mod long_pipeline_test;
 eqlog_mod!(model_strata);
 eqlog_mod!(model_hierarchy);
 #[cfg(test)]

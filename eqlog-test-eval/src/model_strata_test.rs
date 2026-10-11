@@ -28,6 +28,46 @@ fn bound_rules_keep_model_inputs_separate() {
 }
 
 #[test]
+fn external_rules_respect_receivers_and_cross_owner_inputs() {
+    let mut m = ModelStrata::new();
+    let a = m.new_scoped();
+    let b = m.new_scoped();
+    let x = m.new_atom();
+    let y = m.new_atom();
+    m.insert_owned_seed(a, x);
+    m.insert_owned_seed(b, y);
+    m.insert_cross_seed(a, x);
+    m.insert_scope_input(x);
+    m.insert_export_seed(b, y);
+    m.close();
+    assert!(m.owned_result(a, x));
+    assert!(m.owned_result(b, y));
+    assert!(!m.owned_result(a, y));
+    assert!(!m.owned_result(b, x));
+    for owner in [a, b] {
+        assert!(m.cross_result(owner, x));
+        assert!(!m.cross_result(owner, y));
+        assert!(m.ambient_result(owner, x));
+        assert!(!m.ambient_result(owner, y));
+    }
+    assert!(m.scope_output(b, y));
+    assert!(!m.scope_output(a, y));
+
+    m.insert_cross_seed(b, y);
+    m.insert_scope_input(y);
+    m.insert_export_seed(a, x);
+    m.close();
+    for owner in [a, b] {
+        assert!(m.cross_result(owner, y));
+        assert!(m.ambient_result(owner, y));
+    }
+    assert!(m.scope_output(a, x));
+    assert!(!m.scope_output(b, x));
+    assert!(!m.owned_result(a, y));
+    assert!(!m.owned_result(b, x));
+}
+
+#[test]
 fn new_models_and_late_ambient_inputs_have_independent_checkpoints() {
     let mut m = ModelStrata::new();
     let a = m.new_world();

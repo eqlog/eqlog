@@ -86,3 +86,35 @@ rule feedback_escape {
     then ambient_feedback(f, x);
 }
 rule feedback_return { if ambient_feedback(f, x); then f.feedback_completed(x); }
+
+model Scoped {
+    pred owned_seed(Atom);
+    pred owned_result(Atom);
+    pred cross_seed(Atom);
+    pred cross_result(Atom);
+    pred ambient_result(Atom);
+    pred export_seed(Atom);
+}
+pred scope_input(Atom);
+pred scope_output(Scoped, Atom);
+rule explicit_local {
+    if owner: Scoped;
+    if owner.owned_seed(x);
+    then owner.owned_result(x);
+}
+rule explicit_cross {
+    if source: Scoped;
+    if target: Scoped;
+    if source.cross_seed(x);
+    then target.cross_result(x);
+}
+rule explicit_ambient_read {
+    if owner: Scoped;
+    if scope_input(x);
+    then owner.ambient_result(x);
+}
+rule explicit_ambient_write {
+    if owner: Scoped;
+    if owner.export_seed(x);
+    then scope_output(owner, x);
+}

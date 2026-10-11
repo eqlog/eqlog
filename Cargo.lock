@@ -369,6 +369,7 @@ dependencies = [
  "env_logger",
  "eqlog",
  "eqlog-runtime",
+ "indoc",
  "log",
  "maplit",
 ]

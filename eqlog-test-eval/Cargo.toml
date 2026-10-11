@@ -15,4 +15,5 @@ maplit = ">= 0"
 [build-dependencies]
 eqlog = { path = "../eqlog", features = ["rebuild"] }
 env_logger = ">= 0"
+indoc = "2"
 log = ">= 0"
