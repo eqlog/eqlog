@@ -18,7 +18,8 @@ default and selects one global stratum in the same evaluator.
 Store current relations and derive old/new views from each consumer's
 checkpoint. Publish storage roots directly to preserve sharing.
 Dynamic models also store current facts; restoring one starts fresh
-consumer checkpoints.
+consumer checkpoints. Before closure, function lookup selects the
+smallest stored result when conflicting results exist.
 
 Apply only each stratum's outputs and allocate only after immediate
 closure. Preserve pending work across interrupted evaluation. Avoid
