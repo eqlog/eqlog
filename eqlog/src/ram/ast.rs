@@ -156,7 +156,15 @@ impl RamModule {
     pub fn input_indices(&self) -> BTreeSet<(FlatInRel, IndexSpec)> {
         self.routines
             .iter()
-            .flat_map(|routine| &routine.stmts)
+            .flat_map(RamRoutine::input_indices)
+            .collect()
+    }
+}
+
+impl RamRoutine {
+    pub fn input_indices(&self) -> BTreeSet<(FlatInRel, IndexSpec)> {
+        self.stmts
+            .iter()
             .filter_map(|stmt| match stmt {
                 RamStmt::DefineSet(stmt) => match &stmt.expr {
                     InSetExpr::GetIndex(index) => {

@@ -1,0 +1,8 @@
+type Node;
+pred path(Node, Node);
+
+rule transitive {
+    if path(x, y);
+    if path(y, z);
+    then path(x, z);
+}

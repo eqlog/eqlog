@@ -14,7 +14,7 @@ use super::{
 };
 use crate::algebra::signature::TypeId;
 use crate::flat_eqlog::{
-    FlatInRel, IndexAge, IndexSelection, IndexSpec, Schedule, StratifiedPlan, Stratum,
+    FlatInRel, FlatOutRel, IndexAge, IndexSelection, IndexSpec, Schedule, StratifiedPlan, Stratum,
 };
 use crate::fmt_util::FmtFn;
 use crate::ram::{
@@ -39,6 +39,21 @@ fn input_key(rel: FlatInRel, mut index: IndexSpec) -> (FlatInRel, IndexSpec) {
 }
 
 impl<'s> Codegen<'s> {
+    pub fn tracks_owner(&self, typ: TypeId, ctx: &RustGenCtx<'_>) -> bool {
+        self.strata
+            .iter()
+            .filter_map(|stratum| stratum.model)
+            .any(|model| typ == model || ctx.signature().type_(model).parents.contains(&typ))
+    }
+
+    fn stratum_inputs(&self, s: usize) -> BTreeSet<FlatInRel> {
+        self.preparations[s]
+            .indices
+            .iter()
+            .map(|(rel, _)| source_relation(rel))
+            .collect()
+    }
+
     fn has_stable_inputs(&self, s: usize) -> bool {
         self.preparations[s]
             .indices
@@ -53,6 +68,19 @@ impl<'s> Codegen<'s> {
     ) -> impl Display + 'a {
         FmtFn(move |f| {
             for (s, stratum) in self.strata.iter().enumerate() {
+                if let Some(model) = stratum.model {
+                    writeln!(f, "struct __OwnerInputs{s} {{")?;
+                    for rel in self.stratum_inputs(s) {
+                        let i = self.inputs[&rel];
+                        let arity =
+                            rel.arity(ctx.signature()).len() - scope_prefix(&rel, model, ctx);
+                        writeln!(
+                            f,
+                            "input_{i}_old: PrefixTree{arity}, input_{i}_new: PrefixTree{arity},"
+                        )?;
+                    }
+                    writeln!(f, "}}")?;
+                }
                 let mut fields = BTreeMap::new();
                 for (rel, index) in &self.preparations[s].indices {
                     let source = source_relation(rel);
@@ -92,7 +120,7 @@ impl<'s> Codegen<'s> {
         &self,
         ctx: &RustGenCtx<'_>,
         selection: &IndexSelection,
-    ) -> BTreeMap<String, (usize, usize)> {
+    ) -> BTreeMap<String, (Vec<TypeId>, usize)> {
         let mut fields = BTreeMap::new();
         for (s, stratum) in self.strata.iter().enumerate() {
             let Some(model) = stratum.model else {
@@ -105,16 +133,34 @@ impl<'s> Codegen<'s> {
                 if count == 0 {
                     continue;
                 }
+                let owners: Vec<_> = ctx
+                    .signature()
+                    .type_(model)
+                    .parents
+                    .iter()
+                    .copied()
+                    .chain(std::iter::once(model))
+                    .take(count)
+                    .collect();
                 let arity = source.arity(ctx.signature()).len() - count;
-                fields.insert(format!("__scope_input_{i}_{count}"), (count, arity));
+                fields.insert(
+                    format!("__scope_input_{i}_{count}"),
+                    (owners.clone(), arity),
+                );
                 let arity = rel.arity(ctx.signature()).len() - scope_prefix(rel, model, ctx);
                 if let Some(id) = native_indices::find(self.native_indices, rel, index) {
-                    fields.insert(format!("__scope_native_{id}_{count}"), (count, arity));
+                    fields.insert(
+                        format!("__scope_native_{id}_{count}"),
+                        (owners.clone(), arity),
+                    );
                 } else if !selection.is_primary(rel, index) {
                     let key = input_key(rel.clone(), index.clone());
                     if self.old_indices.contains(&key) {
                         let j = self.indices[&key];
-                        fields.insert(format!("__scope_index_{j}_{count}"), (count, arity));
+                        fields.insert(
+                            format!("__scope_index_{j}_{count}"),
+                            (owners.clone(), arity),
+                        );
                     }
                 }
             }
@@ -176,16 +222,27 @@ impl<'s> Codegen<'s> {
             let count = self.strata.len();
             writeln!(f, "__stratum_initialized: [bool; {count}],")?;
             writeln!(f, "__model_owners_changed: bool,")?;
+            for (_, ids) in ctx
+                .signature()
+                .iter_model_decls()
+                .filter(|(_, ids)| self.tracks_owner(ids.type_, ctx))
+            {
+                let name = display_type(ids.type_, ctx)
+                    .to_string()
+                    .to_case(Case::Snake);
+                writeln!(f, "__merged_{name}: std::collections::BTreeSet<u32>,")?;
+            }
             for (s, stratum) in self.strata.iter().enumerate() {
                 if let Some(model) = stratum.model {
                     let count = ctx.signature().type_(model).parents.len() + 1;
                     writeln!(
                         f,
-                        "__stratum_{s}_initialized: std::collections::BTreeSet<[u32; {count}]>,"
+                        "__owner_inputs_{s}: std::collections::BTreeMap<[u32; {count}], __OwnerInputs{s}>,"
                     )?;
                 }
             }
-            for (field, (count, arity)) in self.scoped_histories(ctx, selection) {
+            for (field, (owners, arity)) in self.scoped_histories(ctx, selection) {
+                let count = owners.len();
                 writeln!(f, "{field}: std::collections::BTreeMap<[u32; {count}], eqlog_runtime::__private::RelationVersions<PrefixTree{arity}, (usize, Vec<u32>)>>,")?;
             }
             for (rel, i) in &self.inputs {
@@ -222,12 +279,19 @@ impl<'s> Codegen<'s> {
             let count = self.strata.len();
             writeln!(f, "__stratum_initialized: [false; {count}],")?;
             writeln!(f, "__model_owners_changed: false,")?;
+            for (_, ids) in ctx
+                .signature()
+                .iter_model_decls()
+                .filter(|(_, ids)| self.tracks_owner(ids.type_, ctx))
+            {
+                let name = display_type(ids.type_, ctx)
+                    .to_string()
+                    .to_case(Case::Snake);
+                writeln!(f, "__merged_{name}: std::collections::BTreeSet::new(),")?;
+            }
             for (s, stratum) in self.strata.iter().enumerate() {
                 if stratum.model.is_some() {
-                    writeln!(
-                        f,
-                        "__stratum_{s}_initialized: std::collections::BTreeSet::new(),"
-                    )?;
+                    writeln!(f, "__owner_inputs_{s}: std::collections::BTreeMap::new(),")?;
                 }
             }
             for field in self.scoped_histories(ctx, selection).keys() {
@@ -268,16 +332,13 @@ impl<'s> Codegen<'s> {
     ) -> impl Display + 'a {
         FmtFn(move |f| {
             for (s, stratum) in self.strata.iter().enumerate() {
-                let inputs: BTreeSet<_> = self.preparations[s]
-                    .indices
-                    .iter()
-                    .map(|(rel, _)| source_relation(rel))
-                    .collect();
+                let inputs = self.stratum_inputs(s);
                 let stable = if self.has_stable_inputs(s) {
                     format!("stable: &mut __StableInputs{s}, ")
                 } else {
                     String::new()
                 };
+                writeln!(f, "#[allow(unused_variables)]")?;
                 if let Some(model) = stratum.model {
                     let count = ctx.signature().type_(model).parents.len() + 1;
                     let retain = if !self.preparations[s].reads_descendants() {
@@ -287,7 +348,6 @@ impl<'s> Codegen<'s> {
                     };
                     writedoc! {f, "
                         fn __run_stratum_{s}_at(&mut self, owners: [u32; {count}], {retain}{stable}delta: &mut ModelDelta) -> bool {{
-                            let mut dirty = !self.__stratum_{s}_initialized.contains(&owners);
                     "}?;
                 } else {
                     writedoc! {f, "
@@ -319,6 +379,54 @@ impl<'s> Codegen<'s> {
                 }
                 if stratum.model.is_none() && !native.propagation.relations.is_empty() {
                     writeln!(f, "self.recompute_model_indices_stratum_{s}();")?;
+                }
+                if let Some(model) = stratum.model {
+                    // Most owners have no new input on an incremental visit.
+                    // Comparing roots avoids constructing their consumer views.
+                    let mut unchanged = vec!["true".to_owned()];
+                    let mut snapshots = Vec::new();
+                    for rel in &inputs {
+                        let i = self.inputs[rel];
+                        for (age, name) in [(IndexAge::Old, "old"), (IndexAge::New, "new")] {
+                            let field =
+                                display_all_index_field_name(rel, selection.primary(rel, age), ctx);
+                            let source = scoped_tree(&format!("&self.{field}"), rel, model, ctx);
+                            writeln!(f, "let input_{i}_{name} = {source};")?;
+                            unchanged.push(format!("eqlog_runtime::__private::SnapshotSet::shares_root(input_{i}_{name}, &_previous.input_{i}_{name})"));
+                            snapshots.push(format!("input_{i}_{name}: input_{i}_{name}.clone()"));
+                        }
+                    }
+                    let unchanged = unchanged.join(" && ");
+                    let snapshots = snapshots.join(", ");
+                    writedoc! {f, "
+                        let previous = self.__owner_inputs_{s}.get(&owners);
+                        #[allow(unused_mut)]
+                        let mut dirty = previous.is_none();
+                        if previous.is_some_and(|_previous| {unchanged}) {{
+                            return false;
+                        }}
+                        let checkpoint = __OwnerInputs{s} {{ {snapshots} }};
+                        self.__owner_inputs_{s}.insert(owners, checkpoint);
+                    "}?;
+                    let possible: BTreeSet<_> = stratum.groups.iter()
+                        .flat_map(|&m| &modules[m].routines)
+                        .map(|routine| {
+                            let sources: BTreeSet<_> = routine.input_indices().iter()
+                                .map(|(rel, _)| self.inputs[&source_relation(rel)]).collect();
+                            if sources.is_empty() {
+                                "true".to_owned()
+                            } else {
+                                sources.iter().map(|i| format!("(!input_{i}_old.is_empty() || !input_{i}_new.is_empty())")).join(" && ")
+                            }
+                        }).collect();
+                    if !possible.contains("true") {
+                        let possible = if possible.is_empty() {
+                            "false".to_owned()
+                        } else {
+                            possible.iter().map(|expr| format!("({expr})")).join(" || ")
+                        };
+                        writeln!(f, "if !({possible}) {{ return false; }}")?;
+                    }
                 }
                 for rel in inputs {
                     let i = self.inputs[&rel];
@@ -380,9 +488,7 @@ impl<'s> Codegen<'s> {
                     writeln!(f, "dirty |= !input_{i}.new.is_empty();")?;
                 }
                 writeln!(f, "if !dirty {{ return false; }}")?;
-                if stratum.model.is_some() {
-                    writeln!(f, "self.__stratum_{s}_initialized.insert(owners);")?;
-                } else {
+                if stratum.model.is_none() {
                     writeln!(f, "self.__stratum_initialized[{s}] = true;")?;
                 }
                 writeln!(f, "{{")?;
@@ -543,14 +649,47 @@ impl<'s> Codegen<'s> {
                     writeln!(f, "}}; {name}(env);")?;
                 }
                 writeln!(f, "}}")?;
-                writedoc! {f, "
-                        self.move_new_to_old();
-                        delta.apply_equalities(self);
-                        self.__canonicalize_relations();
-                        delta.apply_tuples(self);
-                        true
-                    }}
-                "}?;
+                let outputs: BTreeSet<_> = stratum
+                    .groups
+                    .iter()
+                    .flat_map(|&m| module_env_out_rels(&modules[m]))
+                    .collect();
+                let mut equalities = Vec::new();
+                for output in &outputs {
+                    match output {
+                        FlatOutRel::Equality(typ) => {
+                            let name = display_type(*typ, ctx).to_string().to_case(Case::Snake);
+                            writedoc! {f, "
+                                for [lhs, rhs] in delta.new_{name}_equalities.drain(..) {{
+                                    self.__equate_{name}(lhs.into(), rhs.into());
+                                }}
+                            "}?;
+                            equalities.push(format!("!self.{name}_uprooted.is_empty()"));
+                        }
+                        FlatOutRel::Rel(_) | FlatOutRel::FuncDomain(_) => {}
+                    }
+                }
+                if !equalities.is_empty() {
+                    let changed = equalities.join(" || ");
+                    writeln!(f, "if {changed} {{ self.__canonicalize_relations(); }}")?;
+                }
+                for output in &outputs {
+                    match output {
+                        FlatOutRel::Rel(rel) => {
+                            let field = display_out_set_field_name(output, ctx);
+                            let insert = ctx.internal_insert_name(*rel);
+                            let args = (0..rel.arity(ctx.signature()).len())
+                                .map(|i| format!("arg{i}"))
+                                .collect::<Vec<_>>();
+                            let converted =
+                                args.iter().map(|arg| format!("{arg}.into()")).join(", ");
+                            let args = args.join(", ");
+                            writeln!(f, "for [{args}] in delta.{field}.drain(..) {{ self.{insert}({converted}); }}")?;
+                        }
+                        FlatOutRel::Equality(_) | FlatOutRel::FuncDomain(_) => {}
+                    }
+                }
+                writeln!(f, "true }}")?;
             }
             for (&model, &m) in &self.models {
                 let plan = &self.model_preparations[&model];
@@ -628,22 +767,67 @@ impl<'s> Codegen<'s> {
                 }
             }
             writedoc! {f, "
+                #[allow(unused_variables)]
                 fn __refresh_model_consumers(&mut self) {{
                     if !self.__model_owners_changed {{ return; }}
                     self.__model_owners_changed = false;
             "}?;
+            for (_, ids) in ctx
+                .signature()
+                .iter_model_decls()
+                .filter(|(_, ids)| self.tracks_owner(ids.type_, ctx))
+            {
+                let name = display_type(ids.type_, ctx)
+                    .to_string()
+                    .to_case(Case::Snake);
+                writeln!(
+                    f,
+                    "#[allow(unused_variables)] let merged_{name} = &self.__merged_{name};"
+                )?;
+            }
+            writeln!(f, "let retain_consumer = |(stratum, owners): &(usize, Vec<u32>)| {{ match *stratum {{")?;
             for (s, stratum) in self.strata.iter().enumerate() {
-                if stratum.model.is_some() {
-                    writeln!(f, "self.__stratum_{s}_initialized.clear();")?;
+                if let Some(model) = stratum.model {
+                    let owners: Vec<_> = ctx
+                        .signature()
+                        .type_(model)
+                        .parents
+                        .iter()
+                        .copied()
+                        .chain(std::iter::once(model))
+                        .collect();
+                    let retain = retain_owners(&owners, ctx);
+                    writeln!(f, "{s} => {retain},")?;
                 }
             }
-            for field in self.scoped_histories(ctx, selection).keys() {
-                writeln!(f, "self.{field}.clear();")?;
+            writeln!(f, "_ => true, }} }};")?;
+            for (s, stratum) in self.strata.iter().enumerate() {
+                if let Some(model) = stratum.model {
+                    let owners: Vec<_> = ctx
+                        .signature()
+                        .type_(model)
+                        .parents
+                        .iter()
+                        .copied()
+                        .chain(std::iter::once(model))
+                        .collect();
+                    let retain = retain_owners(&owners, ctx);
+                    writeln!(f, "self.__owner_inputs_{s}.retain(|owners, _| {retain});")?;
+                }
+            }
+            for (field, (owners, _)) in self.scoped_histories(ctx, selection) {
+                let retain = retain_owners(&owners, ctx);
+                writedoc! {f, "
+                    self.{field}.retain(|owners, history| {{
+                        history.retain_consumers(&retain_consumer);
+                        {retain}
+                    }});
+                "}?;
             }
             for i in self.inputs.values() {
                 writeln!(
                     f,
-                    "self.__rule_input_{i}.retain_consumers(|(_, owners)| owners.is_empty());"
+                    "self.__rule_input_{i}.retain_consumers(&retain_consumer);"
                 )?;
             }
             for ((rel, index), i) in &self.indices {
@@ -651,8 +835,21 @@ impl<'s> Codegen<'s> {
                     && !selection.is_primary(rel, index)
                     && native_indices::find(self.native_indices, rel, index).is_none()
                 {
-                    writeln!(f, "self.__rule_index_{i}_versions.retain_consumers(|(_, owners)| owners.is_empty());")?;
+                    writeln!(
+                        f,
+                        "self.__rule_index_{i}_versions.retain_consumers(&retain_consumer);"
+                    )?;
                 }
+            }
+            for (_, ids) in ctx
+                .signature()
+                .iter_model_decls()
+                .filter(|(_, ids)| self.tracks_owner(ids.type_, ctx))
+            {
+                let name = display_type(ids.type_, ctx)
+                    .to_string()
+                    .to_case(Case::Snake);
+                writeln!(f, "self.__merged_{name}.clear();")?;
             }
             writeln!(f, "}}")?;
             Ok(())
@@ -680,6 +877,8 @@ impl<'s> Codegen<'s> {
                     loop {{
             "}?;
             emit_schedule(f, self.body, None, 0, None, "false", self, ctx, selection)?;
+            // Consumer snapshots advance within the schedule; storage ages only
+            // separate completed rule evaluation from the next allocation round.
             writedoc! {f, "
                         self.move_new_to_old();
                         delta.apply_func_defs(self);
@@ -698,6 +897,17 @@ impl<'s> Codegen<'s> {
             "}
         })
     }
+}
+
+fn retain_owners(owners: &[TypeId], ctx: &RustGenCtx<'_>) -> String {
+    owners
+        .iter()
+        .enumerate()
+        .map(|(i, &model)| {
+            let name = display_type(model, ctx).to_string().to_case(Case::Snake);
+            format!("!merged_{name}.contains(&owners[{i}])")
+        })
+        .join(" && ")
 }
 
 fn begin_stable_input(
@@ -724,11 +934,10 @@ fn end_stable_input(
 ) -> std::fmt::Result {
     let prefix = model.map_or(0, |model| scope_prefix(rel, model, ctx));
     let arity = rel.arity(ctx.signature()).len();
-    let mut current = format!("({source})");
-    for i in 0..prefix {
-        let dim = arity - i - 1;
-        current = format!("{current}.get(owners[{i}]).unwrap_or_else(|| PrefixTree{dim}::empty())");
-    }
+    let current = model.map_or_else(
+        || source.to_owned(),
+        |model| scoped_tree(source, rel, model, ctx),
+    );
     writeln!(f, "let full = {current}.clone();")?;
     for i in (0..prefix).rev() {
         let dim = arity - i;
@@ -777,6 +986,19 @@ fn scope_prefix(rel: &FlatInRel, model: TypeId, ctx: &RustGenCtx<'_>) -> usize {
     })
 }
 
+fn scoped_tree(source: &str, rel: &FlatInRel, model: TypeId, ctx: &RustGenCtx<'_>) -> String {
+    let arity = rel.arity(ctx.signature()).len();
+    if scope_prefix(rel, model, ctx) == 0 {
+        return source.to_owned();
+    }
+    let mut current = format!("({source})");
+    for i in 0..scope_prefix(rel, model, ctx) {
+        let dim = arity - i - 1;
+        current = format!("{current}.get(owners[{i}]).unwrap_or_else(|| PrefixTree{dim}::empty())");
+    }
+    current
+}
+
 fn consume_scoped(
     f: &mut std::fmt::Formatter<'_>,
     field: &str,
@@ -797,11 +1019,7 @@ fn consume_scoped(
     }
     let field = format!("{field}_{prefix}");
     let key = (0..prefix).map(|i| format!("owners[{i}]")).join(", ");
-    let mut current = format!("({source})");
-    for i in 0..prefix {
-        let dim = arity - i - 1;
-        current = format!("{current}.get(owners[{i}]).unwrap_or_else(|| PrefixTree{dim}::empty())");
-    }
+    let current = scoped_tree(source, rel, model, ctx);
     writedoc! {f, "
         let {name} = {{
             let current = {current};

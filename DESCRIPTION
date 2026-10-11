@@ -17,7 +17,14 @@ deferred allocation; simultaneous scheduling remains the default.
 Swap deferred work back on return so debug builds do not reserve a
 full delta temporary for every stratum in the closure stack frame.
 
+Advance storage ages once per allocation round and apply only each
+stratum's outputs. Skip relation canonicalization in rule steps that
+produce no equality merges. Skip consumer views for unchanged owners
+and rules blocked by empty inputs. Retain unrelated checkpoints when
+owners merge. Use the simultaneous evaluator when the schedule is one
+global recursive component, avoiding unnecessary version tracking.
+
 Cover scope inference, long rule pipelines, nested propagation,
-feedback, late graph changes, model merges, and interrupted evaluation
-by executing generated evaluators across native/desugared and
-naive/semi-naive configurations.
+feedback, sparse updates, late graph changes, model merges, and
+interrupted evaluation by executing generated evaluators across
+native/desugared and naive/semi-naive configurations.

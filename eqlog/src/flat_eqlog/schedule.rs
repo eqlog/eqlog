@@ -58,7 +58,27 @@ pub fn schedule_rule_groups(
     match scheduling_mode {
         SchedulingMode::Simultaneous => RuleSchedule::Simultaneous,
         SchedulingMode::Stratified => {
-            RuleSchedule::Stratified(strata(groups, signature, model_mode))
+            let plan = strata(groups, signature, model_mode);
+            // One global recursive component already has a single consumption
+            // clock; physical old/new sets provide exactly that clock.
+            let single_loop = match &plan.body {
+                Schedule::Saturate(body) => match body.as_ref() {
+                    Schedule::Rules(id) => plan.strata[id.0].model.is_none(),
+                    Schedule::Sequence(_)
+                    | Schedule::Independent(_)
+                    | Schedule::Saturate(_)
+                    | Schedule::ModelComponents { .. } => false,
+                },
+                Schedule::Rules(_)
+                | Schedule::Sequence(_)
+                | Schedule::Independent(_)
+                | Schedule::ModelComponents { .. } => false,
+            };
+            if single_loop {
+                RuleSchedule::Simultaneous
+            } else {
+                RuleSchedule::Stratified(plan)
+            }
         }
     }
 }

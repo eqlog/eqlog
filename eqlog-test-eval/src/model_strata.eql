@@ -1,4 +1,12 @@
 type Atom;
+model Choice {
+    pred east(Atom);
+    pred west(Atom);
+    pred east_edge(Atom, Atom);
+    pred west_edge(Atom, Atom);
+    rule east_to_west { if east(x); if east_edge(x, y); then west(y); }
+    rule west_to_east { if west(x); if west_edge(x, y); then east(y); }
+}
 pred enabled(Atom);
 pred unlock(World, Atom, Atom);
 pred query(World, Atom);

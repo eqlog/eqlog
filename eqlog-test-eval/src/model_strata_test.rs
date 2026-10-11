@@ -1,4 +1,6 @@
 use crate::model_strata::{ModelStrata, World};
+#[cfg(all(feature = "stratified", not(feature = "desugared")))]
+use std::cell::Cell;
 
 fn morphism(m: &mut ModelStrata, a: World, b: World) {
     let f = m.new_world_mor();
@@ -192,6 +194,101 @@ fn merging_nested_owners_replays_the_combined_inputs() {
     m.close();
     assert!(m.child_reached(a, a0, y));
     assert!(m.child_reached(b, b0, y));
+}
+
+#[test]
+fn sparse_updates_reach_old_empty_models_after_transport_and_merges() {
+    let mut m = ModelStrata::new();
+    let worlds: Vec<_> = (0..128).map(|_| m.new_world()).collect();
+    let x = m.new_atom();
+    let y = m.new_atom();
+    let z = m.new_atom();
+    m.insert_seed(worlds[0], x);
+    m.insert_edge(worlds[1], x, y);
+    m.insert_edge(worlds[2], y, z);
+    m.close();
+    for &world in &worlds {
+        assert!(m.born(world));
+        assert!(!m.marked(world, y));
+    }
+
+    morphism(&mut m, worlds[0], worlds[1]);
+    m.close();
+    assert!(m.marked(worlds[1], y));
+    assert!(!m.marked(worlds[2], z));
+    m.equate_world(worlds[1], worlds[2]);
+    m.close();
+    assert!(m.marked(worlds[1], z));
+    assert!(m.marked(worlds[2], z));
+
+    m.insert_seed(worlds[127], y);
+    m.insert_edge(worlds[127], y, z);
+    m.close();
+    assert!(m.marked(worlds[127], z));
+    for &world in &worlds[3..127] {
+        assert!(!m.marked(world, x));
+        assert!(!m.marked(world, y));
+        assert!(!m.marked(world, z));
+    }
+}
+
+#[test]
+fn a_recursive_owner_can_advance_while_another_rule_has_an_empty_input() {
+    let mut m = ModelStrata::new();
+    let owner = m.new_choice();
+    let empty_owner = m.new_choice();
+    let a = m.new_atom();
+    let b = m.new_atom();
+    let c = m.new_atom();
+    let d = m.new_atom();
+    m.insert_east(owner, a);
+    m.insert_east_edge(owner, a, b);
+    m.insert_east_edge(owner, c, d);
+    m.close();
+    assert!(m.west(owner, b));
+    assert!(!m.east(owner, c));
+    assert!(!m.west(owner, d));
+
+    m.insert_west_edge(owner, b, c);
+    m.close();
+    assert!(m.east(owner, c));
+    assert!(m.west(owner, d));
+    for atom in [a, b, c, d] {
+        assert!(!m.east(empty_owner, atom));
+        assert!(!m.west(empty_owner, atom));
+    }
+}
+
+#[cfg(all(feature = "stratified", not(feature = "desugared")))]
+#[test]
+fn merging_two_owners_does_not_replay_unrelated_owners() {
+    let mut checks = Vec::new();
+    for count in [2, 128] {
+        let mut m = ModelStrata::new();
+        let worlds: Vec<_> = (0..count).map(|_| m.new_world()).collect();
+        let parent = m.new_nest();
+        let child = m.new_child(parent);
+        let x = m.new_atom();
+        let y = m.new_atom();
+        m.insert_seed(worlds[0], x);
+        m.insert_edge(worlds[1], x, y);
+        m.insert_child_seed(parent, child, x);
+        m.close();
+        m.equate_world(worlds[0], worlds[1]);
+        let observed = Cell::new(0);
+        assert!(!m.close_until(|_| {
+            observed.set(observed.get() + 1);
+            false
+        }));
+        assert!(m.marked(worlds[0], y));
+        assert!(m.child_reached(parent, child, x));
+        for &world in &worlds[2..] {
+            assert!(m.born(world));
+            assert!(!m.marked(world, y));
+        }
+        checks.push(observed.get());
+    }
+    assert_eq!(checks[0], checks[1]);
 }
 
 #[test]

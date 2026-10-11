@@ -1447,8 +1447,8 @@ fn display_equate_elements<'a>(
             "/// Both elements must belong to the supplied enclosing models, outermost first."
         };
         let invalidate_models = match ctx.signature().type_(typ).kind {
-            TypeKind::Model if track_model_merges => "self.__model_owners_changed = true;",
-            TypeKind::Model | TypeKind::Plain | TypeKind::Enum | TypeKind::Mor(_) => "",
+            TypeKind::Model if track_model_merges => format!("self.__model_owners_changed = true; self.__merged_{type_snake}.extend([lhs.0, rhs.0]);"),
+            TypeKind::Model | TypeKind::Plain | TypeKind::Enum | TypeKind::Mor(_) => String::new(),
         };
 
         writedoc! {f, "
@@ -3641,8 +3641,9 @@ fn display_theory_impl<'a>(
                 display_new_element_fn_internal(typ, ctx, index_selection);
             writeln!(f, "{new_element_fn_internal}")?;
 
+            let track_merges = codegen.is_some_and(|codegen| codegen.tracks_owner(typ, ctx));
             let equate_elements =
-                display_equate_elements(typ, ctx, index_selection, codegen.is_some());
+                display_equate_elements(typ, ctx, index_selection, track_merges);
             write!(f, "{}", equate_elements)?;
         }
 

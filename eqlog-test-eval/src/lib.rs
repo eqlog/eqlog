@@ -1,4 +1,7 @@
 use eqlog_runtime::eqlog_mod;
+eqlog_mod!(recursive_component);
+#[cfg(test)]
+mod recursive_component_test;
 #[cfg(test)]
 mod long_pipeline {
     include!(concat!(env!("OUT_DIR"), "/long_pipeline/long_pipeline.eql.rs"));
