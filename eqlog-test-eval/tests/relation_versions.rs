@@ -108,6 +108,27 @@ fn equality_replacements_are_unseen_and_filtered_old_views_are_shared() {
 }
 
 #[test]
+fn historical_views_share_deltas_without_changing_filtered_consumers() {
+    let mut versions = RelationVersions::new();
+    let mut rows = PrefixTree2::new();
+    rows.insert([0, 1]);
+    rows.insert([2, 3]);
+    versions.publish(&rows);
+    versions.consume(0);
+    versions.consume(1);
+    let before = rows.clone();
+    rows.remove([0, 1]);
+    rows.insert([0, 0]);
+    versions.publish(&rows);
+    let historical = versions.consume_membership::<true, true>(0);
+    let filtered = versions.consume(1);
+    assert!(SnapshotSet::shares_root(&historical.old, &before));
+    assert_eq!(filtered.old.iter().collect::<Vec<_>>(), vec![[2, 3]]);
+    assert_eq!(historical.new.iter().collect::<Vec<_>>(), vec![[0, 0]]);
+    assert!(SnapshotSet::shares_root(&historical.new, &filtered.new));
+}
+
+#[test]
 fn separately_requested_ages_share_views_and_advance_their_consumers() {
     let mut versions = RelationVersions::new();
     let mut rows = PrefixTree2::new();

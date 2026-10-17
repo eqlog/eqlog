@@ -52,14 +52,21 @@ fn equality_enables_a_join_of_previously_consumed_inputs() {
     let mut model = Strata::new();
     let a = model.new_item();
     let b = model.new_item();
+    let c = model.new_item();
+    let d = model.new_item();
     model.insert_left(a);
     model.insert_right(b);
+    model.insert_right(c);
     model.close();
     assert!(!model.joined(a));
     model.insert_merge(a, b);
+    model.insert_left(c);
     model.close();
     assert!(model.joined(a));
     assert!(model.joined(b));
+    assert!(model.joined(c));
+    assert!(!model.joined(d));
+    assert_eq!(model.iter_joined().count(), 2);
 }
 
 #[test]
@@ -94,17 +101,24 @@ fn deferred_definitions_recheck_equalities_after_an_interruption() {
 
 #[test]
 fn external_canonicalization_preserves_unconsumed_equality_matches() {
-    let mut model = Strata::new();
-    let a = model.new_item();
-    let b = model.new_item();
-    model.insert_left(a);
-    model.insert_right(b);
-    model.close();
-    model.equate_item(a, b);
-    model.canonicalize();
-    model.canonicalize();
-    model.close();
-    assert!(model.joined(a));
+    for reverse in [false, true] {
+        let mut model = Strata::new();
+        let a = model.new_item();
+        let b = model.new_item();
+        model.insert_left(a);
+        model.insert_right(b);
+        model.close();
+        if reverse {
+            model.equate_item(b, a);
+        } else {
+            model.equate_item(a, b);
+        }
+        model.canonicalize();
+        model.canonicalize();
+        model.close();
+        assert!(model.joined(a));
+        assert_eq!(model.iter_joined().count(), 1);
+    }
 }
 
 #[test]

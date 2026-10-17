@@ -190,6 +190,23 @@ impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
         &mut self,
         consumer: Consumer,
     ) -> RelationView<T> {
+        self.consume_view::<OLD, NEW, true>(consumer)
+    }
+
+    /// When removals only replace noncanonical IDs, canonical membership probes
+    /// can share the old checkpoint without filtering equality replacements.
+    /// The caller must not enumerate the old view to bind variables.
+    pub fn consume_membership<const OLD: bool, const NEW: bool>(
+        &mut self,
+        consumer: Consumer,
+    ) -> RelationView<T> {
+        self.consume_view::<OLD, NEW, false>(consumer)
+    }
+
+    fn consume_view<const OLD: bool, const NEW: bool, const FILTER_OLD: bool>(
+        &mut self,
+        consumer: Consumer,
+    ) -> RelationView<T> {
         let seen = self.seen.get(&consumer).unwrap_or(&self.empty);
         if Rc::ptr_eq(seen, &self.current) {
             return RelationView {
@@ -205,7 +222,11 @@ impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
             old: None,
             new: None,
         });
-        let old = if OLD {
+        let old = if !OLD {
+            T::empty()
+        } else if !FILTER_OLD {
+            seen.rows.clone()
+        } else {
             view.old
                 .get_or_insert_with(|| {
                     // Removing obsolete IDs is safe; replacing them by their roots here
@@ -217,8 +238,6 @@ impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
                     old
                 })
                 .clone()
-        } else {
-            T::empty()
         };
         let new = if NEW {
             view.new

@@ -13,6 +13,10 @@ inherited views after equality replacement. Include conflicting
 morphism results until equality resolves them, so retained facts
 cannot erase their last owned support.
 
+Reuse old checkpoints for fully bound canonical membership probes.
+Classify these uses before code generation and keep filtering indices
+that bind variables, so equality collapses do not multiply matches.
+
 Compile scheduling workloads in simultaneous and stratified modes and
 measure initial closure, sparse updates, and closure without changes.
 Keep construction and result checks outside the measured operation.
