@@ -199,9 +199,9 @@ impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
         self.consume_view::<OLD, NEW, true>(consumer)
     }
 
-    /// When removals only replace noncanonical IDs, canonical membership probes
-    /// can share the old checkpoint without filtering equality replacements.
-    /// The caller must not enumerate the old view to bind variables.
+    /// When removals only replace noncanonical IDs, the old checkpoint can be
+    /// shared directly. Bound keys must be canonical; obsolete suffixes may
+    /// only serve as private existence witnesses.
     pub fn consume_membership<const OLD: bool, const NEW: bool>(
         &mut self,
         consumer: Consumer,

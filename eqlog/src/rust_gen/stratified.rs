@@ -10,7 +10,7 @@ use super::native_indices;
 use super::{
     display_all_index_field_name, display_index_field_name, display_index_type,
     display_module_env_struct_name, display_morphism_components, display_out_set_field_name,
-    display_type, module_env_in_rels, module_env_out_rels, RustGenCtx,
+    display_type, module_env_in_rels, module_env_iter_types, module_env_out_rels, RustGenCtx,
 };
 use crate::algebra::signature::TypeId;
 use crate::flat_eqlog::{
@@ -718,6 +718,13 @@ impl<'s> Codegen<'s> {
                     writeln!(f, "let env = {env} {{ phantom: std::marker::PhantomData,")?;
                     if stratum.model.is_some() {
                         writeln!(f, "__owners: owners,")?;
+                    }
+                    for typ in module_env_iter_types(module, ctx.signature()) {
+                        let name = display_type(typ, ctx).to_string().to_case(Case::Snake);
+                        writeln!(
+                            f,
+                            "__canonical_{name}: self.{name}_equalities.canonical_roots(),"
+                        )?;
                     }
                     for (rel, index) in module_env_in_rels(module) {
                         let field = display_index_field_name(&rel, &index, ctx);

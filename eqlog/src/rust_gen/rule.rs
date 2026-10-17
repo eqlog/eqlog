@@ -1,3 +1,4 @@
+use crate::algebra::signature::{Signature, TypeId};
 use crate::flat_eqlog::*;
 use crate::fmt_util::*;
 use crate::rust_gen::flat_eqlog::display_flat_rule;
@@ -33,6 +34,26 @@ pub fn display_module_env_struct_name<'a>(ram_module: &'a RamModule) -> impl 'a 
 
 pub fn module_env_in_rels(ram_module: &RamModule) -> BTreeSet<(FlatInRel, IndexSpec)> {
     ram_module.input_indices()
+}
+
+fn iteration_type(stmt: &IterStmt, signature: &Signature) -> TypeId {
+    let set = &stmt.sets[0];
+    let column = set.name.index.order[set.name.restricted];
+    set.name.rel.arity(signature)[column]
+}
+
+pub fn module_env_iter_types(ram_module: &RamModule, signature: &Signature) -> BTreeSet<TypeId> {
+    ram_module
+        .routines
+        .iter()
+        .flat_map(|routine| &routine.stmts)
+        .filter_map(|stmt| match stmt {
+            RamStmt::Iter(stmt) => stmt
+                .canonical_filter
+                .then(|| iteration_type(stmt, signature)),
+            RamStmt::DefineSet(_) | RamStmt::Insert(_) | RamStmt::GuardInhabited(_) => None,
+        })
+        .collect()
 }
 
 pub fn module_env_out_rels(ram_module: &RamModule) -> BTreeSet<FlatOutRel> {
@@ -87,6 +108,13 @@ pub fn display_module_env_struct<'a>(
             .format("\n");
 
         let name = display_module_env_struct_name(ram_module);
+        let canonical = module_env_iter_types(ram_module, ctx.signature())
+            .iter()
+            .map(|&typ| {
+                let name = display_type(typ, ctx).to_string().to_case(Snake);
+                format!("__canonical_{name}: &'a [bool],")
+            })
+            .join("\n");
         let owners = if ram_module.owner_count() > 0 {
             let count = ram_module.owner_count();
             format!("__owners: [u32; {count}],")
@@ -99,6 +127,7 @@ pub fn display_module_env_struct<'a>(
             pub struct {name}<'a> {{
             phantom: std::marker::PhantomData<&'a ()>,
             {owners}
+            {canonical}
 
             {in_rels}
 
@@ -141,6 +170,88 @@ fn display_in_set_expr<'a>(expr: &'a InSetExpr, ctx: &'a RustGenCtx<'a>) -> impl
     })
 }
 
+fn display_key_count<'a>(sets: &'a [SetVar], ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
+    FmtFn(move |f| {
+        write!(f, "0usize")?;
+        for set in sets {
+            let name = display_set_var(set, ctx);
+            let count = if set.arity == 1 {
+                "set.len()"
+            } else {
+                "map.len_upper_bound()"
+            };
+            write!(f, ".saturating_add({name}.{count})")?;
+        }
+        Ok(())
+    })
+}
+
+fn display_iter_sources<'a>(
+    sets: &'a [SetVar],
+    ctx: &'a RustGenCtx<'a>,
+    unique: bool,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        for (i, set) in sets.iter().enumerate() {
+            if i > 0 {
+                write!(f, ".chain(")?;
+            }
+            let name = display_set_var(set, ctx);
+            write!(f, "{name}.iter_restrictions()")?;
+            if unique && i > 0 {
+                write!(f, ".filter(|(key, _)| true")?;
+                for earlier in &sets[..i] {
+                    let earlier = display_set_var(earlier, ctx);
+                    write!(f, " && {earlier}.get(*key).is_none()")?;
+                }
+                write!(f, ")")?;
+            }
+            if i > 0 {
+                write!(f, ")")?;
+            }
+        }
+        Ok(())
+    })
+}
+
+fn display_iter_expr<'a>(stmt: &'a IterStmt, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let direct = display_iter_sources(&stmt.sets, ctx, false);
+        if stmt.lookup_drivers.is_empty() {
+            return write!(f, "{direct}");
+        }
+        let loop_set = display_set_var(&stmt.loop_var_set, ctx);
+        let inverse = display_iter_sources(&stmt.lookup_drivers, ctx, true);
+        write!(
+            f,
+            "(!{loop_set}_use_lookup).then(|| {direct}).into_iter().flatten()"
+        )?;
+        write!(
+            f,
+            ".chain({loop_set}_use_lookup.then(|| {inverse}.flat_map(|(key, _)| {{"
+        )?;
+        for (i, set) in stmt.sets.iter().enumerate() {
+            let name = display_set_var(set, ctx);
+            if i > 0 {
+                write!(f, ".chain(")?;
+            }
+            write!(f, "{name}.get(key).into_iter()")?;
+            if i > 0 {
+                write!(f, ")")?;
+            }
+        }
+        let copy = if stmt.sets[0].arity == 1 {
+            ".cloned()"
+        } else {
+            ""
+        };
+        write!(
+            f,
+            "{copy}.map(move |suffix| (key, suffix)) }})).into_iter().flatten())"
+        )
+    })
+}
+
 fn display_stmt_pre<'a>(ram_stmt: &'a RamStmt, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
     FmtFn(move |f| match ram_stmt {
         RamStmt::DefineSet(DefineSetStmt { defined_var, expr }) => {
@@ -165,12 +276,23 @@ fn display_stmt_pre<'a>(ram_stmt: &'a RamStmt, ctx: &'a RustGenCtx<'a>) -> impl 
                 }
             }
         }
-        RamStmt::Iter(IterStmt {
-            sets,
-            loop_var_el,
-            loop_var_set,
-            first_only,
-        }) => {
+        RamStmt::Iter(
+            iter @ IterStmt {
+                sets,
+                lookup_drivers,
+                loop_var_el,
+                loop_var_set,
+                first_only,
+                canonical_filter,
+            },
+        ) => {
+            let filter = if *canonical_filter {
+                let typ = iteration_type(iter, ctx.signature());
+                let typ = display_type(typ, ctx).to_string().to_case(Snake);
+                format!(".filter(|(key, _)| env.__canonical_{typ}[*key as usize])")
+            } else {
+                String::new()
+            };
             let SetVar {
                 name: _,
                 arity: _,
@@ -183,16 +305,18 @@ fn display_stmt_pre<'a>(ram_stmt: &'a RamStmt, ctx: &'a RustGenCtx<'a>) -> impl 
                 Strictness::Strict => {}
             }
             assert!(sets.len() >= 1, "Expected at least one set in IterStmt");
-            let set_head = display_set_var(&sets[0], ctx);
-            let set_tail_chain_iters = sets[1..]
-                .iter()
-                .map(|set| {
-                    FmtFn(move |f| {
-                        let set = display_set_var(set, ctx);
-                        write!(f, ".chain({set}.iter_restrictions())")
-                    })
-                })
-                .format("\n");
+            let iterator = display_iter_expr(iter, ctx);
+            if !lookup_drivers.is_empty() {
+                let direct_count = display_key_count(sets, ctx);
+                let inverse_count = display_key_count(lookup_drivers, ctx);
+                let loop_set = display_set_var(loop_var_set, ctx);
+                let lookup_cost = sets.len() + 1;
+                writedoc! {f, "
+                    let {loop_set}_key_count = {direct_count};
+                    let {loop_set}_use_lookup = {loop_set}_key_count > 1
+                        && ({inverse_count}).saturating_mul({lookup_cost}) < {loop_set}_key_count;
+                "}?;
+            }
             let loop_var_set = display_set_var(loop_var_set, ctx);
             let limit = if *first_only { ".take(1)" } else { "" };
             writedoc! {f, "
@@ -200,8 +324,8 @@ fn display_stmt_pre<'a>(ram_stmt: &'a RamStmt, ctx: &'a RustGenCtx<'a>) -> impl 
                     for
                     ({loop_var_el}, {loop_var_set})
                     in
-                    {set_head}.iter_restrictions()
-                    {set_tail_chain_iters}
+                    {iterator}
+                    {filter}
                     {limit}
                     {{
                 "}

@@ -59,6 +59,38 @@ unpinned runs of the same variant varied from 15.877 s to 18.642 s, so small
 differences between individual experimental runs are inconclusive. Broader
 inlining and adaptive joins at every eligible loop remain unpromoted.
 
+Historical rule inputs now retain their shared snapshots. Iterators reject
+noncanonical keys before binding them, including at every suffix of an ALL
+scan and before selecting a functionality representative. NEW inputs still
+contain equality-enabled tuples; old aliases are never remapped into them.
+Private existential witnesses need no canonical binding. This removes the
+materialized intersection needed for most OLD inputs.
+
+The compiler can also reverse a join when an already available membership
+guard supplies fewer candidate keys. It compares constant-time upper bounds,
+retains the original guards, and preserves both input-age multiplicities.
+Complete function-result lookups and the initial delta seed keep their original
+traversal. A diagnostic category join avoided over nine million key visits;
+most function-result sites never benefited from the broader experimental pass.
+The narrowed candidate measured 17.176 s against 18.734 s for the preceding
+production version in a sequential same-core pair.
+
+Ordinary tree lookup now avoids mapping state until it encounters a mapping.
+Tuple insertion updates suffixes during one tree descent, avoiding repeated
+searches through the entry API. Together with canonical filtering and narrowed
+adaptive joins, the full development measured 14.846 s end to end with all 52
+declarations checked. The compiler changes passed nine four-mode optimization
+oracles, 281 evaluator library tests, and 17 focused integrations. The runtime
+changes passed existing runtime and prefix-tree checks plus temporary mapped
+and snapshot differential checks. Independent reviews found no correctness or
+ETT-specific assumptions in these mechanisms. Final combined validation and
+further work toward the five-second target remain.
+
+Allocation sampling on the preceding version found approximately 28.5 million
+allocation requests. Difference cursors were a substantial source, but adding
+inline cursor storage made the tested traversals slower despite reducing
+allocations; that experiment is not included.
+
 The next engine changes retain owner-scoped rules inside ambient cycles,
 including ordinary member equalities. Global saturation still revisits the
 owner traversal when cross-owner facts change. Alternate indices reuse the

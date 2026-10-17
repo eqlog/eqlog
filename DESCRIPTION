@@ -53,11 +53,16 @@ work in ordinary tree iteration.
 Keep singleton suffix sets inline and intersect persistent snapshots
 directly, preserving unchanged subtrees without temporary differences.
 Expose unary suffix iteration and membership to generated join loops
-across component crate boundaries.
+across component crate boundaries. Filter historical iterator bindings
+against canonical roots instead of rebuilding old-input intersections.
+Use available membership guards to probe a smaller join input, retaining
+original traversal for delta seeds and complete function-result lookups.
+Update tuple suffixes during one tree descent and bypass mapping state
+for ordinary lookups.
 
 Preserve the complete Nat and Vec development, bounded computation, and
 one-call closure. Independent reviews confirm the mechanisms are general
 Eqlog optimizations. Cover nested transport, partial maps, cross-owner
 equality, dynamic imports, and interrupted closure with evaluator tests.
-The latest full run checks all 52 declarations in about 17 seconds end
+The latest full run checks all 52 declarations in about 15 seconds end
 to end. Further evaluator work is needed for the five-second target.

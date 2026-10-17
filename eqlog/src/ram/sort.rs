@@ -50,11 +50,13 @@ fn collect_stmt_dependencies(
             }
             RamStmt::Iter(IterStmt {
                 sets,
+                lookup_drivers,
                 loop_var_el,
                 loop_var_set,
                 first_only: _,
+                canonical_filter: _,
             }) => {
-                for set in sets {
+                for set in sets.iter().chain(lookup_drivers) {
                     let set_def_site = *set_var_def_sites
                         .get(&set.name)
                         .expect("Variable must be defined before use");

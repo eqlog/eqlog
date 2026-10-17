@@ -15,7 +15,11 @@ pub fn make_ram_lazy(ram_stmts: &mut [RamStmt]) {
                 InSetExpr::GetIndex(_) => {}
             },
             RamStmt::Iter(iter_stmt) => {
-                for set_var in iter_stmt.sets.iter_mut() {
+                for set_var in iter_stmt
+                    .sets
+                    .iter_mut()
+                    .chain(&mut iter_stmt.lookup_drivers)
+                {
                     if lazy_vars.contains(&set_var.name) {
                         set_var.strictness = Strictness::Lazy;
                     }

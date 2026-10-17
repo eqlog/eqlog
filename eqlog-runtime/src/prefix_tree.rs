@@ -549,72 +549,62 @@ impl PrefixTree1 {
 impl PrefixTree2 {
     pub fn insert(&mut self, [el0, el1]: [u32; 2]) -> bool {
         self.map
-            .entry(el0)
-            .or_insert_with(PrefixTree1::new)
-            .insert([el1])
+            .update_entry(el0, PrefixTree1::new, |suffix| suffix.insert([el1]))
     }
 }
 
 impl PrefixTree3 {
     pub fn insert(&mut self, [el0, el1, el2]: [u32; 3]) -> bool {
         self.map
-            .entry(el0)
-            .or_insert_with(PrefixTree2::new)
-            .insert([el1, el2])
+            .update_entry(el0, PrefixTree2::new, |suffix| suffix.insert([el1, el2]))
     }
 }
 
 impl PrefixTree4 {
     pub fn insert(&mut self, [el0, el1, el2, el3]: [u32; 4]) -> bool {
-        self.map
-            .entry(el0)
-            .or_insert_with(PrefixTree3::new)
-            .insert([el1, el2, el3])
+        self.map.update_entry(el0, PrefixTree3::new, |suffix| {
+            suffix.insert([el1, el2, el3])
+        })
     }
 }
 
 impl PrefixTree5 {
     pub fn insert(&mut self, [el0, el1, el2, el3, el4]: [u32; 5]) -> bool {
-        self.map
-            .entry(el0)
-            .or_insert_with(PrefixTree4::new)
-            .insert([el1, el2, el3, el4])
+        self.map.update_entry(el0, PrefixTree4::new, |suffix| {
+            suffix.insert([el1, el2, el3, el4])
+        })
     }
 }
 
 impl PrefixTree6 {
     pub fn insert(&mut self, [el0, el1, el2, el3, el4, el5]: [u32; 6]) -> bool {
-        self.map
-            .entry(el0)
-            .or_insert_with(PrefixTree5::new)
-            .insert([el1, el2, el3, el4, el5])
+        self.map.update_entry(el0, PrefixTree5::new, |suffix| {
+            suffix.insert([el1, el2, el3, el4, el5])
+        })
     }
 }
 
 impl PrefixTree7 {
     pub fn insert(&mut self, [el0, el1, el2, el3, el4, el5, el6]: [u32; 7]) -> bool {
-        self.map
-            .entry(el0)
-            .or_insert_with(PrefixTree6::new)
-            .insert([el1, el2, el3, el4, el5, el6])
+        self.map.update_entry(el0, PrefixTree6::new, |suffix| {
+            suffix.insert([el1, el2, el3, el4, el5, el6])
+        })
     }
 }
 
 impl PrefixTree8 {
     pub fn insert(&mut self, [el0, el1, el2, el3, el4, el5, el6, el7]: [u32; 8]) -> bool {
-        self.map
-            .entry(el0)
-            .or_insert_with(PrefixTree7::new)
-            .insert([el1, el2, el3, el4, el5, el6, el7])
+        self.map.update_entry(el0, PrefixTree7::new, |suffix| {
+            suffix.insert([el1, el2, el3, el4, el5, el6, el7])
+        })
     }
 }
 
 impl PrefixTree9 {
     pub fn insert(&mut self, [el0, el1, el2, el3, el4, el5, el6, el7, el8]: [u32; 9]) -> bool {
-        self.map
-            .entry(el0)
-            .or_insert_with(PrefixTree8::new)
-            .insert([el1, el2, el3, el4, el5, el6, el7, el8])
+        self.map.update_entry(el0, PrefixTree8::new, |suffix| {
+            suffix.insert([el1, el2, el3, el4, el5, el6, el7, el8])
+        })
     }
 }
 

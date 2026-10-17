@@ -17,6 +17,7 @@ fn functionality_emits_a_linear_number_of_equalities_per_domain() {
     let mut output = Vec::new();
     functionality_choose(FunctionalityChooseEnv {
         phantom: std::marker::PhantomData,
+        __canonical_el: &[true; 208],
         choose_new_order_0_1_2: &rows,
         choose_old_order_0_1_2: PrefixTree3::empty(),
         new_el_equalities: &mut output,
@@ -24,6 +25,35 @@ fn functionality_emits_a_linear_number_of_equalities_per_domain() {
     assert_eq!(output.len(), 127 + 7);
     for [left, right] in output {
         assert!(left < 128 && right < 128 || left >= 200 && right >= 200);
+    }
+}
+
+#[test]
+fn functionality_skips_obsolete_anchors_before_choosing_a_result() {
+    for old_results in [vec![0, 1], vec![0]] {
+        let mut old = PrefixTree3::new();
+        for &result in &old_results {
+            old.insert([10, 11, result]);
+        }
+        let mut new = PrefixTree3::new();
+        new.insert([10, 11, 2]);
+        let expected = if old_results.len() == 2 {
+            vec![[2, 1]]
+        } else {
+            new.insert([10, 11, 3]);
+            vec![[3, 2]]
+        };
+        let mut canonical = [true; 12];
+        canonical[0] = false;
+        let mut output = Vec::new();
+        functionality_choose(FunctionalityChooseEnv {
+            phantom: std::marker::PhantomData,
+            __canonical_el: &canonical,
+            choose_new_order_0_1_2: &new,
+            choose_old_order_0_1_2: &old,
+            new_el_equalities: &mut output,
+        });
+        assert_eq!(output, expected);
     }
 }
 

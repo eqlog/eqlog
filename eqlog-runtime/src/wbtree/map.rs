@@ -391,6 +391,50 @@ impl<V: Clone> Node<V> {
         (Some(balanced_node), old_value)
     }
 
+    fn update_entry<F, G, R>(
+        node: Option<Rc<Self>>,
+        key: u32,
+        default: F,
+        update: G,
+    ) -> (Rc<Self>, bool, R)
+    where
+        F: FnOnce() -> V,
+        G: FnOnce(&mut V) -> R,
+    {
+        let mut node = match node {
+            Some(node) => node,
+            None => {
+                let mut value = default();
+                let result = update(&mut value);
+                return (Rc::new(Self::new(key, value)), true, result);
+            }
+        };
+        let data = match Rc::make_mut(&mut node) {
+            Node::Data(data) => data,
+            Node::Mapping(_) => unreachable!("entry updates materialize mappings"),
+        };
+        let (inserted, result) = match key.cmp(&data.key) {
+            Ordering::Equal => (false, update(&mut data.value)),
+            Ordering::Less => {
+                let (child, inserted, result) =
+                    Self::update_entry(data.left.take(), key, default, update);
+                data.left = Some(child);
+                (inserted, result)
+            }
+            Ordering::Greater => {
+                let (child, inserted, result) =
+                    Self::update_entry(data.right.take(), key, default, update);
+                data.right = Some(child);
+                (inserted, result)
+            }
+        };
+        if inserted {
+            data.update_size_internal();
+            node = Self::balance(node);
+        }
+        (node, inserted, result)
+    }
+
     fn remove_min(mut node: Rc<Node<V>>) -> (u32, V, Option<Rc<Node<V>>>) {
         // First handle mapping nodes by recursing through them
         match node.as_ref() {
@@ -907,7 +951,34 @@ impl<V: Clone> WBTreeMap<V> {
         old_value
     }
 
+    pub(crate) fn update_entry<F, G, R>(&mut self, key: u32, default: F, update: G) -> R
+    where
+        F: FnOnce() -> V,
+        G: FnOnce(&mut V) -> R,
+    {
+        self.materialize();
+        let (root, inserted, result) = Node::update_entry(self.root.take(), key, default, update);
+        self.root = Some(root);
+        self.len += usize::from(inserted);
+        result
+    }
+
     pub fn get(&self, key: &u32) -> Option<&V> {
+        let mut current = self.root.as_deref();
+        while let Some(node) = current {
+            match node {
+                Node::Data(data_node) => match key.cmp(&data_node.key) {
+                    Ordering::Less => current = data_node.left.as_deref(),
+                    Ordering::Greater => current = data_node.right.as_deref(),
+                    Ordering::Equal => return Some(&data_node.value),
+                },
+                Node::Mapping(_) => return self.get_mapped(key),
+            }
+        }
+        None
+    }
+
+    fn get_mapped(&self, key: &u32) -> Option<&V> {
         // Accumulate mappings as we traverse
         let mut mappings: Vec<&PrefixTree2> = Vec::new();
         let mut current = &self.root;
@@ -985,7 +1056,8 @@ impl<V: Clone> WBTreeMap<V> {
     }
 
     /// Includes keys filtered by lazy mappings, without traversing them.
-    pub(crate) fn len_upper_bound(&self) -> usize {
+    #[doc(hidden)]
+    pub fn len_upper_bound(&self) -> usize {
         self.len
     }
 

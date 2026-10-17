@@ -56,9 +56,11 @@ pub struct DefineSetStmt {
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct IterStmt {
     pub sets: Vec<SetVar>,
+    pub lookup_drivers: Vec<SetVar>,
     pub loop_var_el: ElVar,
     pub loop_var_set: SetVar,
     pub first_only: bool,
+    pub canonical_filter: bool,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]

@@ -5,6 +5,9 @@ pred end(El);
 pred forward(El);
 pred backward(El);
 pred diagonal(El);
+pred has_outgoing(El);
+pred scan();
+pred scanned(El, El);
 
 rule forward_step {
     if start(x);
@@ -22,4 +25,16 @@ rule diagonal_step {
     if start(x);
     if edge(x, x);
     then diagonal(x);
+}
+
+rule private_outgoing {
+    if start(x);
+    if edge(x, _);
+    then has_outgoing(x);
+}
+
+rule scan_edges {
+    if edge(x, y);
+    if scan();
+    then scanned(x, y);
 }

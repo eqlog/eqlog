@@ -106,6 +106,11 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
                 "All indices for a query must have the same order"
             );
         }
+        // ALL scans can produce OLD suffixes under a NEW-named variable.
+        let canonical_filter = indices.iter().any(|index| match index.age {
+            IndexAge::Old => true,
+            IndexAge::New => false,
+        });
         let order = &indices[0].order;
         let mut arity = order.len();
 
@@ -232,6 +237,7 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
                 }
                 let iter_stmt = IterStmt {
                     sets,
+                    lookup_drivers: Vec::new(),
                     loop_var_el: ram_var,
                     loop_var_set: SetVar {
                         name: next_set_name.clone(),
@@ -239,6 +245,7 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
                         strictness: Strictness::Strict,
                     },
                     first_only,
+                    canonical_filter,
                 };
                 arity -= 1;
                 stmts.push(RamStmt::Iter(iter_stmt));
@@ -304,6 +311,7 @@ fn flat_rule_group_to_ram(
                 .map(|owner| owner.name.clone())
                 .collect();
             routine.stmts = sort_ram_stmts(routine.stmts.as_slice(), &parameters);
+            add_adaptive_lookup_joins(&mut routine.stmts, &routine.flat_rule);
             routine
         })
         .collect();
