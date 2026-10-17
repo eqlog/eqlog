@@ -1,0 +1,114 @@
+{
+  "measured_source_commit": "b23fca3e602cbe847231d44291e4386c3e6cf808",
+  "profile_build_base_revision": "cf3e93dd1c6275469c8c8b2968e61076dcb37d9a",
+  "revision_note": "The profiler was built while the production changes were uncommitted on the base revision. Those production sources were subsequently committed as measured_source_commit.",
+  "profile_build": {
+    "revision": "cf3e93dd1c6275469c8c8b2968e61076dcb37d9a",
+    "rustc": "rustc 1.95.0 (59807616e 2026-04-14)",
+    "generated_sha256": "07975aa14df122749a4548cf1b12b2f6caa4559902ae916a6846c912a3311946",
+    "runtime_sha256": "93092e6bba8bb15e8e2595c137ae7b1c5b9f0aab0942800df7d7944fd0554480",
+    "strata": 18,
+    "model_scoped_strata": 0,
+    "timed_functions": 46,
+    "rule_groups": 128,
+    "reuse_primary": false,
+    "prepared_primary": true,
+    "cached_graph": true,
+    "rewrites_inherited": true,
+    "allocations": false
+  },
+  "metric_notes": {
+    "process_times": "Wall/CPU/RSS values cover the entire invocation, including parsing, elaboration, output, profiling snapshots and any enabled update probes. They are recorded only on the initial phase row.",
+    "close_ns": "Instrumented close() time; excludes Rust compilation and elaboration.",
+    "exclusive_costs": "Categories are disjoint exclusive timer totals and sum exactly to close_ns for each phase.",
+    "graph_preparations": "Cache preparation calls, including hits; not a graph reconstruction count.",
+    "primary_edge_visits": "Selected primary propagation calls; wrapper calls are excluded. Historical instrumentation counted wrappers as well.",
+    "normalization_stratum_calls": "Calls of generated stratum 5, containing the functionality normalization barrier.",
+    "consumer_stratum_calls": "Calls of generated stratum 6, containing the remaining main recursive rule groups.",
+    "candidate_counts": "Transport batches and changed-input counts measure attempted work, not unique new facts.",
+    "canonical_counts": "Counts concern canonical type element sets after initial closure. Update probes do not dump per-phase table snapshots.",
+    "equality_representatives": "Scheduling can change representative IDs; raw tuple hashes are not semantic equality checks across revisions.",
+    "blank_cells": "Not collected or not applicable."
+  },
+  "fixtures": {
+    "nat.ett": {
+      "sha256": "64f4421f714d8f66969ac9dc03dc5e3c7702f34da8b9e0a58b0ee7066232333a"
+    },
+    "vec.ett": {
+      "sha256": "bedae5a4986aef40a91d518b2312bcf1528a31621eb27a991f980283a8b55286"
+    }
+  },
+  "artifacts": [
+    {
+      "path": "/tmp/ett-final-full.csv",
+      "sha256": "3dc13977fa015d9bccd7f6166f8ab830b16b9b794bfcfbd1a53628879b648ca0",
+      "timing_path": "/tmp/ett-final-full.csv.time.json",
+      "timing_sha256": "7b6c89697ef27332ccc79827b799266eb2d1d51035b7abd643e531c0f42cd761",
+      "process": {
+        "command": [
+          "/tmp/ett-final-profile/profile",
+          "eqlog-ett/nat.ett",
+          "eqlog-ett/vec.ett"
+        ],
+        "exit": 0,
+        "seconds": 51.72868735799784,
+        "user": 51.476093,
+        "system": 0.17602399999999999,
+        "maxrss_kb": 313556
+      }
+    },
+    {
+      "path": "/tmp/ett-final-nat.csv",
+      "sha256": "93a1fadc9f5124154e942895a6a65326b90bc245e57271f9bf9956de69f3433d",
+      "timing_path": "/tmp/ett-final-nat.csv.time.json",
+      "timing_sha256": "04cccc4a77fbe2eb7ff1393112ae5a0e247fd432ab426542ad5852182a0c6c96",
+      "process": {
+        "command": [
+          "/tmp/ett-final-profile/profile",
+          "eqlog-ett/nat.ett"
+        ],
+        "exit": 0,
+        "seconds": 6.719459402000211,
+        "user": 6.648316,
+        "system": 0.05989,
+        "maxrss_kb": 96788
+      }
+    },
+    {
+      "path": "/tmp/ett-final-cli-1.txt",
+      "sha256": "0977eaaf0751f70f960db87bc9f1da32d917f2af1c51248d6e889afef7971294",
+      "timing_path": "/tmp/ett-final-cli-1.txt.time.json",
+      "timing_sha256": "2e68d3f40644b820aa63d9dfbdceab913b1a5da90bd00cfee900035295a508f8",
+      "process": {
+        "command": [
+          "target/release/eqlog-ett",
+          "eqlog-ett/nat.ett",
+          "eqlog-ett/vec.ett"
+        ],
+        "exit": 0,
+        "seconds": 56.07737820900002,
+        "user": 55.79294,
+        "system": 0.19195399999999999,
+        "maxrss_kb": 312972
+      }
+    },
+    {
+      "path": "/tmp/ett-final-cli-2.txt",
+      "sha256": "0977eaaf0751f70f960db87bc9f1da32d917f2af1c51248d6e889afef7971294",
+      "timing_path": "/tmp/ett-final-cli-2.txt.time.json",
+      "timing_sha256": "893a34d690f70b4b35e8df16a431cc15cfa5593820e11ce5369ba7132eec03be",
+      "process": {
+        "command": [
+          "target/release/eqlog-ett",
+          "eqlog-ett/nat.ett",
+          "eqlog-ett/vec.ett"
+        ],
+        "exit": 0,
+        "seconds": 50.17999870300264,
+        "user": 49.920014,
+        "system": 0.175792,
+        "maxrss_kb": 313236
+      }
+    }
+  ]
+}

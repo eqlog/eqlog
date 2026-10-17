@@ -35,6 +35,8 @@ allocations. Include runtime artifacts and compiler settings in the
 component cache key.
 
 Preserve the complete Nat and Vec development, bounded computation, and
-one-call closure. Record reproducible profiles and validate the generic
-optimizations against evaluator integration cases and independent
-review.
+one-call closure. Validate the generic optimizations with integration
+cases and independent review. Check all 52 declarations in 50-56 seconds
+on the measured machine, with disconnected updates taking milliseconds
+instead of replaying the existing context graph. Record reproducible
+profiles and build metadata.

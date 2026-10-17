@@ -1,6 +1,6 @@
 # ETT evaluator investigation
 
-The tables below preserve the baseline investigation at
+The historical tables preserve the baseline investigation at
 `8991f586ba5e9288e663f2d9fba6ea144716e031`, after merging `host/master` at
 `895e9a7`. They are historical measurements, not timings of the optimized
 implementation described later in this report.
@@ -15,6 +15,49 @@ has 18 global strata. This is not a conversion to owner-local rule scheduling.
 The Nat and Vec source modules, fresh contexts, equality reflection, partial
 morphisms, three-expansion budget, and single `close()` call are unchanged.
 All closure timings exclude Rust compilation.
+
+## Optimized results
+
+Measured production source: `b23fca3`. Both uninstrumented runs checked all 52
+Nat+Vec declarations in one `close()` call: **56.077 s and 50.180 s end to end**.
+These times include parsing, elaboration, checking, and CLI output, and exclude
+Rust compilation. They meet the one-minute target on this machine; individual
+runs still vary appreciably.
+
+The separately instrumented profiles give the following closure times and
+whole-process peak memory:
+
+| Workload | Baseline `close()` | Optimized `close()` | Baseline peak RSS | Optimized peak RSS |
+| --- | ---: | ---: | ---: | ---: |
+| Nat | 83.295 s | 6.424 s | 120.6 MiB | 94.5 MiB |
+| Nat + Vec | 841.025 s | 50.401 s | 618.7 MiB | 306.2 MiB |
+
+The full profile attributes 5.563 s to primary transport, down from 417.312 s,
+and 1.868 s to alternate indices, down from 273.647 s. Remaining costs include
+17.595 s in rule matching, 12.629 s in canonicalization, 4.247 s in graph
+preparation, and 8.385 s in other evaluation work. Direct canonicalization is
+more expensive than in the baseline, but it preserves inherited data instead
+of forcing the much larger transport replay. Candidate transport batches fell
+from 374,970,808 to 6,744,029.
+
+After Nat is closed, an unchanged close takes 221 ns, a disconnected-context
+update takes 2.559 ms, and an isolated equality takes 2.252 ms. Both nontrivial
+updates perform zero primary edge visits; their baseline times were 773.446 ms
+and 313.104 ms. These remain globally scheduled updates, with some graph and
+canonicalization work, rather than constant-time operations.
+
+The final canonical context, morphism, type, and term counts match the baseline
+for both developments. The full graph still has 397 SCCs and the same 41
+allocation rounds. Representative IDs may differ, so raw tuple hashes are not
+used as cross-revision correctness checks.
+
+The [optimized profile summary](results/ett-optimized-profile.csv),
+[exclusive costs](results/ett-optimized-costs.csv), and
+[build and measurement metadata](results/ett-optimized-metadata.json) record
+these results. Profile times and the two CLI process times are separate rows.
+The profiler was built on base revision `cf3e93d` before the measured production
+changes were committed as `b23fca3`; metadata records both identities and the
+generated-source and runtime hashes.
 
 ## Historical baseline measurements
 
@@ -304,11 +347,34 @@ The functionality barrier is exercised with equalities cascading through
 function domains and a deferred allocation. Existing ETT positive and negative
 checks retain the unchanged Nat and Vec developments.
 
+Final validation at the measured source passed:
+
+```sh
+cargo test --release -p eqlog-runtime -p eqlog-test-compile -p eqlog-test-eval -p eqlog
+cargo test -p eqlog-test-opt
+cargo test -p eqlog-test-eval --features naive,desugared \
+  --test functionality_star --test functionality_barrier \
+  --test prepared_mapped --test prepared_native
+```
+
+The release run passed 483 tests, with two existing documentation examples
+ignored. This includes all 11 ETT tests; that test executable finished in
+59.51 s. The optimization suite passed nine tests comparing all four
+naive/semi-naive and native/desugared combinations. The final command passed
+six focused cases; native-only cases are disabled in desugared mode.
+
 Temporary differential checks compare tree rewrites, partial-map delta joins,
 and lazy iteration against ordinary set/map or direct traversal semantics.
 These development probes are not additional permanent unit-test suites.
 Independent reviewers examine the generality and correctness of the transport,
 scheduling, and runtime mechanisms separately from benchmark results.
+
+Two reviewers started without the parent conversation context. Their final
+reviews found no blocking correctness issue or ETT-specific compiler/runtime
+heuristic. Temporary differential checks included 64,000 transport updates,
+with partial endpoints, typed quotients, cycles, and reconstruction from owned
+support, plus 10,000 ordinary and lazy tree rewrites. These checks supplement
+the generated-evaluator integration tests; they are not a formal proof.
 
 Performance runs should be sequential and repeated. Measure initial closure,
 unchanged closure, a disconnected context, late images, graph changes, and an
@@ -328,8 +394,8 @@ The functionality schedule can change which element represents an equality
 class. Raw tuple hashes therefore need not match the baseline even when the
 models agree. Compare canonical cardinalities and observable proof-checking
 results, and use correspondence-aware comparisons where identities matter.
-Equal cardinalities alone are not a correctness proof. Final optimized timings
-and validation results should be recorded alongside their exact build metadata.
+Equal cardinalities alone are not a correctness proof. Optimized measurement
+artifacts above record the exact build metadata separately from test validation.
 
 ## Reproduction
 
