@@ -102,7 +102,7 @@ struct Variant {
 struct Case {
     name: &'static str,
     source: &'static str,
-    variants: [Variant; 8],
+    variants: [Variant; 4],
 }
 
 include!(concat!(env!("OUT_DIR"), "/cases.rs"));

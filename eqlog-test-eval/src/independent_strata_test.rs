@@ -28,7 +28,6 @@ fn independent_cycles_and_acyclic_rules_handle_incremental_inputs() {
     assert!(m.backwards(d));
 }
 
-#[cfg(feature = "stratified")]
 #[test]
 fn independent_readers_resume_without_consuming_each_others_input() {
     let mut m = IndependentStrata::new();
@@ -61,7 +60,6 @@ fn shared_output_only_relations_combine_both_producers() {
     assert!(m.out_done(b));
 }
 
-#[cfg(feature = "stratified")]
 #[test]
 fn interrupted_recursion_reloads_changed_stable_inputs() {
     let mut m = IndependentStrata::new();
@@ -80,7 +78,6 @@ fn interrupted_recursion_reloads_changed_stable_inputs() {
     assert!(m.backwards(d));
 }
 
-#[cfg(feature = "stratified")]
 #[test]
 fn consumers_wait_for_recursive_producers_to_close() {
     let mut m = IndependentStrata::new();

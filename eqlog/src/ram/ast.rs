@@ -103,6 +103,7 @@ pub struct RamProgram {
 
 pub struct IndexPreparation {
     pub indices: BTreeSet<(FlatInRel, IndexSpec)>,
+    pub membership_only: BTreeSet<(FlatInRel, IndexSpec)>,
     pub native: NativePreparation,
     pub stable: Option<NativePreparation>,
 }

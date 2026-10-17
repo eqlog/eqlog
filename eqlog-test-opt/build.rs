@@ -2,7 +2,7 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-use eqlog::{CompileOptions, Config, EvaluationMode, ModelMode, SchedulingMode};
+use eqlog::{CompileOptions, Config, EvaluationMode, ModelMode};
 use indoc::formatdoc;
 
 mod theories;
@@ -68,17 +68,13 @@ fn main() -> eqlog::Result<()> {
     for (i, (name, source, authored)) in cases.iter().enumerate() {
         let mut variants = Vec::new();
         let mut test_calls = Vec::new();
-        for (mode, (evaluation_mode, model_mode, scheduling_mode)) in [
+        for (mode, (evaluation_mode, model_mode)) in [
             (EvaluationMode::Naive, ModelMode::Desugared),
             (EvaluationMode::SemiNaive, ModelMode::Desugared),
             (EvaluationMode::Naive, ModelMode::Native),
             (EvaluationMode::SemiNaive, ModelMode::Native),
         ]
         .into_iter()
-        .flat_map(|(evaluation, model)| {
-            [SchedulingMode::Simultaneous, SchedulingMode::Stratified]
-                .map(move |schedule| (evaluation, model, schedule))
-        })
         .enumerate()
         {
             let module = format!("case_{i}_mode_{mode}");
@@ -94,7 +90,6 @@ fn main() -> eqlog::Result<()> {
                 options: CompileOptions {
                     evaluation_mode,
                     model_mode,
-                    scheduling_mode,
                 },
             })?;
             let path = output.join(format!("{module}.eql.rs"));
@@ -114,7 +109,7 @@ fn main() -> eqlog::Result<()> {
                     }}
                 }}
             "});
-            let name = format!("{evaluation_mode:?}/{model_mode:?}/{scheduling_mode:?}");
+            let name = format!("{evaluation_mode:?}/{model_mode:?}");
             variants.push(format!("Variant {{ name: {name:?}, create: create::<{module}::{model}>, signature: {module}::{model}::dynamic_signature() }}"));
             test_calls.push(formatdoc! {"
                 {{

@@ -11,6 +11,7 @@ pub trait SnapshotSet: Clone {
     fn empty() -> Self;
     fn is_empty(&self) -> bool;
     fn shares_root(&self, other: &Self) -> bool;
+    fn is_subset(&self, other: &Self) -> bool;
     fn difference(&self, other: &Self) -> Self;
     fn visit_difference(&self, other: &Self, visit: &mut impl FnMut(Self::Row));
     fn insert_row(&mut self, row: Self::Row);
@@ -21,6 +22,9 @@ macro_rules! snapshot_set {
     ($tree:ident, $arity:literal, $left:ident, $right:ident, $shares:expr) => {
         impl SnapshotSet for $tree {
             type Row = [u32; $arity];
+            fn is_subset(&self, other: &Self) -> bool {
+                self.is_subset(other)
+            }
             fn visit_difference(&self, other: &Self, visit: &mut impl FnMut(Self::Row)) {
                 self.visit_difference(other, visit);
             }
@@ -160,12 +164,9 @@ impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
         if self.current.rows.shares_root(rows) {
             return;
         }
-        let mut changed = false;
-        self.current
-            .rows
-            .visit_difference(rows, &mut |_| changed = true);
-        rows.visit_difference(&self.current.rows, &mut |_| changed = true);
-        if !changed {
+        // Most publications add rows; check that direction first so the first
+        // addition proves a change without walking the remaining edits.
+        if rows.is_subset(&self.current.rows) && self.current.rows.is_subset(rows) {
             return;
         }
         self.current = Rc::new(Version {
@@ -189,12 +190,43 @@ impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
         &mut self,
         consumer: Consumer,
     ) -> RelationView<T> {
+        self.consume_view::<OLD, NEW, true>(consumer)
+    }
+
+    /// When removals only replace noncanonical IDs, canonical membership probes
+    /// can share the old checkpoint without filtering equality replacements.
+    /// The caller must not enumerate the old view to bind variables.
+    pub fn consume_membership<const OLD: bool, const NEW: bool>(
+        &mut self,
+        consumer: Consumer,
+    ) -> RelationView<T> {
+        self.consume_view::<OLD, NEW, false>(consumer)
+    }
+
+    fn consume_view<const OLD: bool, const NEW: bool, const FILTER_OLD: bool>(
+        &mut self,
+        consumer: Consumer,
+    ) -> RelationView<T> {
         let seen = self.seen.get(&consumer).unwrap_or(&self.empty);
+        if Rc::ptr_eq(seen, &self.current) {
+            return RelationView {
+                old: if OLD {
+                    self.current.rows.clone()
+                } else {
+                    T::empty()
+                },
+                new: T::empty(),
+            };
+        }
         let view = self.views.entry(seen.id).or_insert_with(|| RelationView {
             old: None,
             new: None,
         });
-        let old = if OLD {
+        let old = if !OLD {
+            T::empty()
+        } else if !FILTER_OLD {
+            seen.rows.clone()
+        } else {
             view.old
                 .get_or_insert_with(|| {
                     // Removing obsolete IDs is safe; replacing them by their roots here
@@ -206,8 +238,6 @@ impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
                     old
                 })
                 .clone()
-        } else {
-            T::empty()
         };
         let new = if NEW {
             view.new
@@ -223,7 +253,13 @@ impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
         } else {
             T::empty()
         };
-        self.seen.insert(consumer, self.current.clone());
+        if let Some(previous) = self.seen.insert(consumer, self.current.clone()) {
+            // With no checkpoint retaining this version, no future reader can
+            // need its cached difference.
+            if Rc::strong_count(&previous) == 1 {
+                self.views.remove(&previous.id);
+            }
+        }
         RelationView { old, new }
     }
 }

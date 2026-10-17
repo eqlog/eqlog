@@ -1,0 +1,20 @@
+[package]
+name = "eqlog-bench"
+version = "0.1.0"
+edition = "2021"
+publish = false
+autobenches = false
+
+[features]
+allocations = []
+
+[dependencies]
+eqlog-runtime = { path = "../eqlog-runtime" }
+
+[build-dependencies]
+eqlog = { path = "../eqlog", features = ["rebuild"] }
+indoc = "2"
+
+[[bench]]
+name = "scheduling"
+harness = false

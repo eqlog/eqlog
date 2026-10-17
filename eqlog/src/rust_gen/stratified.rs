@@ -61,6 +61,17 @@ impl<'s> Codegen<'s> {
             .any(|(rel, _)| self.strata[s].stable_inputs.contains(&source_relation(rel)))
     }
 
+    fn consume_method(&self, s: usize, rel: &FlatInRel, index: &IndexSpec) -> &'static str {
+        if self.preparations[s]
+            .membership_only
+            .contains(&input_key(rel.clone(), index.clone()))
+        {
+            "consume_membership"
+        } else {
+            "consume_required"
+        }
+    }
+
     pub fn loop_input_types<'a>(
         &'a self,
         selection: &'a IndexSelection,
@@ -434,6 +445,12 @@ impl<'s> Codegen<'s> {
                 }
                 for rel in inputs {
                     let i = self.inputs[&rel];
+                    let consume = self.consume_method(s, &rel, selection.current_primary(&rel));
+                    let old = self.preparations[s].indices.iter().any(|(input, index)| {
+                        input == &rel
+                            && index.age == IndexAge::Old
+                            && selection.is_primary(input, index)
+                    });
                     let stable = stratum.stable_inputs.contains(&rel);
                     if stable {
                         begin_stable_input(f, &format!("input_{i}"), &rel, ctx)?;
@@ -451,14 +468,15 @@ impl<'s> Codegen<'s> {
                             &rel,
                             model,
                             s,
+                            old,
                             true,
-                            true,
+                            consume,
                             ctx,
                         )?;
                     } else {
                         writeln!(
                             f,
-                            "let input_{i} = self.__rule_input_{i}.consume(({s}, Vec::new()));"
+                            "let input_{i} = self.__rule_input_{i}.{consume}::<{old}, true>(({s}, Vec::new()));"
                         )?;
                     }
                     if stable {
@@ -485,6 +503,7 @@ impl<'s> Codegen<'s> {
                 }
                 for id in self.preparations[s].native_indices() {
                     let rel = &self.native_indices[*id].rel;
+                    let consume = self.consume_method(s, rel, &self.native_indices[*id].index);
                     let stable = stratum.stable_inputs.contains(&source_relation(rel));
                     if stable {
                         begin_stable_input(f, &format!("native_input_{id}"), rel, ctx)?;
@@ -506,12 +525,13 @@ impl<'s> Codegen<'s> {
                             s,
                             true,
                             true,
+                            consume,
                             ctx,
                         )?;
                     } else {
                         writeln!(
                             f,
-                            "let native_input_{id} = self.__native_input_{id}.consume({s});"
+                            "let native_input_{id} = self.__native_input_{id}.{consume}::<true, true>({s});"
                         )?;
                     }
                     if stable {
@@ -532,6 +552,7 @@ impl<'s> Codegen<'s> {
                     .map(|(rel, index)| input_key(rel, index))
                     .collect();
                 for (rel, index) in &required_indices {
+                    let consume = self.consume_method(s, rel, index);
                     if native_indices::find(self.native_indices, rel, index).is_some() {
                         continue;
                     }
@@ -574,10 +595,11 @@ impl<'s> Codegen<'s> {
                                 s,
                                 old,
                                 new,
+                                consume,
                                 ctx,
                             )?;
                         } else {
-                            writeln!(f, "let index_{j} = self.__rule_index_{j}_versions.consume_required::<{old}, {new}>(({s}, Vec::new()));")?;
+                            writeln!(f, "let index_{j} = self.__rule_index_{j}_versions.{consume}::<{old}, {new}>(({s}, Vec::new()));")?;
                         }
                         if stable {
                             end_stable_input(
@@ -855,6 +877,9 @@ impl<'s> Codegen<'s> {
                 }}
 
                 fn __close_until(&mut self, condition: Option<&dyn Fn(&Self) -> bool>) -> bool {{
+                    if self.__closed {{
+                        return condition.is_some_and(|condition| condition(self));
+                    }}
                     self.__canonicalize_relations();
                     if self.__check_condition(condition) {{ return true; }}
                     let mut delta = std::mem::replace(&mut self.__pending_delta, ModelDelta::new());
@@ -867,6 +892,7 @@ impl<'s> Codegen<'s> {
                         if !self.__allocated {{
                             std::mem::swap(&mut self.__pending_delta, &mut delta);
                             self.canonicalize();
+                            self.__closed = true;
                             return false;
                         }}
                         self.__canonicalize_relations();
@@ -988,12 +1014,16 @@ fn consume_scoped(
     stratum: usize,
     old: bool,
     new: bool,
+    consume: &str,
     ctx: &RustGenCtx<'_>,
 ) -> std::fmt::Result {
     let arity = rel.arity(ctx.signature()).len();
     let prefix = scope_prefix(rel, model, ctx);
     if prefix == 0 {
-        return writeln!(f, "let {name} = self.{global}.consume_required::<{old}, {new}>(({stratum}, owners.to_vec()));");
+        return writeln!(
+            f,
+            "let {name} = self.{global}.{consume}::<{old}, {new}>(({stratum}, owners.to_vec()));"
+        );
     }
     let field = format!("{field}_{prefix}");
     let key = (0..prefix).map(|i| format!("owners[{i}]")).join(", ");
@@ -1003,7 +1033,7 @@ fn consume_scoped(
             let current = {current};
             let history = self.{field}.entry([{key}]).or_insert_with(eqlog_runtime::__private::RelationVersions::new);
             history.publish(current);
-            let view = history.consume_required::<{old}, {new}>(({stratum}, owners.to_vec()));
+            let view = history.{consume}::<{old}, {new}>(({stratum}, owners.to_vec()));
     "}?;
     for age in ["old", "new"] {
         writeln!(f, "let {age} = view.{age};")?;

@@ -231,6 +231,27 @@ pub fn plan_index_preparation(
             .iter()
             .flat_map(|&i| modules[i].input_indices())
             .collect();
+        // Canonical membership probes cannot find obsolete aliases. Iteration
+        // must filter them, or equality collapses can multiply rule matches.
+        let mut membership_only: BTreeSet<_> = inputs
+            .iter()
+            .filter(|(_, index)| index.age == IndexAge::Old)
+            .cloned()
+            .collect();
+        for stmt in groups
+            .iter()
+            .flat_map(|&i| &modules[i].routines)
+            .flat_map(|routine| &routine.stmts)
+        {
+            let sets = match stmt {
+                RamStmt::Iter(stmt) => &stmt.sets,
+                RamStmt::GuardInhabited(stmt) => &stmt.sets,
+                RamStmt::DefineSet(_) | RamStmt::Insert(_) => continue,
+            };
+            for set in sets.iter().filter(|set| set.arity != 0) {
+                membership_only.remove(&(set.name.rel.clone(), set.name.index.clone()));
+            }
+        }
         if model.is_some() {
             for stmt in groups
                 .iter()
@@ -321,6 +342,7 @@ pub fn plan_index_preparation(
         }
         let plan = IndexPreparation {
             indices: inputs,
+            membership_only,
             native: NativePreparation {
                 native_indices: required_native,
                 support_indices: prepared_support,

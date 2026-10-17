@@ -1098,7 +1098,7 @@ impl PrefixTree2 {
     pub fn union(&self, other: &Self) -> Self {
         let map = self
             .map
-            .union(&other.map, |_key, val1, val2| val1.union(&val2));
+            .union_shared(&other.map, |_key, val1, val2| val1.union(&val2));
         Self { map }
     }
 }
@@ -1107,7 +1107,7 @@ impl PrefixTree3 {
     pub fn union(&self, other: &Self) -> Self {
         let map = self
             .map
-            .union(&other.map, |_key, val1, val2| val1.union(&val2));
+            .union_shared(&other.map, |_key, val1, val2| val1.union(&val2));
         Self { map }
     }
 }
@@ -1116,7 +1116,7 @@ impl PrefixTree4 {
     pub fn union(&self, other: &Self) -> Self {
         let map = self
             .map
-            .union(&other.map, |_key, val1, val2| val1.union(&val2));
+            .union_shared(&other.map, |_key, val1, val2| val1.union(&val2));
         Self { map }
     }
 }
@@ -1125,7 +1125,7 @@ impl PrefixTree5 {
     pub fn union(&self, other: &Self) -> Self {
         let map = self
             .map
-            .union(&other.map, |_key, val1, val2| val1.union(&val2));
+            .union_shared(&other.map, |_key, val1, val2| val1.union(&val2));
         Self { map }
     }
 }
@@ -1134,7 +1134,7 @@ impl PrefixTree6 {
     pub fn union(&self, other: &Self) -> Self {
         let map = self
             .map
-            .union(&other.map, |_key, val1, val2| val1.union(&val2));
+            .union_shared(&other.map, |_key, val1, val2| val1.union(&val2));
         Self { map }
     }
 }
@@ -1143,7 +1143,7 @@ impl PrefixTree7 {
     pub fn union(&self, other: &Self) -> Self {
         let map = self
             .map
-            .union(&other.map, |_key, val1, val2| val1.union(&val2));
+            .union_shared(&other.map, |_key, val1, val2| val1.union(&val2));
         Self { map }
     }
 }
@@ -1152,7 +1152,7 @@ impl PrefixTree8 {
     pub fn union(&self, other: &Self) -> Self {
         let map = self
             .map
-            .union(&other.map, |_key, val1, val2| val1.union(&val2));
+            .union_shared(&other.map, |_key, val1, val2| val1.union(&val2));
         Self { map }
     }
 }
@@ -1161,8 +1161,108 @@ impl PrefixTree9 {
     pub fn union(&self, other: &Self) -> Self {
         let map = self
             .map
-            .union(&other.map, |_key, val1, val2| val1.union(&val2));
+            .union_shared(&other.map, |_key, val1, val2| val1.union(&val2));
         Self { map }
+    }
+}
+
+impl PrefixTree0 {
+    pub fn is_subset(&self, other: &Self) -> bool {
+        self.0.is_none() || other.0.is_some()
+    }
+}
+
+impl PrefixTree1 {
+    pub fn is_subset(&self, other: &Self) -> bool {
+        self.set.difference_iter(&other.set).next().is_none()
+    }
+}
+
+impl PrefixTree2 {
+    pub fn is_subset(&self, other: &Self) -> bool {
+        self.map
+            .difference_entries(&other.map)
+            .all(|(_, left, right)| match right {
+                Some(right) => left.is_subset(right),
+                None => left.is_empty(),
+            })
+    }
+}
+
+impl PrefixTree3 {
+    pub fn is_subset(&self, other: &Self) -> bool {
+        self.map
+            .difference_entries(&other.map)
+            .all(|(_, left, right)| match right {
+                Some(right) => left.is_subset(right),
+                None => left.is_empty(),
+            })
+    }
+}
+
+impl PrefixTree4 {
+    pub fn is_subset(&self, other: &Self) -> bool {
+        self.map
+            .difference_entries(&other.map)
+            .all(|(_, left, right)| match right {
+                Some(right) => left.is_subset(right),
+                None => left.is_empty(),
+            })
+    }
+}
+
+impl PrefixTree5 {
+    pub fn is_subset(&self, other: &Self) -> bool {
+        self.map
+            .difference_entries(&other.map)
+            .all(|(_, left, right)| match right {
+                Some(right) => left.is_subset(right),
+                None => left.is_empty(),
+            })
+    }
+}
+
+impl PrefixTree6 {
+    pub fn is_subset(&self, other: &Self) -> bool {
+        self.map
+            .difference_entries(&other.map)
+            .all(|(_, left, right)| match right {
+                Some(right) => left.is_subset(right),
+                None => left.is_empty(),
+            })
+    }
+}
+
+impl PrefixTree7 {
+    pub fn is_subset(&self, other: &Self) -> bool {
+        self.map
+            .difference_entries(&other.map)
+            .all(|(_, left, right)| match right {
+                Some(right) => left.is_subset(right),
+                None => left.is_empty(),
+            })
+    }
+}
+
+impl PrefixTree8 {
+    pub fn is_subset(&self, other: &Self) -> bool {
+        self.map
+            .difference_entries(&other.map)
+            .all(|(_, left, right)| match right {
+                Some(right) => left.is_subset(right),
+                None => left.is_empty(),
+            })
+    }
+}
+
+impl PrefixTree9 {
+    pub fn is_subset(&self, other: &Self) -> bool {
+        self.map
+            .difference_entries(&other.map)
+            .all(|(_, left, right)| match right {
+                Some(right) => left.is_subset(right),
+                None => left.is_empty(),
+            })
     }
 }
 

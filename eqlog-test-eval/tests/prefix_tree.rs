@@ -1,7 +1,9 @@
+use eqlog_runtime::__private::SnapshotSet;
 use eqlog_runtime::{
     PrefixTree1, PrefixTree2, PrefixTree3, PrefixTree4, PrefixTree5, PrefixTree6, PrefixTree7,
     PrefixTree8, PrefixTree9,
 };
+use std::collections::BTreeSet;
 
 macro_rules! restriction_tests {
     ($name:ident, $tree:ident, $restriction:ident, $arity:expr) => {
@@ -42,4 +44,87 @@ fn filtering_a_later_column_does_not_leave_empty_prefixes() {
     assert!(mapped.is_empty());
     assert!(mapped.get(1).is_none());
     assert_eq!(mapped.iter_restrictions().count(), 0);
+}
+
+#[test]
+fn set_operations_preserve_shared_prefixes() {
+    let mut base = PrefixTree3::new();
+    for i in 0..128 {
+        base.insert([i, i, i]);
+    }
+    let same = base.union(&base);
+    assert!(SnapshotSet::shares_root(&same, &base));
+    let mut extended = base.clone();
+    extended.insert([128, 128, 128]);
+    assert!(base.is_subset(&extended));
+    assert!(!extended.is_subset(&base));
+    let union = base.union(&extended);
+    assert_eq!(
+        union.iter().collect::<Vec<_>>(),
+        extended.iter().collect::<Vec<_>>()
+    );
+    assert!(SnapshotSet::shares_root(
+        base.get(0).unwrap(),
+        union.get(0).unwrap()
+    ));
+}
+
+#[test]
+fn subset_comparisons_respect_mappings_and_filtered_prefixes() {
+    let mut base = PrefixTree2::new();
+    let mut mapping = PrefixTree2::new();
+    let mut expected = PrefixTree2::new();
+    for i in 0..128 {
+        base.insert([i, i]);
+        if i % 3 != 0 {
+            mapping.insert([i, i + 128]);
+            expected.insert([i + 128, i]);
+        }
+    }
+    let mapped = PrefixTree2 {
+        map: base.map.mapped(mapping),
+    };
+    assert!(mapped.is_subset(&expected));
+    assert!(expected.is_subset(&mapped));
+    assert!(!mapped.is_subset(&base));
+    assert!(!base.is_subset(&mapped));
+    assert!(mapped.difference(&expected).is_empty());
+    assert!(expected.difference(&mapped).is_empty());
+    assert!(SnapshotSet::shares_root(&mapped.union(&mapped), &mapped));
+    expected.insert([0, 0]);
+    assert!(mapped.is_subset(&expected));
+    assert!(!expected.is_subset(&mapped));
+    assert_eq!(
+        expected.difference(&mapped).iter().collect::<Vec<_>>(),
+        vec![[0, 0]]
+    );
+    let union = mapped.union(&expected);
+    assert_eq!(
+        union.iter().collect::<Vec<_>>(),
+        expected.iter().collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn differences_agree_with_tuple_sets_after_scattered_edits() {
+    let mut original = PrefixTree2::new();
+    for i in 0..512 {
+        original.insert([i, i % 7]);
+    }
+    for stride in [1, 2, 3, 17, 32, 127] {
+        let mut edited = original.clone();
+        for i in (0..512).step_by(stride) {
+            edited.remove([i, i % 7]);
+            edited.insert([i + 512, i % 5]);
+        }
+        for (left, right) in [(&original, &edited), (&edited, &original)] {
+            let left_rows: BTreeSet<_> = left.iter().collect();
+            let right_rows: BTreeSet<_> = right.iter().collect();
+            let expected: Vec<_> = left_rows.difference(&right_rows).copied().collect();
+            assert_eq!(left.difference(right).iter().collect::<Vec<_>>(), expected);
+            let mut visited = Vec::new();
+            left.visit_difference(right, &mut |row| visited.push(row));
+            assert_eq!(visited, expected);
+        }
+    }
 }
