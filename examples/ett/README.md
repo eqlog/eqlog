@@ -8,6 +8,13 @@ cargo run --release -p eqlog-ett -- examples/ett/nat.ett examples/ett/vec.ett
 
 Use a release build: the full development currently takes minutes to saturate.
 
+Pass `--features stratified` to use dependency-stratified scheduling. The same
+feature selects it for the checker in the evaluator integration suite:
+
+```sh
+cargo test --release -p eqlog-test-eval --test ett --features stratified
+```
+
 `nat.ett` defines addition, predecessor, and multiplication. It proves the
 zero and successor laws, successor injectivity, commutativity, associativity,
 both distributive laws, and rearrangement lemmas. The statements follow Lean's
