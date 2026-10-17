@@ -48,10 +48,12 @@ local rules during leaf-model transport. Stage transport frontiers until
 the traversal finishes so interrupted closure retains unfinished work.
 Share identical rule-join prefixes and group functionality lookups by
 domain. Keep singleton difference cursors inline.
+Prefer bound join keys after cheap function lookups, and avoid mapping
+work in ordinary tree iteration.
 
 Preserve the complete Nat and Vec development, bounded computation, and
 one-call closure. Independent reviews confirm the mechanisms are general
 Eqlog optimizations. Cover nested transport, partial maps, cross-owner
 equality, dynamic imports, and interrupted closure with evaluator tests.
-The latest full run checks all 52 declarations in about 22 seconds end
+The latest full run checks all 52 declarations in about 20 seconds end
 to end. Further evaluator work is needed for the five-second target.

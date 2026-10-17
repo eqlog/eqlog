@@ -38,6 +38,12 @@ functionality indexing, prefix sharing, and inline difference cursor changes.
 These results remain above the five-second target; broad final validation is
 still pending.
 
+Prioritizing bound join keys after cheap function lookups, together with an
+identity fast path for unmapped tree iterators, measured 3.858 s for Nat and
+20.466 s for Nat+Vec. Both changes passed independent static review. All nine
+optimization-oracle tests pass across naive/semi-naive and native/desugared
+evaluation, including late equalities, partial images, and circular graphs.
+
 The next engine changes retain owner-scoped rules inside ambient cycles,
 including ordinary member equalities. Global saturation still revisits the
 owner traversal when cross-owner facts change. Alternate indices reuse the

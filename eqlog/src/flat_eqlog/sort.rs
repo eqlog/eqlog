@@ -7,7 +7,9 @@ use super::ast::*;
 struct IfStmtGoodness {
     is_equal: bool,
     age: QueryAge,
+    bounded: bool,
     new_variables: usize,
+    free_inputs: usize,
     restrained_variables: usize,
     consumed_result: bool,
 }
@@ -17,7 +19,9 @@ impl Default for IfStmtGoodness {
         IfStmtGoodness {
             is_equal: false,
             age: QueryAge::All,
+            bounded: false,
             new_variables: 0,
+            free_inputs: 0,
             restrained_variables: 0,
             consumed_result: false,
         }
@@ -25,9 +29,11 @@ impl Default for IfStmtGoodness {
 }
 
 fn cmp_age_goodness(lhs: QueryAge, rhs: QueryAge) -> std::cmp::Ordering {
-    let lhs_is_new = matches!(lhs, QueryAge::New);
-    let rhs_is_new = matches!(rhs, QueryAge::New);
-    lhs_is_new.cmp(&rhs_is_new)
+    let is_new = |age| match age {
+        QueryAge::New => true,
+        QueryAge::Old | QueryAge::All => false,
+    };
+    is_new(lhs).cmp(&is_new(rhs))
 }
 
 impl Ord for IfStmtGoodness {
@@ -36,16 +42,20 @@ impl Ord for IfStmtGoodness {
         let is_equal = self.is_equal.cmp(&other.is_equal);
         // True is better than false.
         let age_goodness = cmp_age_goodness(self.age, other.age);
+        let bounded = self.bounded.cmp(&other.bounded);
         // Smaller is better than greater.
         let new_variables = self.new_variables.cmp(&other.new_variables).reverse();
         // Greater is better than smaller.
         let restrained_variables = self.restrained_variables.cmp(&other.restrained_variables);
+        let free_inputs = self.free_inputs.cmp(&other.free_inputs).reverse();
         let consumed_result = self.consumed_result.cmp(&other.consumed_result);
 
         is_equal
             .then(age_goodness)
-            .then(new_variables)
+            .then(bounded)
             .then(restrained_variables)
+            .then(free_inputs)
+            .then(new_variables)
             .then(consumed_result)
     }
 }
@@ -132,6 +142,20 @@ fn if_stmt_goodness(
         .unique()
         .filter(|var| fixed_vars.contains(var))
         .count();
+    let free_inputs = match &stmt.rel {
+        FlatInRel::Rel(FlatRel::Func(_)) => stmt.args[..stmt.args.len() - 1]
+            .iter()
+            .unique()
+            .filter(|var| !fixed_vars.contains(var))
+            .count(),
+        FlatInRel::Rel(FlatRel::Pred(_) | FlatRel::ModelMember(_))
+        | FlatInRel::RelWithDiagonals { .. }
+        | FlatInRel::TypeSet(_)
+        | FlatInRel::Equality(_) => new_variables,
+    };
+    // Bound domains are lookups. For remaining joins, prefer existing keys to
+    // introducing an independent range whose size is hidden by a short tuple.
+    let bounded = free_inputs == 0;
     // Prefer a computed join key to a terminal value when both queries bind
     // the same number of variables. Terminal values cannot constrain the join.
     let consumed_result = match &stmt.rel {
@@ -149,7 +173,9 @@ fn if_stmt_goodness(
     IfStmtGoodness {
         is_equal,
         age,
+        bounded,
         new_variables,
+        free_inputs,
         restrained_variables,
         consumed_result,
     }

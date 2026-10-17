@@ -1143,6 +1143,9 @@ impl<'a, V: Clone> Iterator for Iter<'a, V> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let data_node = self.next_node()?;
+            if self.current_mappings.is_empty() {
+                return Some((data_node.key, &data_node.value));
+            }
             if let Some(key) = apply_mappings(&self.current_mappings, data_node.key) {
                 return Some((key, &data_node.value));
             }
