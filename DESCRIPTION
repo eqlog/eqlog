@@ -20,3 +20,8 @@ Develop addition and multiplication laws and length-indexed vectors,
 including append, replication, mapping, and sums. Cover rejected proofs,
 invalid indices and universe codes, context isolation, partial images,
 and the computation bound in evaluator integration tests.
+
+Measure evaluator transport, indexing, scheduling, and equality costs on
+the proof development. Preserve a reproducible diagnostic and a staged
+plan for making model evaluation incremental without weakening the
+checker semantics.
