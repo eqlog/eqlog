@@ -1,7 +1,7 @@
 use crate::strata::Strata;
 use eqlog_runtime::CompiledModel;
 
-#[cfg(not(feature = "stratified"))]
+#[cfg(feature = "simultaneous")]
 #[test]
 fn simultaneous_rules_share_one_round_checkpoint() {
     let mut model = Strata::new();
@@ -127,7 +127,7 @@ fn interrupted_allocation_round_resumes_without_duplicate_witnesses() {
     let a = model.new_item();
     model.insert_seed(a);
     assert!(model.close_until(|model| model.witness(a).is_some()));
-    #[cfg(not(feature = "stratified"))]
+    #[cfg(feature = "simultaneous")]
     assert!(model.witnessed(a));
     let witness = model.witness(a).unwrap();
     model.canonicalize();

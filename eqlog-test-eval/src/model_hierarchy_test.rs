@@ -89,7 +89,7 @@ fn parent_reads_descendants_without_local_rule_bodies() {
     assert!(m.passive_answer(p, x));
 }
 
-#[cfg(all(feature = "stratified", not(feature = "desugared")))]
+#[cfg(all(not(feature = "simultaneous"), not(feature = "desugared")))]
 #[test]
 fn a_parent_runs_its_child_body_before_moving_to_an_unrelated_parent() {
     let mut m = ModelHierarchy::new();

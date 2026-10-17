@@ -44,7 +44,7 @@ struct Cli {
     model_mode: ModelMode,
 
     /// Fixed-point scheduling strategy
-    #[arg(long, value_enum, default_value = "simultaneous")]
+    #[arg(long, value_enum, default_value = "stratified")]
     scheduling_mode: SchedulingMode,
 
     /// Output directory for component libraries (required for component build)

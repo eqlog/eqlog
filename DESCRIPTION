@@ -1,4 +1,8 @@
-Avoid redundant closure and snapshot work
+Default to stratified scheduling
+
+Default the library and CLI to stratified scheduling to exploit rule
+dependencies and morphism order. Keep simultaneous scheduling as an
+explicit option and exercise both through integration tests.
 
 Keep closed models idle until an insertion, allocation, or equality
 changes their inputs. Preserve close_until condition checks and

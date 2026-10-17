@@ -203,7 +203,7 @@ fn scheduling_mode_changes_invalidate_cache() {
     .unwrap();
     let out_file = config.out_dir.join("theory.eql.rs");
     process(&config).unwrap();
-    for scheduling_mode in [SchedulingMode::Stratified, SchedulingMode::Simultaneous] {
+    for scheduling_mode in [SchedulingMode::Simultaneous, SchedulingMode::Stratified] {
         let sentinel = pin_modified(&out_file);
         config.options.scheduling_mode = scheduling_mode;
         process(&config).unwrap();

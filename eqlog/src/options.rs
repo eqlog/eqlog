@@ -24,9 +24,9 @@ pub enum ModelMode {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum SchedulingMode {
     /// Evaluate all rule groups together in one global stratum.
-    #[default]
     Simultaneous,
     /// Close dependency components before evaluating their consumers.
+    #[default]
     Stratified,
 }
 
@@ -37,6 +37,6 @@ pub struct CompileOptions {
     pub evaluation_mode: EvaluationMode,
     /// Defaults to [`ModelMode::Native`], independently of rule evaluation.
     pub model_mode: ModelMode,
-    /// Defaults to [`SchedulingMode::Simultaneous`].
+    /// Defaults to [`SchedulingMode::Stratified`].
     pub scheduling_mode: SchedulingMode,
 }
