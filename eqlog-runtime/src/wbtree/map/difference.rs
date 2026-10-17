@@ -4,6 +4,59 @@ use std::rc::Rc;
 use super::{apply_mappings, Node, WBTreeMap};
 use crate::PrefixTree2;
 
+// Bounds avoid allocating split trees while preserving the left traversal order.
+pub(super) fn all<'a, V: Clone>(
+    left: Option<&'a Rc<Node<V>>>,
+    mut right: Option<&'a Rc<Node<V>>>,
+    lower: Option<u32>,
+    upper: Option<u32>,
+    visit: &mut impl FnMut(u32, &'a V, Option<&'a V>) -> bool,
+) -> bool {
+    let Some(left) = left else {
+        return true;
+    };
+    while let Some(node) = right {
+        let data = match node.as_ref() {
+            Node::Data(data) => data,
+            Node::Mapping(_) => unreachable!("mapped roots use the difference cursor"),
+        };
+        if lower.is_some_and(|lower| data.key <= lower) {
+            right = data.right.as_ref();
+        } else if upper.is_some_and(|upper| data.key >= upper) {
+            right = data.left.as_ref();
+        } else {
+            break;
+        }
+    }
+    let data = match left.as_ref() {
+        Node::Data(data) => data,
+        Node::Mapping(_) => unreachable!("mapped roots use the difference cursor"),
+    };
+    let mut candidate = right;
+    let mut value = None;
+    while let Some(node) = candidate {
+        // Rotations can move a shared subtree below the bounded right root.
+        if Rc::ptr_eq(left, node) {
+            return true;
+        }
+        let other = match node.as_ref() {
+            Node::Data(other) => other,
+            Node::Mapping(_) => unreachable!("mapped roots use the difference cursor"),
+        };
+        match data.key.cmp(&other.key) {
+            Ordering::Less => candidate = other.left.as_ref(),
+            Ordering::Greater => candidate = other.right.as_ref(),
+            Ordering::Equal => {
+                value = Some(&other.value);
+                break;
+            }
+        }
+    }
+    all(data.left.as_ref(), right, lower, Some(data.key), visit)
+        && visit(data.key, &data.value, value)
+        && all(data.right.as_ref(), right, Some(data.key), upper, visit)
+}
+
 type Mappings<'a> = Option<Rc<Vec<&'a PrefixTree2>>>;
 
 enum Pending<'a, V: Clone> {

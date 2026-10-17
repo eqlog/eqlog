@@ -91,6 +91,23 @@ allocation requests. Difference cursors were a substantial source, but adding
 inline cursor storage made the tested traversals slower despite reducing
 allocations; that experiment is not included.
 
+A borrowed difference visitor now walks ordinary trees without a temporary
+cursor stack, preserves early termination and shared-subtree cancellation,
+and retains the existing cursor for mapped roots. Materialized differences
+retain unchanged roots, including when tuple prefixes overlap but suffixes
+are disjoint. Repeated publication of an equal rebuilt tree remembers that
+source root instead of comparing it again. Necessary root-emptiness guards
+also move ahead of restricted joins.
+
+Sequential same-core runs checked all 52 declarations in 13.598 s and
+15.431 s with these changes. The preceding version took 16.852 s in this
+comparison; the new guards and cache without the visitor took 14.656 s.
+Host variation remains visible, so these measurements do not establish a
+precise speedup. The combined runtime passed 55 tests, 14 prefix-tree checks,
+and nine version checks. The compiler guards passed the nine optimization
+oracles and three focused cases in each of four evaluator modes. Independent
+review found no correctness blocker or application-specific assumption.
+
 The next engine changes retain owner-scoped rules inside ambient cycles,
 including ordinary member equalities. Global saturation still revisits the
 owner traversal when cross-owner facts change. Alternate indices reuse the

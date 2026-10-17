@@ -49,6 +49,25 @@ fn consumers_advance_to_the_same_root_even_after_a_storage_rebuild() {
     let unchanged = versions.consume(0);
     assert!(SnapshotSet::shares_root(&first.old, &unchanged.old));
     assert!(unchanged.new.is_empty());
+    versions.publish(&rebuilt);
+    assert!(versions.consume(0).new.is_empty());
+
+    let previous = rebuilt.clone();
+    rebuilt.insert([100]);
+    versions.publish(&rebuilt);
+    assert_eq!(
+        versions.consume(0).new.iter().collect::<Vec<_>>(),
+        vec![[100]]
+    );
+    versions.publish(&previous);
+    assert!(!versions.current().contains([100]));
+    assert!(versions.consume(0).new.is_empty());
+
+    rebuilt.remove([5]);
+    versions.publish(&rebuilt);
+    let lagging = versions.consume(1);
+    assert_eq!(lagging.new.iter().collect::<Vec<_>>(), vec![[100]]);
+    assert!(!lagging.old.contains([5]));
 }
 
 #[test]

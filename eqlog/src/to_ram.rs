@@ -140,6 +140,19 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
             }));
         }
 
+        if !fixed_args.is_empty() {
+            stmts.push(RamStmt::GuardInhabited(GuardInhabitedStmt {
+                sets: set_names
+                    .iter()
+                    .map(|name| SetVar {
+                        name: name.clone(),
+                        arity,
+                        strictness: Strictness::Strict,
+                    })
+                    .collect(),
+            }));
+        }
+
         // Restrict the indices according to fixed args.
         for column in order[..fixed_args.len()].iter() {
             let var = fixed_args

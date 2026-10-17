@@ -1,4 +1,5 @@
 use eqlog_runtime::__private::SnapshotSet;
+use eqlog_runtime::wbtree::map::WBTreeMap;
 use eqlog_runtime::{
     PrefixTree1, PrefixTree2, PrefixTree3, PrefixTree4, PrefixTree5, PrefixTree6, PrefixTree7,
     PrefixTree8, PrefixTree9,
@@ -52,6 +53,16 @@ fn set_operations_preserve_shared_prefixes() {
     for i in 0..128 {
         base.insert([i, i, i]);
     }
+    let mut disjoint = PrefixTree3::new();
+    for i in 0..128 {
+        disjoint.insert([i, i, i + 128]);
+    }
+    let mut difference = base.difference(&disjoint);
+    assert!(SnapshotSet::shares_root(&difference, &base));
+    difference.insert([0, 0, 128]);
+    assert_eq!(base.iter().count(), 128);
+    assert_eq!(difference.iter().count(), 129);
+    assert_eq!(base.get(0).unwrap().iter().collect::<Vec<_>>(), [[0, 0]]);
     let same = base.union(&base);
     assert!(SnapshotSet::shares_root(&same, &base));
     let mut extended = base.clone();
@@ -183,5 +194,41 @@ fn singleton_suffix_snapshots_survive_edits_and_key_replacement() {
             .map(|[prefix, key]| [prefix, replacements[&key]])
             .collect();
         assert_eq!(renamed.iter().collect::<BTreeSet<_>>(), expected);
+    }
+}
+
+#[test]
+fn difference_visitors_stop_early_and_skip_shared_subtrees() {
+    let mut original = WBTreeMap::new();
+    for key in 0..4096 {
+        original.insert(key, ());
+    }
+    let mut visited = Vec::new();
+    assert!(
+        !original.all_difference_entries(&WBTreeMap::new(), |key, (), right| {
+            assert!(right.is_none());
+            visited.push(key);
+            key < 3
+        })
+    );
+    assert_eq!(visited, [0, 1, 2, 3]);
+
+    for removed in [0, 17, 2048, 4095] {
+        let mut edited = original.clone();
+        edited.remove(&removed);
+        edited.insert(4096, ());
+        for (left, right, missing) in [(&original, &edited, removed), (&edited, &original, 4096)] {
+            let mut visits = 0;
+            let mut difference = Vec::new();
+            assert!(left.all_difference_entries(right, |key, (), other| {
+                visits += 1;
+                if other.is_none() {
+                    difference.push(key);
+                }
+                true
+            }));
+            assert_eq!(difference, [missing]);
+            assert!(visits < 64, "a sparse edit scanned shared subtrees");
+        }
     }
 }

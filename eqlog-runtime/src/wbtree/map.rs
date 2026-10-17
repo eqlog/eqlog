@@ -726,16 +726,18 @@ impl<V: Clone> Node<V> {
 
     // Borrow bounded portions of the right tree instead of allocating split
     // trees, which also keeps shared roots available for cancellation.
-    fn difference<F>(
+    fn difference<F, E>(
         left: Option<Rc<Node<V>>>,
         mut right: Option<&Rc<Node<V>>>,
         lower: Option<u32>,
         upper: Option<u32>,
         diff: &mut F,
         cancel_shared: bool,
+        same_value: &E,
     ) -> Option<Rc<Node<V>>>
     where
         F: FnMut(&u32, V, V) -> Option<V>,
+        E: Fn(&V, &V) -> bool,
     {
         let left = left?;
         while let Some(node) = right {
@@ -757,7 +759,10 @@ impl<V: Clone> Node<V> {
         if cancel_shared && Rc::ptr_eq(&left, right) {
             return None;
         }
-        let data = Self::unwrap_to_data(left);
+        let data = match left.as_ref() {
+            Node::Data(data) => data,
+            Node::Mapping(_) => unreachable!("set operations materialize mappings"),
+        };
         let mut candidate = Some(right);
         let mut value = None;
         while let Some(node) = candidate {
@@ -774,29 +779,48 @@ impl<V: Clone> Node<V> {
                 }
             }
         }
-        let left = Self::difference(
-            data.left,
+        let new_left = Self::difference(
+            data.left.clone(),
             Some(right),
             lower,
             Some(data.key),
             diff,
             cancel_shared,
+            same_value,
         );
-        let right = Self::difference(
-            data.right,
+        let new_right = Self::difference(
+            data.right.clone(),
             Some(right),
             Some(data.key),
             upper,
             diff,
             cancel_shared,
+            same_value,
         );
+        let matched = value.is_some();
         let value = match value {
-            Some(value) => diff(&data.key, data.value, value.clone()),
-            None => Some(data.value),
+            Some(value) => diff(&data.key, data.value.clone(), value.clone()),
+            None => Some(data.value.clone()),
         };
         match value {
-            Some(value) => Self::join(left, data.key, value, right),
-            None => match (left, right) {
+            Some(value) => {
+                let same_left = match (&new_left, &data.left) {
+                    (Some(new), Some(old)) => Rc::ptr_eq(new, old),
+                    (None, None) => true,
+                    (Some(_), None) | (None, Some(_)) => false,
+                };
+                let same_right = match (&new_right, &data.right) {
+                    (Some(new), Some(old)) => Rc::ptr_eq(new, old),
+                    (None, None) => true,
+                    (Some(_), None) | (None, Some(_)) => false,
+                };
+                if same_left && same_right && (!matched || same_value(&data.value, &value)) {
+                    Some(left)
+                } else {
+                    Self::join(new_left, data.key, value, new_right)
+                }
+            }
+            None => match (new_left, new_right) {
                 (None, tree) | (tree, None) => tree,
                 (Some(left), Some(right)) => Self::join_without_key(left, right),
             },
@@ -900,6 +924,27 @@ impl<V: Clone> WBTreeMap<V> {
     /// Equal keys are paired so callers can compare nested values themselves.
     pub fn difference_entries<'a>(&'a self, other: &'a Self) -> Difference<'a, V> {
         Difference::new(self, other)
+    }
+
+    /// Visits entries requiring comparison in key order until a callback returns false.
+    /// Shared subtrees are skipped; true means every callback continued.
+    pub fn all_difference_entries<'a>(
+        &'a self,
+        other: &'a Self,
+        mut visit: impl FnMut(u32, &'a V, Option<&'a V>) -> bool,
+    ) -> bool {
+        if self.has_mapping() || other.has_mapping() {
+            return self
+                .difference_entries(other)
+                .all(|(key, left, right)| visit(key, left, right));
+        }
+        difference::all(
+            self.root.as_ref(),
+            other.root.as_ref(),
+            None,
+            None,
+            &mut visit,
+        )
     }
 
     pub(crate) fn shares_root(&self, other: &Self) -> bool {
@@ -1218,21 +1263,29 @@ impl<V: Clone> WBTreeMap<V> {
     where
         F: FnMut(&u32, V, V) -> Option<V>,
     {
-        self.difference_impl(other, diff, false)
+        self.difference_impl(other, diff, false, |_, _| false)
     }
 
-    // Set subtraction cancels identical subtrees; arbitrary map callbacks need
-    // not do so, even when both inputs share every node.
-    pub(crate) fn difference_shared<F>(&self, other: &Self, diff: F) -> Self
+    // Shared roots bypass diff, so equal values must cancel without effects.
+    // same_value must imply equality; retaining unchanged roots preserves sharing.
+    pub(crate) fn difference_shared<F, E>(&self, other: &Self, diff: F, same_value: E) -> Self
     where
         F: FnMut(&u32, V, V) -> Option<V>,
+        E: Fn(&V, &V) -> bool,
     {
-        self.difference_impl(other, diff, true)
+        self.difference_impl(other, diff, true, same_value)
     }
 
-    fn difference_impl<F>(&self, other: &Self, mut diff: F, cancel_shared: bool) -> Self
+    fn difference_impl<F, E>(
+        &self,
+        other: &Self,
+        mut diff: F,
+        cancel_shared: bool,
+        same_value: E,
+    ) -> Self
     where
         F: FnMut(&u32, V, V) -> Option<V>,
+        E: Fn(&V, &V) -> bool,
     {
         if self.root.is_none() {
             return Self::new();
@@ -1254,6 +1307,7 @@ impl<V: Clone> WBTreeMap<V> {
             None,
             &mut diff,
             cancel_shared,
+            &same_value,
         );
         let new_len = Node::size(&new_root);
         WBTreeMap {

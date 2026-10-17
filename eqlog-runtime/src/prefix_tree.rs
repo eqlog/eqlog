@@ -1341,15 +1341,14 @@ impl PrefixTree0 {
 
 impl PrefixTree1 {
     pub fn is_subset(&self, other: &Self) -> bool {
-        self.set.difference_iter(&other.set).next().is_none()
+        self.set.all_difference(&other.set, |_| false)
     }
 }
 
 impl PrefixTree2 {
     pub fn is_subset(&self, other: &Self) -> bool {
         self.map
-            .difference_entries(&other.map)
-            .all(|(_, left, right)| match right {
+            .all_difference_entries(&other.map, |_, left, right| match right {
                 Some(right) => left.is_subset(right),
                 None => left.is_empty(),
             })
@@ -1359,8 +1358,7 @@ impl PrefixTree2 {
 impl PrefixTree3 {
     pub fn is_subset(&self, other: &Self) -> bool {
         self.map
-            .difference_entries(&other.map)
-            .all(|(_, left, right)| match right {
+            .all_difference_entries(&other.map, |_, left, right| match right {
                 Some(right) => left.is_subset(right),
                 None => left.is_empty(),
             })
@@ -1370,8 +1368,7 @@ impl PrefixTree3 {
 impl PrefixTree4 {
     pub fn is_subset(&self, other: &Self) -> bool {
         self.map
-            .difference_entries(&other.map)
-            .all(|(_, left, right)| match right {
+            .all_difference_entries(&other.map, |_, left, right| match right {
                 Some(right) => left.is_subset(right),
                 None => left.is_empty(),
             })
@@ -1381,8 +1378,7 @@ impl PrefixTree4 {
 impl PrefixTree5 {
     pub fn is_subset(&self, other: &Self) -> bool {
         self.map
-            .difference_entries(&other.map)
-            .all(|(_, left, right)| match right {
+            .all_difference_entries(&other.map, |_, left, right| match right {
                 Some(right) => left.is_subset(right),
                 None => left.is_empty(),
             })
@@ -1392,8 +1388,7 @@ impl PrefixTree5 {
 impl PrefixTree6 {
     pub fn is_subset(&self, other: &Self) -> bool {
         self.map
-            .difference_entries(&other.map)
-            .all(|(_, left, right)| match right {
+            .all_difference_entries(&other.map, |_, left, right| match right {
                 Some(right) => left.is_subset(right),
                 None => left.is_empty(),
             })
@@ -1403,8 +1398,7 @@ impl PrefixTree6 {
 impl PrefixTree7 {
     pub fn is_subset(&self, other: &Self) -> bool {
         self.map
-            .difference_entries(&other.map)
-            .all(|(_, left, right)| match right {
+            .all_difference_entries(&other.map, |_, left, right| match right {
                 Some(right) => left.is_subset(right),
                 None => left.is_empty(),
             })
@@ -1414,8 +1408,7 @@ impl PrefixTree7 {
 impl PrefixTree8 {
     pub fn is_subset(&self, other: &Self) -> bool {
         self.map
-            .difference_entries(&other.map)
-            .all(|(_, left, right)| match right {
+            .all_difference_entries(&other.map, |_, left, right| match right {
                 Some(right) => left.is_subset(right),
                 None => left.is_empty(),
             })
@@ -1425,8 +1418,7 @@ impl PrefixTree8 {
 impl PrefixTree9 {
     pub fn is_subset(&self, other: &Self) -> bool {
         self.map
-            .difference_entries(&other.map)
-            .all(|(_, left, right)| match right {
+            .all_difference_entries(&other.map, |_, left, right| match right {
                 Some(right) => left.is_subset(right),
                 None => left.is_empty(),
             })
@@ -1444,144 +1436,129 @@ impl PrefixTree0 {
 
 impl PrefixTree1 {
     pub fn visit_difference(&self, other: &Self, visit: &mut impl FnMut([u32; 1])) {
-        for key in self.set.difference_iter(&other.set) {
+        self.set.all_difference(&other.set, |key| {
             visit([key]);
-        }
+            true
+        });
     }
 }
 
 impl PrefixTree2 {
     pub fn visit_difference(&self, other: &Self, visit: &mut impl FnMut([u32; 2])) {
-        for (key, left, right) in self.map.difference_entries(&other.map) {
-            let mut suffix = |[el1]: [u32; 1]| visit([key, el1]);
-            match right {
-                Some(right) => left.visit_difference(right, &mut suffix),
-                None => {
-                    for row in left.iter() {
-                        suffix(row);
-                    }
+        self.map
+            .all_difference_entries(&other.map, |key, left, right| {
+                let mut suffix = |[el1]: [u32; 1]| visit([key, el1]);
+                match right {
+                    Some(right) => left.visit_difference(right, &mut suffix),
+                    None => left.visit_difference(&PrefixTree1::new(), &mut suffix),
                 }
-            }
-        }
+                true
+            });
     }
 }
 
 impl PrefixTree3 {
     pub fn visit_difference(&self, other: &Self, visit: &mut impl FnMut([u32; 3])) {
-        for (key, left, right) in self.map.difference_entries(&other.map) {
-            let mut suffix = |[el1, el2]: [u32; 2]| visit([key, el1, el2]);
-            match right {
-                Some(right) => left.visit_difference(right, &mut suffix),
-                None => {
-                    for row in left.iter() {
-                        suffix(row);
-                    }
+        self.map
+            .all_difference_entries(&other.map, |key, left, right| {
+                let mut suffix = |[el1, el2]: [u32; 2]| visit([key, el1, el2]);
+                match right {
+                    Some(right) => left.visit_difference(right, &mut suffix),
+                    None => left.visit_difference(&PrefixTree2::new(), &mut suffix),
                 }
-            }
-        }
+                true
+            });
     }
 }
 
 impl PrefixTree4 {
     pub fn visit_difference(&self, other: &Self, visit: &mut impl FnMut([u32; 4])) {
-        for (key, left, right) in self.map.difference_entries(&other.map) {
-            let mut suffix = |[el1, el2, el3]: [u32; 3]| visit([key, el1, el2, el3]);
-            match right {
-                Some(right) => left.visit_difference(right, &mut suffix),
-                None => {
-                    for row in left.iter() {
-                        suffix(row);
-                    }
+        self.map
+            .all_difference_entries(&other.map, |key, left, right| {
+                let mut suffix = |[el1, el2, el3]: [u32; 3]| visit([key, el1, el2, el3]);
+                match right {
+                    Some(right) => left.visit_difference(right, &mut suffix),
+                    None => left.visit_difference(&PrefixTree3::new(), &mut suffix),
                 }
-            }
-        }
+                true
+            });
     }
 }
 
 impl PrefixTree5 {
     pub fn visit_difference(&self, other: &Self, visit: &mut impl FnMut([u32; 5])) {
-        for (key, left, right) in self.map.difference_entries(&other.map) {
-            let mut suffix = |[el1, el2, el3, el4]: [u32; 4]| visit([key, el1, el2, el3, el4]);
-            match right {
-                Some(right) => left.visit_difference(right, &mut suffix),
-                None => {
-                    for row in left.iter() {
-                        suffix(row);
-                    }
+        self.map
+            .all_difference_entries(&other.map, |key, left, right| {
+                let mut suffix = |[el1, el2, el3, el4]: [u32; 4]| visit([key, el1, el2, el3, el4]);
+                match right {
+                    Some(right) => left.visit_difference(right, &mut suffix),
+                    None => left.visit_difference(&PrefixTree4::new(), &mut suffix),
                 }
-            }
-        }
+                true
+            });
     }
 }
 
 impl PrefixTree6 {
     pub fn visit_difference(&self, other: &Self, visit: &mut impl FnMut([u32; 6])) {
-        for (key, left, right) in self.map.difference_entries(&other.map) {
-            let mut suffix =
-                |[el1, el2, el3, el4, el5]: [u32; 5]| visit([key, el1, el2, el3, el4, el5]);
-            match right {
-                Some(right) => left.visit_difference(right, &mut suffix),
-                None => {
-                    for row in left.iter() {
-                        suffix(row);
-                    }
+        self.map
+            .all_difference_entries(&other.map, |key, left, right| {
+                let mut suffix =
+                    |[el1, el2, el3, el4, el5]: [u32; 5]| visit([key, el1, el2, el3, el4, el5]);
+                match right {
+                    Some(right) => left.visit_difference(right, &mut suffix),
+                    None => left.visit_difference(&PrefixTree5::new(), &mut suffix),
                 }
-            }
-        }
+                true
+            });
     }
 }
 
 impl PrefixTree7 {
     pub fn visit_difference(&self, other: &Self, visit: &mut impl FnMut([u32; 7])) {
-        for (key, left, right) in self.map.difference_entries(&other.map) {
-            let mut suffix = |[el1, el2, el3, el4, el5, el6]: [u32; 6]| {
-                visit([key, el1, el2, el3, el4, el5, el6])
-            };
-            match right {
-                Some(right) => left.visit_difference(right, &mut suffix),
-                None => {
-                    for row in left.iter() {
-                        suffix(row);
-                    }
+        self.map
+            .all_difference_entries(&other.map, |key, left, right| {
+                let mut suffix = |[el1, el2, el3, el4, el5, el6]: [u32; 6]| {
+                    visit([key, el1, el2, el3, el4, el5, el6])
+                };
+                match right {
+                    Some(right) => left.visit_difference(right, &mut suffix),
+                    None => left.visit_difference(&PrefixTree6::new(), &mut suffix),
                 }
-            }
-        }
+                true
+            });
     }
 }
 
 impl PrefixTree8 {
     pub fn visit_difference(&self, other: &Self, visit: &mut impl FnMut([u32; 8])) {
-        for (key, left, right) in self.map.difference_entries(&other.map) {
-            let mut suffix = |[el1, el2, el3, el4, el5, el6, el7]: [u32; 7]| {
-                visit([key, el1, el2, el3, el4, el5, el6, el7])
-            };
-            match right {
-                Some(right) => left.visit_difference(right, &mut suffix),
-                None => {
-                    for row in left.iter() {
-                        suffix(row);
-                    }
+        self.map
+            .all_difference_entries(&other.map, |key, left, right| {
+                let mut suffix = |[el1, el2, el3, el4, el5, el6, el7]: [u32; 7]| {
+                    visit([key, el1, el2, el3, el4, el5, el6, el7])
+                };
+                match right {
+                    Some(right) => left.visit_difference(right, &mut suffix),
+                    None => left.visit_difference(&PrefixTree7::new(), &mut suffix),
                 }
-            }
-        }
+                true
+            });
     }
 }
 
 impl PrefixTree9 {
     pub fn visit_difference(&self, other: &Self, visit: &mut impl FnMut([u32; 9])) {
-        for (key, left, right) in self.map.difference_entries(&other.map) {
-            let mut suffix = |[el1, el2, el3, el4, el5, el6, el7, el8]: [u32; 8]| {
-                visit([key, el1, el2, el3, el4, el5, el6, el7, el8])
-            };
-            match right {
-                Some(right) => left.visit_difference(right, &mut suffix),
-                None => {
-                    for row in left.iter() {
-                        suffix(row);
-                    }
+        self.map
+            .all_difference_entries(&other.map, |key, left, right| {
+                let mut suffix = |[el1, el2, el3, el4, el5, el6, el7, el8]: [u32; 8]| {
+                    visit([key, el1, el2, el3, el4, el5, el6, el7, el8])
+                };
+                match right {
+                    Some(right) => left.visit_difference(right, &mut suffix),
+                    None => left.visit_difference(&PrefixTree8::new(), &mut suffix),
                 }
-            }
-        }
+                true
+            });
     }
 }
 
@@ -1645,112 +1622,144 @@ impl PrefixTree1 {
 
 impl PrefixTree2 {
     pub fn difference(&self, other: &Self) -> Self {
-        let map = self.map.difference_shared(&other.map, |_key, val1, val2| {
-            let diff_result = val1.difference(&val2);
-            if diff_result.is_empty() {
-                None
-            } else {
-                Some(diff_result)
-            }
-        });
+        let map = self.map.difference_shared(
+            &other.map,
+            |_key, val1, val2| {
+                let diff_result = val1.difference(&val2);
+                if diff_result.is_empty() {
+                    None
+                } else {
+                    Some(diff_result)
+                }
+            },
+            SnapshotSet::shares_root,
+        );
         Self { map }
     }
 }
 
 impl PrefixTree3 {
     pub fn difference(&self, other: &Self) -> Self {
-        let map = self.map.difference_shared(&other.map, |_key, val1, val2| {
-            let diff_result = val1.difference(&val2);
-            if diff_result.is_empty() {
-                None
-            } else {
-                Some(diff_result)
-            }
-        });
+        let map = self.map.difference_shared(
+            &other.map,
+            |_key, val1, val2| {
+                let diff_result = val1.difference(&val2);
+                if diff_result.is_empty() {
+                    None
+                } else {
+                    Some(diff_result)
+                }
+            },
+            SnapshotSet::shares_root,
+        );
         Self { map }
     }
 }
 
 impl PrefixTree4 {
     pub fn difference(&self, other: &Self) -> Self {
-        let map = self.map.difference_shared(&other.map, |_key, val1, val2| {
-            let diff_result = val1.difference(&val2);
-            if diff_result.is_empty() {
-                None
-            } else {
-                Some(diff_result)
-            }
-        });
+        let map = self.map.difference_shared(
+            &other.map,
+            |_key, val1, val2| {
+                let diff_result = val1.difference(&val2);
+                if diff_result.is_empty() {
+                    None
+                } else {
+                    Some(diff_result)
+                }
+            },
+            SnapshotSet::shares_root,
+        );
         Self { map }
     }
 }
 
 impl PrefixTree5 {
     pub fn difference(&self, other: &Self) -> Self {
-        let map = self.map.difference_shared(&other.map, |_key, val1, val2| {
-            let diff_result = val1.difference(&val2);
-            if diff_result.is_empty() {
-                None
-            } else {
-                Some(diff_result)
-            }
-        });
+        let map = self.map.difference_shared(
+            &other.map,
+            |_key, val1, val2| {
+                let diff_result = val1.difference(&val2);
+                if diff_result.is_empty() {
+                    None
+                } else {
+                    Some(diff_result)
+                }
+            },
+            SnapshotSet::shares_root,
+        );
         Self { map }
     }
 }
 
 impl PrefixTree6 {
     pub fn difference(&self, other: &Self) -> Self {
-        let map = self.map.difference_shared(&other.map, |_key, val1, val2| {
-            let diff_result = val1.difference(&val2);
-            if diff_result.is_empty() {
-                None
-            } else {
-                Some(diff_result)
-            }
-        });
+        let map = self.map.difference_shared(
+            &other.map,
+            |_key, val1, val2| {
+                let diff_result = val1.difference(&val2);
+                if diff_result.is_empty() {
+                    None
+                } else {
+                    Some(diff_result)
+                }
+            },
+            SnapshotSet::shares_root,
+        );
         Self { map }
     }
 }
 
 impl PrefixTree7 {
     pub fn difference(&self, other: &Self) -> Self {
-        let map = self.map.difference_shared(&other.map, |_key, val1, val2| {
-            let diff_result = val1.difference(&val2);
-            if diff_result.is_empty() {
-                None
-            } else {
-                Some(diff_result)
-            }
-        });
+        let map = self.map.difference_shared(
+            &other.map,
+            |_key, val1, val2| {
+                let diff_result = val1.difference(&val2);
+                if diff_result.is_empty() {
+                    None
+                } else {
+                    Some(diff_result)
+                }
+            },
+            SnapshotSet::shares_root,
+        );
         Self { map }
     }
 }
 
 impl PrefixTree8 {
     pub fn difference(&self, other: &Self) -> Self {
-        let map = self.map.difference_shared(&other.map, |_key, val1, val2| {
-            let diff_result = val1.difference(&val2);
-            if diff_result.is_empty() {
-                None
-            } else {
-                Some(diff_result)
-            }
-        });
+        let map = self.map.difference_shared(
+            &other.map,
+            |_key, val1, val2| {
+                let diff_result = val1.difference(&val2);
+                if diff_result.is_empty() {
+                    None
+                } else {
+                    Some(diff_result)
+                }
+            },
+            SnapshotSet::shares_root,
+        );
         Self { map }
     }
 }
 
 impl PrefixTree9 {
     pub fn difference(&self, other: &Self) -> Self {
-        let map = self.map.difference_shared(&other.map, |_key, val1, val2| {
-            let diff_result = val1.difference(&val2);
-            if diff_result.is_empty() {
-                None
-            } else {
-                Some(diff_result)
-            }
-        });
+        let map = self.map.difference_shared(
+            &other.map,
+            |_key, val1, val2| {
+                let diff_result = val1.difference(&val2);
+                if diff_result.is_empty() {
+                    None
+                } else {
+                    Some(diff_result)
+                }
+            },
+            SnapshotSet::shares_root,
+        );
         Self { map }
     }
 }

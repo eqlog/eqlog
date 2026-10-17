@@ -212,9 +212,29 @@ impl WBTreeSet {
                     result.remove(value);
                     result
                 }
-                Storage::Tree(right) => {
-                    Self::from_map(left.difference_shared(right, |_element, (), ()| None))
+                Storage::Tree(right) => Self::from_map(left.difference_shared(
+                    right,
+                    |_element, (), ()| None,
+                    |(), ()| true,
+                )),
+            },
+        }
+    }
+
+    pub(crate) fn all_difference(&self, other: &Self, mut visit: impl FnMut(u32) -> bool) -> bool {
+        match &self.storage {
+            Storage::Empty => true,
+            Storage::Singleton(value) => other.contains(value) || visit(*value),
+            Storage::Tree(left) => match &other.storage {
+                Storage::Empty => {
+                    left.all_difference_entries(&WBTreeMap::new(), |key, (), _| visit(key))
                 }
+                Storage::Singleton(excluded) => left
+                    .all_difference_entries(&WBTreeMap::new(), |key, (), _| {
+                        key == *excluded || visit(key)
+                    }),
+                Storage::Tree(right) => left
+                    .all_difference_entries(right, |key, (), value| value.is_some() || visit(key)),
             },
         }
     }

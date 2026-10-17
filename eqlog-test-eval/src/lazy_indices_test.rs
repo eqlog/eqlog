@@ -40,3 +40,34 @@ fn later_readers_see_accumulated_rows_and_equality_replacements() {
     assert!(imported.backward(e));
     assert_eq!(imported.iter_edge().count(), 4);
 }
+
+#[test]
+fn skewed_joins_keep_rows_from_overlapping_age_prefixes() {
+    let mut model = LazyIndices::new();
+    let source = model.new_el();
+    let middle: Vec<_> = (0..32).map(|_| model.new_el()).collect();
+    let left = model.new_el();
+    let right = model.new_el();
+    for &value in &middle {
+        model.insert_edge(source, value);
+    }
+    model.insert_edge(middle[0], left);
+    model.close();
+    assert_eq!(model.iter_joined().count(), 0);
+
+    model.insert_edge(source, source);
+    model.insert_edge(middle[0], right);
+    model.insert_start(source);
+    model.close();
+    for target in middle.iter().copied().chain([source, left, right]) {
+        assert!(model.joined(source, target));
+    }
+    assert_eq!(model.iter_joined().count(), 35);
+
+    model.equate_el(middle[0], middle[1]);
+    model.insert_start(middle[1]);
+    model.close();
+    assert!(model.joined(source, left));
+    assert!(model.joined(source, right));
+    assert_eq!(model.iter_joined().count(), 34);
+}

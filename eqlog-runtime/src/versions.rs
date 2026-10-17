@@ -137,6 +137,7 @@ pub struct RelationView<T> {
 /// Consumers advance to shared published roots, never to independently updated copies.
 pub struct RelationVersions<T, Consumer = usize> {
     current: Rc<Version<T>>,
+    equal_source: Option<T>,
     empty: Rc<Version<T>>,
     seen: BTreeMap<Consumer, Rc<Version<T>>>,
     views: BTreeMap<u64, RelationView<Option<T>>>,
@@ -152,6 +153,7 @@ impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
             empty: current.clone(),
             seen: BTreeMap::new(),
             current,
+            equal_source: None,
             views: BTreeMap::new(),
         }
     }
@@ -167,14 +169,21 @@ impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
     /// Keep supplied trees shared with storage and other consumers. Equal rebuilt
     /// trees retain the previous published root so checkpoints do not diverge.
     pub fn publish(&mut self, rows: &T) {
-        if self.current.rows.shares_root(rows) {
+        if self.current.rows.shares_root(rows)
+            || self
+                .equal_source
+                .as_ref()
+                .is_some_and(|source| source.shares_root(rows))
+        {
             return;
         }
         // Most publications add rows; check that direction first so the first
         // addition proves a change without walking the remaining edits.
         if rows.is_subset(&self.current.rows) && self.current.rows.is_subset(rows) {
+            self.equal_source = Some(rows.clone());
             return;
         }
+        self.equal_source = None;
         self.current = Rc::new(Version {
             id: self
                 .current
