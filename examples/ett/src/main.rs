@@ -3,12 +3,15 @@ use std::fs;
 use std::process::ExitCode;
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let mut args = env::args().skip(1);
-    let path = args.next().ok_or("usage: eqlog-ett FILE")?;
-    if args.next().is_some() {
-        return Err("usage: eqlog-ett FILE".into());
+    let paths: Vec<_> = env::args().skip(1).collect();
+    if paths.is_empty() {
+        return Err("usage: eqlog-ett FILE...".into());
     }
-    let source = fs::read_to_string(&path)?;
+    let mut source = String::new();
+    for path in paths {
+        source.push_str(&fs::read_to_string(path)?);
+        source.push('\n');
+    }
     let checked = eqlog_ett::check(&source)?;
     for name in checked.declarations {
         println!("checked {name}");

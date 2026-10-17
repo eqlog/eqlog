@@ -1,0 +1,173 @@
+inductive Vec (A : Type) : (n : Nat) -> Type where
+| nil : Vec A Nat.zero
+| cons (k : Nat) (x : A) (xs : Vec A k) : Vec A (Nat.succ k)
+
+def replicate (A : Type) (x : A) (n : Nat) : Vec A n :=
+  rec n motive (k : Nat) => Vec A k with
+  | zero => Vec.nil A
+  | succ k ih => Vec.cons A k x ih
+  end
+
+def append (A : Type) (n : Nat) (ys : Vec A n) (m : Nat) (xs : Vec A m) :
+    Vec A (add m n) :=
+  rec m, xs motive (k : Nat) (zs : Vec A k) => Vec A (add k n) with
+  | nil =>
+    let length : add Nat.zero n = n := zero_add n;
+    ys
+  | cons k x tail ih =>
+    let length : add (Nat.succ k) n = Nat.succ (add k n) := succ_add k n;
+    Vec.cons A (add k n) x ih
+  end
+
+theorem nil_append (A : Type) (n : Nat) (ys : Vec A n) :
+    append A n ys Nat.zero (Vec.nil A) = ys := rfl
+
+theorem append_nil (A : Type) (n : Nat) (xs : Vec A n) :
+    append A Nat.zero (Vec.nil A) n xs = xs :=
+  rec n, xs motive (k : Nat) (zs : Vec A k) =>
+    append A Nat.zero (Vec.nil A) k zs = zs with
+  | nil => rfl
+  | cons k x tail ih => rfl
+  end
+
+theorem append_cons (A : Type) (n : Nat) (ys : Vec A n)
+    (m : Nat) (x : A) (xs : Vec A m) :
+    append A n ys (Nat.succ m) (Vec.cons A m x xs) =
+      Vec.cons A (add m n) x (append A n ys m xs) :=
+  let length : add (Nat.succ m) n = Nat.succ (add m n) := succ_add m n;
+  rfl
+
+def cast (A : Type) (m n : Nat) (h : m = n) (xs : Vec A m) : Vec A n := xs
+
+theorem cast_eq (A : Type) (m n : Nat) (h : m = n) (xs : Vec A m) :
+    cast A m n h xs = xs := rfl
+
+theorem append_assoc (A : Type) (p : Nat) (zs : Vec A p)
+    (n : Nat) (ys : Vec A n) (m : Nat) (xs : Vec A m) :
+    append A p zs (add m n) (append A n ys m xs) =
+      cast A (add m (add n p)) (add (add m n) p) (add_assoc m n p)
+        (append A (add n p) (append A p zs n ys) m xs) :=
+  rec m, xs motive (k : Nat) (ws : Vec A k) =>
+    append A p zs (add k n) (append A n ys k ws) =
+      cast A (add k (add n p)) (add (add k n) p) (add_assoc k n p)
+        (append A (add n p) (append A p zs n ys) k ws) with
+  | nil =>
+    let left : add Nat.zero n = n := zero_add n;
+    let right : add Nat.zero (add n p) = add n p := zero_add (add n p);
+    rfl
+  | cons k x tail ih =>
+    let first : add (Nat.succ k) n = Nat.succ (add k n) := succ_add k n;
+    let left : add (Nat.succ (add k n)) p = Nat.succ (add (add k n) p) :=
+      succ_add (add k n) p;
+    let right : add (Nat.succ k) (add n p) = Nat.succ (add k (add n p)) :=
+      succ_add k (add n p);
+    rfl
+  end
+
+theorem replicate_append (A : Type) (x : A) (n m : Nat) :
+    append A n (replicate A x n) m (replicate A x m) = replicate A x (add m n) :=
+  rec m motive (k : Nat) =>
+    append A n (replicate A x n) k (replicate A x k) = replicate A x (add k n) with
+  | zero =>
+    let length : add Nat.zero n = n := zero_add n;
+    rfl
+  | succ k ih =>
+    let length : add (Nat.succ k) n = Nat.succ (add k n) := succ_add k n;
+    rfl
+  end
+
+def map_succ (n : Nat) (xs : Vec Nat n) : Vec Nat n :=
+  rec n, xs motive (k : Nat) (zs : Vec Nat k) => Vec Nat k with
+  | nil => Vec.nil Nat
+  | cons k x tail ih => Vec.cons Nat k (Nat.succ x) ih
+  end
+
+theorem map_succ_nil : map_succ Nat.zero (Vec.nil Nat) = Vec.nil Nat := rfl
+
+theorem map_succ_cons (n : Nat) (x : Nat) (xs : Vec Nat n) :
+    map_succ (Nat.succ n) (Vec.cons Nat n x xs) =
+      Vec.cons Nat n (Nat.succ x) (map_succ n xs) := rfl
+
+theorem map_succ_replicate (x n : Nat) :
+    map_succ n (replicate Nat x n) = replicate Nat (Nat.succ x) n :=
+  rec n motive (k : Nat) =>
+    map_succ k (replicate Nat x k) = replicate Nat (Nat.succ x) k with
+  | zero => rfl
+  | succ k ih => rfl
+  end
+
+theorem map_succ_append (n : Nat) (ys : Vec Nat n) (m : Nat) (xs : Vec Nat m) :
+    map_succ (add m n) (append Nat n ys m xs) =
+      append Nat n (map_succ n ys) m (map_succ m xs) :=
+  rec m, xs motive (k : Nat) (zs : Vec Nat k) =>
+    map_succ (add k n) (append Nat n ys k zs) =
+      append Nat n (map_succ n ys) k (map_succ k zs) with
+  | nil =>
+    let length : add Nat.zero n = n := zero_add n;
+    rfl
+  | cons k x tail ih =>
+    let length : add (Nat.succ k) n = Nat.succ (add k n) := succ_add k n;
+    let joined : append Nat n ys (Nat.succ k) (Vec.cons Nat k x tail) =
+        Vec.cons Nat (add k n) x (append Nat n ys k tail) :=
+      append_cons Nat n ys k x tail;
+    let mapped : map_succ (Nat.succ k) (Vec.cons Nat k x tail) =
+        Vec.cons Nat k (Nat.succ x) (map_succ k tail) := map_succ_cons k x tail;
+    let left : map_succ (Nat.succ (add k n))
+        (Vec.cons Nat (add k n) x (append Nat n ys k tail)) =
+        Vec.cons Nat (add k n) (Nat.succ x)
+          (map_succ (add k n) (append Nat n ys k tail)) :=
+      map_succ_cons (add k n) x (append Nat n ys k tail);
+    let right : append Nat n (map_succ n ys) (Nat.succ k)
+        (Vec.cons Nat k (Nat.succ x) (map_succ k tail)) =
+        Vec.cons Nat (add k n) (Nat.succ x)
+          (append Nat n (map_succ n ys) k (map_succ k tail)) :=
+      append_cons Nat n (map_succ n ys) k (Nat.succ x) (map_succ k tail);
+    rfl
+  end
+
+def sum (n : Nat) (xs : Vec Nat n) : Nat :=
+  rec n, xs motive (k : Nat) (zs : Vec Nat k) => Nat with
+  | nil => Nat.zero
+  | cons k x tail ih => add ih x
+  end
+
+theorem sum_nil : sum Nat.zero (Vec.nil Nat) = Nat.zero := rfl
+
+theorem sum_cons (n : Nat) (x : Nat) (xs : Vec Nat n) :
+    sum (Nat.succ n) (Vec.cons Nat n x xs) = add (sum n xs) x := rfl
+
+theorem sum_append (n : Nat) (ys : Vec Nat n) (m : Nat) (xs : Vec Nat m) :
+    sum (add m n) (append Nat n ys m xs) = add (sum m xs) (sum n ys) :=
+  rec m, xs motive (k : Nat) (zs : Vec Nat k) =>
+    sum (add k n) (append Nat n ys k zs) = add (sum k zs) (sum n ys) with
+  | nil =>
+    let length : add Nat.zero n = n := zero_add n;
+    zero_add (sum n ys)
+  | cons k x tail ih =>
+    let length : add (Nat.succ k) n = Nat.succ (add k n) := succ_add k n;
+    add_right_comm (sum k tail) (sum n ys) x
+  end
+
+theorem sum_replicate (x n : Nat) : sum n (replicate Nat x n) = mul x n :=
+  rec n motive (k : Nat) => sum k (replicate Nat x k) = mul x k with
+  | zero => rfl
+  | succ k ih => rfl
+  end
+
+theorem sum_map_succ (n : Nat) (xs : Vec Nat n) :
+    sum n (map_succ n xs) = add (sum n xs) n :=
+  rec n, xs motive (k : Nat) (zs : Vec Nat k) =>
+    sum k (map_succ k zs) = add (sum k zs) k with
+  | nil => rfl
+  | cons k x tail ih =>
+    let left : sum (Nat.succ k) (map_succ (Nat.succ k) (Vec.cons Nat k x tail)) =
+        add (sum k (map_succ k tail)) (Nat.succ x) := rfl;
+    let right : sum (Nat.succ k) (Vec.cons Nat k x tail) = add (sum k tail) x := rfl;
+    let left_add : add (sum k (map_succ k tail)) (Nat.succ x) =
+        Nat.succ (add (sum k (map_succ k tail)) x) := rfl;
+    let right_add : add (add (sum k tail) x) (Nat.succ k) =
+        Nat.succ (add (add (sum k tail) x) k) := rfl;
+    let rearrange : add (add (sum k tail) k) x = add (add (sum k tail) x) k :=
+      add_right_comm (sum k tail) k x;
+    rfl
+  end

@@ -4,29 +4,61 @@ type Constructors;
 func data_constructors(Data) -> Constructors;
 func no_data_constructors() -> Constructors;
 func more_data_constructors(Constructor, Constructors) -> Constructors;
-pred nullary(Constructor, Data);
-pred recursive(Constructor, Data);
 
 model Context {
     type Ty;
     type Tm;
+    type Args;
     pred is_type(Ty);
+    pred small(Ty);
     pred has_type(Tm, Ty);
     func type_of(Tm) -> Ty;
-    func data_type(Data) -> Ty;
+    func universe() -> Ty;
+    func quote(Ty) -> Tm;
+    func decode(Tm) -> Ty;
+    func nil_args() -> Args;
+    func cons_args(Tm, Args) -> Args;
+    func last_arg(Args) -> Tm;
+    func data_type(Data, Args) -> Ty;
+    func construct(Constructor, Args) -> Tm;
     func identity(Ty, Tm, Tm) -> Ty;
-    func constant(Constructor) -> Tm;
-    func construct(Constructor, Tm) -> Tm;
     func refl(Ty) -> Tm;
 
     rule inferred_type {
         if has_type(t, a);
         then type_of(t) = a;
     }
-    rule data_formation {
-        if a = data_type(d);
-        if data_constructors(d)!;
+    rule small_formation {
+        if small(a);
         then is_type(a);
+    }
+    rule universe_formation {
+        if a = universe();
+        then is_type(a);
+    }
+    rule code_typing {
+        if t = quote(a);
+        if small(a);
+        then u := universe()!;
+        then has_type(t, u);
+        then decode(t) = a;
+    }
+    rule code_decoding {
+        if a = decode(t);
+        if u = universe();
+        if has_type(t, u);
+        then small(a);
+        then quote(a) = t;
+    }
+    rule last_singleton {
+        if xs = cons_args(x, nil_args());
+        then last_arg(xs) = x;
+    }
+    rule last_cons {
+        if xs = cons_args(x, rest);
+        if y = last_arg(rest);
+        then last_arg(xs) = y;
+        then x = x;
     }
     rule identity_formation {
         if a = identity(t, x, y);
@@ -34,18 +66,13 @@ model Context {
         if has_type(y, t);
         then is_type(a);
     }
-    rule constant_typing {
-        if t = constant(c);
-        if nullary(c, d);
-        if a = data_type(d);
-        then has_type(t, a);
-    }
-    rule constructor_typing {
-        if t = construct(c, x);
-        if recursive(c, d);
-        if a = data_type(d);
-        if has_type(x, a);
-        then has_type(t, a);
+    rule small_identity {
+        if a = identity(t, x, y);
+        if is_type(a);
+        if small(t);
+        then small(a);
+        then x = x;
+        then y = y;
     }
     rule refl_typing {
         if a = identity(t, x, x);
@@ -81,11 +108,16 @@ func projection(Context) -> Mor(Context);
 func variable(g: Context) -> g.Tm;
 func identity_sub(Context) -> Mor(Context);
 func compose(Mor(Context), Mor(Context)) -> Mor(Context);
+pred context_parent(Context, Context, Mor(Context));
+pred closed_context(Context);
+pred variable_context(Context);
+func closed_substitution(Context, Context) -> Mor(Context);
 func pair(e: Context, d: Context, f: Mor(Context), t: d.Tm) -> Mor(Context);
 
 rule empty_context {
     if g = empty();
     then valid(g);
+    then closed_context(g);
 }
 rule comprehension {
     if extension(e, g, a);
@@ -96,6 +128,8 @@ rule comprehension {
     then dom(p) = g;
     then cod(p) = e;
     then substitution(p);
+    then context_parent(e, g, p);
+    then variable_context(e);
     then b := p.Ty(a)!;
     then q := variable(e)!;
     then e.has_type(q, b);
@@ -107,6 +141,19 @@ rule statement_context {
     then dom(p) = g;
     then cod(p) = e;
     then substitution(p);
+    then context_parent(e, g, p);
+}
+rule closed_statement {
+    if advance(g, e, p);
+    if closed_context(g);
+    then closed_context(e);
+    then p = p;
+}
+rule variable_statement {
+    if advance(g, e, p);
+    if variable_context(g);
+    then variable_context(e);
+    then p = p;
 }
 rule identity_substitution {
     if f = identity_sub(g);
@@ -121,6 +168,18 @@ rule composition {
     if cod(f) = dom(g);
     then h = f >> g;
     then substitution(h);
+}
+// Restriction descends the finite source-context ancestry, without allocating terms.
+rule composition_restriction {
+    if h = compose(f, g);
+    if substitution(h);
+    if e = dom(h);
+    if variable_context(e);
+    if context_parent(e, parent, p);
+    then compose(p, h)!;
+    then f = f;
+    then g = g;
+    then parent = parent;
 }
 rule pairing {
     if h = pair(e, d, f, t);
@@ -147,8 +206,7 @@ rule pairing_eta {
     if q = variable(e);
     if t = h.Tm(q);
     if f = p >> h;
-    if k = pair(e, d, f, t);
-    then h = k;
+    then pair(e, d, f, t) = h;
     then g = g;
     then a = a;
 }
@@ -174,6 +232,25 @@ rule requested_term_image {
 type Definition;
 pred definition_goal(d: Definition, g: Context, t: g.Tm, a: g.Ty, exported: g.Tm);
 pred checked_definition(Definition);
+func instance(source: Context, body: source.Tm, target: Context, args: target.Args) -> target.Tm;
+rule image_instance {
+    if substitution(f);
+    if s = dom(f);
+    if t = cod(f);
+    if a = instance(source, body, s, args);
+    if images = f.Args(args);
+    if b = instance(source, body, t, images);
+    then f.Tm(a) = b;
+}
+rule open_instance {
+    if substitution(f);
+    if s = dom(f);
+    if t = cod(f);
+    if a = instance(source, body, s, args);
+    if b = f.Tm(a);
+    if images = f.Args(args);
+    then instance(source, body, t, images) = b;
+}
 rule check_definition {
     if definition_goal(d, g, t, a, exported);
     if valid(g);
@@ -183,6 +260,40 @@ rule check_definition {
     then exported = t;
 }
 
+pred family_schema(g: Context, a: g.Ty);
+pred constructor_schema(g: Context, t: g.Tm, a: g.Ty);
+rule family_formation {
+    if family_schema(g, a);
+    if valid(g);
+    then g.small(a);
+}
+rule constructor_typing {
+    if constructor_schema(g, t, a);
+    if valid(g);
+    if g.is_type(a);
+    then g.has_type(t, a);
+}
+
+type Telescope;
+func telescope_end() -> Telescope;
+func telescope_cons(Context, Telescope) -> Telescope;
+func instantiate(t: Telescope, d: Context, f: Mor(Context), xs: d.Args) -> Mor(Context);
+rule instantiate_end {
+    if h = instantiate(telescope_end(), d, f, d.nil_args());
+    then h = f;
+}
+rule instantiate_cons {
+    if h = instantiate(telescope_cons(e, rest), d, f, xs);
+    if xs = d.cons_args(x, tail);
+    if extension(e, g, a);
+    if substitution(f);
+    if dom(f) = g;
+    if cod(f) = d;
+    then f.Ty(a)!;
+    then p := pair(e, d, f, x)!;
+    then h = instantiate(rest, d, p, tail);
+}
+
 type Eliminator;
 type Branch;
 func case_branch(Eliminator, Constructor) -> Branch;
@@ -190,6 +301,9 @@ pred branch_goal(b: Branch, g: Context, t: g.Tm, a: g.Ty);
 pred checked_branch(Branch);
 pred checked_cases(Eliminator, Constructors);
 pred elimination(e: Eliminator, d: Data, g: Context, a: g.Ty, t: g.Tm);
+func elimination_base(Eliminator) -> Context;
+func elimination_telescope(Eliminator) -> Telescope;
+pred checked_eliminator(Eliminator);
 rule branch_check {
     if branch_goal(b, g, t, a);
     if valid(g);
@@ -216,32 +330,70 @@ rule dependent_elimination {
     if valid(g);
     if g.is_type(a);
     then g.has_type(t, a);
+    then checked_eliminator(e);
 }
 
+rule image_universe {
+    if substitution(f);
+    if s = dom(f);
+    if t = cod(f);
+    if a = s.universe();
+    if b = t.universe();
+    then f.Ty(a) = b;
+}
+rule image_nil {
+    if substitution(f);
+    if s = dom(f);
+    if t = cod(f);
+    if a = s.nil_args();
+    then b := t.nil_args()!;
+    then f.Args(a) = b;
+}
+rule image_cons {
+    if substitution(f);
+    if s = dom(f);
+    if t = cod(f);
+    if a = s.cons_args(x, xs);
+    if y = f.Tm(x);
+    if ys = f.Args(xs);
+    then b := t.cons_args(y, ys)!;
+    then f.Args(a) = b;
+}
 rule image_data_type {
     if substitution(f);
     if s = dom(f);
     if t = cod(f);
-    if a = s.data_type(d);
-    if b = t.data_type(d);
+    if a = s.data_type(d, xs);
+    if ys = f.Args(xs);
+    if b = t.data_type(d, ys);
     then f.Ty(a) = b;
-}
-rule image_constant {
-    if substitution(f);
-    if s = dom(f);
-    if t = cod(f);
-    if a = s.constant(c);
-    if b = t.constant(c);
-    then f.Tm(a) = b;
 }
 rule image_constructor {
     if substitution(f);
     if s = dom(f);
     if t = cod(f);
-    if a = s.construct(c, x);
-    if y = f.Tm(x);
-    if b = t.construct(c, y);
+    if a = s.construct(c, xs);
+    if ys = f.Args(xs);
+    if b = t.construct(c, ys);
     then f.Tm(a) = b;
+}
+rule image_quote {
+    if substitution(f);
+    if s = dom(f);
+    if t = cod(f);
+    if a = s.quote(x);
+    if y = f.Ty(x);
+    if b = t.quote(y);
+    then f.Tm(a) = b;
+}
+rule image_decode {
+    if substitution(f);
+    if s = dom(f);
+    if t = cod(f);
+    if a = s.decode(x);
+    if y = f.Tm(x);
+    if b = t.decode(y);
+    then f.Ty(a) = b;
 }
 rule image_identity {
     if substitution(f);
@@ -264,61 +416,49 @@ rule image_refl {
     then f.Tm(a) = b;
 }
 
-func elimination_base(Eliminator) -> Context;
-pred nullary_case(e: Eliminator, c: Constructor, g: Context, k: Context, body: k.Tm);
-pred recursive_case(e: Eliminator, c: Constructor, h: Context, k: Context, body: k.Tm);
-pred checked_eliminator(Eliminator);
-rule elimination_checked {
-    if elimination(e, d, g, a, t);
-    if g.has_type(t, a);
-    then checked_eliminator(e);
-    then d = d;
-}
-
-func application(e: Eliminator, f: Mor(Context), g: Context, x: g.Tm) -> g.Tm;
-rule application_pair {
-    if application(e, f, g, x)!;
-    if elimination(e, d, m, a, r);
+func application(e: Eliminator, f: Mor(Context), g: Context, xs: g.Args) -> g.Tm;
+pred applied(e: Eliminator, f: Mor(Context), g: Context, xs: g.Args);
+rule application_instance {
+    if application(e, f, g, xs)!;
     if b = elimination_base(e);
+    if telescope = elimination_telescope(e);
     if substitution(f);
     if dom(f) = b;
     if cod(f) = g;
-    then pair(m, g, f, x)!;
-    then d = d;
-    then a = a;
-    then r = r;
+    then instantiate(telescope, g, f, xs)!;
 }
 rule application_image {
-    if result = application(e, f, g, x);
+    if result = application(e, f, g, xs);
     if elimination(e, d, m, a, r);
-    if p = pair(m, g, f, x);
+    if telescope = elimination_telescope(e);
+    if p = instantiate(telescope, g, f, xs);
     if substitution(p);
     if dom(p) = m;
     if cod(p) = g;
     then p.Ty(a)!;
     then p.Tm(r) = result;
+    then applied(e, f, g, xs);
     then d = d;
 }
 rule image_application {
     if substitution(f);
     if s = dom(f);
     if t = cod(f);
-    if a = application(e, g, s, x);
-    if y = f.Tm(x);
+    if a = application(e, g, s, xs);
+    if ys = f.Args(xs);
     if h = compose(g, f);
-    if b = application(e, h, t, y);
+    if b = application(e, h, t, ys);
     then f.Tm(a) = b;
 }
-
 rule open_application {
     if substitution(f);
     if s = dom(f);
     if t = cod(f);
-    if a = application(e, g, s, x);
+    if a = application(e, g, s, xs);
     if b = f.Tm(a);
-    if y = f.Tm(x);
+    if ys = f.Args(xs);
     if h = compose(g, f);
-    then application(e, h, t, y) = b;
+    then application(e, h, t, ys) = b;
 }
 
 func rebase(e: Context, d: Context, f: Mor(Context)) -> Mor(Context);
@@ -333,14 +473,57 @@ rule rebase_statement {
     then substitution(h);
     then p >> h = f;
 }
+rule rebase_eta {
+    if advance(g, e, p);
+    if substitution(h);
+    if dom(h) = e;
+    if d = cod(h);
+    if f = p >> h;
+    then rebase(e, d, f) = h;
+    then g = g;
+}
+rule closed_substitution_uniqueness {
+    if closed_context(g);
+    if substitution(f);
+    if dom(f) = g;
+    if d = cod(f);
+    then closed_substitution(g, d) = f;
+}
 
 type Expansion;
 func next_expansion(Expansion) -> Expansion;
-pred expand(site: Expansion, e: Eliminator, f: Mor(Context), g: Context, x: g.Tm);
-pred literal(site: Expansion, g: Context, t: g.Tm);
+pred expand(site: Expansion, e: Eliminator, f: Mor(Context), g: Context, x: g.Args);
+type Call;
+func direct_call(e: Eliminator, f: Mor(Context), g: Context, xs: g.Args) -> Call;
+func image_call(Call, Mor(Context)) -> Call;
+pred call_shape(c: Call, e: Eliminator, f: Mor(Context), g: Context, xs: g.Args);
+pred literal(Expansion, Call);
+rule direct_call_shape {
+    if c = direct_call(e, f, g, xs);
+    then call_shape(c, e, f, g, xs);
+}
+rule image_call_base {
+    if image_call(c, h)!;
+    if call_shape(c, e, f, g, xs);
+    if substitution(h);
+    if dom(h) = g;
+    then compose(f, h)!;
+    then e = e;
+    then xs = xs;
+}
+rule image_call_shape {
+    if d = image_call(c, h);
+    if call_shape(c, e, f, g, xs);
+    if substitution(h);
+    if dom(h) = g;
+    if target = cod(h);
+    if ys = h.Args(xs);
+    if base = compose(f, h);
+    then call_shape(d, e, base, target, ys);
+}
 rule literal_application {
-    if literal(site, g, t);
-    if t = application(e, f, g, x);
+    if literal(site, c);
+    if call_shape(c, e, f, g, x);
     then expand(site, e, f, g, x);
 }
 
@@ -359,93 +542,116 @@ rule through_statement {
     then k := through(start, previous, d, f)!;
     then h = rebase(end, d, k);
 }
-rule beta_nullary {
-    if expand(site, e, f, g, x);
-    if next_expansion(site)!;
-    if x = g.constant(c);
+type BranchSteps;
+func case_steps(Eliminator, Constructor) -> BranchSteps;
+pred parameter_step(s: BranchSteps, g: Context, parameter: g.Tm, rest: BranchSteps);
+pred field_step(BranchSteps, Context, BranchSteps);
+pred hypothesis_step(s: BranchSteps, g: Context, args: g.Args, e: Context, instance: Mor(Context), rest: BranchSteps);
+pred finish_step(s: BranchSteps, g: Context, args: g.Args, end: Context, body: end.Tm);
+pred body_base(BranchSteps, Mor(Context));
+pred body_call(BranchSteps, Call);
+func run_branch(s: BranchSteps, e: Eliminator, base: Mor(Context), f: Mor(Context), g: Context, xs: g.Args, fuel: Expansion, actual: g.Args) -> Mor(Context);
+
+rule beta_request {
+    if expand(site, e, f, g, xs);
+    if next = next_expansion(site);
+    if applied(e, f, g, xs);
     if checked_eliminator(e);
-    if nullary_case(e, c, b, k, body);
-    if substitution(f);
-    if dom(f) = b;
-    if cod(f) = g;
-    if result = application(e, f, g, x);
-    then h := through(b, k, g, f)!;
-    then h = h;
-    then result = result;
-    then body = body;
+    if x = g.last_arg(xs);
+    if x = g.construct(c, fields);
+    if steps = case_steps(e, c);
+    then run_branch(steps, e, f, f, g, fields, next, xs)!;
 }
-rule beta_nullary_result {
-    if expand(site, e, f, g, x);
-    if next_expansion(site)!;
-    if x = g.constant(c);
-    if checked_eliminator(e);
-    if nullary_case(e, c, b, k, body);
-    if h = through(b, k, g, f);
+rule branch_parameter {
+    if h = run_branch(s, e, base, f, g, xs, fuel, actual);
+    if parameter_step(s, source, parameter, rest);
+    if substitution(f);
+    if dom(f) = source;
+    if cod(f) = g;
+    if xs = g.cons_args(x, tail);
+    if x = f.Tm(parameter);
+    then h = run_branch(rest, e, base, f, g, tail, fuel, actual);
+}
+rule branch_field {
+    if h = run_branch(s, e, base, f, g, xs, fuel, actual);
+    if field_step(s, target, rest);
+    if extension(target, source, a);
+    if substitution(f);
+    if dom(f) = source;
+    if cod(f) = g;
+    if xs = g.cons_args(x, tail);
+    then f.Ty(a)!;
+    then p := pair(target, g, f, x)!;
+    then h = run_branch(rest, e, base, p, g, tail, fuel, actual);
+}
+rule branch_hypothesis {
+    if h = run_branch(s, e, base, f, g, xs, fuel, actual);
+    if hypothesis_step(s, source, args, target, instance, rest);
+    if extension(target, source, a);
+    if substitution(f);
+    if dom(f) = source;
+    if cod(f) = g;
+    if recursive_args = f.Args(args);
+    then f.Ty(a)!;
+    then compose(instance, f)!;
+    then ih := application(e, base, g, recursive_args)!;
+    then expand(fuel, e, base, g, recursive_args);
+    then p := pair(target, g, f, ih)!;
+    then h = run_branch(rest, e, base, p, g, xs, fuel, actual);
+}
+rule branch_finish {
+    if h = run_branch(s, e, base, f, g, g.nil_args(), fuel, actual);
+    if finish_step(s, source, expected, end, body);
+    if substitution(f);
+    if dom(f) = source;
+    if cod(f) = g;
+    if actual = f.Args(expected);
+    then h = through(source, end, g, f);
+    then body = body;
+    then fuel = fuel;
+    then e = e;
+    then base = base;
+}
+rule branch_body {
+    if h = run_branch(s, e, base, f, g, g.nil_args(), fuel, actual);
+    if finish_step(s, source, expected, end, body);
     if substitution(h);
-    if dom(h) = k;
+    if dom(h) = end;
     if cod(h) = g;
-    if result = application(e, f, g, x);
+    if result = application(e, base, g, actual);
     then rhs := h.Tm(body)!;
     then result = rhs;
+    then source = source;
+    then expected = expected;
+    then fuel = fuel;
+    then f = f;
 }
-rule beta_recursive_request {
-    if expand(site, e, f, g, x);
-    if next_expansion(site)!;
-    if x = g.construct(c, k);
-    if checked_eliminator(e);
-    if recursive_case(e, c, h, end, body);
-    if elimination(e, d, m, a, r);
-    if result = application(e, f, g, x);
-    then previous := application(e, f, g, k)!;
-    then p := pair(m, g, f, k)!;
-    then pair(h, g, p, previous)!;
-    then body = body;
-    then d = d;
-    then a = a;
-    then r = r;
-    then result = result;
-    then end = end;
+rule branch_body_application {
+    if h = run_branch(s, e, base, f, g, xs, fuel, actual);
+    if body_base(s, b);
+    if substitution(h);
+    then compose(b, h)!;
+    then e = e;
+    then base = base;
+    then f = f;
+    then g = g;
+    then xs = xs;
+    then fuel = fuel;
+    then actual = actual;
 }
-rule beta_recursive {
-    if expand(site, e, f, g, x);
-    if next = next_expansion(site);
-    if x = g.construct(c, k);
-    if checked_eliminator(e);
-    if recursive_case(e, c, h, end, body);
-    if elimination(e, d, m, a, r);
-    if previous = application(e, f, g, k);
-    if p = pair(m, g, f, k);
-    if q = pair(h, g, p, previous);
-    if substitution(q);
-    if dom(q) = h;
-    if cod(q) = g;
-    if result = application(e, f, g, x);
-    then through(h, end, g, q)!;
-    then expand(next, e, f, g, k);
-    then d = d;
-    then a = a;
-    then r = r;
-    then body = body;
-    then result = result;
-}
-rule beta_recursive_result {
-    if expand(site, e, f, g, x);
-    if next_expansion(site)!;
-    if x = g.construct(c, k);
-    if checked_eliminator(e);
-    if recursive_case(e, c, h, end, body);
-    if elimination(e, d, m, a, r);
-    if previous = application(e, f, g, k);
-    if p = pair(m, g, f, k);
-    if q = pair(h, g, p, previous);
-    if v = through(h, end, g, q);
-    if substitution(v);
-    if dom(v) = end;
-    if cod(v) = g;
-    if result = application(e, f, g, x);
-    then rhs := v.Tm(body)!;
-    then result = rhs;
-    then d = d;
-    then a = a;
-    then r = r;
+rule branch_body_expansion {
+    if h = run_branch(s, e, base, f, g, xs, fuel, actual);
+    if body_call(s, c);
+    if call_shape(c, nested, b, source, args);
+    if substitution(h);
+    if dom(h) = source;
+    if cod(h) = g;
+    if images = h.Args(args);
+    if target_base = compose(b, h);
+    then expand(fuel, nested, target_base, g, images);
+    then e = e;
+    then base = base;
+    then f = f;
+    then xs = xs;
+    then actual = actual;
 }

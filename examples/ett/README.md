@@ -3,22 +3,28 @@
 Run the example from the repository root:
 
 ```sh
-cargo run -p eqlog-ett -- examples/ett/nat.ett
+cargo run --release -p eqlog-ett -- examples/ett/nat.ett examples/ett/vec.ett
 ```
 
-`nat.ett` declares natural numbers, defines addition by recursion, and proves
-`add_zero`, `add_succ`, `zero_add`, `succ_add`, `add_comm`, `add_assoc`, and
-congruence. These follow the statements in Lean's
+Use a release build: the full development currently takes minutes to saturate.
+
+`nat.ett` defines addition, predecessor, and multiplication. It proves the
+zero and successor laws, successor injectivity, commutativity, associativity,
+both distributive laws, and rearrangement lemmas. The statements follow Lean's
 [Init.Data.Nat.Basic](https://github.com/leanprover/lean4/blob/master/src/Init/Data/Nat/Basic.lean).
 The checker has no built-in natural numbers or arithmetic equations.
+`vec.ett` declares `Vec A n`, defines replication, append, successor mapping,
+and sum, and proves laws relating these operations. Append associativity uses
+an explicit length equality to reindex its result. Both files are elaborated
+together and checked by one `close()` call.
 
 The input language has `inductive`, `def`, `theorem`, explicitly typed
 parameters, identity types, `rfl`, and typed `let` statements. `by rfl` and
-`by exact term` are also accepted. Inductive declarations are finite sums of
-nullary constructors and unary recursive constructors. This includes natural
-numbers and finite enumerations. There are no Pi types, universes, type
-parameters, general constructor telescopes, implicit arguments, tactics, or
-general recursive definitions.
+`by exact term` are also accepted. Inductive declarations have explicit uniform
+parameters, index telescopes, and dependent constructor fields. Recursion must
+be directly through the declared family with unchanged parameters; nested and
+mutual inductives are not supported. There are no Pi types, implicit arguments,
+tactics, or general recursive definitions.
 
 ```text
 inductive Nat where
@@ -32,10 +38,33 @@ def add (m n : Nat) : Nat :=
   end
 ```
 
-`rec` has an explicit motive, with one branch per constructor. A recursive
-branch binds the predecessor and a term of the motive at that predecessor.
-The motive may depend on its argument, as the induction proofs in `nat.ett`
-demonstrate. Its type annotation names the inductive being eliminated.
+`rec` has an explicit motive, with one branch per constructor. Each branch
+binds the constructor's fields in order, with an induction hypothesis
+immediately after each recursive field. The hypothesis uses the motive at
+that field's own indices.
+
+```text
+inductive Vec (A : Type) : (n : Nat) -> Type where
+| nil : Vec A Nat.zero
+| cons (k : Nat) (x : A) (xs : Vec A k) : Vec A (Nat.succ k)
+
+def sum (n : Nat) (xs : Vec Nat n) : Nat :=
+  rec n, xs motive (k : Nat) (zs : Vec Nat k) => Nat with
+  | nil => Nat.zero
+  | cons k x tail ih => add ih x
+  end
+```
+
+An indexed recursor supplies its indices before its scrutinee. The motive
+binds these indices and then an element of that fiber. Beta requires the
+constructor's parameters and return indices to match: equality of two family
+fibers does not imply equality of their indices.
+
+`Type` is a universe of codes for small types. A parameter `A : Type` can be
+used as a type by decoding its code. The universe itself is formed but is not
+small, so `Type : Type` and small constructors with fields of type `Type`
+are rejected. Uniform parameters such as Vec's `A` are external to its fields.
+
 `let` statements can begin declaration and branch bodies; their annotations
 are checked before their values become available. Numeric literals and
 infix arithmetic are not implemented; constructors use qualified names.
@@ -62,8 +91,9 @@ branches are simply `rfl`. Identity proofs are proof irrelevant.
 The frontend elaborates the entire module into one Eqlog model. It allocates
 syntax and substitution requests, but does not evaluate terms or assert that
 unchecked annotations hold. It calls `close()` exactly once and then checks
-the definition obligations. A declaration's exported term is identified with
-its body only after the body has the declared type. The frontend is part of
+the declaration, constructor-field, index-binder, and definition obligations.
+A declaration's exported term is identified with its body only after the body
+has the declared type. The frontend is part of
 the trusted checker: in particular, it constructs the motives and branch
 obligations and resolves names hygienically.
 
@@ -77,12 +107,14 @@ missing images through surjective rules. Weakening copies the finite material
 already present in the previous statement context.
 
 Constructor computation is a separate, bounded allocation mechanism. Each
-elaborated literal occurrence, including occurrences in instantiated signatures,
+elaborated call occurrence, including occurrences in instantiated signatures,
 gets a finite chain of three expansion steps. A step opens one constructor case
 and may request the recursive call and the branch result. It does not copy
-hidden branch subterms. Generated recursive calls consume the remaining chain;
-they do not receive a fresh budget. Merely weakening a term does not reset its
-budget. Equality saturation on the resulting material has no step limit.
+hidden branch subterms. Recursive calls and calls at the head of a branch
+consume the remaining chain. Immutable call descriptors keep a branch that
+returns its recursive result from restarting its fuel after equality merging.
+Merely weakening a term does not reset its budget. Equality saturation on the
+resulting material has no step limit.
 
 The bound counts the terminal constructor case too: reducing `add m (succ
 (succ zero))` to `succ (succ m)` needs three steps. Additional written

@@ -11,22 +11,21 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Expr {
     Name(String, Vec<Expr>),
     Equal(Box<Expr>, Box<Expr>),
     Refl,
     Rec {
-        scrutinee: Box<Expr>,
-        variable: String,
-        data: String,
+        arguments: Vec<Expr>,
+        binders: Vec<(String, Expr)>,
         motive: Box<Expr>,
         cases: Vec<Case>,
     },
     Let(String, Box<Expr>, Box<Expr>, Box<Expr>),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Case {
     pub constructor: String,
     pub variables: Vec<String>,
@@ -35,13 +34,25 @@ pub(crate) struct Case {
 
 #[derive(Debug)]
 pub(crate) enum Declaration {
-    Data(String, Vec<(String, bool)>),
+    Data {
+        name: String,
+        parameters: Vec<(String, Expr)>,
+        indices: Vec<(String, Expr)>,
+        constructors: Vec<ConstructorDecl>,
+    },
     Definition {
         name: String,
         parameters: Vec<(String, Expr)>,
         result: Expr,
         body: Expr,
     },
+}
+
+#[derive(Debug)]
+pub(crate) struct ConstructorDecl {
+    pub name: String,
+    pub fields: Vec<(String, Expr)>,
+    pub result: Option<Expr>,
 }
 
 struct Token {
@@ -81,9 +92,10 @@ pub(crate) fn parse(source: &str) -> Result<Vec<Declaration>, Error> {
             }
         } else if (c == ':' && chars.peek() == Some(&'='))
             || (c == '=' && chars.peek() == Some(&'>'))
+            || (c == '-' && chars.peek() == Some(&'>'))
         {
             text.push(chars.next().unwrap());
-        } else if !"():;|=".contains(c) {
+        } else if !"():;|=,".contains(c) {
             return Err(Error(format!("line {line}: unsupported character {c:?}")));
         }
         tokens.push(Token { text, line });
@@ -145,25 +157,56 @@ impl Parser {
     fn declaration(&mut self) -> Result<Declaration, Error> {
         if self.eat("inductive") {
             let name = self.name()?;
+            let parameters = self.binders()?;
+            let mut indices = Vec::new();
+            if self.eat(":") {
+                while self.peek() == Some("(") {
+                    indices.extend(self.binders()?);
+                    self.expect("->")?;
+                }
+                self.expect("Type")?;
+            }
             self.expect("where")?;
             let mut constructors = Vec::new();
             while self.eat("|") {
                 let constructor = self.name()?;
-                let recursive = self.eat("(");
-                if recursive {
-                    self.name()?;
-                    self.expect(":")?;
-                    self.expect(&name)?;
-                    self.expect(")")?;
-                }
-                constructors.push((constructor, recursive));
+                let fields = self.binders()?;
+                let result = if self.eat(":") {
+                    Some(self.expression()?)
+                } else {
+                    None
+                };
+                constructors.push(ConstructorDecl {
+                    name: constructor,
+                    fields,
+                    result,
+                });
             }
-            return Ok(Declaration::Data(name, constructors));
+            return Ok(Declaration::Data {
+                name,
+                parameters,
+                indices,
+                constructors,
+            });
         }
         if !self.eat("def") && !self.eat("theorem") {
             return Err(self.error("expected inductive, def or theorem"));
         }
         let name = self.name()?;
+        let parameters = self.binders()?;
+        self.expect(":")?;
+        let result = self.expression()?;
+        self.expect(":=")?;
+        let body = self.expression()?;
+        Ok(Declaration::Definition {
+            name,
+            parameters,
+            result,
+            body,
+        })
+    }
+
+    fn binders(&mut self) -> Result<Vec<(String, Expr)>, Error> {
         let mut parameters = Vec::new();
         while self.eat("(") {
             let mut names = vec![self.name()?];
@@ -175,16 +218,7 @@ impl Parser {
             self.expect(")")?;
             parameters.extend(names.into_iter().map(|n| (n, ty.clone())));
         }
-        self.expect(":")?;
-        let result = self.expression()?;
-        self.expect(":=")?;
-        let body = self.expression()?;
-        Ok(Declaration::Definition {
-            name,
-            parameters,
-            result,
-            body,
-        })
+        Ok(parameters)
     }
 
     fn expression(&mut self) -> Result<Expr, Error> {
@@ -248,13 +282,15 @@ impl Parser {
             return Ok(Expr::Refl);
         }
         if self.eat("rec") {
-            let scrutinee = self.application()?;
+            let mut arguments = vec![self.application()?];
+            while self.eat(",") {
+                arguments.push(self.application()?);
+            }
             self.expect("motive")?;
-            self.expect("(")?;
-            let variable = self.name()?;
-            self.expect(":")?;
-            let data = self.name()?;
-            self.expect(")")?;
+            let binders = self.binders()?;
+            if binders.is_empty() {
+                return Err(self.error("a motive needs a scrutinee binder"));
+            }
             self.expect("=>")?;
             let motive = self.expression()?;
             self.expect("with")?;
@@ -275,9 +311,8 @@ impl Parser {
             }
             self.expect("end")?;
             return Ok(Expr::Rec {
-                scrutinee: Box::new(scrutinee),
-                variable,
-                data,
+                arguments,
+                binders,
                 motive: Box::new(motive),
                 cases,
             });
