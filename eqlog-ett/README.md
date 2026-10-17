@@ -1,9 +1,9 @@
 # Extensional type theory with partial substitutions
 
-Run the example from the repository root:
+Run the proof checker from the repository root:
 
 ```sh
-cargo run --release -p eqlog-ett -- examples/ett/nat.ett examples/ett/vec.ett
+cargo run --release -p eqlog-ett -- eqlog-ett/nat.ett eqlog-ett/vec.ett
 ```
 
 Use a release build: the full development currently takes minutes to saturate.

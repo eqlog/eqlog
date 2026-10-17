@@ -18,8 +18,8 @@ const NAT: &str = indoc! {"
 fn arithmetic_and_vectors() {
     check(&format!(
         "{}\n{}",
-        include_str!("../../examples/ett/nat.ett"),
-        include_str!("../../examples/ett/vec.ett")
+        include_str!("../../eqlog-ett/nat.ett"),
+        include_str!("../../eqlog-ett/vec.ett")
     ))
     .unwrap();
 }

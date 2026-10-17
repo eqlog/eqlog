@@ -4,17 +4,16 @@ resolver = "2"
 members = [
   "eqlog",
   "eqlog-runtime",
+  "eqlog-ett",
   "eqlog-test-eval",
   "eqlog-test-compile",
   "eqlog-test-opt",
-  "examples/ett",
   "eqlog-bench",
   # "v1_to_v2",
   # "examples/inference",
 ]
 
 # Standalone examples should build without a local eqlog checkout.
-# The experimental checker uses the workspace's integration test harness.
 exclude = [
   "examples/semilattice",
   "cwf-theory",

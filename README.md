@@ -175,9 +175,9 @@ The receiver of a member type must be an earlier named model argument. These
 owner bindings are checked by generated Rust APIs and dynamic models, and
 determine where `define_*` allocates a result. An ambient relation such as
 `has_type` above is not automatically preserved by context morphisms; declare
-relations inside the model when they should be preserved. For an example that
-uses ambient signatures to connect distinct models, see the
-[extensional type theory checker](examples/ett/README.md).
+relations inside the model when they should be preserved. The
+[extensional type theory checker](eqlog-ett/README.md) uses ambient signatures
+to connect distinct context models.
 
 ### Morphism identities and composition
 

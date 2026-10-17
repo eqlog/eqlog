@@ -5,7 +5,7 @@ edition.workspace = true
 publish = false
 
 [dependencies]
-eqlog-runtime = { path = "../../eqlog-runtime" }
+eqlog-runtime = { path = "../eqlog-runtime" }
 
 [build-dependencies]
-eqlog = { path = "../../eqlog" }
+eqlog = { path = "../eqlog" }

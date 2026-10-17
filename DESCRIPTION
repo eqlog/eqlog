@@ -5,7 +5,7 @@ arguments, so ambient rules can relate distinct context models without
 flattening their members. Preserve owner bindings in native and dynamic
 evaluators, including foreign members of model relations.
 
-Add examples/ett with a small Lean-like frontend and an Eqlog kernel for
+Add eqlog-ett with a Lean-like frontend and an Eqlog kernel for
 context extension, partial substitutions, identity types with equality
 reflection, a small universe, and indexed inductive families with
 dependent constructor telescopes and elimination. Morphisms follow
