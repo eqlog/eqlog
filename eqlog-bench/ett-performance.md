@@ -1,15 +1,22 @@
 # ETT evaluator investigation
 
-Measured at `8991f586ba5e9288e663f2d9fba6ea144716e031`, after merging
-`host/master` at `895e9a7`. This is an investigation and implementation plan;
-the production evaluator and proof checker are unchanged.
+The tables below preserve the baseline investigation at
+`8991f586ba5e9288e663f2d9fba6ea144716e031`, after merging `host/master` at
+`895e9a7`. They are historical measurements, not timings of the optimized
+implementation described later in this report.
 
-The main finding is that model isolation is currently semantic, but not an
-effective scheduling boundary for this kernel. All 17 generated strata are
-global. Most closure time goes to repeatedly transporting existing facts and
-preparing indices, rather than matching the proof rules themselves.
+The baseline spent most closure time transporting existing facts and preparing
+indices. Model isolation was semantic, but its 17 global strata did not make
+small changes cheap. The implementation now caches prepared data and propagates
+changes within that global schedule. A functionality normalization barrier
+splits the main component into separate consumers; the current ETT evaluator
+has 18 global strata. This is not a conversion to owner-local rule scheduling.
 
-## Measurements
+The Nat and Vec source modules, fresh contexts, equality reflection, partial
+morphisms, three-expansion budget, and single `close()` call are unchanged.
+All closure timings exclude Rust compilation.
+
+## Historical baseline measurements
 
 The diagnostic builds an independent executable from the release evaluator's
 generated Rust and its existing rule libraries. Nested timers separate rule
@@ -61,7 +68,7 @@ proof uniqueness at 8.032 s, less than 1% of closure time.
 
 The earlier 689 s and 951 s figures measured the whole 11-test integration
 suite. These profiles measure the combined positive development alone and
-are instrumented. They diagnose the current evaluator, but do not attribute
+are instrumented. They diagnose the baseline evaluator, but do not attribute
 the earlier regression to a particular upstream change. That would require
 matched profiles of both revisions.
 
@@ -131,7 +138,10 @@ including reallocation sizes, not live memory. It supports investigating
 temporary tree construction and repeated index rebuilding; changing the
 allocator itself is not the first priority.
 
-## Why the context graph does not isolate the work
+## Why the baseline did not isolate the work
+
+The following describes the baseline code paths and counts. Several of these
+paths have since been replaced, as detailed below.
 
 1. `flat_eqlog/scope.rs::infer_scope` makes equality-producing rules global.
    It also requires model-owned premises and conclusions to agree on an owner.
@@ -178,139 +188,163 @@ with 47,657 type members and 26,889 term members across 430 contexts. Finite
 and isolated does not mean constant work per source declaration. Nevertheless,
 the profile points first to repeated engine work on that material.
 
-## Implementation order
+## Implemented mechanisms
 
-### 1. Reuse prepared relations and graph topology
+### Prepared primary relations and graph caches
 
-For global strata that already have complete primary transport, construct
-alternate indices incrementally from the primary `_all` relation using
-`IndexSeed`. Do not independently reconstruct inherited closure for each
-permutation. The compiler should express this preparation precondition
-explicitly. Model-local traversal can have only a slice prepared; it needs a
-separate decision rather than the same unconditional shortcut.
+The compiler records when a global stratum has completed primary transport.
+Eligible alternate native indices are then maintained by `IndexSeed`
+projections from that primary relation, rather than by transporting the same
+facts again for each column order. Model-local preparation retains its previous
+path because a prepared slice is not a complete relation. Copy-only transport
+also retains its sharing-preserving path: permuting every row would discard
+shared suffixes without avoiding member-map joins. Support indices used only
+by replaced transport paths are removed from the preparation plan.
 
-Cache the morphism SCC order by the actual object/domain/codomain snapshots,
-including the enclosing owner for nested models. Reuse it across strata and
-alternate indices until those inputs change. Do not use cardinalities as
-versions. Graph construction is measurable but smaller than tuple transport.
+`MorphismGraphCache` caches SCC order by persistent object, domain, and codomain
+snapshots, separately for each enclosing owner tuple. It never uses row counts
+as versions. Cached graphs also share their sorted edge signatures, including
+whether an edge is internal to an SCC. Equal signatures can survive a snapshot
+change with the same shared identity, keeping per-relation comparisons cheap.
+Nested graph preparation includes visible endpoints without asserting new
+model membership.
 
-These are bounded changes in `ram/prepare.rs`, `rust_gen/native_indices.rs`,
-`rust_gen/stratified.rs`, and the graph preparation runtime. They can help even
-while all ETT strata remain global. Compare closures against the existing
-evaluator before extending the shortcut to stable inputs or nested models.
-Also check destination membership before constructing temporary mapped-prefix
-trees where possible. The current transport builds wrappers before discovering
-that a tuple is already present. Preserve the owned-support bookkeeping when
-moving that check earlier.
+### Incremental primary transport
 
-### 2. Make primary transport incremental
+A `TransportCheckpoint` records the source subtree and partial member maps for
+a relation, enclosing owners, morphism, domain, and codomain. New source facts
+join the current maps. Newly available images join old source facts, so a late
+image can enable transport even when the source relation is unchanged. Map
+changes are partitioned by their first changed column to avoid repeating the
+same combination. No path allocates a missing image of a hidden term.
 
-Maintain consumption checkpoints per relation, owner, and morphism. Transport
-new source tuples and changes in the member maps instead of rescanning every
-edge on every stratum visit. A work queue should wake only affected transport
-jobs; initially it can retain the existing global rule schedule.
+Relation-specific `TransportFrontier` records identify changed source owners,
+changed maps, and newly added edge signatures. A source or map partition needs
+work only when it contains tuples absent from its previous snapshot; removing
+equality aliases alone cannot enable a join. Only active relation/edge
+combinations perform transport; an insertion activates the destination for
+downstream work. The graph remains traversed in SCC order, with a fixed point inside
+cycles and owned support retained where cyclic inheritance requires it. After
+that pass saturates, the frontier records the resulting relation, avoiding a
+second pass over its own output on the next preparation call.
 
-There are several independent triggers: source tuple changes, newly defined
-member images, graph edges, canonical representative replacement, and changes
-propagated into a destination that is itself a source. A late image must join
-against old source tuples. Skipping work solely because source facts are
-unchanged is incorrect. Partial maps must remain partial; this optimization
-must never create missing images of hidden terms.
+The fast frontier applies to leaf model graphs with supported owner-prefix
+indices. Nested model traversal and unsupported primary orders keep the
+conservative traversal. The initial graph and changes to owned-support retention
+force a full pass. Other graph changes activate newly present signatures,
+including edges whose classification as internal to an SCC changed. Per-edge
+checkpoints replay the source when that edge's retention mode changes. Removed
+edge aliases need no replay: source, map, graph, and target facts must grow or
+undergo the same equality quotient. These caches do not support arbitrary
+destructive edits. Checkpoints whose owner or morphism keys cease to be canonical
+are pruned.
 
-Start with whole-source-subtree checkpoints for an edge as a conservative
-fast path. Then add delta joins for changed facts and image entries. Retain
-full recomputation for invalidated regions until the finer dependency scheme
-is validated.
+### Equality preserves inherited snapshots
 
-### 3. Preserve unaffected inherited data through equality
+Canonicalization rewrites existing inherited tuples to current representatives
+instead of resetting every inherited relation to its owned rows. Transported
+facts remain valid under the equality quotient. Rewriting every relevant column
+also handles ambient relations containing foreign model members; it does not
+assume that only the first owner column can change. Owned-support bookkeeping
+continues to protect cycles.
 
-Use the existing element-occurrence information, extended where necessary for
-inherited data, to identify affected relation/owner slices. Canonicalize or
-rebuild those slices and propagate their changes downstream. Avoid the global
-`_all = _own` reset for a merge in an unrelated context.
+`PrefixTree::replace_keys` uses sparse replacement maps. Unchanged subtrees
+retain their roots, and a per-call cache rewrites a shared subtree only once.
+The cache keeps source snapshots alive so pointer identities cannot be reused
+during the call. Moved keys are removed and stationary subtrees overwritten
+before incoming replacements are merged. At the last affected column, traversal
+chooses between replacement keys and subtree keys using a constant-time size upper
+bound; querying the exact length of a lazy mapped tree could itself scan it.
+Changed indices are invalidated, and the normal consumer snapshots expose newly
+canonical tuples to rule evaluation.
 
-This must be designed together with transport checkpoints. Equality can
-replace rows and enable joins, so consumers must still see the newly enabled
-matches. Owned support must survive cycles and transient conflicting function
-results. Ambient relations can contain foreign model members; the affected
-owners must follow column ownership, not merely the member's type name.
+### Normalize functionality before larger joins
 
-The simple safe first milestone is retaining unrelated slices while using
-the current reset/rebuild behavior inside affected components. Member merges,
-model-owner merges, and morphism merges need distinct invalidation paths.
+A structural matcher recognizes the two-application rule expressing function
+uniqueness. Its second result loop chooses one representative while the first
+loop still visits every new result. The representative is chosen from old
+results before new ones: choosing a new result itself could fail to connect it
+to an existing value. This gives a linear equality star for each domain without
+relying on rule or function names.
 
-### 4. Schedule ambient feedback by actual owners and morphisms
+In a mixed recursive global component, functionality groups saturate before
+other rule groups run. The original outer fixed point and model-child traversal
+remain, so equalities enabling other rules still feed back into functionality.
+The two groups have independent consumer checkpoints, and stable inputs are
+classified using the original SCC before partitioning. Allocation requests
+remain behind the existing allocation barrier; `close_until` can still stop
+and resume between completed steps. Model-local scheduling is unchanged.
 
-Once transport is incremental, improve `RuleScope` and scheduling so equality
-and ambient dependencies do not force an entire model type into a global
-loop. Use owner-keyed tasks for local rules and morphism-keyed tasks for rules
-connecting contexts. Global declarations can supply shared inputs without
-making every consumer globally active.
+Empty-conclusion flat rules are discarded before semi-naive expansion, and
+reflexive equality outputs are omitted. The RAM scheduler reconsiders ready
+statements after each selection so newly enabled guards can run before another
+loop expands the branch. These changes preserve the original data dependencies.
 
-This needs runtime dependencies for the actual owner values. A context-local
-equality may wake ambient rows referring to its members, then particular
-target contexts; it must not be silently treated as having no external
-effects. Merely removing the existing global fallback is unsound. Cyclic
-dependencies still need a local fixed point, and dynamically introduced
-edges must update the work queue.
+### Avoid iterator and build-cache overhead
 
-This is the larger change that should deliver the intended property: adding
-one context costs its new material and the consequences reachable from it,
-rather than a pass over every old context. Keep the one-call `close()` API.
+Immutable weight-balanced-tree iteration stores mapping depths rather than
+cloning a mapping vector at every node. Nodes without a left child yield
+directly, avoiding an ancestor-stack allocation for singleton suffixes. Mapping
+prefixes remain valid until the corresponding ancestor is popped, including
+for filtered and nested lazy mappings.
 
-### 5. Re-profile before changing matching or allocation policy
-
-Rule joins, candidate deduplication, and non-surjective allocation barriers
-may matter after transport costs fall. Count matches and newly inserted facts
-before optimizing a particular rule. Moving allocations into local work queues
-could reduce global waves, but eager allocation can also create more temporary
-witnesses before equality collapses them. Treat that as a separate experiment.
-
-Frontend placeholder reuse may reduce input size, but should not be the main
-fix. Do not trade away fresh contexts, equality reflection, partial images,
-or the bounded computation policy to obtain a faster benchmark.
+Component-build cache keys now include runtime library contents, compiler
+identity, optimization level, and debug mode. Reusing an rlib path after its
+contents changed must not leave rule components linked against stale runtime
+code. This is necessary for correct builds and performance comparisons; it
+is separate from evaluator closure time.
 
 ## Validation and benchmarks
 
-Add small scaled workloads to the existing scheduling benchmark harness, with
-executing integration coverage. They should combine model-local equality,
-ambient dependent rules, and partial morphisms; the existing model-chain
-fixtures do not reproduce this combination.
+Correctness is checked by executing generated evaluators. Coverage includes
+late partial images, disconnected contexts, graph growth and cycles, nested
+models, foreign members, owner and member equality, shared inherited suffixes,
+conflicting function results, and interrupted `close_until` followed by resume.
+The functionality barrier is exercised with equalities cascading through
+function domains and a deferred allocation. Existing ETT positive and negative
+checks retain the unchanged Nat and Vec developments.
 
-Measure initial closure, unchanged closure, one new disconnected context, one
-new weakening edge, one late member image, and one equality in a disconnected
-context. Scale the pre-existing graph while keeping each update fixed. Record
-edge visits, tuples or batches transported, graph reconstructions, allocation
-traffic, and canonical relation sizes as well as wall time.
+Temporary differential checks compare tree rewrites, partial-map delta joins,
+and lazy iteration against ordinary set/map or direct traversal semantics.
+These development probes are not additional permanent unit-test suites.
+Independent reviewers examine the generality and correctness of the transport,
+scheduling, and runtime mechanisms separately from benchmark results.
 
-Correctness cases include equality enabling a previously impossible join,
-late partial images, independent contexts, cycles with owned support, nested
-models, foreign members of ambient relations, model-owner merges, conflicting
-function results, and interrupted `close_until`. Compare optimized and
-reference closures. Keep the existing ETT positive and negative integration
-checks. Run full Nat+Vec manually for performance validation rather than
-adding another redundant long-running unit test.
+Performance runs should be sequential and repeated. Measure initial closure,
+unchanged closure, a disconnected context, late images, graph changes, and an
+isolated equality. Compare wall time alongside transported batches, active
+edge visits, allocation traffic, and final canonical cardinalities. A sparse
+update should avoid replaying unrelated relation/edge combinations; global
+rule scheduling and conservative nested fallbacks can still do wider work.
 
-The success criterion is proportional work on sparse updates, not a promised
-millisecond target. The initial target is eliminating repeated secondary
-transport and reducing unaffected edge visits toward zero. The full workload
-then checks whether those improvements survive the combined theory.
+Current `graph_preparation` metrics include cache lookups and occasional graph
+reconstruction. Their call count is not a graph-build count and must not be
+compared directly with the historical `Graph builds` columns. Current primary
+edge counters exclude wrapper calls; older instrumentation included them, so
+edge-count comparisons must account for that correction. Candidate outputs and
+transport batches remain counts of attempted work, not unique new facts.
+
+The functionality schedule can change which element represents an equality
+class. Raw tuple hashes therefore need not match the baseline even when the
+models agree. Compare canonical cardinalities and observable proof-checking
+results, and use correspondence-aware comparisons where identities matter.
+Equal cardinalities alone are not a correctness proof. Final optimized timings
+and validation results should be recorded alongside their exact build metadata.
 
 ## Reproduction
 
 `profile-ett.py` is a diagnostic for this generated kernel shape, not a stable
-profiling API. It fails if the expected shape changes. After a normal Cargo
-build, it instruments only copies in the chosen output directory. Production
-source and generated evaluator files are not patched. It requires Python 3
-and the existing Rust toolchain.
+profiling API. It discovers the current global strata and instrumentation
+methods, and fails if required generated structures are missing. It first
+builds the release evaluator, then instruments only copies in the chosen output
+directory. Production source and generated evaluator files are not patched.
+It requires Python 3 and the existing Rust toolchain.
 
 ```sh
 python3 eqlog-bench/profile-ett.py /tmp/ett-timing
 /tmp/ett-timing/profile eqlog-ett/nat.ett > /tmp/nat-profile.csv
 /tmp/ett-timing/profile eqlog-ett/nat.ett eqlog-ett/vec.ett > /tmp/full-profile.csv
 ETT_PROFILE_UPDATES=1 /tmp/ett-timing/profile eqlog-ett/nat.ett > /tmp/updates-profile.csv
-python3 eqlog-bench/profile-ett.py /tmp/ett-primary --reuse-primary
-/tmp/ett-primary/profile eqlog-ett/nat.ett > /tmp/primary-profile.csv
 python3 eqlog-bench/profile-ett.py /tmp/ett-alloc --allocations
 ```
 
@@ -325,8 +359,9 @@ inherited variants and canonical type-element sets; they do not serialize the
 entire union-find representation. The output directory also records the code
 revision, compiler version, generated-source SHA-256, and diagnostic options.
 
-The optional `--reuse-primary` build is a diagnostic ablation, not a proposed
-production implementation. The optional `--allocations` build counts requested
+The optional `--reuse-primary` flag reproduces the historical ablation on the
+baseline revision. It rejects current generated code because eligible primary
+reuse is already compiled in. The optional `--allocations` build counts requested
 allocation bytes during `close()`; use separate runs because the allocator
 instrumentation changes timings. Neither allocation traffic nor propagated
 batch counts represents live memory or distinct facts.

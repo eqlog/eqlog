@@ -5,8 +5,8 @@ arguments, so ambient rules can relate distinct context models without
 flattening their members. Preserve owner bindings in native and dynamic
 evaluators, including foreign members of model relations.
 
-Add eqlog-ett with a Lean-like frontend and an Eqlog kernel for
-context extension, partial substitutions, identity types with equality
+Add eqlog-ett with a Lean-like frontend and an Eqlog kernel for context
+extension, partial substitutions, identity types with equality
 reflection, a small universe, and indexed inductive families with
 dependent constructor telescopes and elimination. Morphisms follow
 substitution. Fresh statement scopes keep equality local; open
@@ -21,7 +21,20 @@ including append, replication, mapping, and sums. Cover rejected proofs,
 invalid indices and universe codes, context isolation, partial images,
 and the computation bound in evaluator integration tests.
 
-Measure evaluator transport, indexing, scheduling, and equality costs on
-the proof development. Preserve a reproducible diagnostic and a staged
-plan for making model evaluation incremental without weakening the
-checker semantics.
+Make native model evaluation incremental through transport checkpoints,
+partial-map deltas, and changed-owner frontiers. Reuse graph topology
+and fully prepared primary relations when building alternate indices.
+Keep inherited facts through equality quotients while preserving shared
+subtrees, so unrelated changes do not replay existing transport.
+
+Reconsider join priorities after each bound variable and connect
+conflicting function results to one old-preferred representative.
+Saturate functionality before larger joins while retaining independent
+consumer checkpoints. Avoid repeated mapping-path and singleton iterator
+allocations. Include runtime artifacts and compiler settings in the
+component cache key.
+
+Preserve the complete Nat and Vec development, bounded computation, and
+one-call closure. Record reproducible profiles and validate the generic
+optimizations against evaluator integration cases and independent
+review.

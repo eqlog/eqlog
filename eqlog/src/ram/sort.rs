@@ -52,6 +52,7 @@ fn collect_stmt_dependencies(
                 sets,
                 loop_var_el,
                 loop_var_set,
+                first_only: _,
             }) => {
                 for set in sets {
                     let set_def_site = *set_var_def_sites
@@ -115,36 +116,28 @@ pub fn sort_ram_stmts(stmts: &[RamStmt], parameters: &BTreeSet<Arc<str>>) -> Vec
         }
     }
 
-    let mut open_stmts: Vec<usize> = dependencies
+    let mut open_stmts: BTreeSet<(usize, usize)> = dependencies
         .iter()
         .enumerate()
-        .filter_map(|(i, deps)| if deps.is_empty() { Some(i) } else { None })
+        .filter_map(|(i, deps)| deps.is_empty().then(|| (ram_stmt_cost(&stmts[i]), i)))
         .collect();
 
     let mut result_stmts: Vec<RamStmt> = Vec::new();
 
     while result_stmts.len() != stmts.len() {
-        assert!(
-            !open_stmts.is_empty(),
-            "The dependency graph must not contain cycles"
-        );
+        let (_, i) = open_stmts
+            .pop_first()
+            .expect("The dependency graph must not contain cycles");
+        result_stmts.push(stmts[i].clone());
 
-        let mut stmts: Vec<&RamStmt> = open_stmts.iter().copied().map(|i| &stmts[i]).collect();
-        stmts.sort_by_key(|stmt| ram_stmt_cost(*stmt));
-
-        result_stmts.extend(stmts.into_iter().cloned());
-
-        let mut new_open_stmts = Vec::new();
-        for i in open_stmts.into_iter() {
-            for j in reverse_dependencies[i].iter().copied() {
-                dependencies[j].retain(|i0| *i0 != i);
-                if dependencies[j].is_empty() {
-                    new_open_stmts.push(j);
-                }
+        // A newly enabled guard can reject this branch before another loop
+        // expands it. Reconsider priorities after every dependency is satisfied.
+        for &j in &reverse_dependencies[i] {
+            dependencies[j].remove(&i);
+            if dependencies[j].is_empty() {
+                open_stmts.insert((ram_stmt_cost(&stmts[j]), j));
             }
-            reverse_dependencies[i].clear();
         }
-        open_stmts = new_open_stmts;
     }
 
     result_stmts

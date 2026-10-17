@@ -348,6 +348,7 @@ pub fn plan_index_preparation(
         let plan = IndexPreparation {
             indices: inputs,
             membership_only,
+            native_indices_from_primary: BTreeSet::new(),
             native: NativePreparation {
                 native_indices: required_native,
                 support_indices: prepared_support,
@@ -364,6 +365,38 @@ pub fn plan_index_preparation(
         }
     }
     for (stratum, preparation) in schedule.strata.iter().zip(&mut preparations) {
+        if stratum.model.is_none() {
+            for &id in &preparation.native.native_indices {
+                let rel = match native[id].rel {
+                    FlatInRel::Rel(rel) => rel,
+                    FlatInRel::RelWithDiagonals { .. }
+                    | FlatInRel::TypeSet(_)
+                    | FlatInRel::Equality(_) => {
+                        unreachable!("native indices require full member relations")
+                    }
+                };
+                assert!(preparation.native.propagation.relations.contains(&rel));
+                let parent = rel.parent_model_type(signature).unwrap();
+                let owner_columns = signature.type_(parent).parents.len() + 1;
+                let maps_members = (owner_columns..rel.arity(signature).len()).any(|column| {
+                    native[id]
+                        .models
+                        .iter()
+                        .any(|&model| rel.column_maps_under(signature, column, model))
+                });
+                // Copy-only transport shares entire payload trees. A row-wise
+                // permutation would lose that sharing without avoiding mappings.
+                if maps_members {
+                    preparation.native_indices_from_primary.insert(id);
+                }
+            }
+        }
+        preparation.native.support_indices = preparation
+            .native
+            .native_indices
+            .difference(&preparation.native_indices_from_primary)
+            .flat_map(|&id| native[id].support_indices.iter().cloned())
+            .collect();
         let stable_indices: BTreeSet<_> = preparation
             .indices
             .iter()
@@ -396,7 +429,7 @@ pub fn plan_index_preparation(
             .filter(|&id| stratum.stable_inputs.contains(&native[id].rel))
             .collect();
         let stable_support = stable_native
-            .iter()
+            .difference(&preparation.native_indices_from_primary)
             .flat_map(|&id| native[id].support_indices.iter().cloned())
             .collect();
         preparation
@@ -406,7 +439,7 @@ pub fn plan_index_preparation(
         preparation.native.support_indices = preparation
             .native
             .native_indices
-            .iter()
+            .difference(&preparation.native_indices_from_primary)
             .flat_map(|&id| native[id].support_indices.iter().cloned())
             .collect();
         preparation.native.propagation =

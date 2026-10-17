@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::wbtree::{map, map::WBTreeMap, set::WBTreeSet};
 
 // type definitions
@@ -48,6 +50,137 @@ pub struct PrefixTree8 {
 pub struct PrefixTree9 {
     pub map: WBTreeMap<PrefixTree8>,
 }
+
+#[derive(Default)]
+struct KeyReplacementCache {
+    tree1: BTreeMap<usize, (PrefixTree1, Option<PrefixTree1>)>,
+    tree2: BTreeMap<usize, (PrefixTree2, Option<PrefixTree2>)>,
+    tree3: BTreeMap<usize, (PrefixTree3, Option<PrefixTree3>)>,
+    tree4: BTreeMap<usize, (PrefixTree4, Option<PrefixTree4>)>,
+    tree5: BTreeMap<usize, (PrefixTree5, Option<PrefixTree5>)>,
+    tree6: BTreeMap<usize, (PrefixTree6, Option<PrefixTree6>)>,
+    tree7: BTreeMap<usize, (PrefixTree7, Option<PrefixTree7>)>,
+    tree8: BTreeMap<usize, (PrefixTree8, Option<PrefixTree8>)>,
+    tree9: BTreeMap<usize, (PrefixTree9, Option<PrefixTree9>)>,
+}
+
+impl PrefixTree0 {
+    pub fn replace_keys(&self, _replacements: [&BTreeMap<u32, u32>; 0]) -> Option<Self> {
+        None
+    }
+
+    fn replace_keys_cached(
+        &self,
+        _replacements: [&BTreeMap<u32, u32>; 0],
+        _cache: &mut KeyReplacementCache,
+    ) -> Option<Self> {
+        None
+    }
+}
+
+macro_rules! replace_keys {
+    (@overwrite $tree:ident, set, $key:expr, $subtree:expr) => {
+        $tree.insert_restriction($key, $subtree)
+    };
+    (@overwrite $tree:ident, map, $key:expr, $subtree:expr) => {
+        $tree.map.insert($key, $subtree)
+    };
+    ($tree:ident, $arity:literal, $storage:ident, $cache_field:ident) => {
+        impl $tree {
+            /// Renames specified keys, leaving other keys and unchanged subtrees shared.
+            /// Returns `None` when no stored key changes. Colliding rows are united.
+            pub fn replace_keys(
+                &self,
+                replacements: [&BTreeMap<u32, u32>; $arity],
+            ) -> Option<Self> {
+                if replacements.iter().all(|mapping| mapping.is_empty()) {
+                    return None;
+                }
+                self.replace_keys_cached(replacements, &mut KeyReplacementCache::default())
+            }
+
+            fn replace_keys_cached(
+                &self,
+                replacements: [&BTreeMap<u32, u32>; $arity],
+                cache: &mut KeyReplacementCache,
+            ) -> Option<Self> {
+                let identity = self.$storage.root_identity();
+                if let Some((_, result)) = cache.$cache_field.get(&identity) {
+                    return result.clone();
+                }
+                let result = self.replace_keys_uncached(replacements, cache);
+                // Pin each input snapshot so its identity cannot be reused while
+                // this call traverses shared suffixes. Cache absent changes too.
+                cache
+                    .$cache_field
+                    .insert(identity, (self.clone(), result.clone()));
+                result
+            }
+
+            fn replace_keys_uncached(
+                &self,
+                replacements: [&BTreeMap<u32, u32>; $arity],
+                cache: &mut KeyReplacementCache,
+            ) -> Option<Self> {
+                let remaining = replacements[1..].try_into().unwrap();
+                let mut changes = Vec::new();
+                let suffix_changes = replacements[1..].iter().any(|mapping| !mapping.is_empty());
+                if !suffix_changes && replacements[0].len() <= self.$storage.len_upper_bound() {
+                    for (&old, &new) in replacements[0] {
+                        if old == new {
+                            continue;
+                        }
+                        if let Some(subtree) = self.get(old) {
+                            changes.push((old, new, subtree.clone()));
+                        }
+                    }
+                } else {
+                    for (old, subtree) in self.iter_restrictions() {
+                        let new = replacements[0].get(&old).copied().unwrap_or(old);
+                        let replaced = if suffix_changes {
+                            subtree.replace_keys_cached(remaining, cache)
+                        } else {
+                            None
+                        };
+                        if old != new || replaced.is_some() {
+                            let result = replaced.unwrap_or_else(|| subtree.clone());
+                            changes.push((old, new, result));
+                        }
+                    }
+                }
+                if changes.is_empty() {
+                    return None;
+                }
+                let mut result = self.clone();
+                // Set stationary values before merging incoming keys, and remove
+                // moved keys before inserting replacements that may collide.
+                for (old, new, subtree) in &changes {
+                    if old == new {
+                        replace_keys!(@overwrite result, $storage, *old, subtree.clone());
+                    } else {
+                        result.$storage.remove(old);
+                    }
+                }
+                for (old, new, subtree) in changes {
+                    if old != new {
+                        result.insert_restriction(new, subtree);
+                    }
+                }
+                Some(result)
+            }
+        }
+    };
+}
+
+replace_keys!(PrefixTree1, 1, set, tree1);
+replace_keys!(PrefixTree2, 2, map, tree2);
+replace_keys!(PrefixTree3, 3, map, tree3);
+replace_keys!(PrefixTree4, 4, map, tree4);
+replace_keys!(PrefixTree5, 5, map, tree5);
+replace_keys!(PrefixTree6, 6, map, tree6);
+replace_keys!(PrefixTree7, 7, map, tree7);
+replace_keys!(PrefixTree8, 8, map, tree8);
+replace_keys!(PrefixTree9, 9, map, tree9);
 
 // new methods
 impl PrefixTree0 {

@@ -139,90 +139,107 @@ fn display_in_set_expr<'a>(expr: &'a InSetExpr, ctx: &'a RustGenCtx<'a>) -> impl
 }
 
 fn display_stmt_pre<'a>(ram_stmt: &'a RamStmt, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
-    FmtFn(move |f| {
-        match ram_stmt {
-            RamStmt::DefineSet(DefineSetStmt { defined_var, expr }) => {
-                let expr = display_in_set_expr(expr, ctx);
-                let strictness = defined_var.strictness;
-                let defined_var = display_set_var(defined_var, ctx);
-                match strictness {
-                    Strictness::Lazy => {
-                        writedoc! {f, "
+    FmtFn(move |f| match ram_stmt {
+        RamStmt::DefineSet(DefineSetStmt { defined_var, expr }) => {
+            let expr = display_in_set_expr(expr, ctx);
+            let strictness = defined_var.strictness;
+            let defined_var = display_set_var(defined_var, ctx);
+            match strictness {
+                Strictness::Lazy => {
+                    writedoc! {f, "
                             let {defined_var} =
                             LazyCell::new(|| {{
                             {expr}
                             }});
                         "}
-                    }
-                    Strictness::Strict => {
-                        writedoc! {f, "
+                }
+                Strictness::Strict => {
+                    writedoc! {f, "
                             let {defined_var} =
                             {expr}
                             ;
                         "}
-                    }
                 }
             }
-            RamStmt::Iter(IterStmt {
-                sets,
-                loop_var_el,
-                loop_var_set,
-            }) => {
-                let SetVar {
-                    name: _,
-                    arity: _,
-                    strictness,
-                } = loop_var_set;
-                match strictness {
-                    Strictness::Lazy => {
-                        panic!("Loop set variables for iter statements must be strict")
-                    }
-                    Strictness::Strict => {}
+        }
+        RamStmt::Iter(IterStmt {
+            sets,
+            loop_var_el,
+            loop_var_set,
+            first_only,
+        }) => {
+            let SetVar {
+                name: _,
+                arity: _,
+                strictness,
+            } = loop_var_set;
+            match strictness {
+                Strictness::Lazy => {
+                    panic!("Loop set variables for iter statements must be strict")
                 }
-                assert!(sets.len() >= 1, "Expected at least one set in IterStmt");
-                let set_head = display_set_var(&sets[0], ctx);
-                let set_tail_chain_iters = sets[1..]
-                    .iter()
-                    .map(|set| {
-                        FmtFn(move |f| {
-                            let set = display_set_var(set, ctx);
-                            write!(f, ".chain({set}.iter_restrictions())")
-                        })
+                Strictness::Strict => {}
+            }
+            assert!(sets.len() >= 1, "Expected at least one set in IterStmt");
+            let set_head = display_set_var(&sets[0], ctx);
+            let set_tail_chain_iters = sets[1..]
+                .iter()
+                .map(|set| {
+                    FmtFn(move |f| {
+                        let set = display_set_var(set, ctx);
+                        write!(f, ".chain({set}.iter_restrictions())")
                     })
-                    .format("\n");
-                let loop_var_set = display_set_var(loop_var_set, ctx);
-                writedoc! {f, "
+                })
+                .format("\n");
+            let loop_var_set = display_set_var(loop_var_set, ctx);
+            let limit = if *first_only { ".take(1)" } else { "" };
+            writedoc! {f, "
                     #[allow(unused_variables)]
                     for
                     ({loop_var_el}, {loop_var_set})
                     in
                     {set_head}.iter_restrictions()
                     {set_tail_chain_iters}
+                    {limit}
                     {{
                 "}
+        }
+        RamStmt::Insert(InsertStmt { rel, args }) => {
+            let rel_field = display_out_set_field_name(rel, ctx);
+            match rel {
+                FlatOutRel::Equality(_) => {
+                    let [lhs, rhs] = args.as_slice() else {
+                        unreachable!("equality output has two operands")
+                    };
+                    if lhs == rhs {
+                        return Ok(());
+                    }
+                    writedoc! {f, "
+                            if {lhs} != {rhs} {{
+                                env.{rel_field}.push([{lhs}, {rhs}]);
+                            }}
+                        "}
+                }
+                FlatOutRel::Rel(_) | FlatOutRel::FuncDomain(_) => {
+                    let args = args.iter().format(", ");
+                    writedoc! {f, "
+                            env.{rel_field}.push([{args}]);
+                        "}
+                }
             }
-            RamStmt::Insert(InsertStmt { rel, args }) => {
-                let rel_field = display_out_set_field_name(rel, ctx);
-                let args = args.iter().format(", ");
-                // TODO: Check that this row doesn't exist already in indices.
-                writedoc! {f, "
-                    env.{rel_field}.push([{args}]);
-                "}
-            }
-            RamStmt::GuardInhabited(GuardInhabitedStmt { sets }) => {
-                let checks = sets
-                    .iter()
-                    .map(|set| {
-                        FmtFn(move |f| {
-                            let set = display_set_var(set, ctx);
-                            write!(f, "|| !{set}.is_empty()")
-                        })
+        }
+        RamStmt::GuardInhabited(GuardInhabitedStmt { sets }) => {
+            let checks = sets
+                .iter()
+                .map(|set| {
+                    FmtFn(move |f| {
+                        let set = display_set_var(set, ctx);
+                        write!(f, "|| !{set}.is_empty()")
                     })
-                    .format("");
-                writedoc! {f, "
+                })
+                .format("");
+            writedoc! {f, "
                     if false {checks} {{
                 "}
-            }
         }
     })
 }

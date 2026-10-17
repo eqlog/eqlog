@@ -1,5 +1,9 @@
+use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::ops::Deref;
+use std::rc::Rc;
 
+use crate::versions::SnapshotSet;
 use crate::{PrefixTree1, PrefixTree2};
 
 #[derive(Debug)]
@@ -14,6 +18,114 @@ pub struct MorphismComponent {
     pub objects: Vec<u32>,
     pub internal: Vec<MorphismWithSignature>,
     pub outgoing: Vec<MorphismWithSignature>,
+}
+
+/// All relations using this topology share its sorted edge signatures.
+#[derive(Debug)]
+pub struct MorphismGraph {
+    components: Vec<MorphismComponent>,
+    pub(crate) signatures: Rc<[(u32, u32, u32, bool)]>,
+}
+
+impl Deref for MorphismGraph {
+    type Target = [MorphismComponent];
+
+    fn deref(&self) -> &Self::Target {
+        &self.components
+    }
+}
+
+fn edge_signatures(graph: &[MorphismComponent]) -> Vec<(u32, u32, u32, bool)> {
+    let mut edges: Vec<_> = graph
+        .iter()
+        .flat_map(|component| {
+            component
+                .internal
+                .iter()
+                .map(|morphism| (morphism, true))
+                .chain(component.outgoing.iter().map(|morphism| (morphism, false)))
+        })
+        .map(|(morphism, internal)| (morphism.morph, morphism.dom, morphism.cod, internal))
+        .collect();
+    edges.sort_unstable();
+    edges
+}
+
+struct GraphSnapshot {
+    dom: PrefixTree2,
+    cod: PrefixTree2,
+    objects: PrefixTree1,
+    components: Rc<MorphismGraph>,
+}
+
+/// Reuses graph topology across relations and strata with the same inputs.
+pub struct MorphismGraphCache<const N: usize> {
+    owners: RefCell<BTreeMap<[u32; N], GraphSnapshot>>,
+}
+
+impl<const N: usize> MorphismGraphCache<N> {
+    pub fn new() -> Self {
+        Self {
+            owners: RefCell::new(BTreeMap::new()),
+        }
+    }
+
+    pub fn components(
+        &self,
+        parents: [u32; N],
+        dom: &PrefixTree2,
+        cod: &PrefixTree2,
+        objects: &PrefixTree1,
+    ) -> Rc<MorphismGraph> {
+        let mut owners = self.owners.borrow_mut();
+        if let Some(previous) = owners.get(&parents) {
+            if previous.dom.shares_root(dom)
+                && previous.cod.shares_root(cod)
+                && previous.objects.shares_root(objects)
+            {
+                return Rc::clone(&previous.components);
+            }
+        }
+        let mut graph_objects = objects.clone();
+        if N > 0 {
+            // Propagated endpoints can precede parent equalities. Include
+            // them in the graph without asserting additional membership.
+            for [object, _] in dom.iter() {
+                graph_objects.insert([object]);
+            }
+            for [_, object] in cod.iter() {
+                graph_objects.insert([object]);
+            }
+        }
+        let components = morphism_components(dom, cod, &graph_objects);
+        let signatures = edge_signatures(&components);
+        let signatures = if let Some(previous) = owners
+            .get(&parents)
+            .filter(|previous| previous.components.signatures.as_ref() == signatures.as_slice())
+        {
+            Rc::clone(&previous.components.signatures)
+        } else {
+            signatures.into()
+        };
+        let components = Rc::new(MorphismGraph {
+            components,
+            signatures,
+        });
+        owners.insert(
+            parents,
+            GraphSnapshot {
+                dom: dom.clone(),
+                cod: cod.clone(),
+                objects: objects.clone(),
+                components: Rc::clone(&components),
+            },
+        );
+        components
+    }
+
+    pub fn retain_owners(&mut self, mut retain: impl FnMut(&[u32; N]) -> bool) {
+        self.owners.get_mut().retain(|owners, _| retain(owners));
+    }
 }
 
 /// Groups mutually reachable objects in topological order.

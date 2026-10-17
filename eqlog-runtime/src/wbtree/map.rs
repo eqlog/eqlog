@@ -775,6 +775,13 @@ impl<V: Clone> WBTreeMap<V> {
         }
     }
 
+    /// The identity remains valid while a snapshot of this root is alive.
+    pub(crate) fn root_identity(&self) -> usize {
+        self.root
+            .as_ref()
+            .map_or(0, |root| Rc::as_ptr(root) as usize)
+    }
+
     pub const fn new() -> Self {
         WBTreeMap { root: None, len: 0 }
     }
@@ -884,6 +891,11 @@ impl<V: Clone> WBTreeMap<V> {
         } else {
             self.len
         }
+    }
+
+    /// Includes keys filtered by lazy mappings, without traversing them.
+    pub(crate) fn len_upper_bound(&self) -> usize {
+        self.len
     }
 
     pub fn clear(&mut self) {
@@ -1087,77 +1099,52 @@ impl<V: Clone> WBTreeMap<V> {
     }
 }
 
-// Iterator implementation
-// We need to track pointers to DataNodes since Node is an enum
-// Each stack entry includes the accumulated mappings at that point
 pub struct Iter<'a, V: Clone> {
-    // Stack entries: (data_node, accumulated_mappings_at_this_level)
-    // TODO: We shouldn't save the full path of mappings for element in the stack.
-    // This looks like (log n)^2 complexity instead of log n.
-    // Instead, we should just maintain the current_mappings value for the current path of
-    // mappings, and `stack` should probably be `Node` instead of just `DataNode`.
-    // Then, when we pop a MappingNode from `stack`, we have to pop an element from
-    // `current_mappings` as well, but not if we pop a `DataNode`.
-    stack: Vec<(&'a DataNode<V>, Vec<&'a PrefixTree2>)>,
+    stack: Vec<(&'a DataNode<V>, usize)>,
     current: Option<&'a Option<Rc<Node<V>>>>,
-    // Current accumulated mappings (grows as we descend through mapping nodes)
     current_mappings: Vec<&'a PrefixTree2>,
 }
 
 impl<'a, V: Clone> Iter<'a, V> {
-    fn descend_left(&mut self) {
+    fn next_node(&mut self) -> Option<&'a DataNode<V>> {
         while let Some(opt_node) = self.current {
             match opt_node {
                 None => {
                     self.current = None;
-                    return;
                 }
                 Some(node) => match node.as_ref() {
                     Node::Data(data_node) => {
-                        // Push this node with a snapshot of current mappings
-                        self.stack.push((data_node, self.current_mappings.clone()));
+                        // Singleton suffixes do not need an allocated ancestor stack.
+                        if data_node.left.is_none() {
+                            self.current = Some(&data_node.right);
+                            return Some(data_node);
+                        }
+                        self.stack.push((data_node, self.current_mappings.len()));
                         self.current = Some(&data_node.left);
                     }
                     Node::Mapping(mapping_node) => {
-                        // Accumulate this mapping
                         self.current_mappings.push(&mapping_node.mapping);
                         self.current = Some(&mapping_node.child);
                     }
                 },
             }
         }
+        let (data_node, mapping_depth) = self.stack.pop()?;
+        // Descendants only append mappings, so the ancestor's prefix stays valid.
+        self.current_mappings.truncate(mapping_depth);
+        self.current = Some(&data_node.right);
+        Some(data_node)
     }
 }
 
 impl<'a, V: Clone> Iterator for Iter<'a, V> {
-    // Return owned key since we compute it by applying mappings
     type Item = (u32, &'a V);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            // First descend left as far as possible
-            self.descend_left();
-
-            // Pop from stack and return
-            if let Some((data_node, mappings)) = self.stack.pop() {
-                // Restore the mapping state for when we go right
-                self.current_mappings = mappings.clone();
-                self.current = Some(&data_node.right);
-
-                // Apply accumulated mappings to the key
-                let mapped_key = if mappings.is_empty() {
-                    Some(data_node.key)
-                } else {
-                    apply_mappings(&mappings, data_node.key)
-                };
-
-                // If key is in mapping domain, yield it; otherwise skip
-                if let Some(mk) = mapped_key {
-                    return Some((mk, &data_node.value));
-                }
-                // Key not in mapping domain, continue to next
-            } else {
-                return None;
+            let data_node = self.next_node()?;
+            if let Some(key) = apply_mappings(&self.current_mappings, data_node.key) {
+                return Some((key, &data_node.value));
             }
         }
     }

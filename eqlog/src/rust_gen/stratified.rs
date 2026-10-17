@@ -508,7 +508,12 @@ impl<'s> Codegen<'s> {
                     if stable {
                         begin_stable_input(f, &format!("native_input_{id}"), rel, ctx)?;
                     }
-                    if stratum.model.is_some() {
+                    if self.preparations[s]
+                        .native_indices_from_primary
+                        .contains(id)
+                    {
+                        writeln!(f, "self.__prepare_native_index_from_primary_{id}();")?;
+                    } else if stratum.model.is_some() {
                         writeln!(f, "self.__extend_native_index_{id}();")?;
                     } else {
                         writeln!(f, "self.__prepare_native_index_{id}();")?;
@@ -1185,7 +1190,7 @@ fn emit_components(
         "{}",
         display_morphism_components(model, ctx, selection, true)
     )?;
-    writeln!(f, "for component in components {{")?;
+    writeln!(f, "for component in components.iter() {{")?;
     writeln!(f, "#[allow(unused_variables)] let retain_component_{depth} = {retain_own} || !component.internal.is_empty();")?;
     writedoc! {f, "
             loop {{

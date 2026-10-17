@@ -11,6 +11,10 @@ impl WBTreeSet {
         self.map.shares_root(&other.map)
     }
 
+    pub(crate) fn root_identity(&self) -> usize {
+        self.map.root_identity()
+    }
+
     pub const fn new() -> Self {
         WBTreeSet {
             map: WBTreeMap::new(),
@@ -35,6 +39,10 @@ impl WBTreeSet {
 
     pub fn len(&self) -> usize {
         self.map.len()
+    }
+
+    pub(crate) fn len_upper_bound(&self) -> usize {
+        self.map.len_upper_bound()
     }
 
     pub fn clear(&mut self) {

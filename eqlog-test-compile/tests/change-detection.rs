@@ -1,7 +1,9 @@
 use eqlog::*;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
+use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::SystemTime;
 use tempdir::TempDir;
 
@@ -179,4 +181,127 @@ fn model_mode_changes_invalidate_cache() {
             assert_eq!(read_modified(&out_file), sentinel);
         }
     }
+}
+
+fn run(command: &mut Command) {
+    let output = command
+        .output()
+        .expect("Failed to run compiler or evaluator");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "Command failed: {command:?}\n{stderr}",
+    );
+}
+
+#[test]
+fn component_cache_tracks_replaced_runtime_and_compiler_options() {
+    let directory = TempDir::new("component-runtime-cache").unwrap();
+    let in_dir = directory.path().join("input");
+    fs::create_dir(&in_dir).unwrap();
+    fs::write(
+        in_dir.join("theory.eql"),
+        indoc! {"
+            type El;
+            pred seed(El);
+            pred reached(El);
+            rule propagate { if seed(x); then reached(x); }
+        "},
+    )
+    .unwrap();
+    let rustc = env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
+    let runtime_source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../eqlog-runtime/src/lib.rs");
+    let runtime = directory.path().join("libeqlog_runtime.rlib");
+    let compile_runtime = |metadata: &str| {
+        run(Command::new(&rustc)
+            .arg(&runtime_source)
+            .args([
+                "--crate-name",
+                "eqlog_runtime",
+                "--crate-type=rlib",
+                "--edition=2021",
+            ])
+            .arg("-C")
+            .arg(format!("metadata={metadata}"))
+            .arg("-o")
+            .arg(&runtime)
+            .env("OUT_DIR", directory.path()));
+    };
+    compile_runtime("first");
+    let mut config = Config {
+        in_dir,
+        out_dir: directory.path().join("output"),
+        component_build: Some(ComponentConfig {
+            component_out_dir: directory.path().join("components"),
+            rustc_path: rustc.clone().into(),
+            runtime_rlib_path: runtime.clone(),
+            debug: false,
+            opt_level: "0".to_string(),
+        }),
+        options: CompileOptions::default(),
+    };
+    process(&config).unwrap();
+    let component_dir = directory.path().join("components/theory.eql");
+    let components: Vec<_> = fs::read_dir(&component_dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "rlib"))
+        .collect();
+    assert!(!components.is_empty());
+    let module = config.out_dir.join("theory.eql.rs");
+    let outputs: Vec<_> = components.iter().chain(std::iter::once(&module)).collect();
+    for path in &outputs {
+        pin_modified(path);
+    }
+    process(&config).unwrap();
+    for path in &outputs {
+        assert_eq!(read_modified(path), SystemTime::UNIX_EPOCH);
+    }
+
+    compile_runtime("second");
+    process(&config).unwrap();
+    for path in &outputs {
+        assert_ne!(read_modified(path), SystemTime::UNIX_EPOCH);
+        pin_modified(path);
+    }
+    config.component_build.as_mut().unwrap().opt_level = "1".to_string();
+    process(&config).unwrap();
+    for path in &outputs {
+        assert_ne!(read_modified(path), SystemTime::UNIX_EPOCH);
+    }
+
+    let main = directory.path().join("main.rs");
+    fs::write(
+        &main,
+        formatdoc! {"
+            include!({module:?});
+            fn main() {{
+                let mut model = Theory::new();
+                let element = model.new_el();
+                model.insert_seed(element);
+                model.close();
+                assert!(model.reached(element));
+            }}
+        "},
+    )
+    .unwrap();
+    let executable = directory.path().join("evaluator");
+    let mut compiler = Command::new(&rustc);
+    let runtime = runtime.display();
+    let component_dir = component_dir.display();
+    compiler
+        .arg(&main)
+        .arg("--edition=2024")
+        .arg("--extern")
+        .arg(format!("eqlog_runtime={runtime}"))
+        .arg("-L")
+        .arg(format!("native={component_dir}"))
+        .arg("-o")
+        .arg(&executable);
+    for component in &components {
+        let name = component.file_name().unwrap().to_str().unwrap();
+        compiler.arg("-l").arg(format!("static:+verbatim={name}"));
+    }
+    run(&mut compiler);
+    run(&mut Command::new(executable));
 }

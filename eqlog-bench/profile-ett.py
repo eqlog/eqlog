@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = args.output.resolve()
 OUT.mkdir(parents=True, exist_ok=True)
 build_result = subprocess.run(
-    ['cargo', 'build', '--release', '-p', 'eqlog-ett', '--message-format=json'],
+    ['cargo', 'build', '--release', '-p', 'eqlog-ett', '--features', 'eqlog/rebuild', '--message-format=json'],
     cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE)
 messages = [json.loads(line) for line in build_result.stdout.splitlines()]
 build_message, = [m for m in messages if m['reason'] == 'build-script-executed'
@@ -28,8 +28,11 @@ build = Path(build_message['out_dir']).parent
 generated = build / 'out/eqlog-ett/src/kernel.eql.rs'
 source = generated.read_text()
 original_hash = hashlib.sha256(source.encode()).hexdigest()
+prepared_primary = '__prepare_native_index_from_primary_0' in source
+cached_graph = '__morphism_graph_context.components' in source
+rewrites_inherited = 'let tm_replacements' in source
 strata = re.findall(r'fn (__run_stratum_\d+(?:_at)?)\(', source)
-assert len(strata) == 17, 'The generated kernel schedule has changed'
+assert strata, 'No generated strata found'
 if any(name.endswith('_at') for name in strata):
     raise RuntimeError('This diagnostic assumes the current globally scheduled ETT kernel')
 names = []
@@ -49,11 +52,12 @@ def functions(match):
         count = ' + '.join(f'self.{field}.len()' for field in uprooted)
         code += f'\nlet merged = {count};'
         code += f'\ncrate::profile::count({ident("merged_roots")}, merged);'
-        code += f'\ncrate::profile::count({ident("inherited_resets")}, usize::from(merged > 0));'
+        label = 'inherited_rewrites' if rewrites_inherited else 'inherited_resets'
+        code += f'\ncrate::profile::count({ident(label)}, usize::from(merged > 0));'
     return code
 
-source, fn_count = re.subn(r'\bfn (__run_stratum_\d+|__canonicalize_relations|recompute_model_indices\w*|__prepare_native_index_\d+|__extend_native_index_\d+|apply_func_defs|__close_until)\([^\n]*\)[^{\n]*\{', functions, source)
-assert fn_count == 37, f'Expected 37 timed functions, found {fn_count}'
+source, fn_count = re.subn(r'\bfn (__run_stratum_\d+|__canonicalize_relations|recompute_model_indices\w*|__prepare_native_index_(?:from_primary_)?\d+|__extend_native_index_\d+|apply_func_defs|__close_until)\([^\n]*\)[^{\n]*\{', functions, source)
+assert fn_count > len(strata), 'Expected transport and canonicalization methods'
 
 def rule(match):
     label = 'rule:' + match[2]
@@ -62,21 +66,28 @@ def rule(match):
     return f'{{ let before = {size};\n{timer(label)}\n{match[1]}}}; {match[2]}(env);\ncrate::profile::count({ident("output:" + match[2])}, ({size}) - before); }}'
 
 source, rule_count = re.subn(r'(let env = \w+Env \{[^}]+)\}; (\w+)\(env\);', rule, source)
-assert rule_count == 128, f'Expected 128 rule groups, found {rule_count}'
+assert rule_count, 'No generated rule calls found'
 
-source, edge_count = re.subn(r'(fn (__propagate_context_morphism\w*)\([\s\S]*?\n\) -> bool \{)', lambda m: m[1] + f'\ncrate::profile::count({ident("edge:" + m[2])}, 1);', source)
-assert edge_count == 6, f'Expected 6 primary transport functions, found {edge_count}'
-source, graph_count = re.subn(r'(let components = eqlog_runtime::morphism_components\([\s\S]*?\n\);)', lambda m: '{ let _profile_guard = crate::profile::enter(' + str(ident('graph')) + ');\n' + m[1] + '\ncomponents };', source)
-assert graph_count == 10, f'Expected 10 graph construction sites, found {graph_count}'
+edge_method = '__propagate_context_morphism_selected' if 'fn __propagate_context_morphism_selected' in source else '__propagate_context_morphism'
+source, edge_count = re.subn(r'(fn (' + edge_method + r'(?:_\w*)?)\([\s\S]*?\n\) -> bool \{)', lambda m: m[1] + f'\ncrate::profile::count({ident("edge:" + m[2])}, 1);', source)
+assert edge_count, 'No primary transport functions found'
+graph_call = r'self\.__morphism_graph_context.components' if cached_graph else r'eqlog_runtime::morphism_components'
+graph_metric = 'graph_preparation' if cached_graph else 'graph'
+source, graph_count = re.subn(r'(let components = ' + graph_call + r'\([\s\S]*?\n\);)', lambda m: '{ let _profile_guard = crate::profile::enter(' + str(ident(graph_metric)) + ');\n' + m[1] + '\ncomponents };', source)
+assert graph_count, 'No morphism graph preparation found'
 # Preserve the binding outside the timing scope.
-source = source.replace('{ let _profile_guard = crate::profile::enter(' + str(ident('graph')) + ');\nlet components =', 'let components = { let _profile_guard = crate::profile::enter(' + str(ident('graph')) + ');\nlet components =')
+source = source.replace('{ let _profile_guard = crate::profile::enter(' + str(ident(graph_metric)) + ');\nlet components =', 'let components = { let _profile_guard = crate::profile::enter(' + str(ident(graph_metric)) + ');\nlet components =')
 
 source = source.replace('propagated.push((', f'crate::profile::count({ident("transport_batches")}, 1); propagated.push((')
+for condition in ['!source_delta.is_empty()', '!source_delta.is_empty() || map_deltas.iter().any(|map| !map.is_empty())', '!source_delta.is_empty() || maps_changed']:
+    source = source.replace(f'if {condition} {{', f'if {condition} {{ crate::profile::count({ident("transport_changed_inputs")}, 1);')
 assert source.count('self.__allocated = false;') == 1
 source = source.replace('self.__allocated = false;', f'crate::profile::count({ident("allocation_round")}, 1); self.__allocated = false;')
 
 # This optional ablation is confined to the generated profiling copy.
 if args.reuse_primary:
+    if prepared_primary:
+        raise RuntimeError('Primary reuse is already compiled in; this ablation applies to the baseline revision')
     source, replacements = re.subn(
         r'(let mut index = self\.__native_seed_\d+\.update\(&self\.)(\w+)_own(, [^\n]+);\n\s*self\.__native_\d+_model_0\(\[\], &mut index, false\);',
         r'\1\2_all\3;', source)
@@ -219,11 +230,15 @@ metadata = {
     'revision': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
     'rustc': subprocess.check_output(['rustc', '--version'], text=True).strip(),
     'generated_sha256': original_hash,
+    'runtime_sha256': hashlib.sha256(runtime.read_bytes()).hexdigest(),
     'strata': len(strata),
     'model_scoped_strata': 0,
     'timed_functions': fn_count,
     'rule_groups': rule_count,
     'reuse_primary': args.reuse_primary,
+    'prepared_primary': prepared_primary,
+    'cached_graph': cached_graph,
+    'rewrites_inherited': rewrites_inherited,
     'allocations': args.allocations,
 }
 (OUT / 'metadata.json').write_text(json.dumps(metadata, indent=2) + '\n')

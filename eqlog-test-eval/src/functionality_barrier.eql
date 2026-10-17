@@ -1,0 +1,27 @@
+type Key;
+type Value;
+
+func pick(Key) -> Value;
+func next(Value) -> Value;
+func witness(Key) -> Value;
+pred request(Key, Value);
+pred left(Value);
+pred right(Value);
+pred selected(Key, Value);
+pred staged(Key);
+
+rule install {
+    if request(k, x);
+    then pick(k) = x;
+}
+
+rule complete {
+    if x = pick(k);
+    if y = next(x);
+    if left(y);
+    if right(y);
+    then selected(k, y);
+    then staged(k);
+    then witness(k)!;
+    then request(k, x);
+}

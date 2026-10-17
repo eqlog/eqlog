@@ -783,6 +783,7 @@ fn postprocess_rule_group(
     group.rules = group
         .rules
         .iter()
+        .filter(|rule| !rule.conclusion.is_empty())
         .flat_map(|rule| {
             let rule = eliminate_equalities_ifs(rule);
             match evaluation_mode {

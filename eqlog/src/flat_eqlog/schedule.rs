@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::algebra::signature::{Signature, TypeId};
 use crate::flat_eqlog::{
-    infer_rule_scopes, iter_flat_rels, morphism_preservation_rules, FlatInRel, FlatOutRel,
-    FlatRuleGroup, RuleScope,
+    functionality_anchor, infer_rule_scopes, iter_flat_rels, morphism_preservation_rules,
+    FlatInRel, FlatOutRel, FlatRuleGroup, RuleScope,
 };
 use crate::options::ModelMode;
 
@@ -273,7 +273,7 @@ fn schedule_scope(
         }
         if !rules.is_empty() {
             rules.sort_unstable();
-            let stable_inputs = rules
+            let stable_inputs: BTreeSet<_> = rules
                 .iter()
                 .flat_map(|&group| dependencies.reads[group].iter())
                 .filter(|rel| recursive && !writes.contains(*rel))
@@ -291,13 +291,42 @@ fn schedule_scope(
                 })
                 .cloned()
                 .collect();
-            let id = StratumId(strata.len());
-            strata.push(Stratum {
-                groups: rules,
-                model: scope,
-                stable_inputs,
-            });
-            children.insert(0, Schedule::Rules(id));
+            let (functional, ordinary): (Vec<_>, Vec<_>) =
+                rules.iter().copied().partition(|&group| {
+                    groups[group]
+                        .rules
+                        .iter()
+                        .all(|rule| functionality_anchor(rule).is_some())
+                });
+            let partitions =
+                if scope.is_none() && recursive && !functional.is_empty() && !ordinary.is_empty() {
+                    vec![(functional, true), (ordinary, false)]
+                } else {
+                    vec![(rules, false)]
+                };
+            let mut rule_steps = Vec::new();
+            for (groups, normalize) in partitions {
+                let inputs: BTreeSet<_> = groups
+                    .iter()
+                    .flat_map(|&group| &dependencies.reads[group])
+                    .cloned()
+                    .collect();
+                let id = StratumId(strata.len());
+                strata.push(Stratum {
+                    groups,
+                    model: scope,
+                    stable_inputs: stable_inputs.intersection(&inputs).cloned().collect(),
+                });
+                let rules = Schedule::Rules(id);
+                // Other joins should see canonical function results. Separate
+                // checkpoints keep their pending matches across normalization.
+                rule_steps.push(if normalize {
+                    Schedule::Saturate(Box::new(rules))
+                } else {
+                    rules
+                });
+            }
+            children.splice(0..0, rule_steps);
         }
         let body = sequence(children);
         bodies.push(Some(if recursive {

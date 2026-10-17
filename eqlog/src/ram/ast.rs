@@ -58,6 +58,7 @@ pub struct IterStmt {
     pub sets: Vec<SetVar>,
     pub loop_var_el: ElVar,
     pub loop_var_set: SetVar,
+    pub first_only: bool,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
@@ -104,6 +105,9 @@ pub struct RamProgram {
 pub struct IndexPreparation {
     pub indices: BTreeSet<(FlatInRel, IndexSpec)>,
     pub membership_only: BTreeSet<(FlatInRel, IndexSpec)>,
+    // Owner-scoped traversal can leave other slices pending, so only a full
+    // preparation permits deriving native indices from the primary relation.
+    pub native_indices_from_primary: BTreeSet<usize>,
     pub native: NativePreparation,
     pub stable: Option<NativePreparation>,
 }

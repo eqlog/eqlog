@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> RamRoutine {
     let mut stmts: Vec<RamStmt> = Vec::new();
+    let anchor = functionality_anchor(&flat_rule);
     let mut defined_vars: BTreeMap<FlatVar, ElVar> = flat_rule
         .scope
         .owners()
@@ -139,21 +140,33 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
                     ..set_names[0].clone()
                 };
 
+                let first_only = stmt_index == 1 && anchor == Some(flat_var);
+                let mut sets: Vec<_> = set_names
+                    .iter()
+                    .map(|name| SetVar {
+                        name: name.clone(),
+                        arity,
+                        strictness: Strictness::Strict,
+                    })
+                    .collect();
+                if first_only {
+                    assert_eq!(arity, 1, "functionality anchors require the full domain");
+                    // New results must join an old representative when one
+                    // exists, or a singleton delta could select itself.
+                    sets.sort_by_key(|set| match set.name.index.age {
+                        IndexAge::Old => 0,
+                        IndexAge::New => 1,
+                    });
+                }
                 let iter_stmt = IterStmt {
-                    sets: set_names
-                        .iter()
-                        .map(|name| SetVar {
-                            name: name.clone(),
-                            arity,
-                            strictness: Strictness::Strict,
-                        })
-                        .collect(),
+                    sets,
                     loop_var_el: ram_var,
                     loop_var_set: SetVar {
                         name: next_set_name.clone(),
                         arity: arity - 1,
                         strictness: Strictness::Strict,
                     },
+                    first_only,
                 };
                 arity -= 1;
                 stmts.push(RamStmt::Iter(iter_stmt));

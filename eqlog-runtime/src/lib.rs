@@ -202,6 +202,7 @@ impl std::error::Error for Error {}
 
 mod prefix_tree;
 mod toposort;
+mod transport;
 mod unification;
 #[doc(hidden)]
 pub mod wbtree;
