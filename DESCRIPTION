@@ -2,7 +2,8 @@ Evaluate rules in dependency order
 
 Use strata for all evaluation to exploit rule dependencies and
 morphism order. Remove scheduling selection from the library, CLI,
-tests, and benchmarks.
+tests, and benchmarks. Document the four remaining optimization test
+configurations.
 
 Keep closed models idle until an insertion, allocation, or equality
 changes their inputs. Preserve close_until condition checks and
