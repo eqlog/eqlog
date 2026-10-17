@@ -11,6 +11,9 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('output', type=Path)
 parser.add_argument('--reuse-primary', action='store_true', help='experimental secondary-index ablation')
 parser.add_argument('--allocations', action='store_true', help='count allocation traffic in a separate run')
+parser.add_argument('--inputs', action='store_true', help='time published rule input views separately')
+parser.add_argument('--outputs', action='store_true', help='measure output deduplication and insertion separately')
+parser.add_argument('--transport', action='store_true', help='time primary edge transport by relation')
 args = parser.parse_args()
 ROOT = Path(__file__).resolve().parents[1]
 OUT = args.output.resolve()
@@ -33,8 +36,7 @@ cached_graph = '__morphism_graph_context.components' in source
 rewrites_inherited = 'let tm_replacements' in source
 strata = re.findall(r'fn (__run_stratum_\d+(?:_at)?)\(', source)
 assert strata, 'No generated strata found'
-if any(name.endswith('_at') for name in strata):
-    raise RuntimeError('This diagnostic assumes the current globally scheduled ETT kernel')
+scoped_strata = sum(name.endswith('_at') for name in strata)
 names = []
 uprooted = sorted(set(re.findall(r'self\.(\w+_uprooted)', source)))
 
@@ -56,8 +58,19 @@ def functions(match):
         code += f'\ncrate::profile::count({ident(label)}, usize::from(merged > 0));'
     return code
 
-source, fn_count = re.subn(r'\bfn (__run_stratum_\d+|__canonicalize_relations|recompute_model_indices\w*|__prepare_native_index_(?:from_primary_)?\d+|__extend_native_index_\d+|apply_func_defs|__close_until)\([^\n]*\)[^{\n]*\{', functions, source)
+source, fn_count = re.subn(r'\bfn (__run_stratum_\d+(?:_at)?|__transport_component_\w+|__canonicalize_relations|recompute_model_indices\w*|__prepare_native_index_(?:from_primary_)?\d+|__extend_native_index_\d+|apply_func_defs|__close_until)\([^\n]*\)[^{\n]*\{', functions, source)
 assert fn_count > len(strata), 'Expected transport and canonicalization methods'
+
+if args.inputs:
+    def input_view(match):
+        return (f'let {match[3]} = {{ {timer("input:" + match[2])}\n'
+                f'{match[1]}\n{match[4]} }};')
+
+    source, input_count = re.subn(
+        r'(self\.__rule_input_\d+\.publish\(&self\.(\w+)\);)\n'
+        r'let (input_\d+) = (self\.__rule_input_\d+\.consume_\w+[^\n]+);',
+        input_view, source)
+    assert input_count, 'No published rule input views found'
 
 def rule(match):
     label = 'rule:' + match[2]
@@ -67,6 +80,36 @@ def rule(match):
 
 source, rule_count = re.subn(r'(let env = \w+Env \{[^}]+)\}; (\w+)\(env\);', rule, source)
 assert rule_count, 'No generated rule calls found'
+
+if args.outputs:
+    def output_batch(match):
+        field = match[1]
+        return (f'{{ let before = delta.{field}.len();\n'
+                f'{{ {timer("dedup:" + field)}\n'
+                f'delta.{field}.sort_unstable(); delta.{field}.dedup(); }}\n'
+                f'crate::profile::count({ident("batch:" + field)}, before);\n'
+                f'crate::profile::count({ident("unique:" + field)}, delta.{field}.len());\n'
+                f'{timer("insert:" + field)}\n{match[2]} }}')
+
+    source, output_count = re.subn(
+        r'delta\.(\w+)\.sort_unstable\(\);\n'
+        r'delta\.\1\.dedup\(\);\n'
+        r'(for \[[^\n]+ in delta\.\1\.drain\(\.\.\) \{[^\n]+\})',
+        output_batch, source)
+    assert output_count, 'No deduplicated relation output batches found'
+
+if args.transport:
+    def transport_block(match):
+        field = re.search(r'let source = Some\(&self\.(\w+_all)\)', match[3])
+        if field is None:
+            raise RuntimeError('Cannot identify the primary relation in a transport block')
+        return match[1] + timer('transport:' + field[1]) + '\n' + match[3]
+
+    source, transport_count = re.subn(
+        r'(if active\[(\d+)\] \{\s*\n)'
+        r'([\s\S]*?\n\s*inserted\[\2\] = relation_changed;)',
+        transport_block, source)
+    assert transport_count, 'No selected primary transport blocks found'
 
 edge_method = '__propagate_context_morphism_selected' if 'fn __propagate_context_morphism_selected' in source else '__propagate_context_morphism'
 source, edge_count = re.subn(r'(fn (' + edge_method + r'(?:_\w*)?)\([\s\S]*?\n\) -> bool \{)', lambda m: m[1] + f'\ncrate::profile::count({ident("edge:" + m[2])}, 1);', source)
@@ -232,7 +275,7 @@ metadata = {
     'generated_sha256': original_hash,
     'runtime_sha256': hashlib.sha256(runtime.read_bytes()).hexdigest(),
     'strata': len(strata),
-    'model_scoped_strata': 0,
+    'model_scoped_strata': scoped_strata,
     'timed_functions': fn_count,
     'rule_groups': rule_count,
     'reuse_primary': args.reuse_primary,
@@ -240,6 +283,9 @@ metadata = {
     'cached_graph': cached_graph,
     'rewrites_inherited': rewrites_inherited,
     'allocations': args.allocations,
+    'inputs': args.inputs,
+    'outputs': args.outputs,
+    'transport': args.transport,
 }
 (OUT / 'metadata.json').write_text(json.dumps(metadata, indent=2) + '\n')
 print('generated:', generated, 'timed functions:', fn_count, 'rules:', rule_count, 'graph sites:', graph_count, flush=True)

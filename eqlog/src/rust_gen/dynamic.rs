@@ -8,6 +8,7 @@ use itertools::Itertools;
 use crate::algebra::signature::{FuncId, TypeId, TypeKind};
 use crate::flat_eqlog::{iter_flat_rels, FlatInRel, FlatRel, IndexSelection};
 use crate::fmt_util::FmtFn;
+use crate::options::ModelMode;
 
 use super::{
     display_all_index_field_name, display_current_index_field_name,
@@ -212,6 +213,15 @@ impl DynamicContext<'_> {
                     }}
                     let mut model = Self::new();
             "}?;
+            match self.ctx.model_mode() {
+                ModelMode::Native => {
+                    for (_, ids) in self.ctx.signature().iter_model_decls() {
+                        let name = self.ctx.type_name(ids.type_).to_case(Case::Snake);
+                        writeln!(f, "model.__morphism_graph_{name}.mark_ownership_unknown();")?;
+                    }
+                }
+                ModelMode::Desugared => {}
+            }
             for typ in self.ctx.signature().iter_types() {
                 let snake = self.ctx.type_name(typ).to_case(Case::Snake);
                 let camel = self.ctx.type_name(typ).to_case(Case::UpperCamel);

@@ -287,6 +287,15 @@ pub(super) fn prune<'a>(
             let canonical = (0..key_types.len())
                 .map(|i| format!("root_{i}.root_const(key[{i}].into()).0 == key[{i}]"))
                 .join(" && ");
+            let suffix_unchanged = key_types
+                .iter()
+                .skip(1)
+                .map(|&typ| {
+                    let name = display_type(typ, ctx).to_string().to_case(Snake);
+                    format!("self.{name}_uprooted.is_empty()")
+                })
+                .unique()
+                .join(" && ");
             writeln!(f, "if {changed} {{ {roots}")?;
             if !parents.is_empty() {
                 let canonical = (0..parents.len())
@@ -299,7 +308,23 @@ pub(super) fn prune<'a>(
             }
             for (rel, _) in checkpoints {
                 let checkpoint = field(rel, model, ctx);
-                writeln!(f, "self.{checkpoint}.retain(|key, _| {canonical});")?;
+                let first = display_type(key_types[0], ctx).to_string().to_case(Snake);
+                let key_len = key_types.len();
+                writedoc! {f, "
+                    if {suffix_unchanged} {{
+                        for alias in &self.{first}_uprooted {{
+                            let mut lower = [0; {key_len}];
+                            let mut upper = [u32::MAX; {key_len}];
+                            lower[0] = alias.0;
+                            upper[0] = alias.0;
+                            let keys: Vec<_> = self.{checkpoint}.range(lower..=upper)
+                                .map(|(key, _)| *key).collect();
+                            for key in keys {{ self.{checkpoint}.remove(&key); }}
+                        }}
+                    }} else {{
+                        self.{checkpoint}.retain(|key, _| {canonical});
+                    }}
+                "}?;
                 if is_leaf(model, ctx) && !parents.is_empty() {
                     let canonical = (0..parents.len())
                         .map(|i| format!("root_{i}.root_const(key[{i}].into()).0 == key[{i}]"))

@@ -33,12 +33,80 @@ pub struct Codegen<'s> {
     model_preparations: &'s BTreeMap<TypeId, NativePreparation>,
 }
 
+struct TransportBaseline {
+    relations: Vec<FlatInRel>,
+    maps: Vec<(FlatInRel, IndexSpec)>,
+    relation_maps: Vec<Vec<usize>>,
+}
+
 fn input_key(rel: FlatInRel, mut index: IndexSpec) -> (FlatInRel, IndexSpec) {
     index.age = IndexAge::Old;
     (rel, index)
 }
 
 impl<'s> Codegen<'s> {
+    fn transport_baseline(
+        &self,
+        model: TypeId,
+        selection: &IndexSelection,
+        ctx: &RustGenCtx<'_>,
+    ) -> Option<TransportBaseline> {
+        if !ctx.signature().type_(model).parents.is_empty()
+            || ctx
+                .signature()
+                .iter_model_decls()
+                .any(|(_, ids)| ctx.signature().type_(ids.type_).parents.last() == Some(&model))
+        {
+            return None;
+        }
+        let plan = &self.model_preparations[&model].propagation;
+        let relations: Vec<_> = selection
+            .indices
+            .keys()
+            .filter(|rel| ctx.has_shared_indices(rel))
+            .filter(|rel| match rel {
+                FlatInRel::Rel(rel) => {
+                    plan.relations.contains(rel)
+                        && rel.parent_model_type(ctx.signature()) == Some(model)
+                }
+                FlatInRel::RelWithDiagonals { .. }
+                | FlatInRel::TypeSet(_)
+                | FlatInRel::Equality(_) => false,
+            })
+            .cloned()
+            .collect();
+        if relations
+            .iter()
+            .any(|rel| selection.current_primary(rel).order.first() != Some(&0))
+        {
+            return None;
+        }
+        let maps: Vec<_> = relations
+            .iter()
+            .flat_map(|rel| plan.map_indices.get(&(model, rel.clone())))
+            .flatten()
+            .cloned()
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let relation_maps = relations
+            .iter()
+            .map(|rel| {
+                plan.map_indices
+                    .get(&(model, rel.clone()))
+                    .into_iter()
+                    .flatten()
+                    .map(|map| maps.binary_search(map).unwrap())
+                    .collect()
+            })
+            .collect();
+        Some(TransportBaseline {
+            relations,
+            maps,
+            relation_maps,
+        })
+    }
+
     pub fn tracks_owner(&self, typ: TypeId, ctx: &RustGenCtx<'_>) -> bool {
         self.strata
             .iter()
@@ -78,6 +146,21 @@ impl<'s> Codegen<'s> {
         ctx: &'a RustGenCtx<'a>,
     ) -> impl Display + 'a {
         FmtFn(move |f| {
+            for (&model, &m) in &self.models {
+                let Some(baseline) = self.transport_baseline(model, selection, ctx) else {
+                    continue;
+                };
+                writeln!(f, "struct __TransportBaseline{m} {{")?;
+                for (i, rel) in baseline.relations.iter().enumerate() {
+                    let typ = display_index_type(rel, ctx);
+                    writeln!(f, "source_{i}: {typ},")?;
+                }
+                for (i, (rel, _)) in baseline.maps.iter().enumerate() {
+                    let typ = display_index_type(rel, ctx);
+                    writeln!(f, "map_{i}: {typ},")?;
+                }
+                writeln!(f, "}}")?;
+            }
             for (s, stratum) in self.strata.iter().enumerate() {
                 if let Some(model) = stratum.model {
                     writeln!(f, "struct __OwnerInputs{s} {{")?;
@@ -508,10 +591,7 @@ impl<'s> Codegen<'s> {
                     if stable {
                         begin_stable_input(f, &format!("native_input_{id}"), rel, ctx)?;
                     }
-                    if self.preparations[s]
-                        .native_indices_from_primary
-                        .contains(id)
-                    {
+                    if self.native_indices[*id].from_primary {
                         writeln!(f, "self.__prepare_native_index_from_primary_{id}();")?;
                     } else if stratum.model.is_some() {
                         writeln!(f, "self.__extend_native_index_{id}();")?;
@@ -697,29 +777,46 @@ impl<'s> Codegen<'s> {
                             let converted =
                                 args.iter().map(|arg| format!("{arg}.into()")).join(", ");
                             let args = args.join(", ");
-                            writeln!(f, "for [{args}] in delta.{field}.drain(..) {{ self.{insert}({converted}); }}")?;
+                            writedoc! {f, "
+                                delta.{field}.sort_unstable();
+                                delta.{field}.dedup();
+                                for [{args}] in delta.{field}.drain(..) {{ self.{insert}({converted}); }}
+                            "}?;
                         }
                         FlatOutRel::Equality(_) | FlatOutRel::FuncDomain(_) => {}
                     }
                 }
                 writeln!(f, "true }}")?;
             }
-            for (&model, &m) in &self.models {
-                let plan = &self.model_preparations[&model];
+            for (&root, &m) in &self.models {
+                let plan = &self.model_preparations[&root];
+                let baseline = self.transport_baseline(root, selection, ctx);
                 for &model in &plan.propagation.models {
                     let name = display_type(model, ctx).to_string().to_case(Case::Snake);
                     let count = ctx.signature().type_(model).parents.len();
+                    let baseline_arg = if baseline.is_some() {
+                        format!("baseline: &__TransportBaseline{m}, ")
+                    } else {
+                        String::new()
+                    };
                     writedoc! {f, "
-                    fn __transport_component_{m}_{name}(&mut self, parents: [u32; {count}], morphisms: &[MorphismWithSignature], retain_own: bool) -> bool {{
+                    fn __transport_component_{m}_{name}(&mut self, {baseline_arg}parents: [u32; {count}], morphisms: &[MorphismWithSignature], retain_own: bool) -> bool {{
                         if morphisms.is_empty() {{ return false; }}
                         let mut changed = false;
                 "}?;
-                    writeln!(f, "for morphism in morphisms {{ changed |= self.__propagate_{name}_morphism_model_{m}(parents, morphism, retain_own); }}")?;
+                    if let Some(baseline) = &baseline {
+                        emit_transport_since_baseline(f, baseline, model, m, selection, ctx)?;
+                    } else {
+                        writeln!(f, "for morphism in morphisms {{ changed |= self.__propagate_{name}_morphism_model_{m}(parents, morphism, retain_own); }}")?;
+                    }
                     for (rel, index) in &plan.support_indices {
                         write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
                     }
                     for id in &plan.native_indices {
                         let native = &self.native_indices[*id];
+                        if native.from_primary {
+                            continue;
+                        }
                         if let Some(level) = native.models.iter().position(|&typ| typ == model) {
                             writedoc! {f, "
                             self.__extend_native_index_{id}();
@@ -761,6 +858,9 @@ impl<'s> Codegen<'s> {
                     }
                     for id in &plan.native_indices {
                         let native = &self.native_indices[*id];
+                        if native.from_primary {
+                            continue;
+                        }
                         if native
                             .models
                             .get(count)
@@ -917,6 +1017,77 @@ fn retain_owners(owners: &[TypeId], ctx: &RustGenCtx<'_>) -> String {
             format!("!merged_{name}.contains(&owners[{i}])")
         })
         .join(" && ")
+}
+
+fn emit_transport_since_baseline(
+    f: &mut std::fmt::Formatter<'_>,
+    baseline: &TransportBaseline,
+    model: TypeId,
+    m: usize,
+    selection: &IndexSelection,
+    ctx: &RustGenCtx<'_>,
+) -> std::fmt::Result {
+    let name = display_type(model, ctx).to_string().to_case(Case::Snake);
+    let mut unchanged = Vec::new();
+    for (i, (rel, index)) in baseline.maps.iter().enumerate() {
+        write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
+        let read = super::indices::read_method(rel, index, selection, ctx, true);
+        writeln!(f, "let same_map_{i} = eqlog_runtime::__private::SnapshotSet::shares_root(self.{read}(), &baseline.map_{i});")?;
+        unchanged.push(format!("same_map_{i}"));
+    }
+    let sources: Vec<_> = baseline
+        .relations
+        .iter()
+        .enumerate()
+        .map(|(i, rel)| {
+            let index = selection.current_primary(rel);
+            let field = display_all_index_field_name(rel, index, ctx);
+            let same = format!("eqlog_runtime::__private::SnapshotSet::shares_root(&self.{field}, &baseline.source_{i})");
+            unchanged.push(same.clone());
+            (field.to_string(), same)
+        })
+        .collect();
+    let unchanged = if unchanged.is_empty() {
+        "true".to_owned()
+    } else {
+        unchanged.join(" && ")
+    };
+    writeln!(f, "if {unchanged} {{ return false; }}")?;
+    writeln!(f, "for morphism in morphisms {{")?;
+    for (i, (rel, index)) in baseline.maps.iter().enumerate() {
+        let read = super::indices::read_method(rel, index, selection, ctx, true);
+        writedoc! {f, "
+            let changed_map_{i} = !same_map_{i} && !eqlog_runtime::__private::SnapshotSet::shares_root(
+                self.{read}().get(morphism.morph).unwrap_or_else(|| PrefixTree2::empty()),
+                baseline.map_{i}.get(morphism.morph).unwrap_or_else(|| PrefixTree2::empty()),
+            );
+        "}?;
+    }
+    let mut active = Vec::new();
+    for (i, rel) in baseline.relations.iter().enumerate() {
+        let (field, same) = &sources[i];
+        let dim = rel.arity(ctx.signature()).len() - 1;
+        let mut changed = vec![format!(
+            "(!({same}) && !eqlog_runtime::__private::SnapshotSet::shares_root(self.{field}.get(morphism.dom).unwrap_or_else(|| PrefixTree{dim}::empty()), baseline.source_{i}.get(morphism.dom).unwrap_or_else(|| PrefixTree{dim}::empty())))"
+        )];
+        changed.extend(
+            baseline.relation_maps[i]
+                .iter()
+                .map(|j| format!("changed_map_{j}")),
+        );
+        active.push(changed.join(" || "));
+    }
+    let count = baseline.relations.len();
+    let active = active.join(", ");
+    writedoc! {f, "
+        let active = [{active}];
+        if active.iter().any(|&active| active) {{
+            changed |= self.__propagate_{name}_morphism_selected_model_{m}(
+                parents, morphism, retain_own, &active, &mut [false; {count}],
+            );
+        }}
+    }}
+    "}
 }
 
 fn begin_stable_input(
@@ -1136,7 +1307,27 @@ fn emit_schedule(
                     write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
                 }
                 for id in &plan.native_indices {
-                    writeln!(f, "self.__prepare_native_index_{id}();")?;
+                    if !codegen.native_indices[*id].from_primary {
+                        writeln!(f, "self.__prepare_native_index_{id}();")?;
+                    }
+                }
+                if let Some(baseline) = codegen.transport_baseline(*model, selection, ctx) {
+                    for (rel, index) in &baseline.maps {
+                        write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
+                    }
+                    // Keep this snapshot until the traversal ends: one owner's
+                    // equality can change inputs belonging to another owner.
+                    writeln!(f, "let baseline_{m} = __TransportBaseline{m} {{")?;
+                    for (i, rel) in baseline.relations.iter().enumerate() {
+                        let index = selection.current_primary(rel);
+                        let field = display_all_index_field_name(rel, index, ctx);
+                        writeln!(f, "source_{i}: self.{field}.clone(),")?;
+                    }
+                    for (i, (rel, index)) in baseline.maps.iter().enumerate() {
+                        let read = super::indices::read_method(rel, index, selection, ctx, true);
+                        writeln!(f, "map_{i}: self.{read}().clone(),")?;
+                    }
+                    writeln!(f, "}};")?;
                 }
             } else {
                 writeln!(f, "let parents = owners;")?;
@@ -1175,6 +1366,11 @@ fn emit_components(
     let name = display_type(model, ctx).to_string().to_case(Case::Snake);
     let parent_count = ctx.signature().type_(model).parents.len();
     let plan = &codegen.model_preparations[&root];
+    let baseline = if codegen.transport_baseline(root, selection, ctx).is_some() {
+        format!("&baseline_{m}, ")
+    } else {
+        String::new()
+    };
     for (rel, index) in plan
         .propagation
         .graph_indices
@@ -1215,7 +1411,7 @@ fn emit_components(
     )?;
     writedoc! {f, "
                 }}
-                active_{depth} |= self.__transport_component_{m}_{name}(parents, &component.internal, true);
+                active_{depth} |= self.__transport_component_{m}_{name}({baseline}parents, &component.internal, true);
     "}?;
     if let Some(active) = active {
         writeln!(f, "active_{active} |= active_{depth};")?;
@@ -1229,6 +1425,6 @@ fn emit_components(
     }
     writeln!(
         f,
-        "self.__transport_component_{m}_{name}(parents, &component.outgoing, {retain_own}); }}"
+        "self.__transport_component_{m}_{name}({baseline}parents, &component.outgoing, {retain_own}); }}"
     )
 }

@@ -231,11 +231,9 @@ impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
                 .get_or_insert_with(|| {
                     // Removing obsolete IDs is safe; replacing them by their roots here
                     // would hide joins that only became possible after an equality.
-                    let mut old = seen.rows.clone();
-                    seen.rows.visit_difference(&self.current.rows, &mut |row| {
-                        old.remove_row(row);
-                    });
-                    old
+                    // Subtract whole removed subtrees without flattening their rows.
+                    seen.rows
+                        .difference(&seen.rows.difference(&self.current.rows))
                 })
                 .clone()
         };

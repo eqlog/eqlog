@@ -148,27 +148,16 @@ pub fn schedule_rule_groups(
         }
     }
     let members: Vec<_> = (0..groups.len()).collect();
-    loop {
-        let mut strata = Vec::new();
-        match schedule_scope(
-            None,
-            &members,
-            groups,
-            &dependencies,
-            signature,
-            &mut strata,
-        ) {
-            Ok(body) => return RuleSchedule { strata, body },
-            Err(fallback) => {
-                // Ambient feedback cannot be closed with one owner bound.
-                for group in fallback {
-                    for rule in &mut groups[group].rules {
-                        rule.scope = RuleScope::Global;
-                    }
-                }
-            }
-        }
-    }
+    let mut strata = Vec::new();
+    let body = schedule_scope(
+        None,
+        &members,
+        groups,
+        &dependencies,
+        signature,
+        &mut strata,
+    );
+    RuleSchedule { strata, body }
 }
 
 fn schedule_scope(
@@ -178,7 +167,7 @@ fn schedule_scope(
     dependencies: &Dependencies,
     signature: &Signature,
     strata: &mut Vec<Stratum>,
-) -> Result<Schedule, Vec<usize>> {
+) -> Schedule {
     let edges = &dependencies.edges;
     let depth = scope.map_or(0, |model| signature.type_(model).parents.len() + 1);
     let mut units = BTreeMap::new();
@@ -218,28 +207,24 @@ fn schedule_scope(
             }
         }
     }
-    let components = components(&unit_edges);
-    if scope.is_none() {
-        let mut fallback = Vec::new();
-        for component in components.iter().filter(|component| component.len() > 1) {
-            for &unit in component {
-                if units[unit].0.is_none() {
-                    continue;
-                }
-                for &source in &units[unit].1 {
-                    if edges[source].iter().any(|target| {
-                        let target = unit_of[target];
-                        target != unit && component.contains(&target)
-                    }) {
-                        fallback.push(source);
-                    }
-                }
-            }
-        }
-        if !fallback.is_empty() {
-            return Err(fallback);
+    for (unit, (model, members)) in units.iter().enumerate() {
+        if model.is_some()
+            && members.iter().any(|&group| {
+                groups[group]
+                    .rules
+                    .iter()
+                    .flat_map(|rule| &rule.conclusion)
+                    .any(|stmt| match stmt.rel {
+                        FlatOutRel::Equality(_) => true,
+                        FlatOutRel::Rel(_) | FlatOutRel::FuncDomain(_) => false,
+                    })
+            })
+        {
+            // Shared member IDs can enable joins in an owner visited earlier.
+            unit_edges[unit].push(unit);
         }
     }
+    let components = components(&unit_edges);
     let mut bodies = Vec::new();
     for component in &components {
         let recursive = component.len() > 1 || unit_edges[component[0]].contains(&component[0]);
@@ -262,7 +247,7 @@ fn schedule_scope(
                         dependencies,
                         signature,
                         strata,
-                    )?;
+                    );
                     children.push(Schedule::ModelComponents {
                         model: *model,
                         body: Box::new(body),
@@ -298,12 +283,11 @@ fn schedule_scope(
                         .iter()
                         .all(|rule| functionality_anchor(rule).is_some())
                 });
-            let partitions =
-                if scope.is_none() && recursive && !functional.is_empty() && !ordinary.is_empty() {
-                    vec![(functional, true), (ordinary, false)]
-                } else {
-                    vec![(rules, false)]
-                };
+            let partitions = if recursive && !functional.is_empty() && !ordinary.is_empty() {
+                vec![(functional, true), (ordinary, false)]
+            } else {
+                vec![(rules, false)]
+            };
             let mut rule_steps = Vec::new();
             for (groups, normalize) in partitions {
                 let inputs: BTreeSet<_> = groups
@@ -329,6 +313,8 @@ fn schedule_scope(
             children.splice(0..0, rule_steps);
         }
         let body = sequence(children);
+        // An ambient cycle repeats the owner traversal after global feedback.
+        // Its rule bodies can therefore keep their owner-bound inputs.
         bodies.push(Some(if recursive {
             Schedule::Saturate(Box::new(body))
         } else {
@@ -354,7 +340,7 @@ fn schedule_scope(
             }
         }
     }
-    Ok(order_components(&incoming, &adjacent, &mut bodies))
+    order_components(&incoming, &adjacent, &mut bodies)
 }
 
 fn sequence(mut children: Vec<Schedule>) -> Schedule {

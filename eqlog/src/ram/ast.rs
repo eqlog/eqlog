@@ -105,9 +105,6 @@ pub struct RamProgram {
 pub struct IndexPreparation {
     pub indices: BTreeSet<(FlatInRel, IndexSpec)>,
     pub membership_only: BTreeSet<(FlatInRel, IndexSpec)>,
-    // Owner-scoped traversal can leave other slices pending, so only a full
-    // preparation permits deriving native indices from the primary relation.
-    pub native_indices_from_primary: BTreeSet<usize>,
     pub native: NativePreparation,
     pub stable: Option<NativePreparation>,
 }
@@ -145,6 +142,7 @@ pub struct PropagationPlan {
 }
 
 pub struct NativeIndexPreparation {
+    pub from_primary: bool,
     pub rel: FlatInRel,
     pub index: IndexSpec,
     pub models: Vec<TypeId>,

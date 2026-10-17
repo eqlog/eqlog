@@ -1,19 +1,20 @@
 use std::cell::RefCell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Deref;
 use std::rc::Rc;
 
+use crate::lazy_index::IndexSeed;
 use crate::versions::SnapshotSet;
 use crate::{PrefixTree1, PrefixTree2};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct MorphismWithSignature {
     pub morph: u32,
     pub dom: u32,
     pub cod: u32,
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct MorphismComponent {
     pub objects: Vec<u32>,
     pub internal: Vec<MorphismWithSignature>,
@@ -55,19 +56,132 @@ struct GraphSnapshot {
     dom: PrefixTree2,
     cod: PrefixTree2,
     objects: PrefixTree1,
+    graph_objects: PrefixTree1,
+    dom_by_morphism: IndexSeed<PrefixTree2, PrefixTree2>,
+    positions: BTreeMap<u32, usize>,
+    connectivity: BTreeMap<(u32, u32), usize>,
+    conflicting_codomain_targets: BTreeSet<u32>,
     components: Rc<MorphismGraph>,
+}
+
+impl GraphSnapshot {
+    fn update_edges(&mut self, dom: &PrefixTree2, cod: &PrefixTree2) -> Option<Rc<MorphismGraph>> {
+        let mut changed = BTreeSet::new();
+        dom.visit_difference(&self.dom, &mut |[_, morphism]| {
+            changed.insert(morphism);
+        });
+        self.dom.visit_difference(dom, &mut |[_, morphism]| {
+            changed.insert(morphism);
+        });
+        cod.visit_difference(&self.cod, &mut |[morphism, _]| {
+            changed.insert(morphism);
+        });
+        self.cod.visit_difference(cod, &mut |[morphism, _]| {
+            changed.insert(morphism);
+        });
+        let domains = self
+            .dom_by_morphism
+            .update(dom, |[owner, morphism]| Some([morphism, owner]));
+        let mut connectivity_delta = BTreeMap::<(u32, u32), isize>::new();
+        let mut affected = BTreeSet::new();
+        let mut additions = Vec::new();
+        let old = &self.components.signatures;
+        for &morphism in &changed {
+            let first = old.partition_point(|edge| edge.0 < morphism);
+            let end = old.partition_point(|edge| edge.0 <= morphism);
+            for &(_, dom, cod, _) in &old[first..end] {
+                *connectivity_delta.entry((dom, cod)).or_default() -= 1;
+                affected.insert(self.positions[&dom]);
+            }
+            if let Some(domains) = domains.get(morphism) {
+                if let Some(codomains) = cod.get(morphism) {
+                    for [dom] in domains.iter() {
+                        for [cod] in codomains.iter() {
+                            let source = self.positions[&dom];
+                            let target = self.positions[&cod];
+                            if source > target {
+                                return None;
+                            }
+                            *connectivity_delta.entry((dom, cod)).or_default() += 1;
+                            affected.insert(source);
+                            additions.push((morphism, dom, cod, source == target));
+                        }
+                    }
+                }
+            }
+        }
+        for (&(dom, cod), &delta) in &connectivity_delta {
+            let count = self.connectivity.get(&(dom, cod)).copied().unwrap_or(0);
+            let remaining = count
+                .checked_add_signed(delta)
+                .expect("edge multiplicities must stay nonnegative");
+            // Removing the last internal connection can split an SCC. Outgoing
+            // deletions and additions respecting its order preserve the partition.
+            if remaining == 0 && dom != cod && self.positions[&dom] == self.positions[&cod] {
+                return None;
+            }
+        }
+        let mut signatures: Vec<_> = old
+            .iter()
+            .copied()
+            .filter(|edge| !changed.contains(&edge.0))
+            .collect();
+        signatures.extend(additions.iter().copied());
+        signatures.sort_unstable();
+        if signatures.as_slice() == old.as_ref() {
+            return Some(Rc::clone(&self.components));
+        }
+        let mut components = self.components.components.clone();
+        for source in affected {
+            components[source]
+                .internal
+                .retain(|edge| !changed.contains(&edge.morph));
+            components[source]
+                .outgoing
+                .retain(|edge| !changed.contains(&edge.morph));
+        }
+        for (morph, dom, cod, internal) in additions {
+            let component = &mut components[self.positions[&dom]];
+            let edges = if internal {
+                &mut component.internal
+            } else {
+                &mut component.outgoing
+            };
+            edges.push(MorphismWithSignature { morph, dom, cod });
+        }
+        for (pair, delta) in connectivity_delta {
+            let count = self.connectivity.get(&pair).copied().unwrap_or(0);
+            let remaining = count.checked_add_signed(delta).unwrap();
+            if remaining == 0 {
+                self.connectivity.remove(&pair);
+            } else {
+                self.connectivity.insert(pair, remaining);
+            }
+        }
+        Some(Rc::new(MorphismGraph {
+            components,
+            signatures: signatures.into(),
+        }))
+    }
 }
 
 /// Reuses graph topology across relations and strata with the same inputs.
 pub struct MorphismGraphCache<const N: usize> {
     owners: RefCell<BTreeMap<[u32; N], GraphSnapshot>>,
+    ownership_known: bool,
 }
 
 impl<const N: usize> MorphismGraphCache<N> {
     pub fn new() -> Self {
         Self {
             owners: RefCell::new(BTreeMap::new()),
+            ownership_known: true,
         }
+    }
+
+    /// Graph observations cannot certify the dependent ownership of imported facts.
+    pub fn mark_ownership_unknown(&mut self) {
+        self.ownership_known = false;
     }
 
     pub fn components(
@@ -86,6 +200,19 @@ impl<const N: usize> MorphismGraphCache<N> {
                 return Rc::clone(&previous.components);
             }
         }
+        let mut conflicting_codomain_targets =
+            owners.get(&parents).map_or_else(BTreeSet::new, |previous| {
+                previous.conflicting_codomain_targets.clone()
+            });
+        let previous_cod = owners
+            .get(&parents)
+            .map(|previous| &previous.cod)
+            .unwrap_or_else(|| PrefixTree2::empty());
+        for (_, targets, _) in cod.map.difference_entries(&previous_cod.map) {
+            if targets.iter().nth(1).is_some() {
+                conflicting_codomain_targets.extend(targets.iter().map(|[target]| target));
+            }
+        }
         let mut graph_objects = objects.clone();
         if N > 0 {
             // Propagated endpoints can precede parent equalities. Include
@@ -97,8 +224,32 @@ impl<const N: usize> MorphismGraphCache<N> {
                 graph_objects.insert([object]);
             }
         }
+        if let Some(previous) = owners.get_mut(&parents) {
+            if graph_objects.is_subset(&previous.graph_objects)
+                && previous.graph_objects.is_subset(&graph_objects)
+            {
+                if let Some(components) = previous.update_edges(dom, cod) {
+                    previous.dom = dom.clone();
+                    previous.cod = cod.clone();
+                    previous.objects = objects.clone();
+                    previous.graph_objects = graph_objects;
+                    previous.conflicting_codomain_targets = conflicting_codomain_targets;
+                    previous.components = Rc::clone(&components);
+                    return components;
+                }
+            }
+        }
         let components = morphism_components(dom, cod, &graph_objects);
+        let positions = components
+            .iter()
+            .enumerate()
+            .flat_map(|(i, component)| component.objects.iter().map(move |&object| (object, i)))
+            .collect();
         let signatures = edge_signatures(&components);
+        let mut connectivity = BTreeMap::new();
+        for &(_, dom, cod, _) in &signatures {
+            *connectivity.entry((dom, cod)).or_default() += 1;
+        }
         let signatures = if let Some(previous) = owners
             .get(&parents)
             .filter(|previous| previous.components.signatures.as_ref() == signatures.as_slice())
@@ -111,16 +262,39 @@ impl<const N: usize> MorphismGraphCache<N> {
             components,
             signatures,
         });
+        let mut dom_by_morphism = IndexSeed::new();
+        dom_by_morphism.update(dom, |[owner, morphism]| Some([morphism, owner]));
         owners.insert(
             parents,
             GraphSnapshot {
                 dom: dom.clone(),
                 cod: cod.clone(),
                 objects: objects.clone(),
+                graph_objects,
+                dom_by_morphism,
+                positions,
+                connectivity,
+                conflicting_codomain_targets,
                 components: Rc::clone(&components),
             },
         );
         components
+    }
+
+    /// Conflicting codomains can transport member facts outside their declared owner.
+    /// Keep those owners after conflicts disappear, since inherited facts survive.
+    /// `None` means history is absent or cannot certify imported facts.
+    pub fn conflicting_codomain_targets(&self, parents: [u32; N]) -> Option<Vec<u32>> {
+        if !self.ownership_known {
+            return None;
+        }
+        self.owners.borrow().get(&parents).map(|snapshot| {
+            snapshot
+                .conflicting_codomain_targets
+                .iter()
+                .copied()
+                .collect()
+        })
     }
 
     pub fn retain_owners(&mut self, mut retain: impl FnMut(&[u32; N]) -> bool) {

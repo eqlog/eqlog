@@ -9,6 +9,7 @@ struct IfStmtGoodness {
     age: QueryAge,
     new_variables: usize,
     restrained_variables: usize,
+    consumed_result: bool,
 }
 
 impl Default for IfStmtGoodness {
@@ -18,6 +19,7 @@ impl Default for IfStmtGoodness {
             age: QueryAge::All,
             new_variables: 0,
             restrained_variables: 0,
+            consumed_result: false,
         }
     }
 }
@@ -38,11 +40,13 @@ impl Ord for IfStmtGoodness {
         let new_variables = self.new_variables.cmp(&other.new_variables).reverse();
         // Greater is better than smaller.
         let restrained_variables = self.restrained_variables.cmp(&other.restrained_variables);
+        let consumed_result = self.consumed_result.cmp(&other.consumed_result);
 
         is_equal
             .then(age_goodness)
             .then(new_variables)
             .then(restrained_variables)
+            .then(consumed_result)
     }
 }
 
@@ -106,7 +110,11 @@ fn more_restrained_variables_is_better() {
     assert!(many_vars > few_vars);
 }
 
-fn if_stmt_goodness(stmt: &FlatIfStmt, fixed_vars: &BTreeSet<FlatVar>) -> IfStmtGoodness {
+fn if_stmt_goodness(
+    stmt: &FlatIfStmt,
+    remaining: &[FlatIfStmt],
+    fixed_vars: &BTreeSet<FlatVar>,
+) -> IfStmtGoodness {
     let is_equal = match stmt.rel {
         FlatInRel::Equality(_) => true,
         FlatInRel::Rel(_) | FlatInRel::TypeSet(_) | FlatInRel::RelWithDiagonals { .. } => false,
@@ -124,22 +132,37 @@ fn if_stmt_goodness(stmt: &FlatIfStmt, fixed_vars: &BTreeSet<FlatVar>) -> IfStmt
         .unique()
         .filter(|var| fixed_vars.contains(var))
         .count();
+    // Prefer a computed join key to a terminal value when both queries bind
+    // the same number of variables. Terminal values cannot constrain the join.
+    let consumed_result = match &stmt.rel {
+        FlatInRel::Rel(FlatRel::Func(_)) => stmt.args.last().is_some_and(|result| {
+            !fixed_vars.contains(result)
+                && remaining
+                    .iter()
+                    .any(|other| !std::ptr::eq(stmt, other) && other.args.contains(result))
+        }),
+        FlatInRel::Rel(FlatRel::Pred(_) | FlatRel::ModelMember(_))
+        | FlatInRel::RelWithDiagonals { .. }
+        | FlatInRel::TypeSet(_)
+        | FlatInRel::Equality(_) => false,
+    };
     IfStmtGoodness {
         is_equal,
         age,
         new_variables,
         restrained_variables,
+        consumed_result,
     }
 }
 
 fn find_best_index(stmts: &[FlatIfStmt], fixed_vars: &BTreeSet<FlatVar>) -> Option<usize> {
-    (0..stmts.len()).max_by_key(|i| if_stmt_goodness(&stmts[*i], fixed_vars))
+    (0..stmts.len()).max_by_key(|i| if_stmt_goodness(&stmts[*i], stmts, fixed_vars))
 }
 
 /// A pass that optimizes the order of [FlatIfStmt]s in the premise of a [FlatRule].
 pub fn sort_premise<'a>(rule: &mut FlatRule) {
     let premise = &mut rule.premise;
-    let mut fixed_vars: BTreeSet<FlatVar> = BTreeSet::new();
+    let mut fixed_vars: BTreeSet<FlatVar> = rule.scope.owners().iter().cloned().collect();
     for sorted_until in 0..premise.len() {
         let best_index = sorted_until
             + find_best_index(&premise[sorted_until..], &fixed_vars)

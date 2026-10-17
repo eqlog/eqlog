@@ -7,6 +7,19 @@ use std::collections::{BTreeMap, BTreeSet};
 fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> RamRoutine {
     let mut stmts: Vec<RamStmt> = Vec::new();
     let anchor = functionality_anchor(&flat_rule);
+    let mut occurrences = BTreeMap::new();
+    for var in flat_rule.premise.iter().flat_map(|stmt| &stmt.args) {
+        *occurrences.entry(var).or_insert(0) += 1;
+    }
+    let output_vars: BTreeSet<_> = flat_rule
+        .conclusion
+        .iter()
+        .flat_map(|stmt| &stmt.args)
+        .collect();
+    let private_vars: BTreeSet<_> = occurrences
+        .into_iter()
+        .filter_map(|(var, count)| (count == 1 && !output_vars.contains(var)).then_some(var))
+        .collect();
     let mut defined_vars: BTreeMap<FlatVar, ElVar> = flat_rule
         .scope
         .owners()
@@ -109,9 +122,28 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
             }
 
             arity -= 1;
+
+            if fixed_args.len() < order.len() {
+                // Reject a missing join prefix before unrelated loops expand it.
+                stmts.push(RamStmt::GuardInhabited(GuardInhabitedStmt {
+                    sets: set_names
+                        .iter()
+                        .map(|name| SetVar {
+                            name: name.clone(),
+                            arity,
+                            strictness: Strictness::Strict,
+                        })
+                        .collect(),
+                }));
+            }
         }
 
-        if fixed_args.len() == order.len() {
+        let free_columns = &order[fixed_args.len()..];
+        let used_columns = free_columns
+            .iter()
+            .rposition(|column| !private_vars.contains(&flat_stmt.args[*column]))
+            .map_or(0, |last| last + 1);
+        if used_columns == 0 {
             // We don't need to retrieve any new variables, but we still have to check that the set
             // is not empty.
             stmts.push(RamStmt::GuardInhabited(GuardInhabitedStmt {
@@ -126,7 +158,7 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
             }));
         } else {
             // Iterate over the sets to retrieve the other columns.
-            for column in order[fixed_args.len()..].iter() {
+            for column in &free_columns[..used_columns] {
                 let flat_var = &flat_stmt.args[*column];
                 let ram_var = ElVar {
                     name: flat_var.name.clone(),
@@ -171,6 +203,20 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
                 arity -= 1;
                 stmts.push(RamStmt::Iter(iter_stmt));
                 set_names = vec![next_set_name];
+            }
+            if arity > 0 {
+                // Private suffix variables witness the premise but cannot
+                // distinguish matches in another premise or the conclusion.
+                stmts.push(RamStmt::GuardInhabited(GuardInhabitedStmt {
+                    sets: set_names
+                        .iter()
+                        .map(|name| SetVar {
+                            name: name.clone(),
+                            arity,
+                            strictness: Strictness::Strict,
+                        })
+                        .collect(),
+                }));
             }
         }
     }

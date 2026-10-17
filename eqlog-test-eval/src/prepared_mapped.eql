@@ -3,6 +3,12 @@ model Bundle {
         type El;
         pred pair(El, El);
         pred fixed_pair(El, El);
+        pred local_reached(El);
+        rule reverse_local {
+            if local_reached(y);
+            if pair(x, y);
+            then local_reached(x);
+        }
     }
 }
 

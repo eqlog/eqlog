@@ -556,6 +556,14 @@ fn process_file(in_file: &Path, config: &Config, component_inputs: Option<&Diges
     let mut flat_rule_groups = flatten(&flatten_ctx, &config.options);
     let schedule =
         schedule_rule_groups(&mut flat_rule_groups, &signature, config.options.model_mode);
+    for rule in flat_rule_groups
+        .iter_mut()
+        .flat_map(|group| &mut group.rules)
+    {
+        if rule.scope.model().is_some() {
+            sort_premise(rule);
+        }
+    }
     let flat_rules_iter = flat_rule_groups.iter().flat_map(|group| group.rules.iter());
     let index_selection = select_indices(flat_rules_iter, &signature, config.options.model_mode);
 

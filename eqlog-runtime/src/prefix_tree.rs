@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::wbtree::{map, map::WBTreeMap, set::WBTreeSet};
 
@@ -181,6 +181,47 @@ replace_keys!(PrefixTree6, 6, map, tree6);
 replace_keys!(PrefixTree7, 7, map, tree7);
 replace_keys!(PrefixTree8, 8, map, tree8);
 replace_keys!(PrefixTree9, 9, map, tree9);
+
+macro_rules! replace_keys_in_prefixes {
+    ($tree:ident, $suffix_arity:literal) => {
+        impl $tree {
+            /// Renames suffix keys only beneath the selected first-column values.
+            pub fn replace_keys_in_prefixes(
+                &self,
+                prefixes: &[&BTreeSet<u32>],
+                replacements: [&BTreeMap<u32, u32>; $suffix_arity],
+            ) -> Option<Self> {
+                if replacements.iter().all(|mapping| mapping.is_empty()) {
+                    return None;
+                }
+                let mut cache = KeyReplacementCache::default();
+                let mut result: Option<Self> = None;
+                for &prefix in prefixes.iter().flat_map(|prefixes| prefixes.iter()) {
+                    if let Some(subtree) = self.get(prefix) {
+                        if let Some(replaced) =
+                            subtree.replace_keys_cached(replacements, &mut cache)
+                        {
+                            result
+                                .get_or_insert_with(|| self.clone())
+                                .map
+                                .insert(prefix, replaced);
+                        }
+                    }
+                }
+                result
+            }
+        }
+    };
+}
+
+replace_keys_in_prefixes!(PrefixTree2, 1);
+replace_keys_in_prefixes!(PrefixTree3, 2);
+replace_keys_in_prefixes!(PrefixTree4, 3);
+replace_keys_in_prefixes!(PrefixTree5, 4);
+replace_keys_in_prefixes!(PrefixTree6, 5);
+replace_keys_in_prefixes!(PrefixTree7, 6);
+replace_keys_in_prefixes!(PrefixTree8, 7);
+replace_keys_in_prefixes!(PrefixTree9, 8);
 
 // new methods
 impl PrefixTree0 {

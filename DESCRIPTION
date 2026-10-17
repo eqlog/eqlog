@@ -34,9 +34,19 @@ consumer checkpoints. Avoid repeated mapping-path and singleton iterator
 allocations. Include runtime artifacts and compiler settings in the
 component cache key.
 
+Retain owner-scoped rule consumers through ambient feedback cycles, with
+outer retries for equalities affecting another owner. Reuse prepared
+primary slices for local alternate indices and skip transport unchanged
+since traversal entry. Narrow equality rewrites using dependent
+ownership and historical endpoint conflicts; imported models retain full
+rewriting. Reuse SCC partitions when edge updates preserve their
+topology. Preserve shared old-input subtrees and batch duplicate rule
+outputs.
+
 Preserve the complete Nat and Vec development, bounded computation, and
-one-call closure. Validate the generic optimizations with integration
-cases and independent review. Check all 52 declarations in 50-56 seconds
-on the measured machine, with disconnected updates taking milliseconds
-instead of replaying the existing context graph. Record reproducible
-profiles and build metadata.
+one-call closure. Independent reviews confirm the mechanisms are general
+Eqlog optimizations. Cover nested transport, partial maps, cross-owner
+equality, dynamic imports, and interrupted closure with evaluator tests.
+The latest instrumented full run checks all 52 declarations in 28.965
+seconds of closure and 30.255 seconds end to end. Further scheduling
+work is needed for the five-second target.

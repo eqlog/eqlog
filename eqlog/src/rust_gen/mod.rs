@@ -1488,11 +1488,74 @@ fn display_canonicalize_rel_block<'a>(
     })
 }
 
+fn inherited_rewrite_scopes(
+    rel: FlatRel,
+    index: &IndexSpec,
+    ctx: &RustGenCtx<'_>,
+) -> Option<(BTreeSet<TypeId>, BTreeSet<TypeId>)> {
+    if index.order.first() != Some(&0) {
+        return None;
+    }
+    let arity = rel.arity(ctx.signature());
+    let owner = *arity.first()?;
+    if ctx.signature().type_(owner).kind != TypeKind::Model
+        || !ctx.signature().type_(owner).parents.is_empty()
+    {
+        return None;
+    }
+    let mut members = BTreeSet::new();
+    let mut unrestricted = BTreeSet::from([owner]);
+    for (column, &typ) in arity.iter().enumerate().skip(1) {
+        if rel.column_maps_under(ctx.signature(), column, owner) {
+            members.insert(typ);
+        } else {
+            unrestricted.insert(typ);
+        }
+    }
+    (!members.is_empty()).then_some((members, unrestricted))
+}
+
 fn display_canonicalize_fn<'a>(
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
+        let shared: Vec<_> = index_selection
+            .current_indices()
+            .filter(|(rel, index)| {
+                ctx.has_shared_indices(rel) && index_selection.is_primary(rel, index)
+            })
+            .map(|(rel, index)| {
+                let relation = match rel {
+                    FlatInRel::Rel(relation) => *relation,
+                    FlatInRel::RelWithDiagonals { .. }
+                    | FlatInRel::TypeSet(_)
+                    | FlatInRel::Equality(_) => {
+                        unreachable!("only relations have shared primary indices")
+                    }
+                };
+                (rel, index, inherited_rewrite_scopes(relation, index, ctx))
+            })
+            .collect();
+        let affected_owners = FmtFn(|f| {
+            let member_types: BTreeSet<_> = shared
+                .iter()
+                .filter_map(|(_, _, scope)| scope.as_ref())
+                .flat_map(|(members, _)| members.iter().copied())
+                .collect();
+            for typ in member_types {
+                let name = display_type(typ, ctx).to_string().to_case(Snake);
+                let membership =
+                    display_element_index_field_name(FlatRel::ModelMember(typ), typ, ctx);
+                // Membership aliases disappear during owned canonicalization.
+                writedoc! {f, "
+                    let {name}_affected_owners: BTreeSet<u32> = self.{name}_uprooted.iter()
+                        .filter_map(|el| self.{membership}.get(&el.0))
+                        .flatten().map(|row| row[0]).collect();
+                "}?;
+            }
+            Ok(())
+        });
         let rel_blocks = iter_flat_rels(ctx.signature())
             .filter(|rel| rel.is_model_membership_relation())
             .chain(
@@ -1527,18 +1590,12 @@ fn display_canonicalize_fn<'a>(
         };
         let prune_transport = transport::prune(ctx, index_selection);
         let canonicalize_inherited = FmtFn(|f| {
-            let shared: Vec<_> = index_selection
-                .current_indices()
-                .filter(|(rel, index)| {
-                    ctx.has_shared_indices(rel) && index_selection.is_primary(rel, index)
-                })
-                .collect();
             if shared.is_empty() {
                 return Ok(());
             }
             let types: BTreeSet<_> = shared
                 .iter()
-                .flat_map(|(rel, _)| rel.arity(ctx.signature()))
+                .flat_map(|(rel, _, _)| rel.arity(ctx.signature()))
                 .collect();
             for typ in types {
                 let name = display_type(typ, ctx).to_string().to_case(Snake);
@@ -1547,7 +1604,21 @@ fn display_canonicalize_fn<'a>(
                         .iter().map(|&el| (el.0, self.root_{name}(el).0)).collect();
                 "}?;
             }
-            for (rel, index) in shared {
+            let scoped_owners: BTreeSet<_> = shared
+                .iter()
+                .filter(|(_, _, scope)| scope.is_some())
+                .map(|(rel, _, _)| rel.arity(ctx.signature())[0])
+                .collect();
+            for owner in scoped_owners {
+                let camel = display_type(owner, ctx).to_string().to_case(UpperCamel);
+                let name = camel.to_case(Snake);
+                writedoc! {f, "
+                    let {name}_exceptional_owners: Option<BTreeSet<u32>> = self.__morphism_graph_{name}
+                        .conflicting_codomain_targets([]).map(|owners| owners.into_iter()
+                            .map(|owner| self.root_{name}({camel}(owner)).0).collect());
+                "}?;
+            }
+            for (rel, index, scope) in &shared {
                 let field = display_current_index_field_name(rel, index, ctx);
                 let arity = rel.arity(ctx.signature());
                 let replacements = index
@@ -1557,7 +1628,7 @@ fn display_canonicalize_fn<'a>(
                         let name = display_type(arity[column], ctx).to_string().to_case(Snake);
                         format!("&{name}_replacements")
                     })
-                    .join(", ");
+                    .collect_vec();
                 let relation = match rel {
                     FlatInRel::Rel(relation) => *relation,
                     FlatInRel::RelWithDiagonals { .. }
@@ -1567,8 +1638,38 @@ fn display_canonicalize_fn<'a>(
                     }
                 };
                 let invalidate = indices::invalidate(relation, index_selection, ctx);
+                let replacement_args = replacements.join(", ");
+                let mut rewrite = format!("self.{field}_all.replace_keys([{replacement_args}])");
+                if let Some((members, unrestricted)) = scope {
+                    let owner_name = display_type(arity[0], ctx).to_string().to_case(Snake);
+                    let unaffected = unrestricted
+                        .iter()
+                        .map(|&typ| {
+                            let name = display_type(typ, ctx).to_string().to_case(Snake);
+                            format!("{name}_replacements.is_empty()")
+                        })
+                        .join(" && ");
+                    let prefixes = members
+                        .iter()
+                        .map(|&typ| {
+                            let name = display_type(typ, ctx).to_string().to_case(Snake);
+                            format!("&{name}_affected_owners")
+                        })
+                        .chain(once(format!(
+                            "{owner_name}_exceptional_owners.as_ref().unwrap()"
+                        )))
+                        .join(", ");
+                    let suffix_replacements = replacements[1..].join(", ");
+                    rewrite = formatdoc! {"
+                        if {owner_name}_exceptional_owners.is_some() && {unaffected} {{
+                            self.{field}_all.replace_keys_in_prefixes(&[{prefixes}], [{suffix_replacements}])
+                        }} else {{
+                            {rewrite}
+                        }}
+                    "};
+                }
                 writedoc! {f, "
-                    if let Some(canonical) = self.{field}_all.replace_keys([{replacements}]) {{
+                    if let Some(canonical) = {rewrite} {{
                         self.{field}_all = canonical;
                         {invalidate}
                     }}
@@ -1588,6 +1689,7 @@ fn display_canonicalize_fn<'a>(
             }}
 
             fn __canonicalize_relations(&mut self) {{
+                {affected_owners}
                 {rel_blocks}
 
                 {canonicalize_inherited}

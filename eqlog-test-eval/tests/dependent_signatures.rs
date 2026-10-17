@@ -58,3 +58,38 @@ fn dynamic_signatures_retain_explicit_owner_columns() {
     assert!(model.insert(transport, &[a, b, x, x]).is_err());
     DependentSignatures::from_dynamic(&model).unwrap();
 }
+
+#[test]
+fn member_equalities_rewrite_inherited_facts_with_local_and_foreign_owners() {
+    let mut model = DependentSignatures::new();
+    let source = model.new_world();
+    let target = model.new_world();
+    let foreign = model.new_world();
+    let x = model.new_el(source);
+    let y = model.new_el(target);
+    let z = model.new_el(foreign);
+    let morphism = model.new_world_mor();
+    model.insert_world_mor_dom(morphism, source);
+    model.insert_world_mor_cod(morphism, target);
+    model.insert_el_mor_app(morphism, x, y);
+    model.insert_marked(source, x);
+    model.insert_foreign(source, foreign, z);
+    model.close();
+    assert!(model.marked(target, y));
+    assert!(model.foreign(target, foreign, z));
+
+    let alias_y = model.new_el(target);
+    let alias_z = model.new_el(foreign);
+    model.insert_marked(target, alias_y);
+    model.insert_foreign(target, foreign, alias_z);
+    model.equate_el(target, alias_y, y);
+    model.equate_el(foreign, alias_z, z);
+    model.canonicalize();
+    assert_eq!(model.iter_marked().count(), 2);
+    assert_eq!(model.iter_foreign().count(), 2);
+    assert!(model.marked(target, y));
+    assert!(model.foreign(target, foreign, z));
+    model.close();
+    assert!(model.marked(source, x));
+    assert!(model.foreign(source, foreign, z));
+}

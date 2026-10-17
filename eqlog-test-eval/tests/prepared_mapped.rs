@@ -121,3 +121,79 @@ fn separate_relation_updates_and_late_images_follow_the_whole_chain() {
     model.close();
     assert!(model.fixed_pair(bundle, last, last_elements[0], last_elements[2]));
 }
+
+#[test]
+fn scoped_reverse_lookup_reads_prepared_nested_primary_slices() {
+    let mut model = PreparedMapped::new();
+    let source = model.new_bundle();
+    let target = model.new_bundle();
+    let f = model.new_fiber(source);
+    let g = model.new_fiber(target);
+    let h = model.new_fiber(target);
+    let x = [
+        model.new_el(source, f),
+        model.new_el(source, f),
+        model.new_el(source, f),
+    ];
+    let y = [
+        model.new_el(target, g),
+        model.new_el(target, g),
+        model.new_el(target, g),
+    ];
+    let z = [
+        model.new_el(target, h),
+        model.new_el(target, h),
+        model.new_el(target, h),
+    ];
+    let outer = model.new_bundle_mor();
+    model.insert_bundle_mor_dom(outer, source);
+    model.insert_bundle_mor_cod(outer, target);
+    model.insert_fiber_mor_app(outer, f, g);
+    for i in [0, 2] {
+        model.insert_bundle_el_mor_app(outer, x[i], y[i]);
+    }
+    let inner = model.new_fiber_mor(target);
+    model.insert_fiber_mor_dom(target, inner, g);
+    model.insert_fiber_mor_cod(target, inner, h);
+    for i in 0..3 {
+        model.insert_el_mor_app(target, inner, y[i], z[i]);
+    }
+    model.insert_pair(source, f, x[0], x[1]);
+    model.insert_pair(source, f, x[1], x[2]);
+    model.insert_local_reached(target, h, z[2]);
+    model.close();
+    assert!(!model.local_reached(target, h, z[0]));
+    assert!(!model.local_reached(target, h, z[1]));
+
+    model.insert_bundle_el_mor_app(outer, x[1], y[1]);
+    assert!(model.close_until(|model| model.local_reached(target, h, z[0])));
+    model.close();
+    assert!(model.local_reached(target, h, z[1]));
+    for i in 0..3 {
+        assert!(!model.local_reached(source, f, x[i]));
+        assert!(!model.local_reached(target, g, y[i]));
+    }
+
+    let fresh = model.new_el(target, h);
+    let alias = model.new_el(target, h);
+    model.insert_pair(target, h, fresh, alias);
+    model.close();
+    assert!(!model.local_reached(target, h, fresh));
+    model.equate_el(target, h, alias, z[0]);
+    model.close();
+    assert!(model.local_reached(target, h, fresh));
+
+    let tail = model.new_fiber(target);
+    let image = model.new_el(target, tail);
+    model.insert_local_reached(target, tail, image);
+    model.close();
+    let backward = model.new_fiber_mor(target);
+    model.insert_fiber_mor_dom(target, backward, tail);
+    model.insert_fiber_mor_cod(target, backward, g);
+    model.insert_el_mor_app(target, backward, image, y[2]);
+    model.close();
+    for i in 0..3 {
+        assert!(model.local_reached(target, g, y[i]));
+        assert!(!model.local_reached(source, f, x[i]));
+    }
+}

@@ -7,14 +7,35 @@ implementation described later in this report.
 
 The baseline spent most closure time transporting existing facts and preparing
 indices. Model isolation was semantic, but its 17 global strata did not make
-small changes cheap. The implementation now caches prepared data and propagates
+small changes cheap. The first optimization round cached prepared data and propagated
 changes within that global schedule. A functionality normalization barrier
-splits the main component into separate consumers; the current ETT evaluator
-has 18 global strata. This is not a conversion to owner-local rule scheduling.
+splits the main component into separate consumers; that version of the ETT evaluator
+had 18 global strata. The subsequent scheduling work is described below.
 
 The Nat and Vec source modules, fresh contexts, equality reflection, partial
 morphisms, three-expansion budget, and single `close()` call are unchanged.
 All closure timings exclude Rust compilation.
+
+## Owner-scoped scheduling checkpoint
+
+The next engine changes retain owner-scoped rules inside ambient cycles,
+including ordinary member equalities. Global saturation still revisits the
+owner traversal when cross-owner facts change. Alternate indices reuse the
+prepared primary slices, and an immutable traversal-entry snapshot suppresses
+unchanged edge transport. These retain the existing evaluation semantics.
+
+An instrumented full run with input, output, and transport detail measured
+28.965 s in closure and 30.255 s end to end, with 328.2 MiB peak RSS. All 52
+declarations passed; the graph still has 397 SCCs and closure uses 41 allocation
+rounds. This improves the earlier 50-56 s result but does not meet the current
+five-second target. These are diagnostic timings, not an uninstrumented result.
+
+The changes also narrow inherited equality rewrites, reuse SCC partitions
+under conservative topology checks, preserve shared input subtrees, and batch
+duplicate outputs. Imported models use full equality rewriting because their
+dependent ownership facts can be incomplete. Independent review exposed the
+conflicting-endpoint and import cases; all 41 focused evaluator checks pass,
+including the resulting regressions. Broader final validation remains pending.
 
 ## Optimized results
 

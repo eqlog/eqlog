@@ -73,6 +73,16 @@ fn new_graph_edges_reactivate_consumers_and_cycles_keep_owned_support() {
     model.close();
     assert!(model.backward_result(target, a));
 
+    let parallel = model.new_container_mor();
+    model.insert_container_mor_dom(parallel, source);
+    model.insert_container_mor_cod(parallel, target);
+    model.close();
+    model.equate_container_mor(forward, parallel);
+    let fresh = model.new_atom();
+    model.insert_pair(source, a, fresh);
+    model.close();
+    assert!(model.pair(target, a, fresh));
+
     let c = model.new_atom();
     model.equate_atom(b, c);
     model.close();
