@@ -40,8 +40,9 @@ Recorded environment:
   2026-10-17, x86_64 Linux container
   AMD EPYC 9645 96-Core Processor; process pinned to logical CPU 0
   Rust 1.95.0, Cargo bench profile, default optimization settings
-  Current evaluator: 1dba1f0908197ed99afc396e8d2818bb503b4f3c
+  Pre-fix evaluator: 1dba1f0908197ed99afc396e8d2818bb503b4f3c
   Historical evaluator: db41b3eeb8bf531d39525f8cd0d703431bf13bd8
+  Fixed evaluator: b4973f9
   Benchmark harness: 5e79220
 
 The same benchmark package was copied into a detached worktree at
@@ -54,17 +55,45 @@ Allocation CSVs use the same scale, three samples, and no warmup
 (EQLOG_BENCH_SAMPLES=3 EQLOG_BENCH_WARMUP=0). The historical runs also
 set EQLOG_BENCH_MODE=simultaneous.
 
-These runs identify three follow-ups before changing the default:
-  - Unchanged model chains still take 12.0 ms and 253,628 allocations
+baseline*.csv contains the historical evaluator; current*.csv retains
+the pre-fix measurements. fixed*.csv measures the fixes without changing
+the workloads or harness. Timing runs exclude allocator instrumentation.
+The fixed timing run started after all compilation and tests finished.
+
+The pre-fix runs identified three regressions:
+  - Unchanged model chains took 12.0 ms and 253,628 allocations
     with stratified scheduling, versus 0.89 ms and 20,798 allocations
-    with current simultaneous scheduling.
-  - Current simultaneous initial closure regresses against the old
+    with pre-fix simultaneous scheduling.
+  - Pre-fix simultaneous initial closure regressed against the old
     evaluator on model chains (75.5 vs 27.9 ms), cycles (444 vs 282 ms),
     and nested models (12.5 vs 6.68 ms). Stratified initial closure
-    beats both simultaneous versions on those cases.
-  - Small equality updates take 0.57 ms stratified and 0.71 ms with
-    current simultaneous scheduling, versus 0.20 ms historically.
+    beat both simultaneous versions on those cases.
+  - Small equality updates took 0.57 ms stratified and 0.71 ms with
+    pre-fix simultaneous scheduling, versus 0.20 ms historically.
 
-The ordinary pipeline and independent components have similar initial
-closure times in the two current schedules. The large graph gains do
-not establish an advantage for stratification on every workload.
+The fixes skip closure without edits, preserve inherited roots between
+propagation passes, avoid temporary splits in tree differences, and
+reuse old checkpoints for fully bound canonical membership probes.
+Equality replacement still rebuilds inherited views, and indices that
+bind variables still filter obsolete IDs.
+
+Unchanged closure now makes zero allocations in every case and mode.
+Stratified incremental model chains fall from 267,393 allocations to
+10,799; cycles from 1,380,579 to 97,695. Equality updates fall from 6,012
+to 1,307 allocations, still above the historical evaluator's 666.
+
+Fixed simultaneous initial closure takes 14.3 ms on model chains,
+32.0 ms on cycles, and 5.63 ms on nested models, below the historical
+27.9, 282, and 6.68 ms. Stratified initial closure improves from 5.78,
+50.86, and 3.16 ms before the fixes to 1.36, 10.98, and 0.95 ms.
+
+Equality updates take 0.209 ms simultaneous and 0.233 ms stratified,
+versus 0.714 and 0.571 ms before the fixes. Both remain above the
+historical median of 0.199 ms. The stratified p10/p90 range is
+0.177-0.257 ms; the historical range is 0.169-0.238 ms.
+
+Every initial and incremental median improves over the corresponding
+pre-fix schedule. Unchanged medians are all below 0.002 ms.
+
+The large graph gains do not establish an advantage for stratification
+on every workload.

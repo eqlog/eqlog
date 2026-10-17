@@ -27,6 +27,5 @@ Cover acyclic pipelines, independent components, model chains and
 cycles, nested model graphs, and joins enabled by equality merges.
 Execute the benchmark fixtures in integration tests as well.
 
-Record measurements against the pre-merge simultaneous evaluator as
-well as both current schedules, so costs shared by the new evaluator
-remain visible.
+Keep historical, pre-fix, and fixed measurements of the same workloads
+so costs shared by both schedules and remaining overhead stay visible.
