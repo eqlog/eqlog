@@ -12,6 +12,9 @@ stratified = []
 eqlog-runtime = { path = "../eqlog-runtime" }
 maplit = ">= 0"
 
+[dev-dependencies]
+eqlog-bench = { path = "../eqlog-bench" }
+
 [build-dependencies]
 eqlog = { path = "../eqlog", features = ["rebuild"] }
 env_logger = ">= 0"

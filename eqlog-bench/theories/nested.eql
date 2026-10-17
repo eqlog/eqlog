@@ -1,0 +1,15 @@
+type Item;
+model Parent {
+    pred seed(Item);
+    pred ready(Item);
+    pred done(Item);
+    rule prepare { if seed(x); then ready(x); }
+    rule observe { if c: Child; if c.reached(x); then done(x); }
+
+    model Child {
+        pred edge(Item, Item);
+        pred reached(Item);
+        rule receive { if ready(x); then reached(x); }
+        rule step { if reached(x); if edge(x, y); then reached(y); }
+    }
+}

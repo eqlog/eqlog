@@ -1,0 +1,9 @@
+Compare closure costs across rule schedules
+
+Compile scheduling workloads in simultaneous and stratified modes and
+measure initial closure, sparse updates, and closure without changes.
+Keep construction and result checks outside the measured operation.
+
+Cover acyclic pipelines, independent components, model chains and
+cycles, nested model graphs, and joins enabled by equality merges.
+Execute the benchmark fixtures in integration tests as well.
