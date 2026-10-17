@@ -844,6 +844,7 @@ impl PrefixTree0 {
 }
 
 impl PrefixTree1 {
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.set.is_empty()
     }
@@ -1143,6 +1144,7 @@ impl PrefixTree9 {
 
 // get methods
 impl PrefixTree1 {
+    #[inline]
     pub fn get(&self, first_el: u32) -> Option<&PrefixTree0> {
         if self.set.contains(&first_el) {
             Some(PrefixTree0::non_empty())

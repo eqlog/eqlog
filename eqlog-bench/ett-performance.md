@@ -52,6 +52,13 @@ Independent reviews approved both runtime changes. The 13 prefix-tree and
 nine relation-version checks passed, alongside temporary randomized set and
 version-consumer comparisons. All 52 source declarations remain unchanged.
 
+Four inline annotations expose unary suffix iteration and membership to
+generated component crates. A same-core comparison measured 16.804 s for
+this variant, with baseline results of 19.991 s and 18.743 s. Earlier
+unpinned runs of the same variant varied from 15.877 s to 18.642 s, so small
+differences between individual experimental runs are inconclusive. Broader
+inlining and adaptive joins at every eligible loop remain unpromoted.
+
 The next engine changes retain owner-scoped rules inside ambient cycles,
 including ordinary member equalities. Global saturation still revisits the
 owner traversal when cross-owner facts change. Alternate indices reuse the

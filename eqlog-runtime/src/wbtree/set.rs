@@ -84,6 +84,7 @@ impl WBTreeSet {
         }
     }
 
+    #[inline]
     pub fn contains(&self, value: &u32) -> bool {
         match &self.storage {
             Storage::Empty => false,
@@ -255,6 +256,7 @@ enum IterStorage<'a> {
 
 impl Iterator for WBTreeSetIter<'_> {
     type Item = u32;
+    #[inline]
     fn next(&mut self) -> Option<u32> {
         match &mut self.storage {
             IterStorage::Inline(value) => value.take(),
