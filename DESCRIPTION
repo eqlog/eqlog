@@ -3,7 +3,13 @@ Compare closure costs across rule schedules
 Compile scheduling workloads in simultaneous and stratified modes and
 measure initial closure, sparse updates, and closure without changes.
 Keep construction and result checks outside the measured operation.
+Count allocation traffic in a separate build to leave timings free of
+allocator instrumentation.
 
 Cover acyclic pipelines, independent components, model chains and
 cycles, nested model graphs, and joins enabled by equality merges.
 Execute the benchmark fixtures in integration tests as well.
+
+Record measurements against the pre-merge simultaneous evaluator as
+well as both current schedules, so costs shared by the new evaluator
+remain visible.

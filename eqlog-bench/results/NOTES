@@ -1,0 +1,70 @@
+Scheduling benchmark runs
+
+Run timing benchmarks with:
+  cargo bench -p eqlog-bench --bench scheduling
+
+Run allocation counting separately with:
+  cargo bench -p eqlog-bench --bench scheduling --features allocations
+
+The harness writes CSV to stdout. EQLOG_BENCH_FILTER selects one case by
+name; EQLOG_BENCH_MODE selects simultaneous or stratified. The defaults
+are EQLOG_BENCH_SCALE=8, EQLOG_BENCH_SAMPLES=15, EQLOG_BENCH_WARMUP=2.
+Each sample constructs a fresh model. Only close() is measured; setup,
+input edits, result validation, and destruction are excluded. Incremental
+and unchanged samples first close their baseline outside measurement.
+All runs use semi-naive matching and native morphism propagation.
+
+At scale 8:
+  pipeline: 24 stages, 512 initial items; update adds 8 items.
+  independent: 16 two-rule components, 128 items each; update adds 8
+    items to one component.
+  model_chain/model_cycle: 16 models, 8 consecutive edges per model,
+    two disjoint paths of 129 items. Initially seed the first path at
+    model 0; update seeds the second path at model 8. Earlier edge
+    blocks are inherited, so the update can follow the second path
+    from its beginning.
+  nested: 4 parents in a chain, each with a chain of 4 children and
+    8 consecutive edges per child; parent morphisms map corresponding
+    children. Initially seed a 33-item path at parent 0; update seeds
+    a separate 33-item path at the last parent.
+  equality: 1024 key/value pairs with distinct lookup values. Initially
+    merge 512 pairs of values to enable lookups; update merges 32 more.
+Unchanged samples call close() again without edits.
+
+The allocation build reports successful allocation and reallocation
+counts and total requested bytes. Reallocation counts the full new
+size. These numbers describe allocation traffic, not live or peak
+memory. Timing builds use the normal allocator without counters.
+
+Recorded environment:
+  2026-10-17, x86_64 Linux container
+  AMD EPYC 9645 96-Core Processor; process pinned to logical CPU 0
+  Rust 1.95.0, Cargo bench profile, default optimization settings
+  Current evaluator: 1dba1f0908197ed99afc396e8d2818bb503b4f3c
+  Historical evaluator: db41b3eeb8bf531d39525f8cd0d703431bf13bd8
+  Benchmark harness: 5e79220
+
+The same benchmark package was copied into a detached worktree at
+db41b3e and added to that workspace. Only its simultaneous mode was
+selected. Release binaries were built before measurement and ran
+serially, pinned with taskset -c 0. Each timing CSV reports medians
+and sample p10/p90 values, not confidence intervals.
+
+Allocation CSVs use the same scale, three samples, and no warmup
+(EQLOG_BENCH_SAMPLES=3 EQLOG_BENCH_WARMUP=0). The historical runs also
+set EQLOG_BENCH_MODE=simultaneous.
+
+These runs identify three follow-ups before changing the default:
+  - Unchanged model chains still take 12.0 ms and 253,628 allocations
+    with stratified scheduling, versus 0.89 ms and 20,798 allocations
+    with current simultaneous scheduling.
+  - Current simultaneous initial closure regresses against the old
+    evaluator on model chains (75.5 vs 27.9 ms), cycles (444 vs 282 ms),
+    and nested models (12.5 vs 6.68 ms). Stratified initial closure
+    beats both simultaneous versions on those cases.
+  - Small equality updates take 0.57 ms stratified and 0.71 ms with
+    current simultaneous scheduling, versus 0.20 ms historically.
+
+The ordinary pipeline and independent components have similar initial
+closure times in the two current schedules. The large graph gains do
+not establish an advantage for stratification on every workload.
