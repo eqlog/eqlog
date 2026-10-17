@@ -617,6 +617,7 @@ impl<V: Clone> Node<V> {
         left: Option<Rc<Node<V>>>,
         right: Option<Rc<Node<V>>>,
         merge: &mut F,
+        reuse_shared: bool,
     ) -> Option<Rc<Node<V>>>
     where
         F: FnMut(&u32, V, V) -> V,
@@ -625,6 +626,9 @@ impl<V: Clone> Node<V> {
             (None, None) => None,
             (Some(t), None) | (None, Some(t)) => Some(t),
             (Some(l), Some(r)) => {
+                if reuse_shared && Rc::ptr_eq(&l, &r) {
+                    return Some(l);
+                }
                 let l_size = Self::size(&Some(l.clone()));
                 let r_size = Self::size(&Some(r.clone()));
                 if l_size >= r_size {
@@ -643,8 +647,8 @@ impl<V: Clone> Node<V> {
                         None => l_value,
                     };
 
-                    let new_left = Self::union(l_left, r_left, merge);
-                    let new_right = Self::union(l_right, r_right, merge);
+                    let new_left = Self::union(l_left, r_left, merge, reuse_shared);
+                    let new_right = Self::union(l_right, r_right, merge, reuse_shared);
                     Self::join(new_left, l_key, new_value, new_right)
                 } else {
                     // Use right tree as base, split left tree on right root's key
@@ -662,8 +666,8 @@ impl<V: Clone> Node<V> {
                         None => r_value,
                     };
 
-                    let new_left = Self::union(l_left, r_left, merge);
-                    let new_right = Self::union(l_right, r_right, merge);
+                    let new_left = Self::union(l_left, r_left, merge, reuse_shared);
+                    let new_right = Self::union(l_right, r_right, merge, reuse_shared);
                     Self::join(new_left, r_key, new_value, new_right)
                 }
             }
@@ -941,15 +945,36 @@ impl<V: Clone> WBTreeMap<V> {
         Some(value)
     }
 
-    pub fn union<F>(&self, other: &Self, mut merge: F) -> Self
+    pub fn union<F>(&self, other: &Self, merge: F) -> Self
     where
         F: FnMut(&u32, V, V) -> V,
     {
+        self.union_impl(other, merge, false)
+    }
+
+    // Set union is idempotent; arbitrary map callbacks may change shared values.
+    pub(crate) fn union_shared<F>(&self, other: &Self, merge: F) -> Self
+    where
+        F: FnMut(&u32, V, V) -> V,
+    {
+        self.union_impl(other, merge, true)
+    }
+
+    fn union_impl<F>(&self, other: &Self, mut merge: F, reuse_shared: bool) -> Self
+    where
+        F: FnMut(&u32, V, V) -> V,
+    {
+        if other.root.is_none() || (reuse_shared && self.shares_root(other)) {
+            return self.clone();
+        }
+        if self.root.is_none() {
+            return other.clone();
+        }
         let mut left = self.clone();
         let mut right = other.clone();
         left.materialize();
         right.materialize();
-        let new_root = Node::union(left.root, right.root, &mut merge);
+        let new_root = Node::union(left.root, right.root, &mut merge, reuse_shared);
         let new_len = Node::size(&new_root);
         WBTreeMap {
             root: new_root,

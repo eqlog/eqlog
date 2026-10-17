@@ -990,6 +990,7 @@ fn display_pub_insert_relation<'a>(
 
                 {contains_checks}
 
+                self.__closed = false;
                 {invalidate}
                 {index_inserts}
 
@@ -1068,6 +1069,7 @@ fn display_new_element_fn_internal<'a>(
 
                 self.{index_field}.insert([el]);
                 self.__allocated = true;
+                self.__closed = false;
 
                 assert!(self.{type_snake}_weights.len() == old_len);
                 self.{type_snake}_weights.push(0);
@@ -1289,6 +1291,7 @@ fn display_equate_elements<'a>(
                 if lhs == rhs {{
                     return;
                 }}
+                self.__closed = false;
                 {invalidate_models}
                 let lhs_weight = self.{type_snake}_weights[lhs.0 as usize];
                 let rhs_weight = self.{type_snake}_weights[rhs.0 as usize];
@@ -1945,8 +1948,6 @@ fn display_apply_morphism_index_propagated<'a>(
             .format("\n");
 
         let suffix_type = display_prefix_tree_type(suffix_len);
-        // Only callers inside cycles need a change signal to decide whether
-        // to repeat; acyclic propagation avoids the extra set difference.
         writedoc! {f, "
             for ([{prefix_vars}], mapped_dom_set) in propagated {{
                 let mapped_dom_set: {suffix_type} = mapped_dom_set;
@@ -1954,12 +1955,10 @@ fn display_apply_morphism_index_propagated<'a>(
                 if !retain_own {{
                     {index_field_name}_own.remove_restriction(el0, &mapped_dom_set);
                 }}
-                if retain_own && !changed {{
-                    changed = {index_field_name}_all.get(el0).map_or(
-                        !mapped_dom_set.is_empty(),
-                        |existing| !mapped_dom_set.difference(&existing).is_empty(),
-                    );
+                if {index_field_name}_all.get(el0).is_some_and(|existing| mapped_dom_set.is_subset(existing)) {{
+                    continue;
                 }}
+                changed |= retain_own && !mapped_dom_set.is_empty();
                 {index_field_name}_all.insert_restriction(el0, mapped_dom_set);
             }}
         "}
@@ -2413,6 +2412,7 @@ fn display_new_fn<'a>(
             }
         }
         writeln!(f, "__allocated: false,").unwrap();
+        writeln!(f, "__closed: false,").unwrap();
         writeln!(f, "}}").unwrap();
         write!(f, "}}").unwrap();
         Ok(())
@@ -2801,6 +2801,7 @@ fn display_theory_struct<'a>(
                 {element_index_fields}
                 {type_fields}
                 __allocated: bool,
+                __closed: bool,
                 __pending_delta: ModelDelta,
                 {scheduler_fields}
             }}

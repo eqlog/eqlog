@@ -164,12 +164,14 @@ fn mapped_snapshots_share_roots_without_materializing_empty_differences() {
 }
 
 #[test]
-fn generic_map_difference_still_applies_callbacks_to_shared_values() {
+fn generic_map_operations_still_apply_callbacks_to_shared_values() {
     let mut map = WBTreeMap::new();
     map.insert(1, 2);
     let snapshot = map.clone();
     let result = map.difference(&snapshot, |_, left, right| Some(left + right));
     assert_eq!(result.get(&1), Some(&4));
+    let union = map.union(&snapshot, |_, left, right| left + right);
+    assert_eq!(union.get(&1), Some(&4));
 }
 
 #[test]

@@ -434,6 +434,11 @@ impl<'s> Codegen<'s> {
                 }
                 for rel in inputs {
                     let i = self.inputs[&rel];
+                    let old = self.preparations[s].indices.iter().any(|(input, index)| {
+                        input == &rel
+                            && index.age == IndexAge::Old
+                            && selection.is_primary(input, index)
+                    });
                     let stable = stratum.stable_inputs.contains(&rel);
                     if stable {
                         begin_stable_input(f, &format!("input_{i}"), &rel, ctx)?;
@@ -451,14 +456,14 @@ impl<'s> Codegen<'s> {
                             &rel,
                             model,
                             s,
-                            true,
+                            old,
                             true,
                             ctx,
                         )?;
                     } else {
                         writeln!(
                             f,
-                            "let input_{i} = self.__rule_input_{i}.consume(({s}, Vec::new()));"
+                            "let input_{i} = self.__rule_input_{i}.consume_required::<{old}, true>(({s}, Vec::new()));"
                         )?;
                     }
                     if stable {
@@ -855,6 +860,9 @@ impl<'s> Codegen<'s> {
                 }}
 
                 fn __close_until(&mut self, condition: Option<&dyn Fn(&Self) -> bool>) -> bool {{
+                    if self.__closed {{
+                        return condition.is_some_and(|condition| condition(self));
+                    }}
                     self.__canonicalize_relations();
                     if self.__check_condition(condition) {{ return true; }}
                     let mut delta = std::mem::replace(&mut self.__pending_delta, ModelDelta::new());
@@ -867,6 +875,7 @@ impl<'s> Codegen<'s> {
                         if !self.__allocated {{
                             std::mem::swap(&mut self.__pending_delta, &mut delta);
                             self.canonicalize();
+                            self.__closed = true;
                             return false;
                         }}
                         self.__canonicalize_relations();

@@ -193,12 +193,10 @@ fn remap<'a>(
                 let mut changed = false;
                 for ([{prefix}], mapped) in propagated {{
                     {wrap}
-                    if track_changes && !changed {{
-                        match index.get(el0) {{
-                            Some(existing) => mapped.visit_difference(existing, &mut |_| changed = true),
-                            None => changed = !mapped.is_empty(),
-                        }}
+                    if index.get(el0).is_some_and(|existing| mapped.is_subset(existing)) {{
+                        continue;
                     }}
+                    changed |= track_changes && !mapped.is_empty();
                     index.insert_restriction(el0, mapped);
                 }}
                 changed

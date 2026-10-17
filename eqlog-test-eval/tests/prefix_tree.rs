@@ -1,3 +1,4 @@
+use eqlog_runtime::__private::SnapshotSet;
 use eqlog_runtime::{
     PrefixTree1, PrefixTree2, PrefixTree3, PrefixTree4, PrefixTree5, PrefixTree6, PrefixTree7,
     PrefixTree8, PrefixTree9,
@@ -42,4 +43,57 @@ fn filtering_a_later_column_does_not_leave_empty_prefixes() {
     assert!(mapped.is_empty());
     assert!(mapped.get(1).is_none());
     assert_eq!(mapped.iter_restrictions().count(), 0);
+}
+
+#[test]
+fn set_operations_preserve_shared_prefixes() {
+    let mut base = PrefixTree3::new();
+    for i in 0..128 {
+        base.insert([i, i, i]);
+    }
+    let same = base.union(&base);
+    assert!(SnapshotSet::shares_root(&same, &base));
+    let mut extended = base.clone();
+    extended.insert([128, 128, 128]);
+    assert!(base.is_subset(&extended));
+    assert!(!extended.is_subset(&base));
+    let union = base.union(&extended);
+    assert_eq!(
+        union.iter().collect::<Vec<_>>(),
+        extended.iter().collect::<Vec<_>>()
+    );
+    assert!(SnapshotSet::shares_root(
+        base.get(0).unwrap(),
+        union.get(0).unwrap()
+    ));
+}
+
+#[test]
+fn subset_comparisons_respect_mappings_and_filtered_prefixes() {
+    let mut base = PrefixTree2::new();
+    let mut mapping = PrefixTree2::new();
+    let mut expected = PrefixTree2::new();
+    for i in 0..128 {
+        base.insert([i, i]);
+        if i % 3 != 0 {
+            mapping.insert([i, i + 128]);
+            expected.insert([i + 128, i]);
+        }
+    }
+    let mapped = PrefixTree2 {
+        map: base.map.mapped(mapping),
+    };
+    assert!(mapped.is_subset(&expected));
+    assert!(expected.is_subset(&mapped));
+    assert!(!mapped.is_subset(&base));
+    assert!(!base.is_subset(&mapped));
+    assert!(SnapshotSet::shares_root(&mapped.union(&mapped), &mapped));
+    expected.insert([0, 0]);
+    assert!(mapped.is_subset(&expected));
+    assert!(!expected.is_subset(&mapped));
+    let union = mapped.union(&expected);
+    assert_eq!(
+        union.iter().collect::<Vec<_>>(),
+        expected.iter().collect::<Vec<_>>()
+    );
 }

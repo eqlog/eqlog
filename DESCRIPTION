@@ -1,10 +1,20 @@
-Compare closure costs across rule schedules
+Avoid redundant closure and snapshot work
+
+Keep closed models idle until an insertion, allocation, or equality
+changes their inputs. Preserve close_until condition checks and
+interrupted work. Build old primary views only when the stratum
+uses them.
+
+Skip shared trees and stop semantic comparisons at the first
+difference.  Retain inherited trees when morphism propagation adds
+no facts, and reuse shared subtrees in idempotent unions. This keeps
+propagation from defeating snapshot sharing on subsequent rule visits.
 
 Compile scheduling workloads in simultaneous and stratified modes and
 measure initial closure, sparse updates, and closure without changes.
 Keep construction and result checks outside the measured operation.
-Count allocation traffic in a separate build to leave timings free of
-allocator instrumentation.
+Count allocation traffic in a separate build to leave timings free
+of allocator instrumentation.
 
 Cover acyclic pipelines, independent components, model chains and
 cycles, nested model graphs, and joins enabled by equality merges.

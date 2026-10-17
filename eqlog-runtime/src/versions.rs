@@ -11,6 +11,7 @@ pub trait SnapshotSet: Clone {
     fn empty() -> Self;
     fn is_empty(&self) -> bool;
     fn shares_root(&self, other: &Self) -> bool;
+    fn is_subset(&self, other: &Self) -> bool;
     fn difference(&self, other: &Self) -> Self;
     fn visit_difference(&self, other: &Self, visit: &mut impl FnMut(Self::Row));
     fn insert_row(&mut self, row: Self::Row);
@@ -21,6 +22,9 @@ macro_rules! snapshot_set {
     ($tree:ident, $arity:literal, $left:ident, $right:ident, $shares:expr) => {
         impl SnapshotSet for $tree {
             type Row = [u32; $arity];
+            fn is_subset(&self, other: &Self) -> bool {
+                self.is_subset(other)
+            }
             fn visit_difference(&self, other: &Self, visit: &mut impl FnMut(Self::Row)) {
                 self.visit_difference(other, visit);
             }
@@ -160,12 +164,7 @@ impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
         if self.current.rows.shares_root(rows) {
             return;
         }
-        let mut changed = false;
-        self.current
-            .rows
-            .visit_difference(rows, &mut |_| changed = true);
-        rows.visit_difference(&self.current.rows, &mut |_| changed = true);
-        if !changed {
+        if self.current.rows.is_subset(rows) && rows.is_subset(&self.current.rows) {
             return;
         }
         self.current = Rc::new(Version {
@@ -190,6 +189,16 @@ impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
         consumer: Consumer,
     ) -> RelationView<T> {
         let seen = self.seen.get(&consumer).unwrap_or(&self.empty);
+        if Rc::ptr_eq(seen, &self.current) {
+            return RelationView {
+                old: if OLD {
+                    self.current.rows.clone()
+                } else {
+                    T::empty()
+                },
+                new: T::empty(),
+            };
+        }
         let view = self.views.entry(seen.id).or_insert_with(|| RelationView {
             old: None,
             new: None,
