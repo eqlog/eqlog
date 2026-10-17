@@ -1,0 +1,19 @@
+model World {
+    type El;
+    pred marked(El);
+    pred foreign(other: World, x: other.El);
+    model Fiber {
+        type Point;
+    }
+}
+
+pred related(a: World, b: World, x: a.El, y: b.El);
+func transport(a: World, b: World, x: a.El) -> b.El;
+func nested(o: World, f: o.Fiber, g: o.Fiber, x: f.Point) -> g.Point;
+pred requested(a: World, b: World, x: a.El);
+rule allocate {
+    if requested(a, b, x);
+    then y := transport(a, b, x)!;
+    then related(a, b, x, y);
+    then b.marked(y);
+}

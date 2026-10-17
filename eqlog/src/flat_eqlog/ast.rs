@@ -9,6 +9,24 @@ pub enum FlatRel {
 }
 
 impl FlatRel {
+    pub fn column_maps_under(&self, signature: &Signature, column: usize, model: TypeId) -> bool {
+        let typ = self.arity(signature)[column];
+        let depth = signature.type_(model).parents.len();
+        if signature.type_(typ).parents.get(depth) != Some(&model) {
+            return false;
+        }
+        self.parent_columns(signature)
+            .map_or(true, |columns| columns[column].get(depth) == Some(&depth))
+    }
+
+    pub fn parent_columns<'a>(&self, signature: &'a Signature) -> Option<&'a [Vec<usize>]> {
+        match self {
+            FlatRel::Pred(pred) => signature.pred_parent_columns(*pred),
+            FlatRel::Func(func) => signature.func_parent_columns(*func),
+            FlatRel::ModelMember(_) => None,
+        }
+    }
+
     pub fn arity(&self, signature: &Signature) -> Vec<TypeId> {
         match self {
             FlatRel::Pred(pred) => {

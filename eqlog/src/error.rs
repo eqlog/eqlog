@@ -759,7 +759,7 @@ impl Display for CompileErrorWithContext {
             IllegalMemberTypeExprInArgDecl { location } => {
                 write!(
                     f,
-                    "Member type expressions not allowed in function/predicate arguments\n"
+                    "Dependent signature types must name a member of an earlier model argument\n"
                 )?;
                 write_loc(f, *location)?;
             }

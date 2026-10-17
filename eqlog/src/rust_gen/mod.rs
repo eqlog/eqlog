@@ -471,14 +471,20 @@ fn display_dependent_type_checks<'a>(
             if membership_self_type(rel) == Some(typ) {
                 continue;
             }
-            if arity_types.get(..parents.len()) != Some(parents.as_slice()) {
+            if rel.parent_columns(ctx.signature()).is_none()
+                && arity_types.get(..parents.len()) != Some(parents.as_slice())
+            {
                 continue;
             }
 
             let member = rel_args[pos].to_string();
-            let parents = rel_args[..parents.len()]
+            let columns = rel
+                .parent_columns(ctx.signature())
+                .map(|columns| columns[pos].clone())
+                .unwrap_or_else(|| (0..parents.len()).collect());
+            let parents = columns
                 .iter()
-                .map(ToString::to_string)
+                .map(|&column| rel_args[column].to_string())
                 .collect();
             let checks = display_member_parent_checks(typ, &member, parents, ctx);
             write!(f, "{checks}")?;
@@ -1716,6 +1722,7 @@ fn parent_prefix_len(rel: &FlatInRel, ctx: &RustGenCtx<'_>) -> usize {
 }
 
 fn morphism_index_column_kind(
+    rel: &FlatInRel,
     parent_model_type: TypeId,
     column_index: usize,
     prefix_len: usize,
@@ -1733,12 +1740,15 @@ fn morphism_index_column_kind(
         return MorphismIndexColumnKind::Parent;
     }
 
-    if ctx
-        .signature()
-        .type_(typ)
-        .parents
-        .contains(&parent_model_type)
-    {
+    let maps = match rel {
+        FlatInRel::Rel(rel) => {
+            rel.column_maps_under(ctx.signature(), column_index, parent_model_type)
+        }
+        FlatInRel::RelWithDiagonals { .. } | FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => {
+            unreachable!("morphism indices use full member relations")
+        }
+    };
+    if maps {
         return MorphismIndexColumnKind::Member(typ);
     }
 
@@ -2091,6 +2101,7 @@ fn display_remap_parented_index<'a>(
             .copied()
             .map(|column_index| {
                 morphism_index_column_kind(
+                    &flat_in_rel,
                     parent_model_type,
                     column_index,
                     parent_cols,
@@ -2545,14 +2556,14 @@ fn display_define_fn<'a>(
                 format!("{outer}, parent_el")
             }
         } else {
-            assert_eq!(
-                ctx.signature().func(func).parents.as_slice(),
-                codomain_parents.as_slice()
-            );
-            func_arg_vars[..codomain_parents.len()]
-                .iter()
-                .cloned()
-                .map(display_var)
+            let columns = ctx
+                .signature()
+                .func_parent_columns(func)
+                .map(|columns| columns.last().unwrap().clone())
+                .unwrap_or_else(|| (0..codomain_parents.len()).collect());
+            columns
+                .into_iter()
+                .map(|column| display_var(func_arg_vars[column].clone()))
                 .format(", ")
                 .to_string()
         };

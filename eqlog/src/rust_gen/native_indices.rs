@@ -145,7 +145,14 @@ fn remap<'a>(
             .order
             .iter()
             .map(|&column| {
-                morphism_index_column_kind(model, column, parent_cols, arity[column], ctx)
+                morphism_index_column_kind(
+                    &plan.rel,
+                    model,
+                    column,
+                    parent_cols,
+                    arity[column],
+                    ctx,
+                )
             })
             .collect();
         let prefix_len = columns

@@ -17,3 +17,7 @@ eqlog = { path = "../eqlog", features = ["rebuild"] }
 env_logger = ">= 0"
 indoc = "2"
 log = ">= 0"
+
+[dev-dependencies]
+eqlog-ett = { path = "../examples/ett" }
+indoc = "2"

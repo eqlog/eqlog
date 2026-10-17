@@ -128,10 +128,15 @@ fn support_indices(
         };
         add(objects, (0..parent_len + 1).collect());
         for (column, &typ) in arity.iter().enumerate() {
-            if column < parent_len
-                || (column < parent_cols && typ == model)
-                || !signature.type_(typ).parents.contains(&model)
-            {
+            let maps = match rel {
+                FlatInRel::Rel(rel) => rel.column_maps_under(signature, column, model),
+                FlatInRel::RelWithDiagonals { .. }
+                | FlatInRel::TypeSet(_)
+                | FlatInRel::Equality(_) => {
+                    unreachable!("transport plans use full member relations")
+                }
+            };
+            if column < parent_len || (column < parent_cols && typ == model) || !maps {
                 continue;
             }
             let app = signature

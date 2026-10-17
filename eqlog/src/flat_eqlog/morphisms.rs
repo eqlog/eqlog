@@ -64,7 +64,7 @@ pub fn morphism_preservation_rules(signature: &Signature) -> Vec<FlatRule> {
             let mut target = source.clone();
             target[depth] = codomain;
             for (i, arg) in source.iter().enumerate().skip(depth + 1) {
-                if !signature.type_(arg.typ).parents.contains(&model_type) {
+                if !rel.column_maps_under(signature, i, model_type) {
                     continue;
                 }
                 let action = signature

@@ -163,6 +163,22 @@ Constants are used without parentheses, e.g. `foo` and `model.foo`.
 
 To eqlog, functions are synonymous to *partial* functions; they need not be total.
 
+Named arguments can specify the owning model of a later argument or result:
+
+```eqlog
+model Context { type Ty; type Tm; }
+pred has_type(g: Context, t: g.Tm, a: g.Ty);
+func result(g: Context, t: g.Tm) -> g.Ty;
+```
+
+The receiver of a member type must be an earlier named model argument. These
+owner bindings are checked by generated Rust APIs and dynamic models, and
+determine where `define_*` allocates a result. An ambient relation such as
+`has_type` above is not automatically preserved by context morphisms; declare
+relations inside the model when they should be preserved. For an example that
+uses ambient signatures to connect distinct models, see the
+[extensional type theory checker](examples/ett/README.md).
+
 ### Morphism identities and composition
 
 `id(m)` is the identity on a model instance `m: M`, with type `Mor(M)`.

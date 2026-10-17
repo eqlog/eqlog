@@ -7,12 +7,13 @@ members = [
   "eqlog-test-eval",
   "eqlog-test-compile",
   "eqlog-test-opt",
+  "examples/ett",
   # "v1_to_v2",
   # "examples/inference",
 ]
 
-# Keep examples out of workspace. It should be possible to build them without a
-# local eqlog checkout.
+# Standalone examples should build without a local eqlog checkout.
+# The experimental checker uses the workspace's integration test harness.
 exclude = [
   "examples/semilattice",
   "cwf-theory",

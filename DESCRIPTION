@@ -1,0 +1,17 @@
+Check extensional proofs in Eqlog context models
+
+Allow dependent relation signatures to refer to members of earlier model
+arguments, so ambient rules can relate distinct context models without
+flattening their members. Preserve owner bindings in native and dynamic
+evaluators, including foreign members of model relations.
+
+Add examples/ett with a small Lean-like frontend and an Eqlog kernel for
+context extension, partial substitutions, identity types with equality
+reflection, and finite sums with dependent recursion. Morphisms follow
+substitution. Fresh statement scopes keep equality local;
+open definitions do not allocate images of hidden body operands.
+
+Allocate three constructor expansion steps per elaborated literal
+occurrence and check the module with one close call. Include addition
+and induction proofs, and integration coverage for rejected proofs,
+context isolation, partial images, and the computation bound.

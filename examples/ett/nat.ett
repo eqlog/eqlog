@@ -1,0 +1,47 @@
+inductive Nat where
+| zero
+| succ (pred : Nat)
+
+def add (m n : Nat) : Nat :=
+  rec n motive (k : Nat) => Nat with
+  | zero => m
+  | succ k ih => Nat.succ ih
+  end
+
+theorem add_zero (n : Nat) : add n Nat.zero = n := rfl
+
+theorem add_succ (m n : Nat) :
+    add m (Nat.succ n) = Nat.succ (add m n) := rfl
+
+theorem zero_add (n : Nat) : add Nat.zero n = n :=
+  rec n motive (k : Nat) => add Nat.zero k = k with
+  | zero => rfl
+  | succ k ih => rfl
+  end
+
+theorem succ_add (m n : Nat) :
+    add (Nat.succ m) n = Nat.succ (add m n) :=
+  rec n motive (k : Nat) => add (Nat.succ m) k = Nat.succ (add m k) with
+  | zero => rfl
+  | succ k ih => rfl
+  end
+
+theorem add_comm (m n : Nat) : add m n = add n m :=
+  rec n motive (k : Nat) => add m k = add k m with
+  | zero => zero_add m
+  | succ k ih => succ_add k m
+  end
+
+theorem add_assoc (a b c : Nat) : add (add a b) c = add a (add b c) :=
+  rec c motive (k : Nat) => add (add a b) k = add a (add b k) with
+  | zero => rfl
+  | succ k ih => rfl
+  end
+
+theorem congr_succ (a b : Nat) (h : a = b) : Nat.succ a = Nat.succ b := rfl
+
+def twice (n : Nat) : Nat :=
+  let result : Nat := add n n;
+  result
+
+theorem twice_zero : twice Nat.zero = Nat.zero := rfl

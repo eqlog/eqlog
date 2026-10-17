@@ -125,8 +125,26 @@ impl DynamicContext<'_> {
                     }},
                 "}?;
             }
+            writeln!(
+                f,
+                "]).and_then(|signature| signature.with_argument_parents(vec!["
+            )?;
+            for (index, rel) in iter_flat_rels(self.ctx.signature()).enumerate() {
+                if let Some(columns) = rel.parent_columns(self.ctx.signature()) {
+                    for (column, owners) in columns.iter().enumerate() {
+                        if owners.is_empty() {
+                            continue;
+                        }
+                        let owners = owners.iter().join(", ");
+                        writeln!(
+                            f,
+                            "(eqlog_runtime::RelationId({index}), {column}, vec![{owners}]),"
+                        )?;
+                    }
+                }
+            }
             writedoc! {f, "
-                        ]).expect(\"compiler generated a valid dynamic signature\")
+                        ])).expect(\"compiler generated a valid dynamic signature\")
                     )
                 }}
             "}

@@ -118,6 +118,8 @@ pub struct Signature {
     /// descendant member type. Each function takes `(Mor<M>, T)` and
     /// returns `T`, allowing the same morphism to act at every depth.
     mor_app_funcs: BTreeMap<MorphismMemberTypes, FuncId>,
+    func_parent_columns: BTreeMap<FuncId, Vec<Vec<usize>>>,
+    pred_parent_columns: BTreeMap<PredId, Vec<Vec<usize>>>,
 }
 
 impl Signature {
@@ -131,6 +133,14 @@ impl Signature {
 
     pub fn func(&self, id: FuncId) -> &Func {
         &self.funcs[id.0]
+    }
+
+    pub fn func_parent_columns(&self, id: FuncId) -> Option<&[Vec<usize>]> {
+        self.func_parent_columns.get(&id).map(Vec::as_slice)
+    }
+
+    pub fn pred_parent_columns(&self, id: PredId) -> Option<&[Vec<usize>]> {
+        self.pred_parent_columns.get(&id).map(Vec::as_slice)
     }
 
     pub fn iter_funcs(&self) -> impl Iterator<Item = FuncId> + '_ {
@@ -330,10 +340,6 @@ impl Signature {
 /// regardless of what later resolves. Pass 2 (relation registration) skips
 /// any pred/func/ctor whose arg types or result type fail to resolve, but
 /// records the failure as a [`CompileError`].
-///
-/// Member type expressions in arg-decl positions are silently skipped here
-/// because [`crate::syntactic::check_syntactic`] already emits a
-/// higher-priority [`CompileError::IllegalMemberTypeExprInArgDecl`] for them.
 pub fn build_signature(
     ast: &Ast,
     scopes: &Scopes,
@@ -453,24 +459,35 @@ impl<'a> Builder<'a> {
             match *self.ast.decl(*decl) {
                 Decl::Pred(id) => {
                     let args = self.ast.pred_decl(id).args;
-                    if let Some(arity) = self.resolve_arg_types(args) {
+                    if let Some((arity, columns)) = self.resolve_arg_types(args, parents) {
                         let pid = self.signature.push_pred(Pred {
                             parents: parents.to_vec(),
                             arity,
                         });
+                        self.signature.pred_parent_columns.insert(pid, columns);
                         self.signature.pred_decls.insert(id, pid);
                     }
                 }
                 Decl::Func(id) => {
                     let FuncDecl { args, result, .. } = *self.ast.func_decl(id);
-                    let domain = self.resolve_arg_types(args);
-                    let codomain = self.resolve_signature_type_expr(result);
-                    if let (Some(domain), Some(codomain)) = (domain, codomain) {
+                    let resolved = self.resolve_arg_types(args, parents);
+                    if let Some((domain, mut columns)) = resolved {
+                        let Some((codomain, result_columns)) = self.resolve_dependent_type(
+                            result,
+                            parents,
+                            &self.ast.arg_decl_list(args).args,
+                            &domain,
+                            &columns,
+                        ) else {
+                            continue;
+                        };
+                        columns.push(result_columns);
                         let fid = self.signature.push_func(Func {
                             parents: parents.to_vec(),
                             domain,
                             codomain,
                         });
+                        self.signature.func_parent_columns.insert(fid, columns);
                         self.signature.func_decls.insert(id, fid);
                     }
                 }
@@ -490,12 +507,14 @@ impl<'a> Builder<'a> {
                     let ctors = self.ast.enum_decl(id).ctors.clone();
                     for ctor in ctors {
                         let args = self.ast.ctor_decl(ctor).args;
-                        if let Some(domain) = self.resolve_arg_types(args) {
+                        if let Some((domain, mut columns)) = self.resolve_arg_types(args, parents) {
+                            columns.push((0..parents.len()).collect());
                             let fid = self.signature.push_func(Func {
                                 parents: parents.to_vec(),
                                 domain,
                                 codomain,
                             });
+                            self.signature.func_parent_columns.insert(fid, columns);
                             self.signature.ctor_decls.insert(ctor, fid);
                         }
                     }
@@ -512,25 +531,108 @@ impl<'a> Builder<'a> {
         }
     }
 
-    /// Resolves every arg's type expression. Errors are accumulated for all
-    /// args before returning. The final `Option` is `None` iff at least one
-    /// resolution failed.
-    fn resolve_arg_types(&mut self, args: ArgDeclListId) -> Option<Vec<TypeId>> {
-        let arg_ids: Vec<ArgDeclId> = self.ast.arg_decl_list(args).args.clone();
-        let mut tids = Vec::with_capacity(arg_ids.len());
-        let mut all_ok = true;
-        for arg in arg_ids {
-            let typ_expr = self.ast.arg_decl(arg).typ;
-            match self.resolve_signature_type_expr(typ_expr) {
-                Some(tid) => tids.push(tid),
-                None => all_ok = false,
+    fn resolve_arg_types(
+        &mut self,
+        args: ArgDeclListId,
+        parents: &[TypeId],
+    ) -> Option<(Vec<TypeId>, Vec<Vec<usize>>)> {
+        let arg_ids = self.ast.arg_decl_list(args).args.clone();
+        let mut types = Vec::new();
+        let mut columns: Vec<Vec<usize>> = (0..parents.len()).map(|i| (0..i).collect()).collect();
+        for (i, &arg) in arg_ids.iter().enumerate() {
+            let (typ, owners) = self.resolve_dependent_type(
+                self.ast.arg_decl(arg).typ,
+                parents,
+                &arg_ids[..i],
+                &types,
+                &columns,
+            )?;
+            types.push(typ);
+            columns.push(owners);
+        }
+        Some((types, columns))
+    }
+
+    fn resolve_dependent_type(
+        &mut self,
+        expr: TypeExprId,
+        parents: &[TypeId],
+        args: &[ArgDeclId],
+        types: &[TypeId],
+        columns: &[Vec<usize>],
+    ) -> Option<(TypeId, Vec<usize>)> {
+        let member = match *self.ast.type_expr(expr) {
+            TypeExpr::Ambient(_) | TypeExpr::Mor(_) => {
+                let typ = self.resolve_signature_type_expr(expr)?;
+                return Some((typ, (0..self.signature.type_(typ).parents.len()).collect()));
             }
-        }
-        if all_ok {
-            Some(tids)
-        } else {
-            None
-        }
+            TypeExpr::Member(member) => *self.ast.term_member(member),
+        };
+        let receiver = match *self.ast.term(member.term) {
+            Term::Ident(id) => id,
+            Term::Wildcard
+            | Term::App(_)
+            | Term::Member(_)
+            | Term::Dom(_)
+            | Term::Cod(_)
+            | Term::Id(_)
+            | Term::Comp(_) => {
+                self.errors
+                    .push(CompileError::IllegalMemberTypeExprInArgDecl {
+                        location: self.ast.loc(expr),
+                    });
+                return None;
+            }
+        };
+        let name = &self.ast.ident_term(receiver).name;
+        let Some(index) = args
+            .iter()
+            .rposition(|&arg| self.ast.arg_decl(arg).name.as_ref() == Some(name))
+        else {
+            self.errors.push(CompileError::UndeclaredSymbol {
+                name: name.clone(),
+                used_at: self.ast.loc(receiver),
+            });
+            return None;
+        };
+        let model = self
+            .signature
+            .model_decls
+            .iter()
+            .find_map(|(&model, ids)| (ids.type_ == types[index]).then_some(model));
+        let Some(model) = model else {
+            self.errors.push(CompileError::InvalidMorphismOperand {
+                expected: "a model-valued argument",
+                location: self.ast.loc(member.term),
+            });
+            return None;
+        };
+        let name = self.ast.ident_term(member.name).name.clone();
+        let symbol = self
+            .scopes
+            .scope(self.scopes.unordered(model))
+            .symbols
+            .get(&name)
+            .copied();
+        let typ = match symbol {
+            Some(Symbol::Type(id)) => self.signature.type_for_type_decl(id),
+            Some(Symbol::Enum(id)) => self.signature.type_for_enum_decl(id),
+            Some(Symbol::Model(id)) => self.signature.ids_for_model_decl(id).type_,
+            Some(other) => {
+                self.emit_wrong_kind(name, other, SymbolKind::Type, self.ast.loc(member.name));
+                return None;
+            }
+            None => {
+                self.errors.push(CompileError::UndeclaredSymbol {
+                    name,
+                    used_at: self.ast.loc(member.name),
+                });
+                return None;
+            }
+        };
+        let mut owners = columns[parents.len() + index].clone();
+        owners.push(parents.len() + index);
+        Some((typ, owners))
     }
 
     fn resolve_signature_type_expr(&mut self, type_expr: TypeExprId) -> Option<TypeId> {
@@ -576,9 +678,10 @@ impl<'a> Builder<'a> {
                 }
             }
             TypeExpr::Member(_) => {
-                // `crate::syntactic::check_syntactic` already emits
-                // `IllegalMemberTypeExprInArgDecl` for these. We'd just
-                // duplicate.
+                self.errors
+                    .push(CompileError::IllegalMemberTypeExprInArgDecl {
+                        location: self.ast.loc(type_expr),
+                    });
                 None
             }
         }
