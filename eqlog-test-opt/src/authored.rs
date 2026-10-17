@@ -64,7 +64,7 @@ impl Run {
     }
 }
 
-fn assert_equivalent(runs: [(&str, Run); 8]) {
+fn assert_equivalent(runs: [(&str, Run); 4]) {
     let (reference_name, reference) = &runs[0];
     assert!(!reference.closures.is_empty());
     for (name, run) in &runs[1..] {

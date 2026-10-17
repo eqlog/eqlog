@@ -6,7 +6,6 @@ edition = "2021"
 [features]
 naive = []
 desugared = []
-simultaneous = []
 
 [dependencies]
 eqlog-runtime = { path = "../eqlog-runtime" }

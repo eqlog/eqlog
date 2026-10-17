@@ -44,9 +44,6 @@ fn main() -> eqlog::Result<()> {
     if cfg!(feature = "desugared") {
         options.model_mode = eqlog::ModelMode::Desugared;
     }
-    if cfg!(feature = "simultaneous") {
-        options.scheduling_mode = eqlog::SchedulingMode::Simultaneous;
-    }
     eqlog::process_root_with_options(&options)?;
     build_long_pipeline(options)?;
     Ok(())

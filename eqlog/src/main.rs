@@ -1,7 +1,5 @@
 use clap::{Parser, ValueEnum};
-use eqlog::{
-    process, CompileOptions, ComponentConfig, Config, EvaluationMode, ModelMode, SchedulingMode,
-};
+use eqlog::{process, CompileOptions, ComponentConfig, Config, EvaluationMode, ModelMode};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -42,10 +40,6 @@ struct Cli {
     /// Model and morphism evaluation strategy
     #[arg(long, value_enum, default_value = "native")]
     model_mode: ModelMode,
-
-    /// Fixed-point scheduling strategy
-    #[arg(long, value_enum, default_value = "stratified")]
-    scheduling_mode: SchedulingMode,
 
     /// Output directory for component libraries (required for component build)
     #[arg(
@@ -113,7 +107,6 @@ fn main() -> ExitCode {
         options: CompileOptions {
             evaluation_mode: cli.evaluation_mode,
             model_mode: cli.model_mode,
-            scheduling_mode: cli.scheduling_mode,
         },
     };
 

@@ -7,7 +7,7 @@ use crate::error::*;
 use crate::flat_eqlog::*;
 use crate::flatten::*;
 use crate::grammar::*;
-use crate::options::{CompileOptions, EvaluationMode, ModelMode, SchedulingMode};
+use crate::options::{CompileOptions, EvaluationMode, ModelMode};
 use crate::rust_gen::*;
 use crate::scope_checks::{check_bindings, check_occurrences};
 use crate::scopes::resolve_scopes;
@@ -147,15 +147,10 @@ fn digest_program(theory_name: &str, src: &str, options: &CompileOptions) -> Dig
         ModelMode::Native => "native",
         ModelMode::Desugared => "desugared",
     };
-    let scheduling_mode = match options.scheduling_mode {
-        SchedulingMode::Simultaneous => "simultaneous",
-        SchedulingMode::Stratified => "stratified",
-    };
     Sha256::new()
         .chain_update(digest_source(theory_name, src))
         .chain_update(evaluation_mode.as_bytes())
         .chain_update(model_mode.as_bytes())
-        .chain_update(scheduling_mode.as_bytes())
         .finalize()
         .into()
 }
@@ -516,12 +511,8 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     }
     let flatten_ctx = FlattenCtx::new(&ast, module, &signature, &rule_structures);
     let mut flat_rule_groups = flatten(&flatten_ctx, &config.options);
-    let schedule = schedule_rule_groups(
-        &mut flat_rule_groups,
-        &signature,
-        config.options.model_mode,
-        config.options.scheduling_mode,
-    );
+    let schedule =
+        schedule_rule_groups(&mut flat_rule_groups, &signature, config.options.model_mode);
     let flat_rules_iter = flat_rule_groups.iter().flat_map(|group| group.rules.iter());
     let index_selection = select_indices(flat_rules_iter, &signature, config.options.model_mode);
 

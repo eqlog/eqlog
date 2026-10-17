@@ -1,5 +1,5 @@
 use crate::model_strata::{ModelStrata, World};
-#[cfg(all(not(feature = "simultaneous"), not(feature = "desugared")))]
+#[cfg(not(feature = "desugared"))]
 use std::cell::Cell;
 
 fn morphism(m: &mut ModelStrata, a: World, b: World) {
@@ -259,7 +259,7 @@ fn a_recursive_owner_can_advance_while_another_rule_has_an_empty_input() {
     }
 }
 
-#[cfg(all(not(feature = "simultaneous"), not(feature = "desugared")))]
+#[cfg(not(feature = "desugared"))]
 #[test]
 fn merging_two_owners_does_not_replay_unrelated_owners() {
     let mut checks = Vec::new();

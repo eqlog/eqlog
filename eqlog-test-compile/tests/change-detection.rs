@@ -180,37 +180,3 @@ fn model_mode_changes_invalidate_cache() {
         }
     }
 }
-
-#[test]
-fn scheduling_mode_changes_invalidate_cache() {
-    let in_dir = TempDir::new("scheduling-mode-in").unwrap();
-    let out_dir = TempDir::new("scheduling-mode-out").unwrap();
-    let mut config = Config {
-        in_dir: in_dir.path().to_path_buf(),
-        out_dir: out_dir.path().to_path_buf(),
-        component_build: None,
-        options: CompileOptions::default(),
-    };
-    fs::write(
-        config.in_dir.join("theory.eql"),
-        indoc! {"
-            type Foo;
-            pred input(Foo);
-            pred output(Foo);
-            rule { if input(x); then output(x); }
-        "},
-    )
-    .unwrap();
-    let out_file = config.out_dir.join("theory.eql.rs");
-    process(&config).unwrap();
-    for scheduling_mode in [SchedulingMode::Simultaneous, SchedulingMode::Stratified] {
-        let sentinel = pin_modified(&out_file);
-        config.options.scheduling_mode = scheduling_mode;
-        process(&config).unwrap();
-        assert_ne!(read_modified(&out_file), sentinel);
-
-        let sentinel = pin_modified(&out_file);
-        process(&config).unwrap();
-        assert_eq!(read_modified(&out_file), sentinel);
-    }
-}

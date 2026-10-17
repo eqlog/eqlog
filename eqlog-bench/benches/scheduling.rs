@@ -38,19 +38,15 @@ fn main() {
     let scale = setting("EQLOG_BENCH_SCALE", 8);
     assert!(samples > 0 && scale > 0);
     let filter = env::var_os("EQLOG_BENCH_FILTER");
-    let mode = env::var_os("EQLOG_BENCH_MODE");
     let cases: Vec<_> = cases()
         .into_iter()
-        .filter(|case| {
-            filter.as_ref().is_none_or(|filter| case.name == filter)
-                && mode.as_ref().is_none_or(|mode| case.mode == mode)
-        })
+        .filter(|case| filter.as_ref().is_none_or(|filter| case.name == filter))
         .collect();
     assert!(!cases.is_empty(), "no matching workloads");
     #[cfg(not(feature = "allocations"))]
-    println!("case,phase,mode,scale,samples,median_ns,p10_ns,p90_ns");
+    println!("case,phase,scale,samples,median_ns,p10_ns,p90_ns");
     #[cfg(feature = "allocations")]
-    println!("case,phase,mode,scale,samples,median_allocations,median_allocated_bytes");
+    println!("case,phase,scale,samples,median_allocations,median_allocated_bytes");
     for phase in [Phase::Initial, Phase::Incremental, Phase::Unchanged] {
         let mut results = vec![Vec::with_capacity(samples); cases.len()];
         for sample in 0..warmup + samples {
@@ -73,21 +69,20 @@ fn main() {
         for (case, mut results) in cases.iter().zip(results) {
             results.sort_unstable();
             let name = case.name;
-            let mode = case.mode;
             let phase = phase.name();
             let median = results[samples / 2].0;
             #[cfg(not(feature = "allocations"))]
             {
                 let p10 = results[(samples - 1) / 10].0;
                 let p90 = results[(samples - 1) * 9 / 10].0;
-                println!("{name},{phase},{mode},{scale},{samples},{median},{p10},{p90}");
+                println!("{name},{phase},{scale},{samples},{median},{p10},{p90}");
             }
             #[cfg(feature = "allocations")]
             {
                 let mut bytes: Vec<_> = results.iter().map(|result| result.1).collect();
                 bytes.sort_unstable();
                 let bytes = bytes[samples / 2];
-                println!("{name},{phase},{mode},{scale},{samples},{median},{bytes}");
+                println!("{name},{phase},{scale},{samples},{median},{bytes}");
             }
         }
     }

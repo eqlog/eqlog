@@ -5,7 +5,7 @@ use crate::flat_eqlog::{
     infer_rule_scopes, iter_flat_rels, morphism_preservation_rules, FlatInRel, FlatOutRel,
     FlatRuleGroup, RuleScope,
 };
-use crate::options::{ModelMode, SchedulingMode};
+use crate::options::ModelMode;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StratumId(pub usize);
@@ -36,33 +36,6 @@ struct Dependencies {
     edges: Vec<Vec<usize>>,
 }
 
-pub fn schedule_rule_groups(
-    groups: &mut [FlatRuleGroup],
-    signature: &Signature,
-    model_mode: ModelMode,
-    scheduling_mode: SchedulingMode,
-) -> RuleSchedule {
-    let scoped = scheduling_mode == SchedulingMode::Stratified && model_mode == ModelMode::Native;
-    if scoped {
-        infer_rule_scopes(groups, signature);
-    } else {
-        for rule in groups.iter_mut().flat_map(|group| &mut group.rules) {
-            rule.scope = RuleScope::Global;
-        }
-    }
-    match scheduling_mode {
-        SchedulingMode::Simultaneous => RuleSchedule {
-            strata: vec![Stratum {
-                groups: (0..groups.len()).collect(),
-                model: None,
-                stable_inputs: BTreeSet::new(),
-            }],
-            body: Schedule::Saturate(Box::new(Schedule::Rules(StratumId(0)))),
-        },
-        SchedulingMode::Stratified => strata(groups, signature, model_mode),
-    }
-}
-
 fn resource(rel: &FlatInRel) -> FlatInRel {
     match rel {
         FlatInRel::RelWithDiagonals { rel, .. } => FlatInRel::Rel(*rel),
@@ -70,11 +43,19 @@ fn resource(rel: &FlatInRel) -> FlatInRel {
     }
 }
 
-fn strata(
+pub fn schedule_rule_groups(
     groups: &mut [FlatRuleGroup],
     signature: &Signature,
     model_mode: ModelMode,
 ) -> RuleSchedule {
+    match model_mode {
+        ModelMode::Native => infer_rule_scopes(groups, signature),
+        ModelMode::Desugared => {
+            for rule in groups.iter_mut().flat_map(|group| &mut group.rules) {
+                rule.scope = RuleScope::Global;
+            }
+        }
+    }
     let resources: Vec<_> = iter_flat_rels(signature)
         .map(FlatInRel::Rel)
         .chain(signature.iter_types().map(FlatInRel::TypeSet))

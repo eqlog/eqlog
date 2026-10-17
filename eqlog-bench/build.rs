@@ -2,7 +2,7 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-use eqlog::{CompileOptions, Config, SchedulingMode};
+use eqlog::{CompileOptions, Config};
 use indoc::formatdoc;
 
 fn pipeline() -> String {
@@ -49,48 +49,37 @@ fn main() -> eqlog::Result<()> {
     ];
     let mut modules = String::new();
     let mut cases = Vec::new();
-    for (mode_index, (mode, scheduling_mode)) in [
-        ("simultaneous", SchedulingMode::Simultaneous),
-        ("stratified", SchedulingMode::Stratified),
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        for (source_index, (name, source)) in sources.iter().enumerate() {
-            let module = format!("bench_{source_index}_mode_{mode_index}");
-            let model = format!("Bench{source_index}Mode{mode_index}");
-            let input = out.join(format!("input_{module}"));
-            fs::create_dir_all(&input)?;
-            fs::write(input.join(format!("{module}.eql")), source)?;
-            let output = out.join(&module);
-            eqlog::process(&Config {
-                in_dir: input,
-                out_dir: output.clone(),
-                component_build: None,
-                options: CompileOptions {
-                    scheduling_mode,
-                    ..CompileOptions::default()
-                },
-            })?;
-            let path = output.join(format!("{module}.eql.rs"));
-            let path = path.to_str().unwrap();
-            modules.push_str(&formatdoc! {"
-                mod {module} {{ include!({path:?}); }}
-                impl Evaluator for {module}::{model} {{
-                    fn new() -> Self {{ Self::new() }}
-                    fn close(&mut self) {{ self.close(); }}
-                }}
-            "});
-            let workloads = if *name == "graph" {
-                vec!["model_chain", "model_cycle"]
-            } else {
-                vec![*name]
-            };
-            for workload in workloads {
-                cases.push(format!(
-                    "Case {{ name: {workload:?}, mode: {mode:?}, prepare: workloads::{workload}::<{module}::{model}> }}"
-                ));
-            }
+    for (source_index, (name, source)) in sources.iter().enumerate() {
+        let module = format!("bench_{source_index}");
+        let model = format!("Bench{source_index}");
+        let input = out.join(format!("input_{module}"));
+        fs::create_dir_all(&input)?;
+        fs::write(input.join(format!("{module}.eql")), source)?;
+        let output = out.join(&module);
+        eqlog::process(&Config {
+            in_dir: input,
+            out_dir: output.clone(),
+            component_build: None,
+            options: CompileOptions::default(),
+        })?;
+        let path = output.join(format!("{module}.eql.rs"));
+        let path = path.to_str().unwrap();
+        modules.push_str(&formatdoc! {"
+            mod {module} {{ include!({path:?}); }}
+            impl Evaluator for {module}::{model} {{
+                fn new() -> Self {{ Self::new() }}
+                fn close(&mut self) {{ self.close(); }}
+            }}
+        "});
+        let workloads = if *name == "graph" {
+            vec!["model_chain", "model_cycle"]
+        } else {
+            vec![*name]
+        };
+        for workload in workloads {
+            cases.push(format!(
+                "Case {{ name: {workload:?}, prepare: workloads::{workload}::<{module}::{model}> }}"
+            ));
         }
     }
     let cases = cases.join(",\n");

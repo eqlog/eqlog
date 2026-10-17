@@ -28,7 +28,6 @@ pub trait Workload {
 
 pub struct Case {
     pub name: &'static str,
-    pub mode: &'static str,
     pub prepare: fn(usize, Phase) -> Box<dyn Workload>,
 }
 
