@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::versions::SnapshotSet;
 use crate::wbtree::{map, map::WBTreeMap, set::WBTreeSet};
 
 // type definitions
@@ -1591,6 +1592,45 @@ impl PrefixTree9 {
         }
     }
 }
+
+impl PrefixTree0 {
+    pub fn intersection(&self, other: &Self) -> Self {
+        Self(self.0.and(other.0))
+    }
+}
+
+impl PrefixTree1 {
+    pub fn intersection(&self, other: &Self) -> Self {
+        Self {
+            set: self.set.intersection(&other.set),
+        }
+    }
+}
+
+macro_rules! intersection {
+    ($($tree:ident),*) => {$(
+        impl $tree {
+            pub fn intersection(&self, other: &Self) -> Self {
+                let map = self.map.intersection_shared(&other.map, |_key, left, right| {
+                    let result = left.intersection(right);
+                    (!result.is_empty()).then_some(result)
+                }, |left, right| left.shares_root(right));
+                Self { map }
+            }
+        }
+    )*};
+}
+
+intersection!(
+    PrefixTree2,
+    PrefixTree3,
+    PrefixTree4,
+    PrefixTree5,
+    PrefixTree6,
+    PrefixTree7,
+    PrefixTree8,
+    PrefixTree9
+);
 
 // difference methods
 impl PrefixTree0 {

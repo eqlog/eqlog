@@ -758,6 +758,97 @@ impl<V: Clone> Node<V> {
             },
         }
     }
+
+    fn intersection<F, E>(
+        left: Option<&Rc<Node<V>>>,
+        mut right: Option<&Rc<Node<V>>>,
+        lower: Option<u32>,
+        upper: Option<u32>,
+        intersect: &mut F,
+        same_value: &E,
+    ) -> Option<Rc<Node<V>>>
+    where
+        F: FnMut(&u32, &V, &V) -> Option<V>,
+        E: Fn(&V, &V) -> bool,
+    {
+        let left = left?;
+        while let Some(node) = right {
+            let data = match node.as_ref() {
+                Node::Data(data) => data,
+                Node::Mapping(_) => unreachable!("set operations materialize mappings"),
+            };
+            if lower.is_some_and(|lower| data.key <= lower) {
+                right = data.right.as_ref();
+            } else if upper.is_some_and(|upper| data.key >= upper) {
+                right = data.left.as_ref();
+            } else {
+                break;
+            }
+        }
+        let right = right?;
+        if Rc::ptr_eq(left, right) {
+            return Some(left.clone());
+        }
+        let data = match left.as_ref() {
+            Node::Data(data) => data,
+            Node::Mapping(_) => unreachable!("set operations materialize mappings"),
+        };
+        let mut candidate = Some(right);
+        let mut value = None;
+        while let Some(node) = candidate {
+            let other = match node.as_ref() {
+                Node::Data(other) => other,
+                Node::Mapping(_) => unreachable!("set operations materialize mappings"),
+            };
+            match data.key.cmp(&other.key) {
+                Ordering::Less => candidate = other.left.as_ref(),
+                Ordering::Greater => candidate = other.right.as_ref(),
+                Ordering::Equal => {
+                    value = intersect(&data.key, &data.value, &other.value);
+                    break;
+                }
+            }
+        }
+        let new_left = Self::intersection(
+            data.left.as_ref(),
+            Some(right),
+            lower,
+            Some(data.key),
+            intersect,
+            same_value,
+        );
+        let new_right = Self::intersection(
+            data.right.as_ref(),
+            Some(right),
+            Some(data.key),
+            upper,
+            intersect,
+            same_value,
+        );
+        match value {
+            Some(value) => {
+                let same_left = match (&new_left, &data.left) {
+                    (Some(new), Some(old)) => Rc::ptr_eq(new, old),
+                    (None, None) => true,
+                    (Some(_), None) | (None, Some(_)) => false,
+                };
+                let same_right = match (&new_right, &data.right) {
+                    (Some(new), Some(old)) => Rc::ptr_eq(new, old),
+                    (None, None) => true,
+                    (Some(_), None) | (None, Some(_)) => false,
+                };
+                if same_left && same_right && same_value(&data.value, &value) {
+                    Some(left.clone())
+                } else {
+                    Self::join(new_left, data.key, value, new_right)
+                }
+            }
+            None => match (new_left, new_right) {
+                (None, tree) | (tree, None) => tree,
+                (Some(left), Some(right)) => Self::join_without_key(left, right),
+            },
+        }
+    }
 }
 
 impl<V: Clone> WBTreeMap<V> {
@@ -1015,6 +1106,40 @@ impl<V: Clone> WBTreeMap<V> {
             root: new_root,
             len: new_len,
         }
+    }
+
+    // Shared roots bypass intersect, so it must be idempotent. same_value must
+    // imply equality; retaining unchanged roots preserves version checkpoints.
+    pub(crate) fn intersection_shared<F, E>(
+        &self,
+        other: &Self,
+        mut intersect: F,
+        same_value: E,
+    ) -> Self
+    where
+        F: FnMut(&u32, &V, &V) -> Option<V>,
+        E: Fn(&V, &V) -> bool,
+    {
+        if self.shares_root(other) {
+            return self.clone();
+        }
+        if self.root.is_none() || other.root.is_none() {
+            return Self::new();
+        }
+        let mut left = self.clone();
+        let mut right = other.clone();
+        left.materialize();
+        right.materialize();
+        let root = Node::intersection(
+            left.root.as_ref(),
+            right.root.as_ref(),
+            None,
+            None,
+            &mut intersect,
+            &same_value,
+        );
+        let len = Node::size(&root);
+        Self { root, len }
     }
 
     pub fn difference<F>(&self, other: &Self, diff: F) -> Self

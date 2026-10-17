@@ -44,6 +44,14 @@ identity fast path for unmapped tree iterators, measured 3.858 s for Nat and
 optimization-oracle tests pass across naive/semi-naive and native/desugared
 evaluation, including late equalities, partial images, and circular graphs.
 
+Inline singleton suffix sets reduced the full run to 18.451 s and peak RSS
+to 245.3 MiB. Direct structural intersection of persistent snapshots then
+measured 17.283 s with the same peak memory. Both preserve shared subtrees;
+intersection avoids constructing removed rows merely to subtract them again.
+Independent reviews approved both runtime changes. The 13 prefix-tree and
+nine relation-version checks passed, alongside temporary randomized set and
+version-consumer comparisons. All 52 source declarations remain unchanged.
+
 The next engine changes retain owner-scoped rules inside ambient cycles,
 including ordinary member equalities. Global saturation still revisits the
 owner traversal when cross-owner facts change. Alternate indices reuse the

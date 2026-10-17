@@ -3,7 +3,7 @@ use eqlog_runtime::{
     PrefixTree1, PrefixTree2, PrefixTree3, PrefixTree4, PrefixTree5, PrefixTree6, PrefixTree7,
     PrefixTree8, PrefixTree9,
 };
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 macro_rules! restriction_tests {
     ($name:ident, $tree:ident, $restriction:ident, $arity:expr) => {
@@ -58,6 +58,10 @@ fn set_operations_preserve_shared_prefixes() {
     extended.insert([128, 128, 128]);
     assert!(base.is_subset(&extended));
     assert!(!extended.is_subset(&base));
+    assert!(SnapshotSet::shares_root(
+        &base.intersection(&extended),
+        &base
+    ));
     let union = base.union(&extended);
     assert_eq!(
         union.iter().collect::<Vec<_>>(),
@@ -90,6 +94,10 @@ fn subset_comparisons_respect_mappings_and_filtered_prefixes() {
     assert!(!base.is_subset(&mapped));
     assert!(mapped.difference(&expected).is_empty());
     assert!(expected.difference(&mapped).is_empty());
+    assert!(SnapshotSet::shares_root(
+        &mapped.intersection(&mapped),
+        &mapped
+    ));
     assert!(SnapshotSet::shares_root(&mapped.union(&mapped), &mapped));
     expected.insert([0, 0]);
     assert!(mapped.is_subset(&expected));
@@ -103,6 +111,12 @@ fn subset_comparisons_respect_mappings_and_filtered_prefixes() {
         union.iter().collect::<Vec<_>>(),
         expected.iter().collect::<Vec<_>>()
     );
+    for (left, right) in [(&mapped, &expected), (&expected, &mapped)] {
+        assert_eq!(
+            left.intersection(right).iter().collect::<Vec<_>>(),
+            mapped.iter().collect::<Vec<_>>()
+        );
+    }
 }
 
 #[test]
@@ -125,6 +139,49 @@ fn differences_agree_with_tuple_sets_after_scattered_edits() {
             let mut visited = Vec::new();
             left.visit_difference(right, &mut |row| visited.push(row));
             assert_eq!(visited, expected);
+            let expected: Vec<_> = left_rows.intersection(&right_rows).copied().collect();
+            assert_eq!(
+                left.intersection(right).iter().collect::<Vec<_>>(),
+                expected
+            );
         }
+    }
+}
+
+#[test]
+fn singleton_suffix_snapshots_survive_edits_and_key_replacement() {
+    let original_rows = [[0, 0], [1, 1 << 31], [2, u32::MAX], [3, 7], [4, 7]];
+    let mut original = PrefixTree2::new();
+    for row in original_rows {
+        original.insert(row);
+    }
+    let mut multiple = original.clone();
+    multiple.insert([0, u32::MAX]);
+    let mut edited = multiple.clone();
+    edited.remove([0, 0]);
+    edited.remove([3, 7]);
+
+    assert_eq!(original.iter().collect::<Vec<_>>(), original_rows);
+    assert_eq!(multiple.get(0).unwrap().iter().count(), 2);
+    assert_eq!(
+        edited.get(0).unwrap().iter().collect::<Vec<_>>(),
+        [[u32::MAX]]
+    );
+    assert!(edited.get(3).is_none());
+    assert_eq!(
+        edited.difference(&original).iter().collect::<Vec<_>>(),
+        [[0, u32::MAX]]
+    );
+
+    let replacements = BTreeMap::from([(0, 1), (1 << 31, 2), (u32::MAX, 3), (7, 4)]);
+    for snapshot in [original, multiple, edited] {
+        let renamed = snapshot
+            .replace_keys([&BTreeMap::new(), &replacements])
+            .unwrap();
+        let expected: BTreeSet<_> = snapshot
+            .iter()
+            .map(|[prefix, key]| [prefix, replacements[&key]])
+            .collect();
+        assert_eq!(renamed.iter().collect::<BTreeSet<_>>(), expected);
     }
 }

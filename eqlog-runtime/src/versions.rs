@@ -13,6 +13,9 @@ pub trait SnapshotSet: Clone {
     fn shares_root(&self, other: &Self) -> bool;
     fn is_subset(&self, other: &Self) -> bool;
     fn difference(&self, other: &Self) -> Self;
+    fn intersection(&self, other: &Self) -> Self {
+        self.difference(&self.difference(other))
+    }
     fn visit_difference(&self, other: &Self, visit: &mut impl FnMut(Self::Row));
     fn insert_row(&mut self, row: Self::Row);
     fn remove_row(&mut self, row: Self::Row);
@@ -44,6 +47,9 @@ macro_rules! snapshot_set {
                 let $left = self;
                 let $right = other;
                 $shares
+            }
+            fn intersection(&self, other: &Self) -> Self {
+                self.intersection(other)
             }
             fn difference(&self, other: &Self) -> Self {
                 self.difference(other)
@@ -229,11 +235,9 @@ impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
         } else {
             view.old
                 .get_or_insert_with(|| {
-                    // Removing obsolete IDs is safe; replacing them by their roots here
-                    // would hide joins that only became possible after an equality.
-                    // Subtract whole removed subtrees without flattening their rows.
-                    seen.rows
-                        .difference(&seen.rows.difference(&self.current.rows))
+                    // Keep old canonical rows only: replacing removed IDs with their
+                    // roots would hide joins newly enabled by equality.
+                    seen.rows.intersection(&self.current.rows)
                 })
                 .clone()
         };
