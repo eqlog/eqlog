@@ -130,6 +130,27 @@ pub(super) fn prepare_frontier<'a>(
     ctx: &'a RustGenCtx<'a>,
     selection: &'a IndexSelection,
 ) -> impl Display + 'a {
+    prepare_frontier_impl(model, relations, plan, ctx, selection, false)
+}
+
+pub(super) fn stage_frontier<'a>(
+    model: TypeId,
+    relations: &'a [&'a FlatInRel],
+    plan: &'a PropagationPlan,
+    ctx: &'a RustGenCtx<'a>,
+    selection: &'a IndexSelection,
+) -> impl Display + 'a {
+    prepare_frontier_impl(model, relations, Some(plan), ctx, selection, true)
+}
+
+fn prepare_frontier_impl<'a>(
+    model: TypeId,
+    relations: &'a [&'a FlatInRel],
+    plan: Option<&'a PropagationPlan>,
+    ctx: &'a RustGenCtx<'a>,
+    selection: &'a IndexSelection,
+    staged: bool,
+) -> impl Display + 'a {
     FmtFn(move |f| {
         let relation_count = relations.len();
         writeln!(f, "let mut transport_work: [eqlog_runtime::__private::TransportWork; {relation_count}] = std::array::from_fn(|_| eqlog_runtime::__private::TransportWork::default());")?;
@@ -139,6 +160,7 @@ pub(super) fn prepare_frontier<'a>(
                 .iter()
                 .any(|rel| !checkpoints.iter().any(|(candidate, _)| candidate == rel))
         {
+            assert!(!staged, "staged frontiers require checkpointed leaf models");
             return writeln!(f, "let transport_all = true;");
         }
         if let Some(plan) = plan {
@@ -151,7 +173,9 @@ pub(super) fn prepare_frontier<'a>(
                 write!(f, "{}", indices::prepare(rel, index, selection, ctx))?;
             }
         }
-        writeln!(f, "let transport_all = false;")?;
+        if !staged {
+            writeln!(f, "let transport_all = false;")?;
+        }
         let parent_len = ctx.signature().type_(model).parents.len();
         for (relation_index, &rel) in relations.iter().enumerate() {
             let index = selection.current_primary(rel);
@@ -192,12 +216,16 @@ pub(super) fn prepare_frontier<'a>(
                     }
                 })
                 .join(", ");
+            let frontier = if staged {
+                writeln!(f, "let mut frontier_{relation_index} = self.{field}_frontier.get(&parents).cloned().unwrap_or_else(eqlog_runtime::__private::TransportFrontier::new);")?;
+                format!("frontier_{relation_index}")
+            } else {
+                format!("self.{field}_frontier.entry(parents).or_insert_with(eqlog_runtime::__private::TransportFrontier::new)")
+            };
             writedoc! {f, "
                 let source = {source};
                 let maps = [{maps}];
-                self.{field}_frontier.entry(parents)
-                    .or_insert_with(eqlog_runtime::__private::TransportFrontier::new)
-                    .prepare(&source, &maps, &components, retain_own, &mut transport_work[{relation_index}]);
+                {frontier}.prepare(&source, &maps, &components, retain_own, &mut transport_work[{relation_index}]);
             "}?;
         }
         Ok(())

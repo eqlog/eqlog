@@ -102,7 +102,13 @@ fn ram_stmt_cost(stmt: &RamStmt) -> usize {
                 Strictness::Strict => 4,
             },
         },
-        RamStmt::Iter(_) => 5,
+        RamStmt::Iter(stmt) => {
+            if stmt.first_only {
+                4
+            } else {
+                5
+            }
+        }
     }
 }
 

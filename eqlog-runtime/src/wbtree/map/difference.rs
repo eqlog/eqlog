@@ -13,6 +13,8 @@ enum Pending<'a, V: Clone> {
 
 struct Cursor<'a, V: Clone> {
     pending: Vec<Pending<'a, V>>,
+    // Singleton suffixes need no allocated pending stack.
+    current: Option<Pending<'a, V>>,
     #[cfg(test)]
     opened: usize,
 }
@@ -20,18 +22,30 @@ struct Cursor<'a, V: Clone> {
 impl<'a, V: Clone> Cursor<'a, V> {
     fn new(root: Option<&'a Rc<Node<V>>>) -> Self {
         Self {
-            pending: root
-                .map(|root| Pending::Tree(root, None))
-                .into_iter()
-                .collect(),
+            pending: Vec::new(),
+            current: root.map(|root| Pending::Tree(root, None)),
             #[cfg(test)]
             opened: 0,
         }
     }
 
+    fn peek(&self) -> Option<&Pending<'a, V>> {
+        self.current.as_ref()
+    }
+
+    fn pop(&mut self) -> Option<Pending<'a, V>> {
+        std::mem::replace(&mut self.current, self.pending.pop())
+    }
+
+    fn push(&mut self, pending: Pending<'a, V>) {
+        if let Some(previous) = self.current.replace(pending) {
+            self.pending.push(previous);
+        }
+    }
+
     fn normalize(&mut self) {
         loop {
-            let mapped = match self.pending.last() {
+            let mapped = match self.peek() {
                 Some(Pending::Tree(node, _)) => match node.as_ref() {
                     Node::Mapping(_) => true,
                     Node::Data(_) => false,
@@ -41,24 +55,27 @@ impl<'a, V: Clone> Cursor<'a, V> {
             if !mapped {
                 return;
             }
-            match self.pending.pop().unwrap() {
+            match self.current.take().unwrap() {
                 Pending::Tree(node, mut mappings) => match node.as_ref() {
                     Node::Mapping(mapping) => {
                         if let Some(child) = &mapping.child {
                             Rc::make_mut(mappings.get_or_insert_with(|| Rc::new(Vec::new())))
                                 .push(&mapping.mapping);
-                            self.pending.push(Pending::Tree(child, mappings));
+                            self.push(Pending::Tree(child, mappings));
                         }
                     }
                     Node::Data(_) => unreachable!("only mapping roots are normalized"),
                 },
                 Pending::Entry(_, _) => unreachable!("only trees carry mappings"),
             }
+            if self.current.is_none() {
+                self.current = self.pending.pop();
+            }
         }
     }
 
     fn expand(&mut self) {
-        match self.pending.pop().expect("a tree must be pending") {
+        match self.current.take().expect("a tree must be pending") {
             Pending::Tree(node, mappings) => match node.as_ref() {
                 Node::Data(data) => {
                     #[cfg(test)]
@@ -66,19 +83,22 @@ impl<'a, V: Clone> Cursor<'a, V> {
                         self.opened += 1;
                     }
                     if let Some(right) = &data.right {
-                        self.pending.push(Pending::Tree(right, mappings.clone()));
+                        self.push(Pending::Tree(right, mappings.clone()));
                     }
                     let mappings_slice = mappings.as_deref().map_or(&[][..], Vec::as_slice);
                     if let Some(key) = apply_mappings(mappings_slice, data.key) {
-                        self.pending.push(Pending::Entry(key, &data.value));
+                        self.push(Pending::Entry(key, &data.value));
                     }
                     if let Some(left) = &data.left {
-                        self.pending.push(Pending::Tree(left, mappings));
+                        self.push(Pending::Tree(left, mappings));
                     }
                 }
                 Node::Mapping(_) => unreachable!("normalize before expanding"),
             },
             Pending::Entry(_, _) => unreachable!("only trees can be expanded"),
+        }
+        if self.current.is_none() {
+            self.current = self.pending.pop();
         }
     }
 }
@@ -129,12 +149,12 @@ impl<'a, V: Clone> Iterator for Difference<'a, V> {
         loop {
             self.left.normalize();
             self.right.normalize();
-            let left = self.left.pending.last()?;
-            match (left, self.right.pending.last()) {
+            let left = self.left.peek()?;
+            match (left, self.right.peek()) {
                 (Pending::Tree(left, lm), Some(Pending::Tree(right, rm))) => {
                     if Rc::ptr_eq(left, right) && same_mappings(lm, rm) {
-                        self.left.pending.pop();
-                        self.right.pending.pop();
+                        self.left.pop();
+                        self.right.pop();
                     } else if size(left) >= size(right) {
                         // Keeping the smaller frontier intact exposes shared subtrees
                         // even when rotations changed their depth in the other tree.
@@ -151,23 +171,23 @@ impl<'a, V: Clone> Iterator for Difference<'a, V> {
                 }
                 (Pending::Entry(key, value), None) => {
                     let result = (*key, *value, None);
-                    self.left.pending.pop();
+                    self.left.pop();
                     return Some(result);
                 }
                 (Pending::Entry(lk, lv), Some(Pending::Entry(rk, rv))) => match lk.cmp(rk) {
                     Ordering::Less => {
                         let result = (*lk, *lv, None);
-                        self.left.pending.pop();
+                        self.left.pop();
                         return Some(result);
                     }
                     Ordering::Equal => {
                         let result = (*lk, *lv, Some(*rv));
-                        self.left.pending.pop();
-                        self.right.pending.pop();
+                        self.left.pop();
+                        self.right.pop();
                         return Some(result);
                     }
                     Ordering::Greater => {
-                        self.right.pending.pop();
+                        self.right.pop();
                     }
                 },
             }

@@ -133,7 +133,10 @@ fn display_in_set_expr<'a>(expr: &'a InSetExpr, ctx: &'a RustGenCtx<'a>) -> impl
         }) => {
             let result_arity = set.arity - 1;
             let set = display_set_var(set, ctx);
-            write!(f, "{set}.get({first_column_var}).unwrap_or_else(|| PrefixTree{result_arity}::empty())")
+            write!(
+                f,
+                "{set}.get({first_column_var}).unwrap_or_else(|| PrefixTree{result_arity}::empty())"
+            )
         }
     })
 }
@@ -255,19 +258,98 @@ fn display_stmt_post<'a>(ram_stmt: &'a RamStmt) -> impl 'a + Display {
     })
 }
 
-fn display_routine<'a>(
-    RamRoutine {
-        name,
-        flat_rule,
-        stmts,
-    }: &'a RamRoutine,
+fn shared_routine_groups(ram_module: &RamModule) -> Vec<Vec<&RamRoutine>> {
+    let mut groups: BTreeMap<(&[FlatVar], &[RamStmt]), Vec<&RamRoutine>> = BTreeMap::new();
+    let mut independent = Vec::new();
+    for routine in &ram_module.routines {
+        let first_loop = routine.stmts.iter().position(|stmt| match stmt {
+            RamStmt::Iter(_) => true,
+            RamStmt::DefineSet(_) | RamStmt::Insert(_) | RamStmt::GuardInhabited(_) => false,
+        });
+        if let Some(first_loop) = first_loop {
+            groups
+                .entry((
+                    routine.flat_rule.scope.owners(),
+                    &routine.stmts[..=first_loop],
+                ))
+                .or_default()
+                .push(routine);
+        } else {
+            independent.push(vec![routine]);
+        }
+    }
+    independent.extend(groups.into_values());
+    independent
+}
+
+fn display_shared_stmts<'a>(
+    routines: &'a [&'a [RamStmt]],
+    ctx: &'a RustGenCtx<'a>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let first = routines[0];
+        if routines.len() == 1 {
+            for stmt in first {
+                write!(f, "{}", display_stmt_pre(stmt, ctx))?;
+            }
+            for stmt in first.iter().rev() {
+                write!(f, "{}", display_stmt_post(stmt))?;
+            }
+            return Ok(());
+        }
+        let shared = first
+            .iter()
+            .enumerate()
+            .take_while(|(i, stmt)| match stmt {
+                RamStmt::Insert(_) => false,
+                RamStmt::DefineSet(_) | RamStmt::Iter(_) | RamStmt::GuardInhabited(_) => {
+                    routines.iter().all(|routine| routine.get(*i) == Some(stmt))
+                }
+            })
+            .count();
+        for stmt in &first[..shared] {
+            write!(f, "{}", display_stmt_pre(stmt, ctx))?;
+        }
+
+        let mut branches: BTreeMap<&RamStmt, Vec<&[RamStmt]>> = BTreeMap::new();
+        for routine in routines {
+            if let Some(stmt) = routine.get(shared) {
+                branches.entry(stmt).or_default().push(&routine[shared..]);
+            }
+        }
+        for (stmt, branch) in branches {
+            writeln!(f, "{{")?;
+            match stmt {
+                // Preserve output multiplicity while sharing read-only matches.
+                RamStmt::Insert(_) => {
+                    for suffix in branch {
+                        writeln!(f, "{{ {} }}", display_shared_stmts(&[suffix], ctx))?;
+                    }
+                }
+                RamStmt::DefineSet(_) | RamStmt::Iter(_) | RamStmt::GuardInhabited(_) => {
+                    write!(f, "{}", display_shared_stmts(&branch, ctx))?;
+                }
+            }
+            writeln!(f, "}}")?;
+        }
+
+        for stmt in first[..shared].iter().rev() {
+            write!(f, "{}", display_stmt_post(stmt))?;
+        }
+        Ok(())
+    })
+}
+
+fn display_routine_group<'a>(
+    routines: &'a [&'a RamRoutine],
     ram_module: &'a RamModule,
     ctx: &'a RustGenCtx<'a>,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
-        let name = name;
+        let name = &routines[0].name;
         let env_type = display_module_env_struct_name(ram_module);
-        let owners = flat_rule
+        let owners = routines[0]
+            .flat_rule
             .scope
             .owners()
             .iter()
@@ -278,18 +360,18 @@ fn display_routine<'a>(
             })
             .join("\n");
 
-        let stmts_pre = stmts
+        let stmts: Vec<_> = routines
             .iter()
-            .map(|stmt| display_stmt_pre(stmt, ctx))
-            .format("\n");
-        let stmts_post = stmts
-            .iter()
-            .rev()
-            .map(|stmt| display_stmt_post(stmt))
-            .format("\n");
+            .map(|routine| routine.stmts.as_slice())
+            .collect();
+        let body = display_shared_stmts(&stmts, ctx);
 
-        let flat_rule = display_flat_rule(flat_rule, ctx).to_string();
-        let flat_rule_comment = flat_rule
+        let flat_rules = routines
+            .iter()
+            .map(|routine| display_flat_rule(&routine.flat_rule, ctx))
+            .format("\n")
+            .to_string();
+        let flat_rule_comment = flat_rules
             .lines()
             .map(|line| FmtFn(move |f| write!(f, "// {line}")))
             .format("\n");
@@ -298,8 +380,7 @@ fn display_routine<'a>(
             {flat_rule_comment}
             fn {name}(env: &mut {env_type}) {{
             {owners}
-            {stmts_pre}
-            {stmts_post}
+            {body}
             }}
         "}
     })
@@ -325,17 +406,17 @@ pub fn display_module_main_fn_decl<'a>(
 
 fn display_module_main_fn<'a>(
     ram_module: &'a RamModule,
+    routine_groups: &'a [Vec<&'a RamRoutine>],
     symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let fn_name = display_module_main_fn_name(ram_module);
         let env_name = display_module_env_struct_name(ram_module);
-        let calls = ram_module
-            .routines
+        let calls = routine_groups
             .iter()
-            .map(|routine| {
+            .map(|routines| {
                 FmtFn(move |f| {
-                    let name = &routine.name;
+                    let name = &routines[0].name;
                     write!(f, "{name}(&mut env);")
                 })
             })
@@ -358,11 +439,11 @@ pub fn display_ram_module<'a>(
     FmtFn(move |f: &mut Formatter| -> Result {
         let imports = display_imports();
         let env_struct = display_module_env_struct(ram_module, ctx);
-        let main_fn = display_module_main_fn(ram_module, symbol_prefix);
-        let routines = ram_module
-            .routines
+        let groups = shared_routine_groups(ram_module);
+        let main_fn = display_module_main_fn(ram_module, &groups, symbol_prefix);
+        let routines = groups
             .iter()
-            .map(|routine| display_routine(routine, ram_module, ctx))
+            .map(|routines| display_routine_group(routines, ram_module, ctx))
             .format("\n");
 
         writedoc! {f, r#"

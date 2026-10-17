@@ -43,10 +43,15 @@ rewriting. Reuse SCC partitions when edge updates preserve their
 topology. Preserve shared old-input subtrees and batch duplicate rule
 outputs.
 
+Saturate recursive global groups with functionality barriers and run
+local rules during leaf-model transport. Stage transport frontiers until
+the traversal finishes so interrupted closure retains unfinished work.
+Share identical rule-join prefixes and group functionality lookups by
+domain. Keep singleton difference cursors inline.
+
 Preserve the complete Nat and Vec development, bounded computation, and
 one-call closure. Independent reviews confirm the mechanisms are general
 Eqlog optimizations. Cover nested transport, partial maps, cross-owner
 equality, dynamic imports, and interrupted closure with evaluator tests.
-The latest instrumented full run checks all 52 declarations in 28.965
-seconds of closure and 30.255 seconds end to end. Further scheduling
-work is needed for the five-second target.
+The latest full run checks all 52 declarations in about 22 seconds end
+to end. Further evaluator work is needed for the five-second target.

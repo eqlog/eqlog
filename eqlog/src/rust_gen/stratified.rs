@@ -151,6 +151,11 @@ impl<'s> Codegen<'s> {
                     continue;
                 };
                 writeln!(f, "struct __TransportBaseline{m} {{")?;
+                let count = baseline.relations.len();
+                writeln!(
+                    f,
+                    "work: [eqlog_runtime::__private::TransportWork; {count}],"
+                )?;
                 for (i, rel) in baseline.relations.iter().enumerate() {
                     let typ = display_index_type(rel, ctx);
                     writeln!(f, "source_{i}: {typ},")?;
@@ -1052,7 +1057,10 @@ fn emit_transport_since_baseline(
     } else {
         unchanged.join(" && ")
     };
-    writeln!(f, "if {unchanged} {{ return false; }}")?;
+    writeln!(
+        f,
+        "if baseline.work.iter().all(|work| work.is_empty()) && {unchanged} {{ return false; }}"
+    )?;
     writeln!(f, "for morphism in morphisms {{")?;
     for (i, (rel, index)) in baseline.maps.iter().enumerate() {
         let read = super::indices::read_method(rel, index, selection, ctx, true);
@@ -1067,7 +1075,7 @@ fn emit_transport_since_baseline(
     for (i, rel) in baseline.relations.iter().enumerate() {
         let (field, same) = &sources[i];
         let dim = rel.arity(ctx.signature()).len() - 1;
-        let mut changed = vec![format!(
+        let mut changed = vec![format!("baseline.work[{i}].needs_visit(morphism)"), format!(
             "(!({same}) && !eqlog_runtime::__private::SnapshotSet::shares_root(self.{field}.get(morphism.dom).unwrap_or_else(|| PrefixTree{dim}::empty()), baseline.source_{i}.get(morphism.dom).unwrap_or_else(|| PrefixTree{dim}::empty())))"
         )];
         changed.extend(
@@ -1302,7 +1310,10 @@ fn emit_schedule(
             if root.is_none() {
                 let m = codegen.models[model];
                 let plan = &codegen.model_preparations[model];
-                writeln!(f, "self.__refresh_model_consumers(); self.recompute_model_indices_model_{m}(); let parents = [];")?;
+                writeln!(f, "self.__refresh_model_consumers(); let parents = [];")?;
+                if codegen.transport_baseline(*model, selection, ctx).is_none() {
+                    writeln!(f, "self.recompute_model_indices_model_{m}();")?;
+                }
                 for (rel, index) in &plan.support_indices {
                     write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
                 }
@@ -1317,7 +1328,7 @@ fn emit_schedule(
                     }
                     // Keep this snapshot until the traversal ends: one owner's
                     // equality can change inputs belonging to another owner.
-                    writeln!(f, "let baseline_{m} = __TransportBaseline{m} {{")?;
+                    writeln!(f, "let mut baseline_{m} = __TransportBaseline{m} {{ work: std::array::from_fn(|_| eqlog_runtime::__private::TransportWork::default()),")?;
                     for (i, rel) in baseline.relations.iter().enumerate() {
                         let index = selection.current_primary(rel);
                         let field = display_all_index_field_name(rel, index, ctx);
@@ -1386,6 +1397,16 @@ fn emit_components(
         "{}",
         display_morphism_components(model, ctx, selection, true)
     )?;
+    if let Some(baseline) = codegen.transport_baseline(root, selection, ctx) {
+        let relations = baseline.relations.iter().collect_vec();
+        writeln!(f, "let retain_own = {retain_own};")?;
+        write!(
+            f,
+            "{}",
+            super::transport::stage_frontier(model, &relations, &plan.propagation, ctx, selection)
+        )?;
+        writeln!(f, "baseline_{m}.work = transport_work;")?;
+    }
     writeln!(f, "for component in components.iter() {{")?;
     writeln!(f, "#[allow(unused_variables)] let retain_component_{depth} = {retain_own} || !component.internal.is_empty();")?;
     writedoc! {f, "
@@ -1426,5 +1447,14 @@ fn emit_components(
     writeln!(
         f,
         "self.__transport_component_{m}_{name}({baseline}parents, &component.outgoing, {retain_own}); }}"
-    )
+    )?;
+    if let Some(baseline) = codegen.transport_baseline(root, selection, ctx) {
+        // Save entry snapshots only after all edges were visited. Later owner
+        // equalities must remain pending, including across an early return.
+        for (i, rel) in baseline.relations.iter().enumerate() {
+            let field = super::transport::field(rel, model, ctx);
+            writeln!(f, "self.{field}_frontier.insert(parents, frontier_{i});")?;
+        }
+    }
+    Ok(())
 }

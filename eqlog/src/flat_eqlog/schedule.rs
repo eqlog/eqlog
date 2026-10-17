@@ -283,13 +283,32 @@ fn schedule_scope(
                         .iter()
                         .all(|rule| functionality_anchor(rule).is_some())
                 });
-            let partitions = if recursive && !functional.is_empty() && !ordinary.is_empty() {
+            let functional_groups: BTreeSet<_> = functional.iter().copied().collect();
+            let partitions = if scope.is_none() && recursive && !ordinary.is_empty() {
+                let mut partitions = Vec::new();
+                if !functional.is_empty() {
+                    partitions.push((functional, true));
+                }
+                // Commit producers before the next consumer takes its snapshot.
+                partitions.extend(ordinary.into_iter().map(|group| (vec![group], false)));
+                partitions
+            } else if recursive && !functional.is_empty() && !ordinary.is_empty() {
                 vec![(functional, true), (ordinary, false)]
             } else {
                 vec![(rules, false)]
             };
             let mut rule_steps = Vec::new();
+            let mut normalizer = None;
             for (groups, normalize) in partitions {
+                let repeat = scope.is_none()
+                    && !normalize
+                    && groups.len() == 1
+                    && dependencies.edges[groups[0]].contains(&groups[0]);
+                let needs_normalization = groups.iter().any(|&group| {
+                    dependencies.edges[group]
+                        .iter()
+                        .any(|target| functional_groups.contains(target))
+                });
                 let inputs: BTreeSet<_> = groups
                     .iter()
                     .flat_map(|&group| &dependencies.reads[group])
@@ -305,7 +324,14 @@ fn schedule_scope(
                 // Other joins should see canonical function results. Separate
                 // checkpoints keep their pending matches across normalization.
                 rule_steps.push(if normalize {
+                    normalizer = Some(id);
                     Schedule::Saturate(Box::new(rules))
+                } else if repeat {
+                    let mut steps = vec![rules];
+                    if let Some(normalizer) = normalizer.filter(|_| needs_normalization) {
+                        steps.push(Schedule::Saturate(Box::new(Schedule::Rules(normalizer))));
+                    }
+                    Schedule::Saturate(Box::new(sequence(steps)))
                 } else {
                     rules
                 });

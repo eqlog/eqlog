@@ -2715,6 +2715,7 @@ fn display_recompute_model_indices_fn<'a>(
         writedoc! {f, "
             {propagation_functions}
 
+            #[allow(dead_code)]
             fn recompute_model_indices{suffix}(&mut self) {{
                 {invalidate}
                 {propagate}

@@ -4,6 +4,39 @@ use crate::options::ModelMode;
 use crate::ram::*;
 use std::collections::{BTreeMap, BTreeSet};
 
+fn functionality_seed_indices(
+    rule: &FlatRule,
+    selection: &IndexSelection,
+    fixed: &BTreeSet<usize>,
+) -> Option<Vec<IndexSpec>> {
+    functionality_anchor(rule)?;
+    let first = &rule.premise[0];
+    let query = QuerySpec {
+        age: QueryAge::All,
+        projections: (0..first.args.len() - 1).collect(),
+    };
+    let indices = &selection.queries[&(first.rel.clone(), query)];
+    if indices[0].order[..fixed.len()]
+        .iter()
+        .any(|column| !fixed.contains(column))
+    {
+        return None;
+    }
+    // Group new results by their domain so the representative lookup can be
+    // shared across all equalities for that domain.
+    Some(
+        indices
+            .iter()
+            .filter(|index| match first.age {
+                QueryAge::New => index.age == IndexAge::New,
+                QueryAge::Old => index.age == IndexAge::Old,
+                QueryAge::All => true,
+            })
+            .cloned()
+            .collect(),
+    )
+}
+
 fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> RamRoutine {
     let mut stmts: Vec<RamStmt> = Vec::new();
     let anchor = functionality_anchor(&flat_rule);
@@ -51,15 +84,22 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
             })
             .collect();
         let fixed_columns: BTreeSet<usize> = fixed_args.keys().copied().collect();
+        let functionality_indices = if stmt_index == 0 {
+            functionality_seed_indices(&flat_rule, index_selection, &fixed_columns)
+        } else {
+            None
+        };
         let query_spec = QuerySpec {
             age: flat_stmt.age,
             projections: fixed_columns,
         };
 
-        let indices = index_selection
-            .queries
-            .get(&(flat_stmt.rel.clone(), query_spec.clone()))
-            .expect("Index for query in flat rule should exist");
+        let indices = functionality_indices.as_deref().unwrap_or_else(|| {
+            index_selection
+                .queries
+                .get(&(flat_stmt.rel.clone(), query_spec.clone()))
+                .expect("Index for query in flat rule should exist")
+        });
         for index1 in &indices[1..] {
             assert_eq!(
                 indices[0].order, index1.order,

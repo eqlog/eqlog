@@ -18,6 +18,26 @@ All closure timings exclude Rust compilation.
 
 ## Owner-scoped scheduling checkpoint
 
+The following schedule refinement saturates each self-recursive global group
+and runs the shared functionality normalizer between its passes. Plain
+per-group commits regressed Nat to 26.459 s and 508.2 MiB peak RSS; normalizing
+between recursive passes reduced Nat to 4.604 s and the full development to
+22.947 s end to end. The diagnostic full run used 374 model traversals instead
+of 762, with 24.040 s total elapsed time including instrumentation.
+
+Eligible leaf models now interleave local rules and outgoing transport rather
+than preparing their full primary closure before traversing owners. Initial
+frontier work and immutable entry snapshots cover changes before and during
+the traversal. Staged frontiers commit only after visiting every component;
+later changes to an earlier owner remain pending for the next pass. This
+measured 4.319 s for Nat and 22.377 s for Nat+Vec without instrumentation.
+Sharing identical join prefixes and grouping functionality lookups by domain
+gave a subsequent full result of 21.980 s. All 41 focused generated-evaluator
+checks passed again. Independent reviews approved the scheduling, traversal,
+functionality indexing, prefix sharing, and inline difference cursor changes.
+These results remain above the five-second target; broad final validation is
+still pending.
+
 The next engine changes retain owner-scoped rules inside ambient cycles,
 including ordinary member equalities. Global saturation still revisits the
 owner traversal when cross-owner facts change. Alternate indices reuse the

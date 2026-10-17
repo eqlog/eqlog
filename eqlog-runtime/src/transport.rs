@@ -69,6 +69,7 @@ impl TransportWork {
 }
 
 /// Source, map, and graph rows must grow or undergo the same equality quotient.
+#[derive(Clone)]
 pub struct TransportFrontier<T, const M: usize> {
     source: T,
     maps: [PrefixTree3; M],
