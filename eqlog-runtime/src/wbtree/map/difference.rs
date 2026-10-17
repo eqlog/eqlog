@@ -4,7 +4,7 @@ use std::rc::Rc;
 use super::{apply_mappings, Node, WBTreeMap};
 use crate::PrefixTree2;
 
-type Mappings<'a> = Rc<Vec<&'a PrefixTree2>>;
+type Mappings<'a> = Option<Rc<Vec<&'a PrefixTree2>>>;
 
 enum Pending<'a, V: Clone> {
     Tree(&'a Rc<Node<V>>, Mappings<'a>),
@@ -18,12 +18,10 @@ struct Cursor<'a, V: Clone> {
 }
 
 impl<'a, V: Clone> Cursor<'a, V> {
-    fn new(tree: &'a WBTreeMap<V>) -> Self {
+    fn new(root: Option<&'a Rc<Node<V>>>) -> Self {
         Self {
-            pending: tree
-                .root
-                .as_ref()
-                .map(|root| Pending::Tree(root, Rc::new(Vec::new())))
+            pending: root
+                .map(|root| Pending::Tree(root, None))
                 .into_iter()
                 .collect(),
             #[cfg(test)]
@@ -47,7 +45,8 @@ impl<'a, V: Clone> Cursor<'a, V> {
                 Pending::Tree(node, mut mappings) => match node.as_ref() {
                     Node::Mapping(mapping) => {
                         if let Some(child) = &mapping.child {
-                            Rc::make_mut(&mut mappings).push(&mapping.mapping);
+                            Rc::make_mut(mappings.get_or_insert_with(|| Rc::new(Vec::new())))
+                                .push(&mapping.mapping);
                             self.pending.push(Pending::Tree(child, mappings));
                         }
                     }
@@ -69,7 +68,8 @@ impl<'a, V: Clone> Cursor<'a, V> {
                     if let Some(right) = &data.right {
                         self.pending.push(Pending::Tree(right, mappings.clone()));
                     }
-                    if let Some(key) = apply_mappings(&mappings, data.key) {
+                    let mappings_slice = mappings.as_deref().map_or(&[][..], Vec::as_slice);
+                    if let Some(key) = apply_mappings(mappings_slice, data.key) {
                         self.pending.push(Pending::Entry(key, &data.value));
                     }
                     if let Some(left) = &data.left {
@@ -83,7 +83,9 @@ impl<'a, V: Clone> Cursor<'a, V> {
     }
 }
 
-fn same_mappings(left: &[&PrefixTree2], right: &[&PrefixTree2]) -> bool {
+fn same_mappings(left: &Mappings<'_>, right: &Mappings<'_>) -> bool {
+    let left = left.as_deref().map_or(&[][..], Vec::as_slice);
+    let right = right.as_deref().map_or(&[][..], Vec::as_slice);
     left.len() == right.len()
         && left
             .iter()
@@ -107,9 +109,15 @@ pub struct Difference<'a, V: Clone> {
 
 impl<'a, V: Clone> Difference<'a, V> {
     pub(super) fn new(left: &'a WBTreeMap<V>, right: &'a WBTreeMap<V>) -> Self {
+        if left.root.is_none() || left.shares_root(right) {
+            return Self {
+                left: Cursor::new(None),
+                right: Cursor::new(None),
+            };
+        }
         Self {
-            left: Cursor::new(left),
-            right: Cursor::new(right),
+            left: Cursor::new(left.root.as_ref()),
+            right: Cursor::new(right.root.as_ref()),
         }
     }
 }

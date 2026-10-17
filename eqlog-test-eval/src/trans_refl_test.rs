@@ -4,6 +4,9 @@ use crate::trans_refl::*;
 fn test_close_empty() {
     let mut m = TransRefl::new();
     m.close();
+    let a = m.new_v();
+    m.close();
+    assert!(m.edge(a, a));
 }
 
 #[test]

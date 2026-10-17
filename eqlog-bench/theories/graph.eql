@@ -1,0 +1,10 @@
+type Item;
+model World {
+    pred seed(Item);
+    pred edge(Item, Item);
+    pred reached(Item);
+    pred marked(Item);
+    rule start { if seed(x); then reached(x); }
+    rule step { if reached(x); if edge(x, y); then reached(y); }
+    rule finish { if reached(x); then marked(x); }
+}

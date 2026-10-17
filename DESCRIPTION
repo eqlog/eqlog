@@ -20,6 +20,3 @@ Develop addition and multiplication laws and length-indexed vectors,
 including append, replication, mapping, and sums. Cover rejected proofs,
 invalid indices and universe codes, context isolation, partial images,
 and the computation bound in evaluator integration tests.
-
-Expose stratified scheduling as a feature of the checker and its
-integration suite so both schedules can check the same development.

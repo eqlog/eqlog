@@ -49,7 +49,7 @@ impl WBTreeSet {
 
     pub fn union(&self, other: &Self) -> Self {
         WBTreeSet {
-            map: self.map.union(&other.map, |_element, (), ()| ()),
+            map: self.map.union_shared(&other.map, |_element, (), ()| ()),
         }
     }
 

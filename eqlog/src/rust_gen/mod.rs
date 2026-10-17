@@ -996,6 +996,7 @@ fn display_pub_insert_relation<'a>(
 
                 {contains_checks}
 
+                self.__closed = false;
                 {invalidate}
                 {index_inserts}
 
@@ -1074,6 +1075,7 @@ fn display_new_element_fn_internal<'a>(
 
                 self.{index_field}.insert([el]);
                 self.__allocated = true;
+                self.__closed = false;
 
                 assert!(self.{type_snake}_weights.len() == old_len);
                 self.{type_snake}_weights.push(0);
@@ -1295,6 +1297,7 @@ fn display_equate_elements<'a>(
                 if lhs == rhs {{
                     return;
                 }}
+                self.__closed = false;
                 {invalidate_models}
                 let lhs_weight = self.{type_snake}_weights[lhs.0 as usize];
                 let rhs_weight = self.{type_snake}_weights[rhs.0 as usize];
@@ -1521,6 +1524,36 @@ fn display_canonicalize_fn<'a>(
             ModelMode::Native => "self.recompute_model_indices();",
             ModelMode::Desugared => "",
         };
+        let reset_inherited = FmtFn(|f| {
+            let shared: Vec<_> = index_selection
+                .current_indices()
+                .filter(|(rel, index)| {
+                    ctx.has_shared_indices(rel) && index_selection.is_primary(rel, index)
+                })
+                .collect();
+            if shared.is_empty() {
+                return Ok(());
+            }
+            let changed = ctx
+                .signature()
+                .iter_types()
+                .map(|typ| {
+                    let name = display_type(typ, ctx).to_string().to_case(Snake);
+                    format!("!self.{name}_uprooted.is_empty()")
+                })
+                .join(" || ");
+            writeln!(f, "if {changed} {{")?;
+            for (rel, index) in shared {
+                let field = display_current_index_field_name(rel, index, ctx);
+                writeln!(f, "self.{field}_all = self.{field}_own.clone();")?;
+            }
+            for rel in iter_flat_rels(ctx.signature())
+                .filter(|rel| ctx.has_shared_indices(&FlatInRel::Rel(*rel)))
+            {
+                write!(f, "{}", indices::invalidate(rel, index_selection, ctx))?;
+            }
+            writeln!(f, "}}")
+        });
         writedoc! {f, "
             /// Rewrites facts using the current equality representatives without running rules.
             /// Consumer checkpoints retain pending matches after equality replacement.
@@ -1535,6 +1568,7 @@ fn display_canonicalize_fn<'a>(
             fn __canonicalize_relations(&mut self) {{
                 {rel_blocks}
 
+                {reset_inherited}
                 {clear_uprooted_vecs}
             }}
         "}
@@ -1898,13 +1932,12 @@ fn display_morphism_index_prefix_walk_from(
             );
             formatdoc! {"
                 for ({el}, {subtree}) in {source_tree}.iter_restrictions() {{
-                    let Some(mapped_{el}) = map_{el}
-                        .get({el})
-                        .and_then(|restriction| restriction.iter().next().map(|[mapped]| mapped))
-                    else {{
+                    let Some(images) = map_{el}.get({el}) else {{
                         continue;
                     }};
-                    {body}
+                    for [mapped_{el}] in images.iter() {{
+                        {body}
+                    }}
                 }}
             "}
         }
@@ -1955,8 +1988,6 @@ fn display_apply_morphism_index_propagated<'a>(
             .format("\n");
 
         let suffix_type = display_prefix_tree_type(suffix_len);
-        // Only callers inside cycles need a change signal to decide whether
-        // to repeat; acyclic propagation avoids the extra set difference.
         writedoc! {f, "
             for ([{prefix_vars}], mapped_dom_set) in propagated {{
                 let mapped_dom_set: {suffix_type} = mapped_dom_set;
@@ -1964,12 +1995,10 @@ fn display_apply_morphism_index_propagated<'a>(
                 if !retain_own {{
                     {index_field_name}_own.remove_restriction(el0, &mapped_dom_set);
                 }}
-                if retain_own && !changed {{
-                    changed = {index_field_name}_all.get(el0).map_or(
-                        !mapped_dom_set.is_empty(),
-                        |existing| !mapped_dom_set.difference(&existing).is_empty(),
-                    );
+                if {index_field_name}_all.get(el0).is_some_and(|existing| mapped_dom_set.is_subset(existing)) {{
+                    continue;
                 }}
+                changed |= retain_own && !mapped_dom_set.is_empty();
                 {index_field_name}_all.insert_restriction(el0, mapped_dom_set);
             }}
         "}
@@ -2309,19 +2338,6 @@ fn display_recompute_model_indices_fn<'a>(
     suffix: &'a str,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let initialize = index_selection
-            .current_indices()
-            .filter(|(rel, index)| {
-                ctx.has_shared_indices(rel)
-                    && propagation_includes(plan, rel)
-                    && index_selection.is_primary(rel, index)
-            })
-            .map(|(rel, index)| {
-                let field = display_current_index_field_name(rel, index, ctx);
-                format!("self.{field}_all = self.{field}_own.clone();")
-            })
-            .format("\n");
-
         let propagation_functions = ctx
             .signature()
             .iter_model_decls()
@@ -2351,7 +2367,6 @@ fn display_recompute_model_indices_fn<'a>(
 
             fn recompute_model_indices{suffix}(&mut self) {{
                 {invalidate}
-                {initialize}
                 {propagate}
                 {invalidate}
             }}
@@ -2424,6 +2439,7 @@ fn display_new_fn<'a>(
             }
         }
         writeln!(f, "__allocated: false,").unwrap();
+        writeln!(f, "__closed: false,").unwrap();
         writeln!(f, "}}").unwrap();
         write!(f, "}}").unwrap();
         Ok(())
@@ -2812,6 +2828,7 @@ fn display_theory_struct<'a>(
                 {element_index_fields}
                 {type_fields}
                 __allocated: bool,
+                __closed: bool,
                 __pending_delta: ModelDelta,
                 {scheduler_fields}
             }}

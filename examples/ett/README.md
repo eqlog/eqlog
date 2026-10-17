@@ -8,11 +8,11 @@ cargo run --release -p eqlog-ett -- examples/ett/nat.ett examples/ett/vec.ett
 
 Use a release build: the full development currently takes minutes to saturate.
 
-Pass `--features stratified` to use dependency-stratified scheduling. The same
-feature selects it for the checker in the evaluator integration suite:
+Eqlog evaluates rules in dependency order. Run the checker integration suite
+with:
 
 ```sh
-cargo test --release -p eqlog-test-eval --test ett --features stratified
+cargo test --release -p eqlog-test-eval --test ett
 ```
 
 `nat.ett` defines addition, predecessor, and multiplication. It proves the

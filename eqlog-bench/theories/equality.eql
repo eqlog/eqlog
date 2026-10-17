@@ -1,0 +1,10 @@
+type Item;
+type Value;
+pred link(Item, Value);
+pred wanted(Value);
+pred merge(Value, Value);
+pred hit(Item);
+pred done(Item);
+rule replace { if merge(x, y); then x = y; }
+rule lookup { if wanted(y); if link(x, y); then hit(x); }
+rule finish { if hit(x); then done(x); }

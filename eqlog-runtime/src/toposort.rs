@@ -43,12 +43,15 @@ pub fn morphism_components(
         let Some(cods) = cods else {
             continue;
         };
-        let [cod] = cods.iter().next().unwrap();
         let source = indices[&dom];
-        let target = indices[&cod];
-        outgoing[source].push(target);
-        incoming[target].push(source);
-        morphisms.push(MorphismWithSignature { morph, dom, cod });
+        // Conflicting results still contribute edges until functionality merges
+        // them; dropping an edge could discard the last owned support of a fact.
+        for [cod] in cods.iter() {
+            let target = indices[&cod];
+            outgoing[source].push(target);
+            incoming[target].push(source);
+            morphisms.push(MorphismWithSignature { morph, dom, cod });
+        }
     }
 
     // Explicit DFS stacks also support long chains without using the call stack.

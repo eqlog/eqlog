@@ -344,6 +344,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "eqlog-bench"
+version = "0.1.0"
+dependencies = [
+ "eqlog",
+ "eqlog-runtime",
+ "indoc",
+]
+
+[[package]]
 name = "eqlog-ett"
 version = "0.1.0"
 dependencies = [
@@ -376,6 +385,7 @@ version = "0.1.0"
 dependencies = [
  "env_logger",
  "eqlog",
+ "eqlog-bench",
  "eqlog-ett",
  "eqlog-runtime",
  "indoc",

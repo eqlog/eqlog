@@ -617,6 +617,7 @@ impl<V: Clone> Node<V> {
         left: Option<Rc<Node<V>>>,
         right: Option<Rc<Node<V>>>,
         merge: &mut F,
+        reuse_shared: bool,
     ) -> Option<Rc<Node<V>>>
     where
         F: FnMut(&u32, V, V) -> V,
@@ -625,6 +626,9 @@ impl<V: Clone> Node<V> {
             (None, None) => None,
             (Some(t), None) | (None, Some(t)) => Some(t),
             (Some(l), Some(r)) => {
+                if reuse_shared && Rc::ptr_eq(&l, &r) {
+                    return Some(l);
+                }
                 let l_size = Self::size(&Some(l.clone()));
                 let r_size = Self::size(&Some(r.clone()));
                 if l_size >= r_size {
@@ -643,8 +647,8 @@ impl<V: Clone> Node<V> {
                         None => l_value,
                     };
 
-                    let new_left = Self::union(l_left, r_left, merge);
-                    let new_right = Self::union(l_right, r_right, merge);
+                    let new_left = Self::union(l_left, r_left, merge, reuse_shared);
+                    let new_right = Self::union(l_right, r_right, merge, reuse_shared);
                     Self::join(new_left, l_key, new_value, new_right)
                 } else {
                     // Use right tree as base, split left tree on right root's key
@@ -662,65 +666,9 @@ impl<V: Clone> Node<V> {
                         None => r_value,
                     };
 
-                    let new_left = Self::union(l_left, r_left, merge);
-                    let new_right = Self::union(l_right, r_right, merge);
+                    let new_left = Self::union(l_left, r_left, merge, reuse_shared);
+                    let new_right = Self::union(l_right, r_right, merge, reuse_shared);
                     Self::join(new_left, r_key, new_value, new_right)
-                }
-            }
-        }
-    }
-
-    fn difference<F>(
-        left: Option<Rc<Node<V>>>,
-        right: Option<Rc<Node<V>>>,
-        diff: &mut F,
-        cancel_shared: bool,
-    ) -> Option<Rc<Node<V>>>
-    where
-        F: FnMut(&u32, V, V) -> Option<V>,
-    {
-        match (left, right) {
-            (None, _) => None,
-            (Some(l), None) => Some(l),
-            (Some(l), Some(r)) => {
-                if cancel_shared && Rc::ptr_eq(&l, &r) {
-                    return None;
-                }
-                // Use left tree as base, split right tree on left root's key
-                let DataNode {
-                    key: l_key,
-                    value: l_value,
-                    left: l_left,
-                    right: l_right,
-                    size: _,
-                } = Self::unwrap_to_data(l);
-                let (r_left, r_value_opt, r_right) = Self::split(Some(r), &l_key);
-
-                let new_left = Self::difference(l_left, r_left, diff, cancel_shared);
-                let new_right = Self::difference(l_right, r_right, diff, cancel_shared);
-
-                match r_value_opt {
-                    // Key exists in both trees, call diff function
-                    Some(r_value) => {
-                        match diff(&l_key, l_value, r_value) {
-                            // diff returned None, exclude this key from result
-                            None => {
-                                match (new_left, new_right) {
-                                    (None, None) => None,
-                                    (Some(left), None) => Some(left),
-                                    (None, Some(right)) => Some(right),
-                                    (Some(left), Some(right)) => {
-                                        // Need to join the subtrees without the current key
-                                        Self::join_without_key(left, right)
-                                    }
-                                }
-                            }
-                            // diff returned Some(value), keep this key with the new value
-                            Some(new_value) => Self::join(new_left, l_key, new_value, new_right),
-                        }
-                    }
-                    // Key doesn't exist in right tree, include it in result
-                    None => Self::join(new_left, l_key, l_value, new_right),
                 }
             }
         }
@@ -730,6 +678,85 @@ impl<V: Clone> Node<V> {
         // Remove the minimum element from the right subtree to use as the new root
         let (min_key, min_value, new_right) = Self::remove_min(right);
         Self::join(Some(left), min_key, min_value, new_right)
+    }
+
+    // Borrow bounded portions of the right tree instead of allocating split
+    // trees, which also keeps shared roots available for cancellation.
+    fn difference<F>(
+        left: Option<Rc<Node<V>>>,
+        mut right: Option<&Rc<Node<V>>>,
+        lower: Option<u32>,
+        upper: Option<u32>,
+        diff: &mut F,
+        cancel_shared: bool,
+    ) -> Option<Rc<Node<V>>>
+    where
+        F: FnMut(&u32, V, V) -> Option<V>,
+    {
+        let left = left?;
+        while let Some(node) = right {
+            let data = match node.as_ref() {
+                Node::Data(data) => data,
+                Node::Mapping(_) => unreachable!("set operations materialize mappings"),
+            };
+            if lower.is_some_and(|lower| data.key <= lower) {
+                right = data.right.as_ref();
+            } else if upper.is_some_and(|upper| data.key >= upper) {
+                right = data.left.as_ref();
+            } else {
+                break;
+            }
+        }
+        let Some(right) = right else {
+            return Some(left);
+        };
+        if cancel_shared && Rc::ptr_eq(&left, right) {
+            return None;
+        }
+        let data = Self::unwrap_to_data(left);
+        let mut candidate = Some(right);
+        let mut value = None;
+        while let Some(node) = candidate {
+            let other = match node.as_ref() {
+                Node::Data(other) => other,
+                Node::Mapping(_) => unreachable!("set operations materialize mappings"),
+            };
+            match data.key.cmp(&other.key) {
+                Ordering::Less => candidate = other.left.as_ref(),
+                Ordering::Greater => candidate = other.right.as_ref(),
+                Ordering::Equal => {
+                    value = Some(&other.value);
+                    break;
+                }
+            }
+        }
+        let left = Self::difference(
+            data.left,
+            Some(right),
+            lower,
+            Some(data.key),
+            diff,
+            cancel_shared,
+        );
+        let right = Self::difference(
+            data.right,
+            Some(right),
+            Some(data.key),
+            upper,
+            diff,
+            cancel_shared,
+        );
+        let value = match value {
+            Some(value) => diff(&data.key, data.value, value.clone()),
+            None => Some(data.value),
+        };
+        match value {
+            Some(value) => Self::join(left, data.key, value, right),
+            None => match (left, right) {
+                (None, tree) | (tree, None) => tree,
+                (Some(left), Some(right)) => Self::join_without_key(left, right),
+            },
+        }
     }
 }
 
@@ -941,15 +968,36 @@ impl<V: Clone> WBTreeMap<V> {
         Some(value)
     }
 
-    pub fn union<F>(&self, other: &Self, mut merge: F) -> Self
+    pub fn union<F>(&self, other: &Self, merge: F) -> Self
     where
         F: FnMut(&u32, V, V) -> V,
     {
+        self.union_impl(other, merge, false)
+    }
+
+    // Set union is idempotent; arbitrary map callbacks may change shared values.
+    pub(crate) fn union_shared<F>(&self, other: &Self, merge: F) -> Self
+    where
+        F: FnMut(&u32, V, V) -> V,
+    {
+        self.union_impl(other, merge, true)
+    }
+
+    fn union_impl<F>(&self, other: &Self, mut merge: F, reuse_shared: bool) -> Self
+    where
+        F: FnMut(&u32, V, V) -> V,
+    {
+        if other.root.is_none() || (reuse_shared && self.shares_root(other)) {
+            return self.clone();
+        }
+        if self.root.is_none() {
+            return other.clone();
+        }
         let mut left = self.clone();
         let mut right = other.clone();
         left.materialize();
         right.materialize();
-        let new_root = Node::union(left.root, right.root, &mut merge);
+        let new_root = Node::union(left.root, right.root, &mut merge, reuse_shared);
         let new_len = Node::size(&new_root);
         WBTreeMap {
             root: new_root,
@@ -990,7 +1038,14 @@ impl<V: Clone> WBTreeMap<V> {
         let mut right = other.clone();
         left.materialize();
         right.materialize();
-        let new_root = Node::difference(left.root, right.root, &mut diff, cancel_shared);
+        let new_root = Node::difference(
+            left.root,
+            right.root.as_ref(),
+            None,
+            None,
+            &mut diff,
+            cancel_shared,
+        );
         let new_len = Node::size(&new_root);
         WBTreeMap {
             root: new_root,
