@@ -3,6 +3,7 @@ use eqlog_runtime::{
     PrefixTree1, PrefixTree2, PrefixTree3, PrefixTree4, PrefixTree5, PrefixTree6, PrefixTree7,
     PrefixTree8, PrefixTree9,
 };
+use std::collections::BTreeSet;
 
 macro_rules! restriction_tests {
     ($name:ident, $tree:ident, $restriction:ident, $arity:expr) => {
@@ -87,13 +88,43 @@ fn subset_comparisons_respect_mappings_and_filtered_prefixes() {
     assert!(expected.is_subset(&mapped));
     assert!(!mapped.is_subset(&base));
     assert!(!base.is_subset(&mapped));
+    assert!(mapped.difference(&expected).is_empty());
+    assert!(expected.difference(&mapped).is_empty());
     assert!(SnapshotSet::shares_root(&mapped.union(&mapped), &mapped));
     expected.insert([0, 0]);
     assert!(mapped.is_subset(&expected));
     assert!(!expected.is_subset(&mapped));
+    assert_eq!(
+        expected.difference(&mapped).iter().collect::<Vec<_>>(),
+        vec![[0, 0]]
+    );
     let union = mapped.union(&expected);
     assert_eq!(
         union.iter().collect::<Vec<_>>(),
         expected.iter().collect::<Vec<_>>()
     );
+}
+
+#[test]
+fn differences_agree_with_tuple_sets_after_scattered_edits() {
+    let mut original = PrefixTree2::new();
+    for i in 0..512 {
+        original.insert([i, i % 7]);
+    }
+    for stride in [1, 2, 3, 17, 32, 127] {
+        let mut edited = original.clone();
+        for i in (0..512).step_by(stride) {
+            edited.remove([i, i % 7]);
+            edited.insert([i + 512, i % 5]);
+        }
+        for (left, right) in [(&original, &edited), (&edited, &original)] {
+            let left_rows: BTreeSet<_> = left.iter().collect();
+            let right_rows: BTreeSet<_> = right.iter().collect();
+            let expected: Vec<_> = left_rows.difference(&right_rows).copied().collect();
+            assert_eq!(left.difference(right).iter().collect::<Vec<_>>(), expected);
+            let mut visited = Vec::new();
+            left.visit_difference(right, &mut |row| visited.push(row));
+            assert_eq!(visited, expected);
+        }
+    }
 }

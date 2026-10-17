@@ -1,5 +1,57 @@
 use crate::morphism_preservation::*;
 
+#[cfg(not(feature = "desugared"))]
+#[test]
+fn conflicting_endpoints_preserve_owned_support_until_equality() {
+    let mut model = MorphismPreservation::new();
+    let a = model.new_world();
+    let b = model.new_world();
+    model.insert_ready(a);
+    let f = model.new_world_mor();
+    model.insert_world_mor_dom(f, a);
+    model.insert_world_mor_cod(f, b);
+    model.canonicalize();
+    assert!(model.ready(b));
+
+    model.insert_world_mor_cod(f, a);
+    let g = model.new_world_mor();
+    model.insert_world_mor_dom(g, b);
+    model.insert_world_mor_cod(g, a);
+    model.canonicalize();
+    model.equate_world(a, b);
+    model.canonicalize();
+    assert!(model.ready(a));
+    model.close();
+    assert!(model.observed(a));
+}
+
+#[cfg(not(feature = "desugared"))]
+#[test]
+fn conflicting_images_remain_visible_until_equality() {
+    let mut model = MorphismPreservation::new();
+    let a = model.new_world();
+    let b = model.new_world();
+    let x = model.new_el(a);
+    let y0 = model.new_el(b);
+    let y1 = model.new_el(b);
+    let label = model.new_ambient();
+    model.insert_tagged(a, x, label);
+    let f = model.new_world_mor();
+    model.insert_world_mor_dom(f, a);
+    model.insert_world_mor_cod(f, b);
+    model.insert_el_mor_app(f, x, y1);
+    model.canonicalize();
+    assert!(model.tagged(b, y1, label));
+
+    model.insert_el_mor_app(f, x, y0);
+    model.canonicalize();
+    assert!(model.tagged(b, y0, label));
+    assert!(model.tagged(b, y1, label));
+    model.close();
+    assert!(model.are_equal_el(y0, y1));
+    assert!(model.tagged(b, y0, label));
+}
+
 #[test]
 fn rule_insertions_can_precede_endpoint_equalities() {
     let mut model = MorphismPreservation::new();

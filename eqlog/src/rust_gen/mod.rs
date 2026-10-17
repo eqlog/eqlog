@@ -1518,6 +1518,36 @@ fn display_canonicalize_fn<'a>(
             ModelMode::Native => "self.recompute_model_indices();",
             ModelMode::Desugared => "",
         };
+        let reset_inherited = FmtFn(|f| {
+            let shared: Vec<_> = index_selection
+                .current_indices()
+                .filter(|(rel, index)| {
+                    ctx.has_shared_indices(rel) && index_selection.is_primary(rel, index)
+                })
+                .collect();
+            if shared.is_empty() {
+                return Ok(());
+            }
+            let changed = ctx
+                .signature()
+                .iter_types()
+                .map(|typ| {
+                    let name = display_type(typ, ctx).to_string().to_case(Snake);
+                    format!("!self.{name}_uprooted.is_empty()")
+                })
+                .join(" || ");
+            writeln!(f, "if {changed} {{")?;
+            for (rel, index) in shared {
+                let field = display_current_index_field_name(rel, index, ctx);
+                writeln!(f, "self.{field}_all = self.{field}_own.clone();")?;
+            }
+            for rel in iter_flat_rels(ctx.signature())
+                .filter(|rel| ctx.has_shared_indices(&FlatInRel::Rel(*rel)))
+            {
+                write!(f, "{}", indices::invalidate(rel, index_selection, ctx))?;
+            }
+            writeln!(f, "}}")
+        });
         writedoc! {f, "
             /// Rewrites facts using the current equality representatives without running rules.
             /// Consumer checkpoints retain pending matches after equality replacement.
@@ -1532,6 +1562,7 @@ fn display_canonicalize_fn<'a>(
             fn __canonicalize_relations(&mut self) {{
                 {rel_blocks}
 
+                {reset_inherited}
                 {clear_uprooted_vecs}
             }}
         "}
@@ -1891,13 +1922,12 @@ fn display_morphism_index_prefix_walk_from(
             );
             formatdoc! {"
                 for ({el}, {subtree}) in {source_tree}.iter_restrictions() {{
-                    let Some(mapped_{el}) = map_{el}
-                        .get({el})
-                        .and_then(|restriction| restriction.iter().next().map(|[mapped]| mapped))
-                    else {{
+                    let Some(images) = map_{el}.get({el}) else {{
                         continue;
                     }};
-                    {body}
+                    for [mapped_{el}] in images.iter() {{
+                        {body}
+                    }}
                 }}
             "}
         }
@@ -2297,19 +2327,6 @@ fn display_recompute_model_indices_fn<'a>(
     suffix: &'a str,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let initialize = index_selection
-            .current_indices()
-            .filter(|(rel, index)| {
-                ctx.has_shared_indices(rel)
-                    && propagation_includes(plan, rel)
-                    && index_selection.is_primary(rel, index)
-            })
-            .map(|(rel, index)| {
-                let field = display_current_index_field_name(rel, index, ctx);
-                format!("self.{field}_all = self.{field}_own.clone();")
-            })
-            .format("\n");
-
         let propagation_functions = ctx
             .signature()
             .iter_model_decls()
@@ -2339,7 +2356,6 @@ fn display_recompute_model_indices_fn<'a>(
 
             fn recompute_model_indices{suffix}(&mut self) {{
                 {invalidate}
-                {initialize}
                 {propagate}
                 {invalidate}
             }}

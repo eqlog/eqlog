@@ -5,10 +5,13 @@ changes their inputs. Preserve close_until condition checks and
 interrupted work. Build old primary views only when the stratum
 uses them.
 
-Skip shared trees and stop semantic comparisons at the first
-difference.  Retain inherited trees when morphism propagation adds
-no facts, and reuse shared subtrees in idempotent unions. This keeps
-propagation from defeating snapshot sharing on subsequent rule visits.
+Skip shared trees and stop semantic comparisons at the first addition.
+Subtract borrowed tree ranges without allocating temporary splits.
+Reuse shared subtrees in idempotent unions and retain inherited facts
+between passes so propagation preserves snapshot sharing. Rebuild
+inherited views after equality replacement. Include conflicting
+morphism results until equality resolves them, so retained facts
+cannot erase their last owned support.
 
 Compile scheduling workloads in simultaneous and stratified modes and
 measure initial closure, sparse updates, and closure without changes.

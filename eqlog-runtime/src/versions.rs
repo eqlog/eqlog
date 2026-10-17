@@ -164,7 +164,9 @@ impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
         if self.current.rows.shares_root(rows) {
             return;
         }
-        if self.current.rows.is_subset(rows) && rows.is_subset(&self.current.rows) {
+        // Most publications add rows; check that direction first so the first
+        // addition proves a change without walking the remaining edits.
+        if rows.is_subset(&self.current.rows) && self.current.rows.is_subset(rows) {
             return;
         }
         self.current = Rc::new(Version {
@@ -232,7 +234,13 @@ impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
         } else {
             T::empty()
         };
-        self.seen.insert(consumer, self.current.clone());
+        if let Some(previous) = self.seen.insert(consumer, self.current.clone()) {
+            // With no checkpoint retaining this version, no future reader can
+            // need its cached difference.
+            if Rc::strong_count(&previous) == 1 {
+                self.views.remove(&previous.id);
+            }
+        }
         RelationView { old, new }
     }
 }
