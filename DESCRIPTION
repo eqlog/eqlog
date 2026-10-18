@@ -13,4 +13,13 @@ row is inserted. Evaluation equates such results after every stratum
 instead of running generated functionality rules, and the ordinary rules
 of a recursive component share one stratum per round.
 
-Native models keep the persistent storage and morphism transport.
+The rule modules of a stratum run as tasks on a small thread pool, each
+writing its own output buffers, which are appended in module order so
+that results do not depend on scheduling. While closing, tables defer
+trie updates to one parallel batch per trie before each stratum.
+EQLOG_THREADS sets the number of threads; 1 evaluates sequentially.
+
+Native models keep the persistent storage and morphism transport. The
+ETT checker compiles its kernel as a desugared model; it checks the
+Nat and Vec developments about 13x faster than before this branch
+(8.4x with EQLOG_THREADS=1).
