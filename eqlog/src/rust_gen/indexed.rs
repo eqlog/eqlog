@@ -441,22 +441,38 @@ pub(super) fn display_strata<'a>(
                 self.__stratum_initialized[{s}] = true;
                 self.__since_{s} = now;
                 self.__sync_tables();
+                let work: usize = now.iter().zip(&since).map(|(now, since)| (now - since) as usize).sum();
             "}?;
-            for (k, ((rel, index), source)) in inputs.reads.iter().enumerate() {
-                match index.age {
-                    IndexAge::New => {}
-                    IndexAge::Old | IndexAge::All => continue,
-                }
-                let field = table_field(&inputs.sources[*source], ctx);
-                let position = tables.position(rel, &index.order);
+            let deltas: Vec<_> = inputs
+                .reads
+                .iter()
+                .enumerate()
+                .filter(|(_, ((_, index), _))| match index.age {
+                    IndexAge::New => true,
+                    IndexAge::Old | IndexAge::All => false,
+                })
+                .collect();
+            for (k, ((_, index), _)) in &deltas {
                 let width = index.order.len();
-                writedoc! {f, "
-                    let delta_{k}: Vec<[u32; {width}]> = if since[{source}] < now[{source}] {{
-                        self.{field}.delta::<{width}>({position}, since[{source}])
-                    }} else {{
-                        Vec::new()
-                    }};
-                "}?;
+                writeln!(f, "let mut delta_{k}: Vec<[u32; {width}]> = Vec::new();")?;
+            }
+            if !deltas.is_empty() {
+                writeln!(
+                    f,
+                    "{{ let mut tasks: Vec<eqlog_runtime::Task<'_>> = Vec::new();"
+                )?;
+                for (k, ((rel, index), source)) in &deltas {
+                    let field = table_field(&inputs.sources[*source], ctx);
+                    let position = tables.position(rel, &index.order);
+                    let width = index.order.len();
+                    writedoc! {f, "
+                        if since[{source}] < now[{source}] {{
+                            let (table, delta, since) = (&self.{field}, &mut delta_{k}, since[{source}]);
+                            tasks.push(Box::new(move || *delta = table.delta::<{width}>({position}, since)));
+                        }}
+                    "}?;
+                }
+                writeln!(f, "eqlog_runtime::run_tasks(work, tasks); }}")?;
             }
             let buffers = output_buffers(&stratum.groups, modules);
             for (i, rel) in &buffers {
@@ -469,7 +485,6 @@ pub(super) fn display_strata<'a>(
             let count = stratum.groups.len();
             writedoc! {f, "
                 {{
-                let work = now.iter().zip(&since).map(|(now, since)| (now - since) as usize).sum();
                 let mut tasks: Vec<eqlog_runtime::Task<'_>> = Vec::with_capacity({count});
             "}?;
             for (i, &m) in stratum.groups.iter().enumerate() {
