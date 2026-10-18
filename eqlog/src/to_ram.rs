@@ -451,7 +451,7 @@ fn flat_rule_group_to_ram(
     let routines = flat_rule_group
         .rules
         .into_iter()
-        .flat_map(|flat_rule| residual::plans(flat_rule, index_selection))
+        .flat_map(|flat_rule| residual::plans(flat_rule, index_selection, mode))
         .map(|mut routine| {
             match mode {
                 ModelMode::Native => {}
