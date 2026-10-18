@@ -10,7 +10,7 @@ use crate::flat_eqlog::{iter_flat_rels, FlatInRel, FlatRel, IndexSelection};
 use crate::fmt_util::FmtFn;
 use crate::options::ModelMode;
 
-use super::indexed::table_field;
+use super::indexed::{self, table_field};
 use super::{
     display_all_index_field_name, display_current_index_field_name,
     display_element_index_field_name, display_index_expr, display_own_index_field_name,
@@ -361,8 +361,7 @@ impl DynamicContext<'_> {
                 match self.ctx.model_mode() {
                     ModelMode::Native => {}
                     ModelMode::Desugared => {
-                        let field = table_field(&FlatInRel::Rel(rel), self.ctx);
-                        writeln!(f, "self.{field}.insert(row);")?;
+                        writeln!(f, "{}", indexed::display_import_row(rel, self.ctx))?;
                     }
                 }
                 let mut positions: BTreeMap<TypeId, Vec<usize>> = BTreeMap::new();

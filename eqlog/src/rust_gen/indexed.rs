@@ -6,7 +6,7 @@
 //! are those stamped before that position and its new rows are the rest.
 
 use convert_case::{Case, Casing};
-use indoc::writedoc;
+use indoc::{formatdoc, writedoc};
 use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Display;
@@ -84,8 +84,27 @@ impl Tables {
             })
             .join(", ");
         let arity = source.arity(ctx.signature()).len();
-        format!("eqlog_runtime::IndexedTable::<{arity}>::new(&[{specs}])")
+        let constructor = match source {
+            FlatInRel::Rel(FlatRel::Func(_)) => "function",
+            FlatInRel::Rel(FlatRel::Pred(_) | FlatRel::ModelMember(_))
+            | FlatInRel::TypeSet(_)
+            | FlatInRel::RelWithDiagonals { .. }
+            | FlatInRel::Equality(_) => "new",
+        };
+        format!("eqlog_runtime::IndexedTable::<{arity}>::{constructor}(&[{specs}])")
     }
+}
+
+/// Types whose elements can be equated because a function has two results.
+fn function_codomains(ctx: &RustGenCtx<'_>) -> BTreeSet<TypeId> {
+    ctx.signature()
+        .iter_funcs()
+        .map(|func| ctx.signature().func(func).codomain)
+        .collect()
+}
+
+fn type_snake(typ: TypeId, ctx: &RustGenCtx<'_>) -> String {
+    display_type(typ, ctx).to_string().to_case(Case::Snake)
 }
 
 /// The field holding the table of a relation or of the elements of a type.
@@ -190,6 +209,13 @@ pub(super) fn display_struct<'a>(
             .iter_types()
             .map(|typ| display_type_fields(typ, ctx))
             .format("\n");
+        let functional_fields = function_codomains(ctx)
+            .into_iter()
+            .map(|typ| {
+                let name = type_snake(typ, ctx);
+                format!("__functional_{name}: Vec<[u32; 2]>,")
+            })
+            .join("\n");
         let strata = &program.schedule.strata;
         let count = strata.len();
         let since_fields = strata
@@ -211,6 +237,7 @@ pub(super) fn display_struct<'a>(
                 __allocated: bool,
                 __closed: bool,
                 __pending_delta: ModelDelta,
+                {functional_fields}
                 __stratum_initialized: [bool; {count}],
                 {since_fields}
             }}
@@ -255,6 +282,13 @@ pub(super) fn display_new_fn<'a>(
                 )
             })
             .join("\n");
+        let functional = function_codomains(ctx)
+            .into_iter()
+            .map(|typ| {
+                let name = type_snake(typ, ctx);
+                format!("__functional_{name}: Vec::new(),")
+            })
+            .join("\n");
         let strata = &program.schedule.strata;
         let count = strata.len();
         let since = strata
@@ -278,6 +312,7 @@ pub(super) fn display_new_fn<'a>(
                     __allocated: false,
                     __closed: false,
                     __pending_delta: ModelDelta::new(),
+                    {functional}
                     __stratum_initialized: [false; {count}],
                     {since}
                 }}
@@ -422,6 +457,7 @@ pub(super) fn display_strata<'a>(
                     FlatOutRel::Equality(_) | FlatOutRel::FuncDomain(_) => {}
                 }
             }
+            writeln!(f, "self.__normalize_functions();")?;
             writeln!(f, "true }}")?;
         }
         Ok(())
@@ -470,8 +506,48 @@ fn emit_schedule(
     Ok(())
 }
 
-pub(super) fn display_close<'a>(program: &'a RamProgram) -> impl Display + 'a {
+pub(super) fn display_close<'a>(
+    program: &'a RamProgram,
+    ctx: &'a RustGenCtx<'a>,
+) -> impl Display + 'a {
     FmtFn(move |f| {
+        let codomains = function_codomains(ctx);
+        let equate = codomains
+            .iter()
+            .map(|&typ| {
+                let name = type_snake(typ, ctx);
+                format!(
+                    "for [lhs, rhs] in std::mem::take(&mut self.__functional_{name}) {{ pending = true; self.__equate_{name}(lhs.into(), rhs.into()); }}"
+                )
+            })
+            .join("\n");
+        let uprooted = codomains
+            .iter()
+            .map(|&typ| {
+                let name = type_snake(typ, ctx);
+                format!("|| !self.{name}_uprooted.is_empty()")
+            })
+            .join(" ");
+        writedoc! {f, "
+            /// Equates the results that a function has for the same arguments
+            /// until all function graphs are functional again. Returns whether
+            /// this merged any elements.
+            #[allow(unused_mut)]
+            fn __normalize_functions(&mut self) -> bool {{
+                let mut changed = false;
+                loop {{
+                    let mut pending = false;
+                    {equate}
+                    if !pending {{
+                        return changed;
+                    }}
+                    if false {uprooted} {{
+                        changed = true;
+                        self.__canonicalize_relations();
+                    }}
+                }}
+            }}
+        "}?;
         writedoc! {f, "
             /// Closes the model until the condition holds or all rules are satisfied.
             /// Depending on the axioms, this may run indefinitely.
@@ -485,6 +561,7 @@ pub(super) fn display_close<'a>(program: &'a RamProgram) -> impl Display + 'a {
                     return condition.is_some_and(|condition| condition(self));
                 }}
                 self.__canonicalize_relations();
+                self.__normalize_functions();
                 if self.__check_condition(condition) {{ return true; }}
                 let mut delta = std::mem::replace(&mut self.__pending_delta, ModelDelta::new());
                 loop {{
@@ -493,13 +570,15 @@ pub(super) fn display_close<'a>(program: &'a RamProgram) -> impl Display + 'a {
         writedoc! {f, "
                     self.__allocated = false;
                     delta.apply_func_defs(self);
-                    if !self.__allocated {{
+                    let normalized = self.__normalize_functions();
+                    if !self.__allocated && !normalized {{
                         std::mem::swap(&mut self.__pending_delta, &mut delta);
                         self.canonicalize();
                         self.__closed = true;
                         return false;
                     }}
                     self.__canonicalize_relations();
+                    self.__normalize_functions();
                 }}
             }}
         "}
@@ -627,13 +706,48 @@ pub(super) fn display_insert_rows<'a>(
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let field = table_field(&FlatInRel::Rel(rel), ctx);
-        let args = args.iter().join(", ");
-        writedoc! {f, "
-            if !self.{field}.insert([{args}]) {{
-                return;
-            }}
-        "}
+        let row = args.iter().join(", ");
+        match rel {
+            FlatRel::Func(func) => {
+                let codomain = type_snake(ctx.signature().func(func).codomain, ctx);
+                let result = args.last().expect("a function graph has a result column");
+                writedoc! {f, "
+                    match self.{field}.insert_function([{row}]) {{
+                        eqlog_runtime::FunctionInsert::Present => return,
+                        eqlog_runtime::FunctionInsert::Inserted => {{}}
+                        eqlog_runtime::FunctionInsert::Conflict(other) => {{
+                            self.__functional_{codomain}.push([{result}, other]);
+                        }}
+                    }}
+                "}
+            }
+            FlatRel::Pred(_) | FlatRel::ModelMember(_) => writedoc! {f, "
+                if !self.{field}.insert([{row}]) {{
+                    return;
+                }}
+            "},
+        }
     })
+}
+
+/// Statements inserting an imported `row` into its table.
+pub(super) fn display_import_row(rel: FlatRel, ctx: &RustGenCtx<'_>) -> String {
+    let field = table_field(&FlatInRel::Rel(rel), ctx);
+    match rel {
+        FlatRel::Func(func) => {
+            let codomain = type_snake(ctx.signature().func(func).codomain, ctx);
+            let result = rel.arity(ctx.signature()).len() - 1;
+            formatdoc! {"
+                match self.{field}.insert_function(row) {{
+                    eqlog_runtime::FunctionInsert::Present | eqlog_runtime::FunctionInsert::Inserted => {{}}
+                    eqlog_runtime::FunctionInsert::Conflict(other) => {{
+                        self.__functional_{codomain}.push([row[{result}], other]);
+                    }}
+                }}
+            "}
+        }
+        FlatRel::Pred(_) | FlatRel::ModelMember(_) => format!("self.{field}.insert(row);"),
+    }
 }
 
 pub(super) fn display_holds_expr(rel: FlatRel, ctx: &RustGenCtx<'_>) -> String {

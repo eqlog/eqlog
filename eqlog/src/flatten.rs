@@ -650,15 +650,23 @@ pub fn flatten(ctx: &FlattenCtx<'_>, options: &CompileOptions) -> Vec<FlatRuleGr
     let evaluation_mode = options.evaluation_mode;
     let mut groups: Vec<FlatRuleGroup> = Vec::new();
 
-    groups.extend(ctx.signature.iter_funcs().map(|func_id| {
-        let rel_snake = func_base_name(ctx, func_id).to_case(Snake);
-        let rule_name = format!("functionality_{rel_snake}");
-        let rule = functionality_rule(func_id, ctx.signature, rule_name.clone(), evaluation_mode);
-        FlatRuleGroup {
-            name: rule_name,
-            rules: vec![rule],
+    match options.model_mode {
+        ModelMode::Native => {
+            groups.extend(ctx.signature.iter_funcs().map(|func_id| {
+                let rel_snake = func_base_name(ctx, func_id).to_case(Snake);
+                let rule_name = format!("functionality_{rel_snake}");
+                let rule =
+                    functionality_rule(func_id, ctx.signature, rule_name.clone(), evaluation_mode);
+                FlatRuleGroup {
+                    name: rule_name,
+                    rules: vec![rule],
+                }
+            }));
         }
-    }));
+        // Function tables report a second result for the same arguments on
+        // insertion, so evaluation equates the results without a rule.
+        ModelMode::Desugared => {}
+    }
 
     let mut rule_ids = Vec::new();
     collect_rule_ids(ctx.ast, &ctx.ast.module(ctx.module).decls, &mut rule_ids);

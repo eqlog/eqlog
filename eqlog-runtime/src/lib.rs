@@ -210,7 +210,7 @@ pub mod wbtree;
 
 #[doc(hidden)]
 pub use crate::indexed::{
-    Restrictions, RowsRestrictions, RowsView, Table as IndexedTable, Trie, TrieView,
+    FunctionInsert, Restrictions, RowsRestrictions, RowsView, Table as IndexedTable, Trie, TrieView,
 };
 #[doc(hidden)]
 pub use crate::prefix_tree::{

@@ -717,6 +717,22 @@ pub struct Table<const N: usize> {
     log: Vec<[u32; N]>,
     live: FxHashMap<[u32; N], u32>,
     indices: Vec<Index>,
+    // For the graph of a function, the first result inserted for each
+    // argument tuple, keyed by rows whose result column is zero. Entries
+    // outlive their rows: a row only disappears when one of its elements
+    // stops being canonical, and then an equal result remains or its
+    // arguments are never inserted again.
+    results: Option<FxHashMap<[u32; N], u32>>,
+}
+
+/// The outcome of inserting a row into the graph of a function.
+pub enum FunctionInsert {
+    /// The row was already present.
+    Present,
+    /// The row was inserted, and no other result is known for its arguments.
+    Inserted,
+    /// The row was inserted, but its arguments already have this result.
+    Conflict(u32),
 }
 
 impl<const N: usize> Table<N> {
@@ -739,6 +755,47 @@ impl<const N: usize> Table<N> {
             log: Vec::new(),
             live: FxHashMap::default(),
             indices,
+            results: None,
+        }
+    }
+
+    /// Creates a table for the graph of a function, whose last column holds
+    /// results; see [`Table::new`] for index specifications.
+    pub fn function(indices: &[(&[usize], &[(usize, usize)])]) -> Self {
+        assert!(N > 0, "a function graph has a result column");
+        Table {
+            results: Some(FxHashMap::default()),
+            ..Table::new(indices)
+        }
+    }
+
+    /// Inserts a row of a function graph and reports whether its arguments
+    /// had another result.
+    #[inline(never)]
+    pub fn insert_function(&mut self, row: [u32; N]) -> FunctionInsert {
+        if !self.insert(row) {
+            return FunctionInsert::Present;
+        }
+        let result = row[N - 1];
+        let mut key = row;
+        key[N - 1] = 0;
+        let results = self
+            .results
+            .as_mut()
+            .expect("function tables record results");
+        match results.entry(key) {
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                entry.insert(result);
+                FunctionInsert::Inserted
+            }
+            std::collections::hash_map::Entry::Occupied(entry) => {
+                let other = *entry.get();
+                if other == result {
+                    FunctionInsert::Inserted
+                } else {
+                    FunctionInsert::Conflict(other)
+                }
+            }
         }
     }
 
@@ -983,6 +1040,25 @@ mod tests {
         assert_eq!(trie.view_all().iter_restrictions().next().unwrap().0, 7);
         assert_eq!(trie.view_all().oldest_restriction().unwrap().0, 6);
         assert_eq!(trie.view(2, u32::MAX).oldest_restriction().unwrap().0, 7);
+    }
+
+    // `None` for a present row, otherwise the conflicting result, if any.
+    fn outcome(insert: FunctionInsert) -> Option<Option<u32>> {
+        match insert {
+            FunctionInsert::Present => None,
+            FunctionInsert::Inserted => Some(None),
+            FunctionInsert::Conflict(other) => Some(Some(other)),
+        }
+    }
+
+    #[test]
+    fn function_tables_report_other_results() {
+        let mut table: Table<3> = Table::function(&[(&[0, 1, 2], &[])]);
+        assert_eq!(outcome(table.insert_function([1, 2, 3])), Some(None));
+        assert_eq!(outcome(table.insert_function([1, 2, 3])), None);
+        assert_eq!(outcome(table.insert_function([1, 2, 4])), Some(Some(3)));
+        assert_eq!(outcome(table.insert_function([1, 5, 4])), Some(None));
+        assert_eq!(table.len(), 3);
     }
 
     #[test]

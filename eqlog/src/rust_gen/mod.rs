@@ -3270,7 +3270,7 @@ fn display_theory_impl<'a>(
             }
             ModelMode::Desugared => {
                 write!(f, "{}", indexed::display_strata(program, tables, ctx))?;
-                write!(f, "{}", indexed::display_close(program))?;
+                write!(f, "{}", indexed::display_close(program, ctx))?;
             }
         }
 
