@@ -32,7 +32,7 @@ fn rules_accept_prepared_secondary_inputs() {
 #[cfg(feature = "desugared")]
 #[test]
 fn rules_accept_prepared_secondary_inputs() {
-    let mut edges = IndexedTable::<2>::new(&[(&[1, 0], &[])]);
+    let mut edges = IndexedTable::<2>::new(&[(&[1, 0], &[], true)]);
     edges.insert([1, 2]);
     let ends = [[2]];
     let mut output = Vec::new();

@@ -18,7 +18,7 @@ use super::{
     display_rel, display_type, display_type_fields, display_weight_static_name, module_env_in_rels,
     module_env_out_rels, ElVar, RustGenCtx,
 };
-use crate::algebra::signature::TypeId;
+use crate::algebra::signature::{FuncId, Signature, TypeId};
 use crate::flat_eqlog::{
     iter_flat_rels, FlatInRel, FlatOutRel, FlatRel, IndexAge, IndexSelection, IndexSpec, QuerySpec,
     Schedule,
@@ -26,22 +26,51 @@ use crate::flat_eqlog::{
 use crate::fmt_util::FmtFn;
 use crate::ram::{RamModule, RamProgram};
 
+fn table_indices(
+    selection: &IndexSelection,
+) -> BTreeMap<FlatInRel, Vec<(FlatInRel, Arc<[usize]>)>> {
+    let mut indices: BTreeMap<FlatInRel, Vec<(FlatInRel, Arc<[usize]>)>> = BTreeMap::new();
+    for (rel, index) in selection.current_indices() {
+        let entry = indices.entry(source_relation(rel)).or_default();
+        let key = (rel.clone(), index.order.clone());
+        if !entry.contains(&key) {
+            entry.push(key);
+        }
+    }
+    indices
+}
+
 /// Assigns every index of the selection to a table holding its source relation.
 pub(super) struct Tables {
     indices: BTreeMap<FlatInRel, Vec<(FlatInRel, Arc<[usize]>)>>,
+    // Indices that rules read through trie views rather than only as deltas.
+    viewed: BTreeSet<(FlatInRel, Arc<[usize]>)>,
 }
 
 impl Tables {
-    pub(super) fn new(selection: &IndexSelection) -> Self {
-        let mut indices: BTreeMap<FlatInRel, Vec<(FlatInRel, Arc<[usize]>)>> = BTreeMap::new();
-        for (rel, index) in selection.current_indices() {
-            let entry = indices.entry(source_relation(rel)).or_default();
-            let key = (rel.clone(), index.order.clone());
-            if !entry.contains(&key) {
-                entry.push(key);
-            }
-        }
-        Tables { indices }
+    pub(super) fn new(
+        selection: &IndexSelection,
+        program: &RamProgram,
+        signature: &Signature,
+    ) -> Self {
+        let indices = table_indices(selection);
+        let viewed = program
+            .modules
+            .iter()
+            .flat_map(module_env_in_rels)
+            .filter(|(_, index)| match index.age {
+                IndexAge::Old | IndexAge::All => true,
+                IndexAge::New => false,
+            })
+            .map(|(rel, index)| (rel, index.order))
+            .chain(signature.iter_funcs().map(|func| {
+                let rel = FlatInRel::Rel(FlatRel::Func(func));
+                let query = QuerySpec::eval_func(func, signature);
+                let order = selection.current_query(&rel, query).order.clone();
+                (rel, order)
+            }))
+            .collect();
+        Tables { indices, viewed }
     }
 
     fn sources(&self) -> impl Iterator<Item = &FlatInRel> {
@@ -80,7 +109,8 @@ impl Tables {
                 };
                 let columns = columns.iter().join(", ");
                 let equal = equal.iter().map(|(i, j)| format!("({i}, {j})")).join(", ");
-                format!("(&[{columns}], &[{equal}])")
+                let viewed = self.viewed.contains(&(rel.clone(), order.clone()));
+                format!("(&[{columns}], &[{equal}], {viewed})")
             })
             .join(", ");
         let arity = source.arity(ctx.signature()).len();
@@ -124,24 +154,6 @@ pub(super) fn table_field(source: &FlatInRel, ctx: &RustGenCtx<'_>) -> String {
             unreachable!("only relations and types have tables")
         }
     }
-}
-
-/// An expression for a view of all rows through the index serving `query`.
-fn query_view(
-    rel: FlatRel,
-    query: QuerySpec,
-    selection: &IndexSelection,
-    tables: &Tables,
-    ctx: &RustGenCtx<'_>,
-) -> (String, Arc<[usize]>) {
-    let flat = FlatInRel::Rel(rel);
-    let index = selection.current_query(&flat, query);
-    let field = table_field(&flat, ctx);
-    let position = tables.position(&flat, &index.order);
-    (
-        format!("self.{field}.view({position})"),
-        index.order.clone(),
-    )
 }
 
 /// The tables and rule inputs read by one stratum.
@@ -775,18 +787,24 @@ pub(super) fn display_holds_expr(rel: FlatRel, ctx: &RustGenCtx<'_>) -> String {
 
 /// Statements binding `result` to the value of a function on `arg{i}`.
 pub(super) fn display_eval_body(
-    rel: FlatRel,
-    query: QuerySpec,
+    func: FuncId,
     selection: &IndexSelection,
-    tables: &Tables,
     ctx: &RustGenCtx<'_>,
 ) -> String {
-    let (view, order) = query_view(rel, query, selection, tables, ctx);
-    let gets = order[..order.len() - 1]
+    let rel = FlatInRel::Rel(FlatRel::Func(func));
+    let index = selection.current_query(&rel, QuerySpec::eval_func(func, ctx.signature()));
+    let field = table_field(&rel, ctx);
+    let position = table_indices(selection)[&rel]
+        .iter()
+        .position(|(other, order)| *other == rel && *order == index.order)
+        .expect("the evaluation index belongs to the function's table");
+    let gets = index.order[..index.order.len() - 1]
         .iter()
         .map(|i| format!("let set = set.get(arg{i}.0)?;"))
         .join("\n");
-    format!("let set = {view};\n{gets}\nlet (result, _) = set.iter_restrictions().next()?;")
+    format!(
+        "let set = self.{field}.view({position});\n{gets}\nlet (result, _) = set.iter_restrictions().next()?;"
+    )
 }
 
 /// The table whose `iter` yields the rows of a relation in sorted order.

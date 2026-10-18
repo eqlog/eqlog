@@ -701,13 +701,7 @@ fn display_pub_function_eval_fn<'a>(
                 {gets}
                 let [result] = set.iter().next()?;
             "},
-            ModelMode::Desugared => indexed::display_eval_body(
-                rel,
-                query_spec,
-                index_selection,
-                &indexed::Tables::new(index_selection),
-                ctx,
-            ),
+            ModelMode::Desugared => indexed::display_eval_body(func, index_selection, ctx),
         };
 
         writedoc! {f, "
@@ -3581,7 +3575,7 @@ pub fn display_module<'a>(
         write!(f, "{}", model_delta_struct)?;
 
         let codegen = stratified::Codegen::new(&program.schedule, program);
-        let tables = indexed::Tables::new(index_selection);
+        let tables = indexed::Tables::new(index_selection, program, ctx.signature());
         match ctx.model_mode() {
             ModelMode::Native => {
                 write!(f, "{}", codegen.loop_input_types(index_selection, ctx))?;

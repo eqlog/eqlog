@@ -745,20 +745,26 @@ struct Index {
     columns: Box<[usize]>,
     // Pairs of source columns that rows of the index must agree on.
     equal: Box<[(usize, usize)]>,
-    trie: Trie,
+    // Absent for indices that are only read through deltas.
+    trie: Option<Trie>,
 }
 
-impl Index {
-    #[inline]
-    fn project<const N: usize>(&self, row: &[u32; N], out: &mut [u32; MAX_ARITY]) -> bool {
-        if self.equal.iter().any(|&(i, j)| row[i] != row[j]) {
-            return false;
-        }
-        for (key, &column) in out.iter_mut().zip(self.columns.iter()) {
-            *key = row[column];
-        }
-        true
+/// Writes the key of `row` in an index with these columns and equalities,
+/// unless the row is not in the index.
+#[inline]
+fn project<const N: usize>(
+    columns: &[usize],
+    equal: &[(usize, usize)],
+    row: &[u32; N],
+    out: &mut [u32; MAX_ARITY],
+) -> bool {
+    if equal.iter().any(|&(i, j)| row[i] != row[j]) {
+        return false;
     }
+    for (key, &column) in out.iter_mut().zip(columns) {
+        *key = row[column];
+    }
+    true
 }
 
 /// The rows of one relation together with the indices that rules query.
@@ -787,17 +793,18 @@ pub enum FunctionInsert {
 
 impl<const N: usize> Table<N> {
     /// Creates a table maintaining one index per specification. An index
-    /// specification lists source columns in key order and pairs of columns
-    /// that must be equal for a row to appear in that index.
-    pub fn new(indices: &[(&[usize], &[(usize, usize)])]) -> Self {
+    /// specification lists source columns in key order, pairs of columns that
+    /// must be equal for a row to appear in that index, and whether views of
+    /// the index are needed; otherwise only deltas read it.
+    pub fn new(indices: &[(&[usize], &[(usize, usize)], bool)]) -> Self {
         let indices = indices
             .iter()
-            .map(|&(columns, equal)| {
+            .map(|&(columns, equal, viewed)| {
                 assert!(columns.iter().all(|&column| column < N));
                 Index {
                     columns: columns.into(),
                     equal: equal.into(),
-                    trie: Trie::new(columns.len()),
+                    trie: viewed.then(|| Trie::new(columns.len())),
                 }
             })
             .collect();
@@ -811,7 +818,7 @@ impl<const N: usize> Table<N> {
 
     /// Creates a table for the graph of a function, whose last column holds
     /// results; see [`Table::new`] for index specifications.
-    pub fn function(indices: &[(&[usize], &[(usize, usize)])]) -> Self {
+    pub fn function(indices: &[(&[usize], &[(usize, usize)], bool)]) -> Self {
         assert!(N > 0, "a function graph has a result column");
         Table {
             results: Some(FxHashMap::default()),
@@ -871,9 +878,16 @@ impl<const N: usize> Table<N> {
         if self.live.try_insert_stamp(row, stamp) {
             self.log.push(row);
             let mut key = [0u32; MAX_ARITY];
-            for index in &mut self.indices {
-                if index.project(&row, &mut key) {
-                    index.trie.insert(&key[..index.columns.len()], stamp);
+            for Index {
+                columns,
+                equal,
+                trie,
+            } in &mut self.indices
+            {
+                if let Some(trie) = trie {
+                    if project(columns, equal, &row, &mut key) {
+                        trie.insert(&key[..columns.len()], stamp);
+                    }
                 }
             }
             true
@@ -889,10 +903,17 @@ impl<const N: usize> Table<N> {
             return false;
         }
         let mut key = [0u32; MAX_ARITY];
-        for index in &mut self.indices {
-            if index.project(&row, &mut key) {
-                let removed = index.trie.remove(&key[..index.columns.len()]);
-                debug_assert!(removed);
+        for Index {
+            columns,
+            equal,
+            trie,
+        } in &mut self.indices
+        {
+            if let Some(trie) = trie {
+                if project(columns, equal, &row, &mut key) {
+                    let removed = trie.remove(&key[..columns.len()]);
+                    debug_assert!(removed);
+                }
             }
         }
         true
@@ -930,16 +951,24 @@ impl<const N: usize> Table<N> {
             .any(|(row, stamp)| self.live.get(row) == Some(&stamp))
     }
 
+    #[inline]
+    fn trie(&self, index: usize) -> &Trie {
+        self.indices[index]
+            .trie
+            .as_ref()
+            .expect("viewed indices maintain a trie")
+    }
+
     /// All rows through the given index.
     #[inline]
     pub fn view(&self, index: usize) -> TrieView<'_, false> {
-        self.indices[index].trie.view()
+        self.trie(index).view()
     }
 
     /// The rows stamped before `before` through the given index.
     #[inline]
     pub fn view_before(&self, index: usize, before: u32) -> TrieView<'_, true> {
-        self.indices[index].trie.view_before(before)
+        self.trie(index).view_before(before)
     }
 
     /// The rows stamped at or after `since`, through the given index of
@@ -951,7 +980,9 @@ impl<const N: usize> Table<N> {
         let mut rows = Vec::new();
         let mut key = [0u32; MAX_ARITY];
         for (row, stamp) in self.log[since as usize..].iter().zip(since..) {
-            if self.live.get(row) == Some(&stamp) && index.project(row, &mut key) {
+            if self.live.get(row) == Some(&stamp)
+                && project(&index.columns, &index.equal, row, &mut key)
+            {
                 rows.push(key[..W].try_into().unwrap());
             }
         }
@@ -1073,7 +1104,8 @@ mod tests {
 
     #[test]
     fn views_respect_stamps_after_removals() {
-        let mut table: Table<3> = Table::new(&[(&[0, 1, 2], &[]), (&[2, 0], &[(0, 1)])]);
+        let mut table: Table<3> =
+            Table::new(&[(&[0, 1, 2], &[], true), (&[2, 0], &[(0, 1)], true)]);
         assert!(table.insert([1, 2, 3]));
         assert!(table.insert([1, 1, 4]));
         assert!(!table.insert([1, 2, 3]));
@@ -1162,7 +1194,7 @@ mod tests {
 
     #[test]
     fn function_tables_report_other_results() {
-        let mut table: Table<3> = Table::function(&[(&[0, 1, 2], &[])]);
+        let mut table: Table<3> = Table::function(&[(&[0, 1, 2], &[], true)]);
         assert_eq!(outcome(table.insert_function([1, 2, 3])), Some(None));
         assert_eq!(outcome(table.insert_function([1, 2, 3])), None);
         assert_eq!(outcome(table.insert_function([1, 2, 4])), Some(Some(3)));
@@ -1194,7 +1226,7 @@ mod tests {
 
     #[test]
     fn nullary_tables_hold_one_row() {
-        let mut table: Table<0> = Table::new(&[(&[], &[])]);
+        let mut table: Table<0> = Table::new(&[(&[], &[], true)]);
         assert!(table.view(0).is_empty());
         assert!(table.insert([]));
         assert!(!table.insert([]));
