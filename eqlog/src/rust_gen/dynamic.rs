@@ -262,7 +262,7 @@ impl DynamicContext<'_> {
                         let field = table_field(&rel, self.ctx);
                         let occurrences = indexed::occurrences_field(typ, self.ctx);
                         format!(
-                            "for row in data.elements.iter() {{ model.{field}.insert(row); }}\nmodel.{occurrences} = (0..data.equalities.len()).map(|_| Vec::new()).collect();"
+                            "for row in data.elements.iter() {{ model.{field}.insert(row); }}\nmodel.{occurrences} = eqlog_runtime::Occurrences::with_elements(data.equalities.len());"
                         )
                     }
                 };
@@ -387,7 +387,7 @@ impl DynamicContext<'_> {
                         }
                         ModelMode::Desugared => {
                             let occurrences = indexed::occurrences_field(typ, self.ctx);
-                            format!("self.{occurrences}[element as usize].push(occurrence);")
+                            format!("self.{occurrences}.push(element, occurrence);")
                         }
                     };
                     writedoc! {f, "
@@ -408,7 +408,7 @@ impl DynamicContext<'_> {
                             }
                             ModelMode::Desugared => {
                                 let occurrences = indexed::occurrences_field(typ, self.ctx);
-                                format!("self.{occurrences}[root as usize].push(occurrence);")
+                                format!("self.{occurrences}.push(root, occurrence);")
                             }
                         };
                         writedoc! {f, "

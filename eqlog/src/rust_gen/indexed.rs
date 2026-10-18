@@ -221,7 +221,7 @@ pub(super) fn display_struct<'a>(
             .iter_types()
             .map(|typ| {
                 let field = occurrences_field(typ, ctx);
-                format!("{field}: Vec<Vec<u64>>,")
+                format!("{field}: eqlog_runtime::Occurrences,")
             })
             .join("\n");
         let type_fields = ctx
@@ -299,7 +299,7 @@ pub(super) fn display_new_fn<'a>(
             .iter_types()
             .map(|typ| {
                 let field = occurrences_field(typ, ctx);
-                format!("{field}: Vec::new(),")
+                format!("{field}: eqlog_runtime::Occurrences::default(),")
             })
             .join("\n");
         let types = ctx
@@ -742,7 +742,7 @@ pub(super) fn display_occurrence_rows(
     let field = table_field(&FlatInRel::Rel(rel), ctx);
     let tag = relation_tag(rel, ctx);
     format!(
-        "self.{occurrences}[arg{position}.0 as usize].iter().filter(|&&entry| entry >> 32 == {tag}).map(|&entry| self.{field}.row_at(entry as u32))"
+        "self.{occurrences}.iter(arg{position}.0).filter(|&entry| entry >> 32 == {tag}).map(|entry| self.{field}.row_at(entry as u32))"
     )
 }
 
@@ -757,7 +757,8 @@ pub(super) fn display_canonicalize_fn<'a>(ctx: &'a RustGenCtx<'a>) -> impl Displ
                 formatdoc! {"
                     for el in std::mem::take(&mut self.{name}_uprooted) {{
                         rewritten = true;
-                        for entry in std::mem::take(&mut self.{occurrences}[el.0 as usize]) {{
+                        let mut list = self.{occurrences}.take(el.0);
+                        while let Some(entry) = self.{occurrences}.pop(&mut list) {{
                             self.__rewrite_row(entry);
                         }}
                     }}

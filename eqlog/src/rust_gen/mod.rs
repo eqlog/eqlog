@@ -997,7 +997,7 @@ fn display_pub_insert_relation<'a>(
                                     let occurrences = indexed::occurrences_field(*typ, ctx);
                                     return writedoc! {f, "
                                         if true {checks} {{
-                                        self.{occurrences}[{pos_arg} as usize].push(occurrence);
+                                        self.{occurrences}.push({pos_arg}, occurrence);
                                         }}
                                     "};
                                 }
@@ -1146,7 +1146,7 @@ fn display_new_element_fn_internal<'a>(
             ModelMode::Native => String::new(),
             ModelMode::Desugared => {
                 let occurrences = indexed::occurrences_field(typ, ctx);
-                format!("self.{occurrences}.push(Vec::new());")
+                format!("self.{occurrences}.add_element();")
             }
         };
 

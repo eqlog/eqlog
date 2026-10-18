@@ -211,8 +211,8 @@ pub mod wbtree;
 
 #[doc(hidden)]
 pub use crate::indexed::{
-    Either, FunctionInsert, Restrictions, RowsRestrictions, RowsView, Table as IndexedTable, Trie,
-    TrieView,
+    Either, FunctionInsert, Occurrences, Restrictions, RowsRestrictions, RowsView,
+    Table as IndexedTable, Trie, TrieView,
 };
 #[doc(hidden)]
 pub use crate::parallel::{run_tasks, Task};

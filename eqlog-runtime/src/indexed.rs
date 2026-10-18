@@ -801,6 +801,85 @@ fn project<const N: usize>(
     true
 }
 
+/// For each element of a type, the entries of the rows it occurs in, most
+/// recent first. The lists share one arena, so recording an occurrence
+/// never allocates per element.
+pub struct Occurrences {
+    // The first node of each element's list.
+    heads: Vec<u32>,
+    // An entry and the next node of its list.
+    nodes: Vec<(u64, u32)>,
+    // Nodes of taken lists, linked through their next nodes.
+    free: u32,
+}
+
+impl Default for Occurrences {
+    fn default() -> Self {
+        Occurrences::with_elements(0)
+    }
+}
+
+impl Occurrences {
+    pub fn with_elements(count: usize) -> Self {
+        Occurrences {
+            heads: vec![NONE; count],
+            nodes: Vec::new(),
+            free: NONE,
+        }
+    }
+
+    pub fn add_element(&mut self) {
+        self.heads.push(NONE);
+    }
+
+    #[inline(always)]
+    pub fn push(&mut self, element: u32, entry: u64) {
+        let head = &mut self.heads[element as usize];
+        let next = *head;
+        if self.free == NONE {
+            *head = u32::try_from(self.nodes.len()).expect("occurrence limit");
+            self.nodes.push((entry, next));
+        } else {
+            *head = self.free;
+            let node = &mut self.nodes[self.free as usize];
+            self.free = node.1;
+            *node = (entry, next);
+        }
+    }
+
+    /// Detaches the list of an element, to be consumed by
+    /// [`Occurrences::pop`].
+    #[inline]
+    pub fn take(&mut self, element: u32) -> u32 {
+        std::mem::replace(&mut self.heads[element as usize], NONE)
+    }
+
+    /// Removes the first entry of a detached list.
+    #[inline]
+    pub fn pop(&mut self, list: &mut u32) -> Option<u64> {
+        if *list == NONE {
+            return None;
+        }
+        let index = *list;
+        let (entry, next) = self.nodes[index as usize];
+        self.nodes[index as usize].1 = self.free;
+        self.free = index;
+        *list = next;
+        Some(entry)
+    }
+
+    pub fn iter(&self, element: u32) -> impl Iterator<Item = u64> + '_ {
+        let mut node = self.heads[element as usize];
+        std::iter::from_fn(move || {
+            (node != NONE).then(|| {
+                let (entry, next) = self.nodes[node as usize];
+                node = next;
+                entry
+            })
+        })
+    }
+}
+
 /// The rows of one relation together with the indices that rules query.
 pub struct Table<const N: usize> {
     // Every inserted row, in insertion order; a row's stamp is its position.
@@ -1257,6 +1336,29 @@ mod tests {
         table.set_deferred(false);
         assert!(table.insert([9, 9]));
         assert!(rows(table.view(0), 2).contains(&vec![9, 9]));
+    }
+
+    #[test]
+    fn occurrence_lists_reuse_taken_nodes() {
+        let mut occurrences = Occurrences::with_elements(2);
+        occurrences.push(0, 10);
+        occurrences.push(1, 20);
+        occurrences.push(0, 11);
+        assert_eq!(occurrences.iter(0).collect::<Vec<_>>(), vec![11, 10]);
+        let mut list = occurrences.take(0);
+        assert_eq!(occurrences.iter(0).count(), 0);
+        assert_eq!(occurrences.pop(&mut list), Some(11));
+        // Recording while a taken list is consumed reuses its nodes.
+        occurrences.push(1, 21);
+        assert_eq!(occurrences.pop(&mut list), Some(10));
+        assert_eq!(occurrences.pop(&mut list), None);
+        occurrences.add_element();
+        occurrences.push(2, 30);
+        occurrences.push(2, 31);
+        // Four live entries; without reuse there would be six nodes.
+        assert_eq!(occurrences.nodes.len(), 4);
+        assert_eq!(occurrences.iter(1).collect::<Vec<_>>(), vec![21, 20]);
+        assert_eq!(occurrences.iter(2).collect::<Vec<_>>(), vec![31, 30]);
     }
 
     #[test]
