@@ -1027,6 +1027,16 @@ fn display_pub_insert_relation<'a>(
             ModelMode::Native => String::new(),
             ModelMode::Desugared => indexed::display_occurrence(rel, ctx),
         };
+        // A present row passed the dependent checks when it was inserted,
+        // and memberships are never retracted.
+        let present = match ctx.model_mode() {
+            ModelMode::Native => String::new(),
+            ModelMode::Desugared => {
+                let row = rel_args.iter().map(|arg| format!("{arg}.0")).join(", ");
+                let field = indexed::table_field(&FlatInRel::Rel(rel), ctx);
+                format!("if self.{field}.contains([{row}]) {{ return; }}")
+            }
+        };
         let internal_insert = ctx.internal_insert_name(rel);
         let supported_insert = ctx.supported_insert_name(rel);
         // Inlining every relation's insertion into canonicalization and output
@@ -1052,6 +1062,7 @@ fn display_pub_insert_relation<'a>(
             #[allow(dead_code)]
             pub fn insert_{rel_snake}(&mut self, {rel_fn_args}) {{
                 {canonicalize}
+                {present}
                 {dependent_checks}
                 {parent_checks}
                 self.{internal_insert}({args});
