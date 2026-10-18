@@ -1,6 +1,7 @@
 use crate::algebra::signature::{Signature, TypeId};
 use crate::flat_eqlog::*;
 use crate::fmt_util::*;
+use crate::options::ModelMode;
 use crate::rust_gen::flat_eqlog::display_flat_rule;
 use crate::rust_gen::*;
 use convert_case::{Case, Casing};
@@ -84,6 +85,15 @@ pub fn module_env_out_rels(ram_module: &RamModule) -> BTreeSet<FlatOutRel> {
         .collect()
 }
 
+/// The env field through which desugared rules see the rows that a table
+/// already holds before they output a row.
+pub fn display_out_rows_field_name<'a>(rel: FlatRel, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let rel_snake = display_rel(rel, ctx).to_string().to_case(Snake);
+        write!(f, "{rel_snake}_rows")
+    })
+}
+
 pub fn display_module_env_struct<'a>(
     ram_module: &'a RamModule,
     ctx: &'a RustGenCtx<'a>,
@@ -94,9 +104,24 @@ pub fn display_module_env_struct<'a>(
             .map(|(rel, index_spec)| {
                 FmtFn(move |f| {
                     let name = display_index_field_name(&rel, &index_spec, ctx);
-                    let typ = display_index_type(&rel, ctx);
-
-                    write!(f, "{name}: &'a {typ},")
+                    match ctx.model_mode() {
+                        ModelMode::Native => {
+                            let typ = display_index_type(&rel, ctx);
+                            write!(f, "{name}: &'a {typ},")
+                        }
+                        ModelMode::Desugared => match index_spec.age {
+                            IndexAge::New => {
+                                let width = index_spec.order.len();
+                                write!(f, "{name}: eqlog_runtime::RowsView<'a, {width}>,")
+                            }
+                            IndexAge::Old => {
+                                write!(f, "{name}: eqlog_runtime::TrieView<'a, true>,")
+                            }
+                            IndexAge::All => {
+                                write!(f, "{name}: eqlog_runtime::TrieView<'a, false>,")
+                            }
+                        },
+                    }
                 })
             })
             .format("\n");
@@ -107,14 +132,29 @@ pub fn display_module_env_struct<'a>(
                 FmtFn(move |f| {
                     let name = display_out_set_field_name(&rel, ctx);
                     let typ = display_out_set_type(&rel, ctx);
-
-                    write!(f, "{name}: &'a mut {typ},")
+                    write!(f, "{name}: &'a mut {typ},")?;
+                    match ctx.model_mode() {
+                        ModelMode::Native => Ok(()),
+                        ModelMode::Desugared => match &rel {
+                            FlatOutRel::Rel(out_rel) => {
+                                let rows = display_out_rows_field_name(*out_rel, ctx);
+                                let arity = out_rel.arity(ctx.signature()).len();
+                                write!(f, "\n{rows}: &'a eqlog_runtime::IndexedTable<{arity}>,")
+                            }
+                            FlatOutRel::Equality(_) | FlatOutRel::FuncDomain(_) => Ok(()),
+                        },
+                    }
                 })
             })
             .format("\n");
 
         let name = display_module_env_struct_name(ram_module);
-        let canonical = module_env_iter_types(ram_module, ctx.signature())
+        let canonical_types = match ctx.model_mode() {
+            ModelMode::Native => module_env_iter_types(ram_module, ctx.signature()),
+            // Tables only hold canonical rows.
+            ModelMode::Desugared => BTreeSet::new(),
+        };
+        let canonical = canonical_types
             .iter()
             .map(|&typ| {
                 let name = display_type(typ, ctx).to_string().to_case(Snake);
@@ -168,10 +208,15 @@ fn display_in_set_expr<'a>(expr: &'a InSetExpr, ctx: &'a RustGenCtx<'a>) -> impl
         }) => {
             let result_arity = set.arity - 1;
             let set = display_set_var(set, ctx);
-            write!(
-                f,
-                "{set}.get({first_column_var}).unwrap_or_else(|| PrefixTree{result_arity}::empty())"
-            )
+            match ctx.model_mode() {
+                ModelMode::Native => write!(
+                    f,
+                    "{set}.get({first_column_var}).unwrap_or_else(|| PrefixTree{result_arity}::empty())"
+                ),
+                ModelMode::Desugared => {
+                    write!(f, "{set}.get({first_column_var}).unwrap_or_default()")
+                }
+            }
         }
     })
 }
@@ -181,10 +226,10 @@ fn display_key_count<'a>(sets: &'a [SetVar], ctx: &'a RustGenCtx<'a>) -> impl 'a
         write!(f, "0usize")?;
         for set in sets {
             let name = display_set_var(set, ctx);
-            let count = if set.arity == 1 {
-                "set.len()"
-            } else {
-                "map.len_upper_bound()"
+            let count = match ctx.model_mode() {
+                ModelMode::Native if set.arity == 1 => "set.len()",
+                ModelMode::Native => "map.len_upper_bound()",
+                ModelMode::Desugared => "len_upper_bound()",
             };
             write!(f, ".saturating_add({name}.{count})")?;
         }
@@ -227,6 +272,21 @@ fn display_iter_expr<'a>(stmt: &'a IterStmt, ctx: &'a RustGenCtx<'a>) -> impl 'a
             return write!(f, "{direct}");
         }
         let loop_set = display_set_var(&stmt.loop_var_set, ctx);
+        match ctx.model_mode() {
+            ModelMode::Native => {}
+            ModelMode::Desugared => {
+                // Desugared premises read a single set of one age.
+                let [set] = stmt.sets.as_slice() else {
+                    panic!("desugared premises read one set")
+                };
+                let set = display_set_var(set, ctx);
+                let inverse = display_iter_sources(&stmt.lookup_drivers, ctx, true);
+                return write!(
+                    f,
+                    "if {loop_set}_use_lookup {{ eqlog_runtime::Either::Right({inverse}.filter_map(|(key, _)| {set}.get(key).map(|suffix| (key, suffix)))) }} else {{ eqlog_runtime::Either::Left({direct}) }}"
+                );
+            }
+        }
         let inverse = display_iter_sources(&stmt.lookup_drivers, ctx, true);
         write!(
             f,
@@ -262,7 +322,11 @@ fn display_stmt_pre<'a>(ram_stmt: &'a RamStmt, ctx: &'a RustGenCtx<'a>) -> impl 
     FmtFn(move |f| match ram_stmt {
         RamStmt::DefineSet(DefineSetStmt { defined_var, expr }) => {
             let expr = display_in_set_expr(expr, ctx);
-            let strictness = defined_var.strictness;
+            // Restricting a desugared view is a cheap inlined probe.
+            let strictness = match ctx.model_mode() {
+                ModelMode::Native => defined_var.strictness,
+                ModelMode::Desugared => Strictness::Strict,
+            };
             let defined_var = display_set_var(defined_var, ctx);
             match strictness {
                 Strictness::Lazy => {
@@ -292,7 +356,11 @@ fn display_stmt_pre<'a>(ram_stmt: &'a RamStmt, ctx: &'a RustGenCtx<'a>) -> impl 
                 canonical_filter,
             },
         ) => {
-            let filter = if *canonical_filter {
+            let canonical_filter = match ctx.model_mode() {
+                ModelMode::Native => *canonical_filter,
+                ModelMode::Desugared => false,
+            };
+            let filter = if canonical_filter {
                 let typ = iteration_type(iter, ctx.signature());
                 let typ = display_type(typ, ctx).to_string().to_case(Snake);
                 format!(".filter(|(key, _)| env.__canonical_{typ}[*key as usize])")
@@ -325,6 +393,18 @@ fn display_stmt_pre<'a>(ram_stmt: &'a RamStmt, ctx: &'a RustGenCtx<'a>) -> impl 
             }
             let loop_var_set = display_set_var(loop_var_set, ctx);
             let limit = if *first_only { ".take(1)" } else { "" };
+            // Old rows come first in trie views of age all only until a
+            // removal reorders their entries.
+            let iterator = match ctx.model_mode() {
+                ModelMode::Desugared if *first_only => {
+                    let [set] = sets.as_slice() else {
+                        panic!("desugared anchors read one set")
+                    };
+                    let set = display_set_var(set, ctx);
+                    format!("{set}.oldest_restriction().into_iter()")
+                }
+                ModelMode::Native | ModelMode::Desugared => iterator.to_string(),
+            };
             writedoc! {f, "
                     #[allow(unused_variables)]
                     for
@@ -352,7 +432,25 @@ fn display_stmt_pre<'a>(ram_stmt: &'a RamStmt, ctx: &'a RustGenCtx<'a>) -> impl 
                             }}
                         "}
                 }
-                FlatOutRel::Rel(_) | FlatOutRel::FuncDomain(_) => {
+                FlatOutRel::Rel(out_rel) => {
+                    let args = args.iter().join(", ");
+                    match ctx.model_mode() {
+                        ModelMode::Native => writedoc! {f, "
+                            env.{rel_field}.push([{args}]);
+                        "},
+                        // Skipping rows that the table holds already spares
+                        // the sequential insertion most derived rows.
+                        ModelMode::Desugared => {
+                            let rows = display_out_rows_field_name(*out_rel, ctx);
+                            writedoc! {f, "
+                                if !env.{rows}.contains([{args}]) {{
+                                    env.{rel_field}.push([{args}]);
+                                }}
+                            "}
+                        }
+                    }
+                }
+                FlatOutRel::FuncDomain(_) => {
                     let args = args.iter().format(", ");
                     writedoc! {f, "
                             env.{rel_field}.push([{args}]);

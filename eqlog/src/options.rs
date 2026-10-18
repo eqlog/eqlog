@@ -17,6 +17,10 @@ pub enum ModelMode {
     #[default]
     Native,
     /// Materialize inherited facts using ordinary rules where the required images exist.
+    ///
+    /// Closing evaluates the rules of a stratum on a process-wide pool of up
+    /// to eight threads. The `EQLOG_THREADS` environment variable sets the
+    /// number of threads; `EQLOG_THREADS=1` evaluates sequentially.
     Desugared,
 }
 

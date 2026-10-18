@@ -30,6 +30,8 @@ runtime, = [Path(p) for p in runtime_message['filenames'] if p.endswith('.rlib')
 build = Path(build_message['out_dir']).parent
 generated = build / 'out/eqlog-ett/src/kernel.eql.rs'
 source = generated.read_text()
+if 'eqlog_runtime::IndexedTable' in source:
+    raise SystemExit('This instruments native kernels; compile eqlog-ett with ModelMode::Native first.')
 original_hash = hashlib.sha256(source.encode()).hexdigest()
 prepared_primary = '__prepare_native_index_from_primary_0' in source
 cached_graph = '__morphism_graph_context.components' in source

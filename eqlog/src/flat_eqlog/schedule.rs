@@ -155,6 +155,7 @@ pub fn schedule_rule_groups(
         groups,
         &dependencies,
         signature,
+        model_mode,
         &mut strata,
     );
     RuleSchedule { strata, body }
@@ -166,6 +167,7 @@ fn schedule_scope(
     groups: &[FlatRuleGroup],
     dependencies: &Dependencies,
     signature: &Signature,
+    model_mode: ModelMode,
     strata: &mut Vec<Stratum>,
 ) -> Schedule {
     let edges = &dependencies.edges;
@@ -246,6 +248,7 @@ fn schedule_scope(
                         groups,
                         dependencies,
                         signature,
+                        model_mode,
                         strata,
                     );
                     children.push(Schedule::ModelComponents {
@@ -289,8 +292,15 @@ fn schedule_scope(
                 if !functional.is_empty() {
                     partitions.push((functional, true));
                 }
-                // Commit producers before the next consumer takes its snapshot.
-                partitions.extend(ordinary.into_iter().map(|group| (vec![group], false)));
+                match model_mode {
+                    // Commit producers before the next consumer takes its snapshot.
+                    ModelMode::Native => {
+                        partitions.extend(ordinary.into_iter().map(|group| (vec![group], false)))
+                    }
+                    // A table's new rows are copied once per round for all
+                    // rules instead of once for each consumer.
+                    ModelMode::Desugared => partitions.push((ordinary, false)),
+                }
                 partitions
             } else if recursive && !functional.is_empty() && !ordinary.is_empty() {
                 vec![(functional, true), (ordinary, false)]

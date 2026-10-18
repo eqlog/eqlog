@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{btree_map, BTreeMap, BTreeSet};
 
 use crate::kernel::{
     Args, Call, Constructor, Context, ContextMor, Data, Definition, Kernel, Telescope, Tm, Ty,
@@ -39,6 +39,8 @@ struct Scope {
     context: Context,
     parent: Option<(usize, ContextMor)>,
     locals: BTreeMap<String, Tm>,
+    // The images of the parent's elements and the scope's own elements.
+    // Elements of older scopes are found through the parent chain.
     types: BTreeMap<Ty, Ty>,
     terms: BTreeMap<Tm, Tm>,
     application_bases: BTreeMap<Tm, ContextMor>,
@@ -102,6 +104,7 @@ struct Checker {
     goals: Vec<(String, Definition)>,
     names: Vec<String>,
     type_goals: Vec<(String, usize, Ty, Ty)>,
+    weakenings: BTreeMap<(usize, usize), ContextMor>,
 }
 
 impl Checker {
@@ -126,6 +129,7 @@ impl Checker {
             goals: Vec::new(),
             names: Vec::new(),
             type_goals: Vec::new(),
+            weakenings: BTreeMap::new(),
         }
     }
 
@@ -137,8 +141,30 @@ impl Checker {
         self.scopes[source]
             .locals
             .iter()
-            .map(|(name, term)| (name.clone(), self.scopes[target].terms[term]))
+            .map(|(name, &term)| (name.clone(), self.term_image(target, term)))
             .collect()
+    }
+
+    fn type_image(&self, scope: usize, ty: Ty) -> Ty {
+        if let Some(&image) = self.scopes[scope].types.get(&ty) {
+            return image;
+        }
+        let (parent, _) = self.scopes[scope]
+            .parent
+            .expect("types come from enclosing scopes");
+        let ty = self.type_image(parent, ty);
+        self.scopes[scope].types[&ty]
+    }
+
+    fn term_image(&self, scope: usize, term: Tm) -> Tm {
+        if let Some(&image) = self.scopes[scope].terms.get(&term) {
+            return image;
+        }
+        let (parent, _) = self.scopes[scope]
+            .parent
+            .expect("terms come from enclosing scopes");
+        let term = self.term_image(parent, term);
+        self.scopes[scope].terms[&term]
     }
 
     fn remember_type(&mut self, scope: usize, ty: Ty) -> Ty {
@@ -172,55 +198,50 @@ impl Checker {
         } else {
             self.model.insert_advance(source, context, morphism);
         }
+        // The parent's maps hold its images under their origins and under
+        // themselves, so values repeat; each is weakened only once.
         let mut types = BTreeMap::new();
-        let mut terms = BTreeMap::new();
-        let mut type_images = BTreeMap::new();
-        let mut term_images = BTreeMap::new();
         for &ty in self.scopes[parent].types.values() {
-            let image = *type_images
-                .entry(ty)
-                .or_insert_with(|| self.model.new_ty(context));
-            self.model
-                .insert_type_image(morphism, source, ty, context, image);
+            match types.entry(ty) {
+                btree_map::Entry::Occupied(_) => {}
+                btree_map::Entry::Vacant(entry) => {
+                    let image = self.model.new_ty(context);
+                    self.model
+                        .insert_type_image(morphism, source, ty, context, image);
+                    entry.insert(image);
+                }
+            }
         }
+        let mut terms = BTreeMap::new();
         for &term in self.scopes[parent].terms.values() {
-            let image = *term_images
-                .entry(term)
-                .or_insert_with(|| self.model.new_tm(context));
-            self.model
-                .insert_term_image(morphism, source, term, context, image);
+            match terms.entry(term) {
+                btree_map::Entry::Occupied(_) => {}
+                btree_map::Entry::Vacant(entry) => {
+                    let image = self.model.new_tm(context);
+                    self.model
+                        .insert_term_image(morphism, source, term, context, image);
+                    entry.insert(image);
+                }
+            }
         }
-        for (&origin, ty) in &self.scopes[parent].types {
-            types.insert(origin, type_images[ty]);
-        }
-        for &image in type_images.values() {
-            types.insert(image, image);
-        }
-        for (&origin, term) in &self.scopes[parent].terms {
-            terms.insert(origin, term_images[term]);
-        }
-        for &image in term_images.values() {
-            terms.insert(image, image);
-        }
+        let type_images: Vec<_> = types.values().copied().collect();
+        types.extend(type_images.into_iter().map(|image| (image, image)));
+        let term_images: Vec<_> = terms.values().copied().collect();
+        terms.extend(term_images.into_iter().map(|image| (image, image)));
         let locals = self.scopes[parent]
             .locals
             .iter()
-            .map(|(name, term)| (name.clone(), term_images[term]))
+            .map(|(name, term)| (name.clone(), terms[term]))
             .collect();
         let mut application_bases = BTreeMap::new();
         for (term, base) in &self.scopes[parent].application_bases {
             let base = self.model.define_compose(*base, morphism);
-            application_bases.insert(term_images[term], base);
+            application_bases.insert(terms[term], base);
         }
         let calls = self.scopes[parent]
             .calls
             .iter()
-            .map(|(term, call)| {
-                (
-                    term_images[term],
-                    self.model.define_image_call(*call, morphism),
-                )
-            })
+            .map(|(term, call)| (terms[term], self.model.define_image_call(*call, morphism)))
             .collect();
         let id = self.scopes.len();
         self.scopes.push(Scope {
@@ -244,14 +265,22 @@ impl Checker {
     }
 
     fn weakening(&mut self, source: usize, target: usize) -> Result<ContextMor, Error> {
-        if source == target {
-            return Ok(self.model.define_identity_sub(self.context(source)));
+        // Defining a weakening again returns the same morphism, so walking the
+        // scope chain once per pair suffices.
+        if let Some(&weakening) = self.weakenings.get(&(source, target)) {
+            return Ok(weakening);
         }
-        let (parent, projection) = self.scopes[target]
-            .parent
-            .ok_or_else(|| Error("construction is outside its defining scope".to_owned()))?;
-        let previous = self.weakening(source, parent)?;
-        Ok(self.model.define_compose(previous, projection))
+        let weakening = if source == target {
+            self.model.define_identity_sub(self.context(source))
+        } else {
+            let (parent, projection) = self.scopes[target]
+                .parent
+                .ok_or_else(|| Error("construction is outside its defining scope".to_owned()))?;
+            let previous = self.weakening(source, parent)?;
+            self.model.define_compose(previous, projection)
+        };
+        self.weakenings.insert((source, target), weakening);
+        Ok(weakening)
     }
 
     fn stage_path(&mut self, start: usize, end: usize) {
@@ -743,13 +772,13 @@ impl Checker {
                     return Err(Error("Type is reserved".to_owned()));
                 }
                 let scope = self.child(scope, None);
-                let expected = self.scopes[scope].types[&expected];
+                let expected = self.type_image(scope, expected);
                 let ty = self.ty(scope, annotation)?;
                 let (scope, term, ty) = self.body(scope, value, ty)?;
                 let term = self.goal(format!("let {name}"), scope, term, ty);
                 self.scopes[scope].locals.insert(name.clone(), term);
                 let scope = self.child(scope, None);
-                let expected = self.scopes[scope].types[&expected];
+                let expected = self.type_image(scope, expected);
                 self.body(scope, rest, expected)
             }
             Expr::Name(_, _) | Expr::Equal(_, _) | Expr::Refl | Expr::Rec { .. } => {
@@ -869,7 +898,7 @@ impl Checker {
                         self.scopes[parent]
                             .locals
                             .get(name)
-                            .map(|old| self.scopes[base_scope].terms[old] == *term)
+                            .map(|&old| self.term_image(base_scope, old) == *term)
                             .unwrap_or(false)
                     })
                     .unwrap_or(true)
@@ -1028,7 +1057,7 @@ impl Checker {
             let expected_args = self.args(start, &indices);
             let branch_scope = self.child(start, None);
             self.scopes[branch_scope].locals = self.transport_environment(&body_env, branch_scope);
-            let expected = self.scopes[branch_scope].types[&expected];
+            let expected = self.type_image(branch_scope, expected);
             let (end, body, expected) = self.body(branch_scope, &case.body, expected)?;
             self.stage_path(start, end);
             let branch = self
@@ -1103,7 +1132,7 @@ impl Checker {
     ) -> BTreeMap<String, Tm> {
         environment
             .iter()
-            .map(|(name, term)| (name.clone(), self.scopes[scope].terms[term]))
+            .map(|(name, &term)| (name.clone(), self.term_image(scope, term)))
             .collect()
     }
 

@@ -124,6 +124,9 @@ pub fn query_spec_chains(mut specs: Vec<QuerySpec>) -> Vec<Vec<QuerySpec>> {
 pub enum IndexAge {
     New,
     Old,
+    /// Old and new rows through one index; only desugared rule inputs read
+    /// both ages at once.
+    All,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
@@ -225,6 +228,7 @@ impl IndexSelection {
         let query = match age {
             IndexAge::Old => QuerySpec::all_old(),
             IndexAge::New => QuerySpec::all_new(),
+            IndexAge::All => unreachable!("selected indices have a single age"),
         };
         let indices = &self.queries[&(rel.clone(), query)];
         assert_eq!(indices.len(), 1);

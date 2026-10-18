@@ -8,6 +8,7 @@ include!(concat!(
     "/eqlog-test-eval/src/lazy_indices.eql.rs"
 ));
 
+#[cfg(not(feature = "desugared"))]
 #[test]
 fn rules_accept_prepared_secondary_inputs() {
     let mut ends = PrefixTree1::new();
@@ -28,6 +29,44 @@ fn rules_accept_prepared_secondary_inputs() {
     assert_eq!(output, vec![[1]]);
 }
 
+#[cfg(feature = "desugared")]
+#[test]
+fn rules_accept_prepared_secondary_inputs() {
+    let mut edges = IndexedTable::<2>::new(&[(&[1, 0], &[], true)]);
+    edges.insert([1, 2]);
+    let ends = [[2]];
+    let mut backward = IndexedTable::<1>::new(&[]);
+    let mut output = Vec::new();
+    let env = BackwardStepEnv {
+        phantom: std::marker::PhantomData,
+        end_new_order_0: RowsView::new(&ends),
+        end_all_order_0: TrieView::empty(),
+        edge_new_order_0_1: RowsView::empty(),
+        edge_old_order_1_0: edges.view_before(0, u32::MAX),
+        new_backward: &mut output,
+        backward_rows: &backward,
+    };
+    backward_step(env);
+    assert_eq!(output, vec![[1]]);
+
+    // Rows that their table holds already are not output again.
+    backward.insert([1]);
+    output.clear();
+    let env = BackwardStepEnv {
+        phantom: std::marker::PhantomData,
+        end_new_order_0: RowsView::new(&ends),
+        end_all_order_0: TrieView::empty(),
+        edge_new_order_0_1: RowsView::empty(),
+        edge_old_order_1_0: edges.view_before(0, u32::MAX),
+        new_backward: &mut output,
+        backward_rows: &backward,
+    };
+    backward_step(env);
+    assert!(output.is_empty());
+}
+
+// Desugared tables never hold rows with noncanonical elements.
+#[cfg(not(feature = "desugared"))]
 #[test]
 fn private_old_witnesses_survive_aliases_without_becoming_bound_variables() {
     let mut starts = PrefixTree1::new();
@@ -46,6 +85,7 @@ fn private_old_witnesses_survive_aliases_without_becoming_bound_variables() {
     assert_eq!(output, vec![[1]]);
 }
 
+#[cfg(not(feature = "desugared"))]
 #[test]
 fn all_age_scans_filter_aliases_at_each_bound_column() {
     let mut old_edges = PrefixTree2::new();

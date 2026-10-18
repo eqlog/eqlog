@@ -109,7 +109,7 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
         }
         // ALL scans can produce OLD suffixes under a NEW-named variable.
         let canonical_filter = indices.iter().any(|index| match index.age {
-            IndexAge::Old => true,
+            IndexAge::Old | IndexAge::All => true,
             IndexAge::New => false,
         });
         let order = &indices[0].order;
@@ -245,7 +245,7 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
                     // New results must join an old representative when one
                     // exists, or a singleton delta could select itself.
                     sets.sort_by_key(|set| match set.name.index.age {
-                        IndexAge::Old => 0,
+                        IndexAge::Old | IndexAge::All => 0,
                         IndexAge::New => 1,
                     });
                 }
@@ -307,15 +307,159 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
     }
 }
 
+/// Desugared tables answer a premise of age all through one view, so its
+/// old and new sets merge into a single set of that age.
+fn merge_all_age_sets(routine: &mut RamRoutine) {
+    let mut all: BTreeSet<usize> = routine
+        .flat_rule
+        .premise
+        .iter()
+        .enumerate()
+        .filter_map(|(i, stmt)| match stmt.age {
+            QueryAge::All => Some(i),
+            QueryAge::New | QueryAge::Old => None,
+        })
+        .collect();
+    // Plan probes follow the premises; a probe of a premise of age all reads
+    // both an old and a new set.
+    let mut probe_ages: BTreeMap<usize, BTreeSet<IndexAge>> = BTreeMap::new();
+    for stmt in &routine.stmts {
+        match stmt {
+            RamStmt::DefineSet(define) => {
+                let name = &define.defined_var.name;
+                if name.stmt_index >= routine.flat_rule.premise.len() {
+                    probe_ages
+                        .entry(name.stmt_index)
+                        .or_default()
+                        .insert(name.index.age);
+                }
+            }
+            RamStmt::Iter(_)
+            | RamStmt::Insert(_)
+            | RamStmt::GuardInhabited(_)
+            | RamStmt::GuardPlan(_) => {}
+        }
+    }
+    all.extend(probe_ages.into_iter().filter_map(|(probe, ages)| {
+        (ages.contains(&IndexAge::Old) && ages.contains(&IndexAge::New)).then_some(probe)
+    }));
+    let rename = |name: &mut SetVarName| {
+        if all.contains(&name.stmt_index) {
+            name.index.age = IndexAge::All;
+        }
+    };
+    let merge = |sets: &mut Vec<SetVar>| {
+        for set in sets.iter_mut() {
+            rename(&mut set.name);
+        }
+        let mut seen = BTreeSet::new();
+        sets.retain(|set| seen.insert(set.name.clone()));
+    };
+    let mut defined = BTreeSet::new();
+    let mut stmts = Vec::new();
+    for mut stmt in std::mem::take(&mut routine.stmts) {
+        match &mut stmt {
+            RamStmt::DefineSet(define) => {
+                rename(&mut define.defined_var.name);
+                match &mut define.expr {
+                    InSetExpr::GetIndex(get) => {
+                        get.index_spec = define.defined_var.name.index.clone();
+                    }
+                    InSetExpr::Restrict(restrict) => rename(&mut restrict.set.name),
+                }
+                if !defined.insert(define.defined_var.name.clone()) {
+                    continue;
+                }
+            }
+            RamStmt::Iter(iter) => {
+                merge(&mut iter.sets);
+                merge(&mut iter.lookup_drivers);
+                rename(&mut iter.loop_var_set.name);
+            }
+            RamStmt::GuardInhabited(guard) => merge(&mut guard.sets),
+            RamStmt::GuardPlan(plan) => {
+                merge(&mut plan.original);
+                merge(&mut plan.alternative);
+            }
+            RamStmt::Insert(_) => {}
+        }
+        stmts.push(stmt);
+    }
+    routine.stmts = stmts;
+}
+
+/// Plan probes and premises can restrict the same view by the same
+/// variables; later such sets reuse the first one instead of repeating its
+/// lookups. Earlier statements enclose all later ones, so the first
+/// definition is in scope wherever the others are used.
+fn share_equal_sets(routine: &mut RamRoutine) {
+    let mut definitions: BTreeMap<InSetExpr, SetVar> = BTreeMap::new();
+    let mut aliases: BTreeMap<SetVarName, SetVar> = BTreeMap::new();
+    let alias = |set: &mut SetVar, aliases: &BTreeMap<SetVarName, SetVar>| {
+        if let Some(target) = aliases.get(&set.name) {
+            *set = target.clone();
+        }
+    };
+    let dedup = |sets: &mut Vec<SetVar>| {
+        let mut seen = BTreeSet::new();
+        sets.retain(|set| seen.insert(set.name.clone()));
+    };
+    let mut stmts = Vec::new();
+    for mut stmt in std::mem::take(&mut routine.stmts) {
+        match &mut stmt {
+            RamStmt::DefineSet(define) => {
+                match &mut define.expr {
+                    InSetExpr::GetIndex(_) => {}
+                    InSetExpr::Restrict(restrict) => alias(&mut restrict.set, &aliases),
+                }
+                if let Some(existing) = definitions.get(&define.expr) {
+                    aliases.insert(define.defined_var.name.clone(), existing.clone());
+                    continue;
+                }
+                definitions.insert(define.expr.clone(), define.defined_var.clone());
+            }
+            RamStmt::Iter(iter) => {
+                for set in iter.sets.iter_mut().chain(&mut iter.lookup_drivers) {
+                    alias(set, &aliases);
+                }
+                dedup(&mut iter.sets);
+                dedup(&mut iter.lookup_drivers);
+            }
+            RamStmt::GuardInhabited(guard) => {
+                for set in &mut guard.sets {
+                    alias(set, &aliases);
+                }
+                dedup(&mut guard.sets);
+            }
+            RamStmt::GuardPlan(plan) => {
+                for set in plan.original.iter_mut().chain(&mut plan.alternative) {
+                    alias(set, &aliases);
+                }
+            }
+            RamStmt::Insert(_) => {}
+        }
+        stmts.push(stmt);
+    }
+    routine.stmts = stmts;
+}
+
 fn flat_rule_group_to_ram(
     flat_rule_group: FlatRuleGroup,
     index_selection: &IndexSelection,
+    mode: ModelMode,
 ) -> RamModule {
     let routines = flat_rule_group
         .rules
         .into_iter()
-        .flat_map(|flat_rule| residual::plans(flat_rule, index_selection))
+        .flat_map(|flat_rule| residual::plans(flat_rule, index_selection, mode))
         .map(|mut routine| {
+            match mode {
+                ModelMode::Native => {}
+                ModelMode::Desugared => {
+                    merge_all_age_sets(&mut routine);
+                    share_equal_sets(&mut routine);
+                }
+            }
             make_ram_lazy(routine.stmts.as_mut_slice());
             let parameters = routine
                 .flat_rule
@@ -344,7 +488,7 @@ pub fn flat_rule_groups_to_ram(
 ) -> RamProgram {
     let modules: Vec<_> = groups
         .into_iter()
-        .map(|group| flat_rule_group_to_ram(group, index_selection))
+        .map(|group| flat_rule_group_to_ram(group, index_selection, mode))
         .collect();
     let (preparations, model_preparations, native_indices) =
         plan_index_preparation(&modules, &schedule, index_selection, signature, mode);

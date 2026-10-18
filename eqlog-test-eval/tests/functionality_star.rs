@@ -5,6 +5,9 @@ include!(concat!(
     "/eqlog-test-eval/src/functionality_star.eql.rs"
 ));
 
+// Desugared tables equate a second function result on insertion instead of
+// running functionality rules.
+#[cfg(not(feature = "desugared"))]
 #[test]
 fn functionality_emits_a_linear_number_of_equalities_per_domain() {
     let mut rows = PrefixTree3::new();
@@ -28,6 +31,7 @@ fn functionality_emits_a_linear_number_of_equalities_per_domain() {
     }
 }
 
+#[cfg(not(feature = "desugared"))]
 #[test]
 fn functionality_skips_obsolete_anchors_before_choosing_a_result() {
     for old_results in [vec![0, 1], vec![0]] {

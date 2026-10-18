@@ -6,10 +6,11 @@ Run the proof checker from the repository root:
 cargo run --release -p eqlog-ett -- eqlog-ett/nat.ett eqlog-ett/vec.ett
 ```
 
-Use a release build: the full development currently takes minutes to saturate.
+Use a release build. The kernel is compiled as a desugared Eqlog model, which
+stores the facts transported along substitutions explicitly. Closing uses up
+to eight threads; set `EQLOG_THREADS=1` to check sequentially.
 
-Eqlog evaluates rules in dependency order. Run the checker integration suite
-with:
+Run the checker integration suite with:
 
 ```sh
 cargo test --release -p eqlog-test-eval --test ett

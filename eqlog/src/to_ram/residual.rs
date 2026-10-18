@@ -2,6 +2,7 @@ use std::cmp::Reverse;
 use std::collections::BTreeSet;
 
 use crate::flat_eqlog::*;
+use crate::options::ModelMode;
 use crate::ram::*;
 
 use super::flat_rule_to_ram;
@@ -29,7 +30,11 @@ fn available(rule: &FlatRule, indices: &IndexSelection) -> bool {
     })
 }
 
-fn alternative(rule: &FlatRule, indices: &IndexSelection) -> Option<(FlatRule, usize)> {
+fn alternative(
+    rule: &FlatRule,
+    indices: &IndexSelection,
+    mode: ModelMode,
+) -> Option<(FlatRule, usize)> {
     if rule.premise.len() < 3 || rule.premise[0].age != QueryAge::New {
         return None;
     }
@@ -46,9 +51,24 @@ fn alternative(rule: &FlatRule, indices: &IndexSelection) -> Option<(FlatRule, u
         .position(|stmt| stmt.args.iter().any(|var| !fixed.contains(var)))?;
     let first = &rule.premise[start];
     let free = first.args.len() - query(first, &fixed).projections.len();
-    if free < 2 {
-        return None;
-    }
+    // Inverting a function by its result can range over arbitrarily many
+    // arguments even for a single free column, such as all arrows into a
+    // context compared to the factorizations of one arrow.
+    let inverts_function = match &first.rel {
+        FlatInRel::Rel(FlatRel::Func(_)) => first
+            .args
+            .last()
+            .is_some_and(|result| fixed.contains(result)),
+        FlatInRel::Rel(FlatRel::Pred(_) | FlatRel::ModelMember(_))
+        | FlatInRel::RelWithDiagonals { .. }
+        | FlatInRel::TypeSet(_)
+        | FlatInRel::Equality(_) => false,
+    };
+    let max_remaining = match mode {
+        ModelMode::Desugared if inverts_function => usize::MAX,
+        ModelMode::Native | ModelMode::Desugared if free < 2 => return None,
+        ModelMode::Native | ModelMode::Desugared => free,
+    };
     let mut candidates: Vec<_> = rule.premise[start + 1..]
         .iter()
         .enumerate()
@@ -58,7 +78,7 @@ fn alternative(rule: &FlatRule, indices: &IndexSelection) -> Option<(FlatRule, u
             let remaining = stmt.args.len() - bound;
             (bound > 0
                 && remaining > 0
-                && remaining <= free
+                && remaining <= max_remaining
                 && indices.existing_query(&stmt.rel, &query).is_some())
             .then_some((remaining, Reverse(bound), offset + start + 1))
         })
@@ -126,8 +146,8 @@ fn probe(
         .collect()
 }
 
-pub(super) fn plans(rule: FlatRule, indices: &IndexSelection) -> Vec<RamRoutine> {
-    let Some((other, start)) = alternative(&rule, indices) else {
+pub(super) fn plans(rule: FlatRule, indices: &IndexSelection, mode: ModelMode) -> Vec<RamRoutine> {
+    let Some((other, start)) = alternative(&rule, indices, mode) else {
         return vec![flat_rule_to_ram(rule, indices)];
     };
     let fixed: BTreeSet<_> = rule
