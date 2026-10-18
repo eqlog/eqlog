@@ -1,4 +1,4 @@
-use std::collections::{btree_map, BTreeMap, BTreeSet};
+use std::collections::{hash_map, BTreeMap, BTreeSet, HashMap};
 
 use crate::kernel::{
     Args, Call, Constructor, Context, ContextMor, Data, Definition, Kernel, Telescope, Tm, Ty,
@@ -176,34 +176,38 @@ impl Checker {
         }
         // Scope maps send the elements of every ancestor to the same parent
         // element, so most values repeat; each is weakened only once.
-        let mut type_images = BTreeMap::new();
-        let mut term_images = BTreeMap::new();
-        for &ty in self.scopes[parent].types.values() {
-            if let btree_map::Entry::Vacant(entry) = type_images.entry(ty) {
-                let image = *entry.insert(self.model.new_ty(context));
-                self.model
-                    .insert_type_image(morphism, source, ty, context, image);
-            }
+        let mut type_images = HashMap::new();
+        let mut types = Vec::new();
+        for (&origin, &ty) in &self.scopes[parent].types {
+            let image = match type_images.entry(ty) {
+                hash_map::Entry::Occupied(entry) => *entry.get(),
+                hash_map::Entry::Vacant(entry) => {
+                    let image = self.model.new_ty(context);
+                    self.model
+                        .insert_type_image(morphism, source, ty, context, image);
+                    *entry.insert(image)
+                }
+            };
+            types.push((origin, image));
         }
-        for &term in self.scopes[parent].terms.values() {
-            if let btree_map::Entry::Vacant(entry) = term_images.entry(term) {
-                let image = *entry.insert(self.model.new_tm(context));
-                self.model
-                    .insert_term_image(morphism, source, term, context, image);
-            }
+        let mut term_images = HashMap::new();
+        let mut terms = Vec::new();
+        for (&origin, &term) in &self.scopes[parent].terms {
+            let image = match term_images.entry(term) {
+                hash_map::Entry::Occupied(entry) => *entry.get(),
+                hash_map::Entry::Vacant(entry) => {
+                    let image = self.model.new_tm(context);
+                    self.model
+                        .insert_term_image(morphism, source, term, context, image);
+                    *entry.insert(image)
+                }
+            };
+            terms.push((origin, image));
         }
-        let types = self.scopes[parent]
-            .types
-            .iter()
-            .map(|(&origin, ty)| (origin, type_images[ty]))
-            .chain(type_images.values().map(|&image| (image, image)))
-            .collect();
-        let terms = self.scopes[parent]
-            .terms
-            .iter()
-            .map(|(&origin, term)| (origin, term_images[term]))
-            .chain(term_images.values().map(|&image| (image, image)))
-            .collect();
+        types.extend(type_images.values().map(|&image| (image, image)));
+        terms.extend(term_images.values().map(|&image| (image, image)));
+        let types: BTreeMap<_, _> = types.into_iter().collect();
+        let terms: BTreeMap<_, _> = terms.into_iter().collect();
         let locals = self.scopes[parent]
             .locals
             .iter()
