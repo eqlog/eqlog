@@ -50,9 +50,9 @@ the same host:
 
 | Build | Wall time, median (min) | CPU time | Peak RSS |
 | --- | --- | --- | --- |
-| `6092cd4`, native | 11.20 s (10.39 s) | 11.07 s | 249 MB |
-| Desugared, default threads | 0.67 s (0.60 s) | 1.64 s | 188 MB |
-| Desugared, `EQLOG_THREADS=1` | 1.13 s (1.07 s) | 1.14 s | 191 MB |
+| `6092cd4`, native | 11.15 s (10.92 s) | 11.19 s | 249 MB |
+| Desugared, default threads | 0.67 s (0.60 s) | 1.57 s | 188 MB |
+| Desugared, `EQLOG_THREADS=1` | 1.14 s (1.10 s) | 1.14 s | 192 MB |
 
 Callgrind counts 49.7G instructions for the baseline and 5.0G for the
 sequential desugared run. The sections below describe the earlier work on
