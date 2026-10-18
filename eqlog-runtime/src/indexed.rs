@@ -5,6 +5,7 @@
 //! not seen yet are exactly the live rows stamped at or after that position,
 //! so semi-naive evaluation needs neither snapshots nor set differences.
 
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
 
@@ -772,6 +773,8 @@ pub struct Table<const N: usize> {
     // Every inserted row, in insertion order; a row's stamp is its position.
     log: Vec<[u32; N]>,
     live: FxHashMap<[u32; N], u32>,
+    // Whether the row with this stamp has been removed.
+    removed: Vec<bool>,
     indices: Vec<Index>,
     // For the graph of a function, the first result inserted for each
     // argument tuple, keyed by rows whose result column is zero. Entries
@@ -811,6 +814,7 @@ impl<const N: usize> Table<N> {
         Table {
             log: Vec::new(),
             live: FxHashMap::default(),
+            removed: Vec::new(),
             indices,
             results: None,
         }
@@ -841,11 +845,11 @@ impl<const N: usize> Table<N> {
             .as_mut()
             .expect("function tables record results");
         match results.entry(key) {
-            std::collections::hash_map::Entry::Vacant(entry) => {
+            Entry::Vacant(entry) => {
                 entry.insert(result);
                 FunctionInsert::Inserted
             }
-            std::collections::hash_map::Entry::Occupied(entry) => {
+            Entry::Occupied(entry) => {
                 let other = *entry.get();
                 if other == result {
                     FunctionInsert::Inserted
@@ -875,8 +879,16 @@ impl<const N: usize> Table<N> {
     #[inline(never)]
     pub fn insert(&mut self, row: [u32; N]) -> bool {
         let stamp = u32::try_from(self.log.len()).expect("relation log exceeds u32 stamps");
-        if self.live.try_insert_stamp(row, stamp) {
+        let absent = match self.live.entry(row) {
+            Entry::Occupied(_) => false,
+            Entry::Vacant(entry) => {
+                entry.insert(stamp);
+                true
+            }
+        };
+        if absent {
             self.log.push(row);
+            self.removed.push(false);
             let mut key = [0u32; MAX_ARITY];
             for Index {
                 columns,
@@ -899,9 +911,10 @@ impl<const N: usize> Table<N> {
     /// Removes a row and returns whether it was present.
     #[inline(never)]
     pub fn remove(&mut self, row: [u32; N]) -> bool {
-        if self.live.remove(&row).is_none() {
+        let Some(stamp) = self.live.remove(&row) else {
             return false;
-        }
+        };
+        self.removed[stamp as usize] = true;
         let mut key = [0u32; MAX_ARITY];
         for Index {
             columns,
@@ -929,7 +942,7 @@ impl<const N: usize> Table<N> {
     #[inline(never)]
     pub fn remove_stamped(&mut self, stamp: u32) -> Option<[u32; N]> {
         let row = self.log[stamp as usize];
-        if self.live.get(&row) != Some(&stamp) {
+        if self.removed[stamp as usize] {
             return None;
         }
         self.remove(row);
@@ -945,10 +958,9 @@ impl<const N: usize> Table<N> {
     /// Whether a row stamped at or after `since` is still present.
     #[inline(never)]
     pub fn changed_since(&self, since: u32) -> bool {
-        self.log[since as usize..]
+        self.removed[since as usize..]
             .iter()
-            .zip(since..)
-            .any(|(row, stamp)| self.live.get(row) == Some(&stamp))
+            .any(|&removed| !removed)
     }
 
     #[inline]
@@ -980,8 +992,7 @@ impl<const N: usize> Table<N> {
         let mut rows = Vec::new();
         let mut key = [0u32; MAX_ARITY];
         for (row, stamp) in self.log[since as usize..].iter().zip(since..) {
-            if self.live.get(row) == Some(&stamp)
-                && project(&index.columns, &index.equal, row, &mut key)
+            if !self.removed[stamp as usize] && project(&index.columns, &index.equal, row, &mut key)
             {
                 rows.push(key[..W].try_into().unwrap());
             }
@@ -992,9 +1003,17 @@ impl<const N: usize> Table<N> {
 
     /// All rows, sorted, for deterministic public iteration.
     pub fn sorted_rows(&self) -> Vec<[u32; N]> {
-        let mut rows: Vec<[u32; N]> = self.live.keys().copied().collect();
+        let mut rows: Vec<[u32; N]> = self.rows().collect();
         rows.sort_unstable();
         rows
+    }
+
+    fn rows(&self) -> impl Iterator<Item = [u32; N]> + '_ {
+        self.log
+            .iter()
+            .zip(&self.removed)
+            .filter(|(_, &removed)| !removed)
+            .map(|(&row, _)| row)
     }
 
     /// Iterates over all rows in sorted order.
@@ -1009,8 +1028,8 @@ macro_rules! prefix_tree_from_table {
             #[inline(never)]
             fn from(table: &Table<$arity>) -> Self {
                 let mut tree = crate::$tree::new();
-                for row in table.live.keys() {
-                    tree.insert(*row);
+                for row in table.rows() {
+                    tree.insert(row);
                 }
                 tree
             }
@@ -1059,23 +1078,6 @@ fn sort_rows<const W: usize>(rows: &mut [[u32; W]]) {
         }
     } else {
         rows.sort_unstable();
-    }
-}
-
-trait TryInsertStamp<const N: usize> {
-    fn try_insert_stamp(&mut self, row: [u32; N], stamp: u32) -> bool;
-}
-
-impl<const N: usize> TryInsertStamp<N> for FxHashMap<[u32; N], u32> {
-    #[inline]
-    fn try_insert_stamp(&mut self, row: [u32; N], stamp: u32) -> bool {
-        match self.entry(row) {
-            std::collections::hash_map::Entry::Occupied(_) => false,
-            std::collections::hash_map::Entry::Vacant(entry) => {
-                entry.insert(stamp);
-                true
-            }
-        }
     }
 }
 
