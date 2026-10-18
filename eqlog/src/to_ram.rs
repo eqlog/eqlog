@@ -365,6 +365,61 @@ fn merge_all_age_sets(routine: &mut RamRoutine) {
     routine.stmts = stmts;
 }
 
+/// Plan probes and premises can restrict the same view by the same
+/// variables; later such sets reuse the first one instead of repeating its
+/// lookups. Earlier statements enclose all later ones, so the first
+/// definition is in scope wherever the others are used.
+fn share_equal_sets(routine: &mut RamRoutine) {
+    let mut definitions: BTreeMap<InSetExpr, SetVar> = BTreeMap::new();
+    let mut aliases: BTreeMap<SetVarName, SetVar> = BTreeMap::new();
+    let alias = |set: &mut SetVar, aliases: &BTreeMap<SetVarName, SetVar>| {
+        if let Some(target) = aliases.get(&set.name) {
+            *set = target.clone();
+        }
+    };
+    let dedup = |sets: &mut Vec<SetVar>| {
+        let mut seen = BTreeSet::new();
+        sets.retain(|set| seen.insert(set.name.clone()));
+    };
+    let mut stmts = Vec::new();
+    for mut stmt in std::mem::take(&mut routine.stmts) {
+        match &mut stmt {
+            RamStmt::DefineSet(define) => {
+                match &mut define.expr {
+                    InSetExpr::GetIndex(_) => {}
+                    InSetExpr::Restrict(restrict) => alias(&mut restrict.set, &aliases),
+                }
+                if let Some(existing) = definitions.get(&define.expr) {
+                    aliases.insert(define.defined_var.name.clone(), existing.clone());
+                    continue;
+                }
+                definitions.insert(define.expr.clone(), define.defined_var.clone());
+            }
+            RamStmt::Iter(iter) => {
+                for set in iter.sets.iter_mut().chain(&mut iter.lookup_drivers) {
+                    alias(set, &aliases);
+                }
+                dedup(&mut iter.sets);
+                dedup(&mut iter.lookup_drivers);
+            }
+            RamStmt::GuardInhabited(guard) => {
+                for set in &mut guard.sets {
+                    alias(set, &aliases);
+                }
+                dedup(&mut guard.sets);
+            }
+            RamStmt::GuardPlan(plan) => {
+                for set in plan.original.iter_mut().chain(&mut plan.alternative) {
+                    alias(set, &aliases);
+                }
+            }
+            RamStmt::Insert(_) => {}
+        }
+        stmts.push(stmt);
+    }
+    routine.stmts = stmts;
+}
+
 fn flat_rule_group_to_ram(
     flat_rule_group: FlatRuleGroup,
     index_selection: &IndexSelection,
@@ -377,7 +432,10 @@ fn flat_rule_group_to_ram(
         .map(|mut routine| {
             match mode {
                 ModelMode::Native => {}
-                ModelMode::Desugared => merge_all_age_sets(&mut routine),
+                ModelMode::Desugared => {
+                    merge_all_age_sets(&mut routine);
+                    share_equal_sets(&mut routine);
+                }
             }
             make_ram_lazy(routine.stmts.as_mut_slice());
             let parameters = routine
