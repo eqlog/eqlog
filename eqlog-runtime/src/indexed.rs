@@ -104,7 +104,7 @@ impl Entries {
                     entries[*len as usize] = entry;
                     *len += 1;
                 } else {
-                    let mut heap = Vec::with_capacity(4);
+                    let mut heap = Vec::with_capacity(SCAN_LIMIT);
                     heap.extend_from_slice(entries);
                     heap.push(entry);
                     *self = Entries::Heap(heap);
