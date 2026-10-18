@@ -1,3 +1,5 @@
+mod residual;
+
 use crate::algebra::signature::Signature;
 use crate::flat_eqlog::*;
 use crate::options::ModelMode;
@@ -94,10 +96,9 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
             projections: fixed_columns,
         };
 
-        let indices = functionality_indices.as_deref().unwrap_or_else(|| {
+        let indices = functionality_indices.unwrap_or_else(|| {
             index_selection
-                .queries
-                .get(&(flat_stmt.rel.clone(), query_spec.clone()))
+                .existing_query(&flat_stmt.rel, &query_spec)
                 .expect("Index for query in flat rule should exist")
         });
         for index1 in &indices[1..] {
@@ -313,8 +314,8 @@ fn flat_rule_group_to_ram(
     let routines = flat_rule_group
         .rules
         .into_iter()
-        .map(|flat_rule| {
-            let mut routine = flat_rule_to_ram(flat_rule, index_selection);
+        .flat_map(|flat_rule| residual::plans(flat_rule, index_selection))
+        .map(|mut routine| {
             make_ram_lazy(routine.stmts.as_mut_slice());
             let parameters = routine
                 .flat_rule

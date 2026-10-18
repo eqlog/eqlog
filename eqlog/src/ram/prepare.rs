@@ -260,7 +260,10 @@ pub fn plan_index_preparation(
                         }
                         FlatOutRel::Equality(_) | FlatOutRel::FuncDomain(_) => {}
                     },
-                    RamStmt::DefineSet(_) | RamStmt::Iter(_) | RamStmt::GuardInhabited(_) => {}
+                    RamStmt::DefineSet(_)
+                    | RamStmt::Iter(_)
+                    | RamStmt::GuardInhabited(_)
+                    | RamStmt::GuardPlan(_) => {}
                 }
             }
         }

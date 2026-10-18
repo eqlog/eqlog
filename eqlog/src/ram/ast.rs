@@ -75,11 +75,19 @@ pub struct GuardInhabitedStmt {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct GuardPlanStmt {
+    pub original: Vec<SetVar>,
+    pub alternative: Vec<SetVar>,
+    pub select_alternative: bool,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub enum RamStmt {
     DefineSet(DefineSetStmt),
     Iter(IterStmt),
     Insert(InsertStmt),
     GuardInhabited(GuardInhabitedStmt),
+    GuardPlan(GuardPlanStmt),
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
@@ -177,7 +185,10 @@ impl RamRoutine {
                     }
                     InSetExpr::Restrict(_) => None,
                 },
-                RamStmt::Iter(_) | RamStmt::Insert(_) | RamStmt::GuardInhabited(_) => None,
+                RamStmt::Iter(_)
+                | RamStmt::Insert(_)
+                | RamStmt::GuardInhabited(_)
+                | RamStmt::GuardPlan(_) => None,
             })
             .collect()
     }

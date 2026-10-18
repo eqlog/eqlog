@@ -30,6 +30,13 @@ pub fn make_ram_lazy(ram_stmts: &mut [RamStmt]) {
                 }
             }
             RamStmt::Insert(_) => {}
+            RamStmt::GuardPlan(plan) => {
+                for set in plan.original.iter_mut().chain(&mut plan.alternative) {
+                    if lazy_vars.contains(&set.name) {
+                        set.strictness = Strictness::Lazy;
+                    }
+                }
+            }
             RamStmt::GuardInhabited(guard_inhabited_stmt) => {
                 for set_var in guard_inhabited_stmt.sets.iter_mut() {
                     if lazy_vars.contains(&set_var.name) {

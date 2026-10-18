@@ -51,7 +51,10 @@ pub fn module_env_iter_types(ram_module: &RamModule, signature: &Signature) -> B
             RamStmt::Iter(stmt) => stmt
                 .canonical_filter
                 .then(|| iteration_type(stmt, signature)),
-            RamStmt::DefineSet(_) | RamStmt::Insert(_) | RamStmt::GuardInhabited(_) => None,
+            RamStmt::DefineSet(_)
+            | RamStmt::Insert(_)
+            | RamStmt::GuardInhabited(_)
+            | RamStmt::GuardPlan(_) => None,
         })
         .collect()
 }
@@ -66,7 +69,10 @@ pub fn module_env_out_rels(ram_module: &RamModule) -> BTreeSet<FlatOutRel> {
                 .iter()
                 .filter_map(|stmt| -> Option<FlatOutRel> {
                     let InsertStmt { rel, args: _ } = match stmt {
-                        RamStmt::DefineSet(_) | RamStmt::Iter(_) | RamStmt::GuardInhabited(_) => {
+                        RamStmt::DefineSet(_)
+                        | RamStmt::Iter(_)
+                        | RamStmt::GuardInhabited(_)
+                        | RamStmt::GuardPlan(_) => {
                             return None;
                         }
                         RamStmt::Insert(insert_stmt) => insert_stmt,
@@ -354,6 +360,14 @@ fn display_stmt_pre<'a>(ram_stmt: &'a RamStmt, ctx: &'a RustGenCtx<'a>) -> impl 
                 }
             }
         }
+        RamStmt::GuardPlan(plan) => {
+            let original = display_key_count(&plan.original, ctx);
+            let alternative = display_key_count(&plan.alternative, ctx);
+            let selected = plan.select_alternative;
+            writedoc! {f, "
+                if (({alternative}).saturating_mul(2) < {original}) == {selected} {{
+            "}
+        }
         RamStmt::GuardInhabited(GuardInhabitedStmt { sets }) => {
             let checks = sets
                 .iter()
@@ -374,7 +388,7 @@ fn display_stmt_pre<'a>(ram_stmt: &'a RamStmt, ctx: &'a RustGenCtx<'a>) -> impl 
 fn display_stmt_post<'a>(ram_stmt: &'a RamStmt) -> impl 'a + Display {
     FmtFn(move |f| match ram_stmt {
         RamStmt::DefineSet(_) | RamStmt::Insert(_) => Ok(()),
-        RamStmt::Iter(_) | RamStmt::GuardInhabited(_) => {
+        RamStmt::Iter(_) | RamStmt::GuardInhabited(_) | RamStmt::GuardPlan(_) => {
             writedoc! {f, "
                     }}
                 "}
@@ -388,7 +402,10 @@ fn shared_routine_groups(ram_module: &RamModule) -> Vec<Vec<&RamRoutine>> {
     for routine in &ram_module.routines {
         let first_loop = routine.stmts.iter().position(|stmt| match stmt {
             RamStmt::Iter(_) => true,
-            RamStmt::DefineSet(_) | RamStmt::Insert(_) | RamStmt::GuardInhabited(_) => false,
+            RamStmt::DefineSet(_)
+            | RamStmt::Insert(_)
+            | RamStmt::GuardInhabited(_)
+            | RamStmt::GuardPlan(_) => false,
         });
         if let Some(first_loop) = first_loop {
             groups
@@ -426,7 +443,10 @@ fn display_shared_stmts<'a>(
             .enumerate()
             .take_while(|(i, stmt)| match stmt {
                 RamStmt::Insert(_) => false,
-                RamStmt::DefineSet(_) | RamStmt::Iter(_) | RamStmt::GuardInhabited(_) => {
+                RamStmt::DefineSet(_)
+                | RamStmt::Iter(_)
+                | RamStmt::GuardInhabited(_)
+                | RamStmt::GuardPlan(_) => {
                     routines.iter().all(|routine| routine.get(*i) == Some(stmt))
                 }
             })
@@ -450,7 +470,10 @@ fn display_shared_stmts<'a>(
                         writeln!(f, "{{ {} }}", display_shared_stmts(&[suffix], ctx))?;
                     }
                 }
-                RamStmt::DefineSet(_) | RamStmt::Iter(_) | RamStmt::GuardInhabited(_) => {
+                RamStmt::DefineSet(_)
+                | RamStmt::Iter(_)
+                | RamStmt::GuardInhabited(_)
+                | RamStmt::GuardPlan(_) => {
                     write!(f, "{}", display_shared_stmts(&branch, ctx))?;
                 }
             }

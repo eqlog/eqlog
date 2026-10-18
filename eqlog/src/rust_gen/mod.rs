@@ -2389,12 +2389,11 @@ fn display_remap_parented_index<'a>(
                 {{
                 {preparation}
                 {member_maps}
-                let mut {index_field_name}_all = self.{index_field_name}_all.clone();
+                let {index_field_name}_all = &mut self.{index_field_name}_all;
                 let {index_field_name}_own = &mut self.{index_field_name}_own;
                 let mut propagated: Vec<([u32; {prefix_len}], {suffix_type})> = Vec::new();
                 {collect_propagated}
                 {apply_propagated}
-                self.{index_field_name}_all = {index_field_name}_all;
                 {invalidate}
                 }}
             "#};
@@ -2482,7 +2481,7 @@ fn display_remap_parented_index<'a>(
                 .prepare(&source, &[{maps}], retain_own);
             let maps_changed = map_deltas.iter().any(|map| !map.is_empty());
             if !source_delta.is_empty() || maps_changed {{
-            let mut {index_field_name}_all = self.{index_field_name}_all.clone();
+            let {index_field_name}_all = &mut self.{index_field_name}_all;
             let {index_field_name}_own = &mut self.{index_field_name}_own;
             let mut propagated: Vec<([u32; {prefix_len}], {suffix_type})> = Vec::new();
             let source_delta = &source_delta;
@@ -2493,7 +2492,6 @@ fn display_remap_parented_index<'a>(
             {collect_map_deltas}
             }}
             {apply_propagated}
-            self.{index_field_name}_all = {index_field_name}_all;
             {invalidate}
             }}
             }}

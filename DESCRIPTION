@@ -61,10 +61,17 @@ Update tuple suffixes during one tree descent and bypass mapping state
 for ordinary lookups. Retain unchanged difference subtrees, compare
 ordinary snapshots without allocating cursor stacks, and remember equal
 publication roots. Reject empty relation roots before restricted joins.
+Choose residual join orders from restricted key counts while preserving
+delta seeds and reusing existing index permutations.
+Borrow transport targets directly after snapshotting their inputs, so
+each edge does not force a persistent-root copy.
 
 Preserve the complete Nat and Vec development, bounded computation, and
 one-call closure. Independent reviews confirm the mechanisms are general
 Eqlog optimizations. Cover nested transport, partial maps, cross-owner
 equality, dynamic imports, and interrupted closure with evaluator tests.
-The latest full runs check all 52 declarations in 13.6 to 15.4 seconds
-end to end. Further work is needed for the five-second target.
+The last recorded performance checkpoint, bd48d1c, checks all 52
+declarations in 13.6 to 15.4 seconds end to end. Subsequent residual
+join and transport-copy changes pass 283 evaluator library tests, nine
+optimization oracles, and focused evaluator checks. Their final combined
+timing remains pending. Work is paused; the five-second target is unmet.

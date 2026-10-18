@@ -187,9 +187,18 @@ fn find_best_index(stmts: &[FlatIfStmt], fixed_vars: &BTreeSet<FlatVar>) -> Opti
 
 /// A pass that optimizes the order of [FlatIfStmt]s in the premise of a [FlatRule].
 pub fn sort_premise<'a>(rule: &mut FlatRule) {
+    sort_premise_from(rule, 0);
+}
+
+pub fn sort_premise_from(rule: &mut FlatRule, start: usize) {
     let premise = &mut rule.premise;
     let mut fixed_vars: BTreeSet<FlatVar> = rule.scope.owners().iter().cloned().collect();
-    for sorted_until in 0..premise.len() {
+    fixed_vars.extend(
+        premise[..start]
+            .iter()
+            .flat_map(|stmt| stmt.args.iter().cloned()),
+    );
+    for sorted_until in start..premise.len() {
         let best_index = sorted_until
             + find_best_index(&premise[sorted_until..], &fixed_vars)
                 .expect("a non-empty slice of if statements should have a best element");

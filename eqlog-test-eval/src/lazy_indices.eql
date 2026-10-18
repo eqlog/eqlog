@@ -46,3 +46,32 @@ rule join_edges {
     if edge(y, z);
     then joined(x, z);
 }
+
+model Joins {
+    pred query(El, El);
+    func action(El, El) -> El;
+    func product(El, El) -> El;
+    func unindexed_product(El, El) -> El;
+    pred resolved(El, El, El);
+    pred fallback_resolved(El, El, El);
+    pred inspect_product(El);
+    pred factors(El, El);
+
+    rule resolve {
+        if query(c, x);
+        if y = action(f, x);
+        if c = product(f, g);
+        then resolved(g, x, y);
+    }
+    rule fallback_resolve {
+        if query(c, x);
+        if y = action(f, x);
+        if c = unindexed_product(f, g);
+        then fallback_resolved(g, x, y);
+    }
+    rule factor_index {
+        if inspect_product(c);
+        if c = product(f, g);
+        then factors(f, g);
+    }
+}

@@ -72,11 +72,16 @@ fn collect_stmt_dependencies(
                         RamStmt::DefineSet(_) => true,
                         RamStmt::Iter(_) => true,
                         RamStmt::Insert(_) => false,
-                        RamStmt::GuardInhabited(_) => true,
+                        RamStmt::GuardInhabited(_) | RamStmt::GuardPlan(_) => true,
                     };
                     if depends_on_j {
                         dependencies.insert(j);
                     }
+                }
+            }
+            RamStmt::GuardPlan(stmt) => {
+                for set in stmt.original.iter().chain(&stmt.alternative) {
+                    dependencies.insert(set_var_def_sites[&set.name]);
                 }
             }
             RamStmt::GuardInhabited(GuardInhabitedStmt { sets }) => {
@@ -95,7 +100,7 @@ fn collect_stmt_dependencies(
 
 fn ram_stmt_cost(stmt: &RamStmt) -> usize {
     match stmt {
-        RamStmt::GuardInhabited(_) => 1,
+        RamStmt::GuardInhabited(_) | RamStmt::GuardPlan(_) => 1,
         RamStmt::Insert(_) => 2,
         RamStmt::DefineSet(DefineSetStmt { defined_var, expr }) => match expr {
             InSetExpr::GetIndex(_) => 0,

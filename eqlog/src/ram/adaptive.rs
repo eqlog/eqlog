@@ -32,14 +32,17 @@ pub fn add_adaptive_lookup_joins(stmts: &mut [RamStmt], rule: &FlatRule) {
         .filter_map(|(i, stmt)| match stmt {
             RamStmt::DefineSet(stmt) => Some((&stmt.defined_var.name, i)),
             RamStmt::Iter(stmt) => Some((&stmt.loop_var_set.name, i)),
-            RamStmt::Insert(_) | RamStmt::GuardInhabited(_) => None,
+            RamStmt::Insert(_) | RamStmt::GuardInhabited(_) | RamStmt::GuardPlan(_) => None,
         })
         .collect();
     let mut drivers = vec![Vec::new(); stmts.len()];
     for (i, stmt) in stmts.iter().enumerate() {
         let iter = match stmt {
             RamStmt::Iter(stmt) => stmt,
-            RamStmt::DefineSet(_) | RamStmt::Insert(_) | RamStmt::GuardInhabited(_) => continue,
+            RamStmt::DefineSet(_)
+            | RamStmt::Insert(_)
+            | RamStmt::GuardInhabited(_)
+            | RamStmt::GuardPlan(_) => continue,
         };
         if iter.first_only
             || iter.sets.iter().all(is_function_result)
@@ -52,7 +55,7 @@ pub fn add_adaptive_lookup_joins(stmts: &mut [RamStmt], rule: &FlatRule) {
                 RamStmt::GuardInhabited(stmt) => stmt,
                 // A later guard cannot remove outputs already emitted by this loop.
                 RamStmt::Insert(_) => break,
-                RamStmt::DefineSet(_) | RamStmt::Iter(_) => continue,
+                RamStmt::DefineSet(_) | RamStmt::Iter(_) | RamStmt::GuardPlan(_) => continue,
             };
             let candidate: Option<Vec<SetVar>> = guard
                 .sets
@@ -64,7 +67,10 @@ pub fn add_adaptive_lookup_joins(stmts: &mut [RamStmt], rule: &FlatRule) {
                             InSetExpr::Restrict(expr) => expr,
                             InSetExpr::GetIndex(_) => return None,
                         },
-                        RamStmt::Iter(_) | RamStmt::Insert(_) | RamStmt::GuardInhabited(_) => {
+                        RamStmt::Iter(_)
+                        | RamStmt::Insert(_)
+                        | RamStmt::GuardInhabited(_)
+                        | RamStmt::GuardPlan(_) => {
                             return None;
                         }
                     };
@@ -84,7 +90,10 @@ pub fn add_adaptive_lookup_joins(stmts: &mut [RamStmt], rule: &FlatRule) {
     for (stmt, drivers) in stmts.iter_mut().zip(drivers) {
         match stmt {
             RamStmt::Iter(stmt) => stmt.lookup_drivers = drivers,
-            RamStmt::DefineSet(_) | RamStmt::Insert(_) | RamStmt::GuardInhabited(_) => {}
+            RamStmt::DefineSet(_)
+            | RamStmt::Insert(_)
+            | RamStmt::GuardInhabited(_)
+            | RamStmt::GuardPlan(_) => {}
         }
     }
 }
