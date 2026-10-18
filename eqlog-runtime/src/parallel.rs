@@ -1,16 +1,17 @@
-//! Concurrent evaluation of the rules of a stratum.
+//! Concurrent evaluation of independent tasks while closing a model.
 //!
-//! Rules of a stratum only read the tables and write their own output
-//! buffers, which the stratum appends in a fixed order afterwards. Results
-//! thus do not depend on how tasks are scheduled.
+//! Each task writes only state that it owns, such as one trie or the output
+//! buffers of one rule module, and the caller consumes outputs in a fixed
+//! order afterwards. Results thus do not depend on how tasks are scheduled.
 
 use std::any::Any;
 use std::collections::VecDeque;
+use std::io;
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::thread;
 
-/// A rule evaluation that reads shared views and writes only its own outputs.
+/// Work that reads shared state and writes only state that it owns.
 pub type Task<'a> = Box<dyn FnOnce() + Send + 'a>;
 
 type Job = Box<dyn FnOnce() + Send + 'static>;
@@ -43,9 +44,11 @@ fn threads() -> usize {
         Ok(threads) => threads
             .parse()
             .expect("EQLOG_THREADS must be a number of threads"),
-        Err(std::env::VarError::NotPresent) => thread::available_parallelism()
-            .map_or(1, |threads| threads.get())
-            .min(MAX_THREADS),
+        Err(std::env::VarError::NotPresent) => match thread::available_parallelism() {
+            Ok(threads) => threads.get().min(MAX_THREADS),
+            Err(error) if error.kind() == io::ErrorKind::Unsupported => 1,
+            Err(error) => panic!("querying the available parallelism failed: {error}"),
+        },
         Err(std::env::VarError::NotUnicode(_)) => panic!("EQLOG_THREADS must be unicode"),
     }
 }
@@ -88,7 +91,7 @@ struct Latch {
 
 /// Runs tasks to completion, in parallel when `work` new rows justify it.
 ///
-/// A panic of a task is resumed once all tasks have finished.
+/// A panic of a task is resumed once no other task of the call runs anymore.
 pub fn run_tasks(work: usize, tasks: Vec<Task<'_>>) {
     if work < PARALLEL_WORK || tasks.len() < 2 || pool().workers == 0 {
         for task in tasks {
@@ -111,9 +114,11 @@ pub fn run_tasks(work: usize, tasks: Vec<Task<'_>>) {
                 state.0 -= 1;
                 match result {
                     Ok(()) => {}
-                    Err(payload) => {
-                        state.1.get_or_insert(payload);
-                    }
+                    // Dropping a payload could panic again, so later ones leak.
+                    Err(payload) => match state.1 {
+                        None => state.1 = Some(payload),
+                        Some(_) => std::mem::forget(payload),
+                    },
                 }
                 if state.0 == 0 {
                     latch.done.notify_all();
@@ -161,12 +166,14 @@ mod tests {
     }
 
     #[test]
-    fn panics_resume_once_all_tasks_finished() {
+    fn panics_resume_once_no_other_task_runs() {
+        let started = AtomicUsize::new(0);
         let finished = AtomicUsize::new(0);
         let tasks = (0..16)
             .map(|i| {
-                let finished = &finished;
+                let (started, finished) = (&started, &finished);
                 Box::new(move || {
+                    started.fetch_add(1, Ordering::SeqCst);
                     if i == 3 {
                         panic!("task 3 fails");
                     }
@@ -176,6 +183,10 @@ mod tests {
             .collect();
         let result = panic::catch_unwind(AssertUnwindSafe(|| run_tasks(PARALLEL_WORK, tasks)));
         assert!(result.is_err());
-        assert_eq!(finished.load(Ordering::SeqCst), 15);
+        // Only the failing task may have started without finishing.
+        assert_eq!(
+            started.load(Ordering::SeqCst),
+            finished.load(Ordering::SeqCst) + 1
+        );
     }
 }

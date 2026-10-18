@@ -301,7 +301,6 @@ pub struct Trie {
     levels: Vec<Level>,
     // Stamp of the empty row of a nullary trie.
     unit: Option<u32>,
-    len: usize,
 }
 
 impl Trie {
@@ -313,23 +312,7 @@ impl Trie {
                 _ => Level::inner(),
             })
             .collect();
-        Trie {
-            levels,
-            unit: None,
-            len: 0,
-        }
-    }
-
-    pub fn arity(&self) -> usize {
-        self.levels.len()
-    }
-
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
+        Trie { levels, unit: None }
     }
 
     /// Inserts a row that must not be present yet.
@@ -338,7 +321,6 @@ impl Trie {
         let Some(last) = row.len().checked_sub(1) else {
             debug_assert!(self.unit.is_none());
             self.unit = Some(stamp);
-            self.len += 1;
             return;
         };
         let mut node = 0;
@@ -359,16 +341,13 @@ impl Trie {
                 }
             };
         }
-        self.len += 1;
     }
 
     /// Removes a row and returns whether it was present.
     pub fn remove(&mut self, row: &[u32]) -> bool {
         debug_assert_eq!(row.len(), self.levels.len());
         let Some(last) = row.len().checked_sub(1) else {
-            let present = self.unit.take().is_some();
-            self.len -= usize::from(present);
-            return present;
+            return self.unit.take().is_some();
         };
         let mut path = [0u32; MAX_ARITY];
         let mut node = 0;
@@ -395,25 +374,7 @@ impl Trie {
             debug_assert!(removed);
             column -= 1;
         }
-        self.len -= 1;
         true
-    }
-
-    /// Returns the stamp of a row, if present.
-    pub fn stamp(&self, row: &[u32]) -> Option<u32> {
-        debug_assert_eq!(row.len(), self.levels.len());
-        let Some(last) = row.len().checked_sub(1) else {
-            return self.unit;
-        };
-        let mut node = 0;
-        for (column, &key) in row.iter().enumerate() {
-            let (_, value) = self.levels[column].find(node, key)?;
-            if column == last {
-                return Some(value);
-            }
-            node = value;
-        }
-        unreachable!("the loop returns at the last column")
     }
 
     #[inline]
@@ -441,36 +402,6 @@ impl Trie {
     #[inline]
     pub fn view_before(&self, before: u32) -> TrieView<'_, true> {
         self.root(before)
-    }
-
-    /// Visits all rows in an arbitrary but deterministic order.
-    pub fn for_each(&self, mut visit: impl FnMut(&[u32])) {
-        let mut row = [0u32; MAX_ARITY];
-        if self.levels.is_empty() {
-            if self.unit.is_some() {
-                visit(&[]);
-            }
-            return;
-        }
-        self.for_each_below(0, 0, &mut row, &mut visit);
-    }
-
-    fn for_each_below(
-        &self,
-        column: usize,
-        node: u32,
-        row: &mut [u32; MAX_ARITY],
-        visit: &mut impl FnMut(&[u32]),
-    ) {
-        let arity = self.levels.len();
-        for &(key, value) in self.levels[column].nodes[node as usize].entries.as_slice() {
-            row[column] = key;
-            if column + 1 == arity {
-                visit(&row[..arity]);
-            } else {
-                self.for_each_below(column + 1, value, row, visit);
-            }
-        }
     }
 }
 
@@ -540,11 +471,6 @@ impl<'a, const BOUNDED: bool> TrieView<'a, BOUNDED> {
         self.child(rest, value)
     }
 
-    #[inline]
-    pub fn contains(&self, key: u32) -> bool {
-        self.get(key).is_some()
-    }
-
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
         match self.levels.first() {
@@ -565,8 +491,9 @@ impl<'a, const BOUNDED: bool> TrieView<'a, BOUNDED> {
         }
     }
 
-    /// The restriction holding the oldest row, which on the last column
-    /// prefers rows a consumer has already seen.
+    /// On the last column, the restriction holding the oldest row, which
+    /// prefers rows a consumer has already seen. On other columns, the first
+    /// restriction, which removals may have reordered.
     #[inline]
     pub fn oldest_restriction(&self) -> Option<(u32, TrieView<'a, BOUNDED>)> {
         let (level, rest) = self.levels.split_first()?;
@@ -664,11 +591,6 @@ impl<'a, const W: usize> RowsView<'a, W> {
             rows: &self.rows[start..start + len],
             depth: depth + 1,
         })
-    }
-
-    #[inline]
-    pub fn contains(&self, key: u32) -> bool {
-        self.get(key).is_some()
     }
 
     #[inline]
@@ -1379,10 +1301,6 @@ mod tests {
             expected.insert(vec![i % 3, i]);
         }
         assert_eq!(rows(trie.view(), 2), expected);
-        assert_eq!(trie.len(), expected.len());
-        for row in &expected {
-            assert!(trie.stamp(row).is_some());
-        }
         assert_eq!(
             trie.view_before(100).get(0).map(|view| rows(view, 1)),
             Some(

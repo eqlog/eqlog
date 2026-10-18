@@ -3294,7 +3294,8 @@ fn display_theory_impl<'a>(
                 writeln!(f, "")?;
             }
             ModelMode::Desugared => {
-                write!(f, "{}", indexed::display_new_fn(ctx, tables, program))?;
+                let new_fn = indexed::display_new_fn(ctx, tables, program);
+                write!(f, "{new_fn}")?;
             }
         }
 
@@ -3307,8 +3308,9 @@ fn display_theory_impl<'a>(
                 write!(f, "{}", codegen.close(ctx, index_selection))?;
             }
             ModelMode::Desugared => {
-                write!(f, "{}", indexed::display_strata(program, tables, ctx))?;
-                write!(f, "{}", indexed::display_close(program, ctx))?;
+                let strata = indexed::display_strata(program, tables, ctx);
+                let close = indexed::display_close(program, ctx);
+                write!(f, "{strata}{close}")?;
             }
         }
 
@@ -3405,7 +3407,8 @@ fn display_theory_impl<'a>(
                 write!(f, "{canonicalize_fn}\n")?;
             }
             ModelMode::Desugared => {
-                write!(f, "{}\n", indexed::display_canonicalize_fn(ctx))?;
+                let canonicalize_fn = indexed::display_canonicalize_fn(ctx);
+                write!(f, "{canonicalize_fn}\n")?;
             }
         }
 
@@ -3598,11 +3601,8 @@ pub fn display_module<'a>(
                 write!(f, "{}", theory_struct)?;
             }
             ModelMode::Desugared => {
-                write!(
-                    f,
-                    "{}",
-                    indexed::display_struct(name, ctx, &tables, program)
-                )?;
+                let theory_struct = indexed::display_struct(name, ctx, &tables, program);
+                write!(f, "{theory_struct}")?;
             }
         }
 

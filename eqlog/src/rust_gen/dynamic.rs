@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt::Display;
 
 use convert_case::{Case, Casing};
-use indoc::writedoc;
+use indoc::{formatdoc, writedoc};
 use itertools::Itertools;
 
 use crate::algebra::signature::{FuncId, TypeId, TypeKind};
@@ -167,7 +167,8 @@ impl DynamicContext<'_> {
                 let elements = match self.ctx.model_mode() {
                     ModelMode::Native => {
                         let index = self.indices.current_primary(&rel);
-                        format!("(*{}).clone()", display_index_expr(&rel, index, self.ctx))
+                        let index = display_index_expr(&rel, index, self.ctx);
+                        format!("(*{index}).clone()")
                     }
                     ModelMode::Desugared => {
                         let field = table_field(&rel, self.ctx);
@@ -261,9 +262,10 @@ impl DynamicContext<'_> {
                     ModelMode::Desugared => {
                         let field = table_field(&rel, self.ctx);
                         let occurrences = indexed::occurrences_field(typ, self.ctx);
-                        format!(
-                            "for row in data.elements.iter() {{ model.{field}.insert(row); }}\nmodel.{occurrences} = eqlog_runtime::Occurrences::with_elements(data.equalities.len());"
-                        )
+                        formatdoc! {"
+                            for row in data.elements.iter() {{ model.{field}.insert(row); }}
+                            model.{occurrences} = eqlog_runtime::Occurrences::with_elements(data.equalities.len());
+                        "}
                     }
                 };
                 writedoc! {f, "
@@ -284,7 +286,8 @@ impl DynamicContext<'_> {
             match self.ctx.model_mode() {
                 ModelMode::Native => {}
                 ModelMode::Desugared => {
-                    // Rows of other relations are inserted with their element indices below.
+                    // The import functions below insert the rows of other relations
+                    // together with their occurrences.
                     for (id, rel) in iter_flat_rels(self.ctx.signature()).enumerate() {
                         if !rel.arity(self.ctx.signature()).is_empty() {
                             continue;
@@ -298,11 +301,11 @@ impl DynamicContext<'_> {
                     }
                 }
             }
-            for (flat, index) in self.indices.current_indices() {
-                match self.ctx.model_mode() {
-                    ModelMode::Native => {}
-                    ModelMode::Desugared => continue,
-                }
+            let native_indices: Vec<_> = match self.ctx.model_mode() {
+                ModelMode::Native => self.indices.current_indices().collect(),
+                ModelMode::Desugared => Vec::new(),
+            };
+            for (flat, index) in native_indices {
                 let rel = match flat {
                     FlatInRel::Rel(rel) => *rel,
                     FlatInRel::RelWithDiagonals { .. }
@@ -366,7 +369,10 @@ impl DynamicContext<'_> {
                     ModelMode::Desugared => {
                         let import = indexed::display_import_row(rel, self.ctx);
                         let occurrence = indexed::display_occurrence(rel, self.ctx);
-                        writeln!(f, "{import}\n{occurrence}")?;
+                        writedoc! {f, "
+                            {import}
+                            {occurrence}
+                        "}?;
                     }
                 }
                 let mut positions: BTreeMap<TypeId, Vec<usize>> = BTreeMap::new();

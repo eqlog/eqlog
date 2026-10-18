@@ -306,9 +306,10 @@ fn display_iter_expr<'a>(stmt: &'a IterStmt, ctx: &'a RustGenCtx<'a>) -> impl 'a
                 write!(f, ")")?;
             }
         }
-        let copy = match ctx.model_mode() {
-            ModelMode::Native if stmt.sets[0].arity == 1 => ".cloned()",
-            ModelMode::Native | ModelMode::Desugared => "",
+        let copy = if stmt.sets[0].arity == 1 {
+            ".cloned()"
+        } else {
+            ""
         };
         write!(
             f,

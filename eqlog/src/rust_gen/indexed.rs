@@ -41,10 +41,23 @@ fn table_indices(
     indices
 }
 
+/// The position of an index within the table of its source relation.
+fn index_position(
+    indices: &BTreeMap<FlatInRel, Vec<(FlatInRel, Arc<[usize]>)>>,
+    rel: &FlatInRel,
+    order: &[usize],
+) -> usize {
+    indices[&source_relation(rel)]
+        .iter()
+        .position(|(other, other_order)| other == rel && &other_order[..] == order)
+        .expect("every selected index belongs to a table")
+}
+
 /// Assigns every index of the selection to a table holding its source relation.
 pub(super) struct Tables {
     indices: BTreeMap<FlatInRel, Vec<(FlatInRel, Arc<[usize]>)>>,
-    // Indices that rules read through trie views rather than only as deltas.
+    // Indices that rules or function evaluation read through trie views
+    // rather than only as deltas.
     viewed: BTreeSet<(FlatInRel, Arc<[usize]>)>,
 }
 
@@ -78,12 +91,8 @@ impl Tables {
         self.indices.keys()
     }
 
-    /// The position of an index within the table of its source relation.
     fn position(&self, rel: &FlatInRel, order: &[usize]) -> usize {
-        self.indices[&source_relation(rel)]
-            .iter()
-            .position(|(other, other_order)| other == rel && &other_order[..] == order)
-            .expect("every selected index belongs to a table")
+        index_position(&self.indices, rel, order)
     }
 
     fn init(&self, source: &FlatInRel, ctx: &RustGenCtx<'_>) -> String {
@@ -308,9 +317,11 @@ pub(super) fn display_new_fn<'a>(
             .iter_types()
             .map(|typ| {
                 let type_snake = display_type(typ, ctx).to_string().to_case(Case::Snake);
-                format!(
-                    "{type_snake}_equalities: Unification::new(),\n{type_snake}_weights: Vec::new(),\n{type_snake}_uprooted: Vec::new(),"
-                )
+                formatdoc! {"
+                    {type_snake}_equalities: Unification::new(),
+                    {type_snake}_weights: Vec::new(),
+                    {type_snake}_uprooted: Vec::new(),
+                "}
             })
             .join("\n");
         let functional = function_codomains(ctx)
@@ -425,7 +436,8 @@ pub(super) fn display_strata<'a>(
                     format!("self.{field}.log_len()")
                 })
                 .join(", ");
-            writeln!(f, "let now: [u32; {}] = [{now}];", inputs.sources.len())?;
+            let len = inputs.sources.len();
+            writeln!(f, "let now: [u32; {len}] = [{now}];")?;
             let changed = inputs
                 .sources
                 .iter()
@@ -841,9 +853,10 @@ pub(super) fn display_canonicalize_fn<'a>(ctx: &'a RustGenCtx<'a>) -> impl Displ
                 .map(|(i, &typ)| {
                     let type_snake = type_snake(typ, ctx);
                     let weight = display_weight_static_name(rel, ctx);
-                    format!(
-                        "let weight{i}: &mut usize = &mut self.{type_snake}_weights[el{i} as usize];\n*weight{i} = weight{i}.saturating_sub({weight});"
-                    )
+                    formatdoc! {"
+                        let weight{i}: &mut usize = &mut self.{type_snake}_weights[el{i} as usize];
+                        *weight{i} = weight{i}.saturating_sub({weight});
+                    "}
                 })
                 .join("\n");
             let insert_args = args
@@ -941,17 +954,16 @@ pub(super) fn display_eval_body(
     let rel = FlatInRel::Rel(FlatRel::Func(func));
     let index = selection.current_query(&rel, QuerySpec::eval_func(func, ctx.signature()));
     let field = table_field(&rel, ctx);
-    let position = table_indices(selection)[&rel]
-        .iter()
-        .position(|(other, order)| *other == rel && *order == index.order)
-        .expect("the evaluation index belongs to the function's table");
+    let position = index_position(&table_indices(selection), &rel, &index.order);
     let gets = index.order[..index.order.len() - 1]
         .iter()
         .map(|i| format!("let set = set.get(arg{i}.0)?;"))
         .join("\n");
-    format!(
-        "let set = self.{field}.view({position});\n{gets}\nlet (result, _) = set.iter_restrictions().next()?;"
-    )
+    formatdoc! {"
+        let set = self.{field}.view({position});
+        {gets}
+        let (result, _) = set.iter_restrictions().next()?;
+    "}
 }
 
 /// The table whose `iter` yields the rows of a relation in sorted order.
