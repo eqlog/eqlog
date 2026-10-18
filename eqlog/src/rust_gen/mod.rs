@@ -564,17 +564,19 @@ fn display_pub_predicate_holds_fn<'a>(
                         format!("self.root_{snake}({camel}(row[{i}])) == arg{i}")
                     })
                     .format(" && ");
-                let canonical = match ctx.model_mode() {
-                    ModelMode::Native => String::new(),
+                match ctx.model_mode() {
+                    ModelMode::Native => writedoc! {f, "
+                        self.{element_index}.get(&arg{member_pos}.0)
+                            .is_some_and(|rows| rows.iter().any(|row| {checks}))
+                    "},
                     ModelMode::Desugared => {
-                        format!("{} ||", indexed::display_holds_expr(rel, ctx))
+                        let contains = indexed::display_holds_expr(rel, ctx);
+                        let rows = indexed::display_occurrence_rows(rel, typ, member_pos, ctx);
+                        writedoc! {f, "
+                            {contains} || {rows}.any(|row| {checks})
+                        "}
                     }
-                };
-                writedoc! {f, "
-                    {canonical}
-                    self.{element_index}.get(&arg{member_pos}.0)
-                        .is_some_and(|rows| rows.iter().any(|row| {checks}))
-                "}
+                }
             }
             FlatRel::Pred(_) | FlatRel::Func(_) => Ok(()),
         });
@@ -995,6 +997,17 @@ fn display_pub_insert_relation<'a>(
                             let rel_args = rel_args.iter().format(", ");
                             let el_index_field =
                                 display_element_index_field_name(rel, *typ, ctx).to_string();
+                            match ctx.model_mode() {
+                                ModelMode::Native => {}
+                                ModelMode::Desugared => {
+                                    let occurrences = indexed::occurrences_field(*typ, ctx);
+                                    return writedoc! {f, "
+                                        if true {checks} {{
+                                        self.{occurrences}[{pos_arg} as usize].push(occurrence);
+                                        }}
+                                    "};
+                                }
+                            }
                             writedoc! {f, "
                             if true {checks} {{
                             self.{el_index_field}.entry({pos_arg}).or_default().push([{rel_args}]);
@@ -1009,6 +1022,10 @@ fn display_pub_insert_relation<'a>(
         let invalidate = match ctx.model_mode() {
             ModelMode::Native => indices::invalidate(rel, index_selection, ctx).to_string(),
             ModelMode::Desugared => String::new(),
+        };
+        let occurrence = match ctx.model_mode() {
+            ModelMode::Native => String::new(),
+            ModelMode::Desugared => indexed::display_occurrence(rel, ctx),
         };
         let internal_insert = ctx.internal_insert_name(rel);
         let supported_insert = ctx.supported_insert_name(rel);
@@ -1056,6 +1073,7 @@ fn display_pub_insert_relation<'a>(
                 {invalidate}
                 {index_inserts}
 
+                {occurrence}
                 {el_index_inserts}
 
                 {update_weights}
@@ -1119,6 +1137,13 @@ fn display_new_element_fn_internal<'a>(
         let type_set_rel = FlatInRel::TypeSet(typ);
         let index = index_selection.current_primary(&type_set_rel);
         let index_field = display_current_index_field_name(&type_set_rel, index, ctx);
+        let new_occurrences = match ctx.model_mode() {
+            ModelMode::Native => String::new(),
+            ModelMode::Desugared => {
+                let occurrences = indexed::occurrences_field(typ, ctx);
+                format!("self.{occurrences}.push(Vec::new());")
+            }
+        };
 
         writedoc! {f, "
             /// Adjoins a new element of type [{type_camel}].
@@ -1135,6 +1160,7 @@ fn display_new_element_fn_internal<'a>(
 
                 assert!(self.{type_snake}_weights.len() == old_len);
                 self.{type_snake}_weights.push(0);
+                {new_occurrences}
 
                 {insert_parent}
 

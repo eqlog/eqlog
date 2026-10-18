@@ -866,6 +866,23 @@ impl<const N: usize> Table<N> {
         true
     }
 
+    /// The row stamped with `stamp`, whether or not it is still present.
+    #[inline]
+    pub fn row_at(&self, stamp: u32) -> [u32; N] {
+        self.log[stamp as usize]
+    }
+
+    /// Removes the row stamped with `stamp` unless it was removed since.
+    #[inline(never)]
+    pub fn remove_stamped(&mut self, stamp: u32) -> Option<[u32; N]> {
+        let row = self.log[stamp as usize];
+        if self.live.get(&row) != Some(&stamp) {
+            return None;
+        }
+        self.remove(row);
+        Some(row)
+    }
+
     /// The position the next inserted row will be stamped with.
     #[inline]
     pub fn log_len(&self) -> u32 {

@@ -260,7 +260,10 @@ impl DynamicContext<'_> {
                     ModelMode::Native => format!("model.{elements} = data.elements.clone();"),
                     ModelMode::Desugared => {
                         let field = table_field(&rel, self.ctx);
-                        format!("for row in data.elements.iter() {{ model.{field}.insert(row); }}")
+                        let occurrences = indexed::occurrences_field(typ, self.ctx);
+                        format!(
+                            "for row in data.elements.iter() {{ model.{field}.insert(row); }}\nmodel.{occurrences} = (0..data.equalities.len()).map(|_| Vec::new()).collect();"
+                        )
                     }
                 };
                 writedoc! {f, "
@@ -361,7 +364,9 @@ impl DynamicContext<'_> {
                 match self.ctx.model_mode() {
                     ModelMode::Native => {}
                     ModelMode::Desugared => {
-                        writeln!(f, "{}", indexed::display_import_row(rel, self.ctx))?;
+                        let import = indexed::display_import_row(rel, self.ctx);
+                        let occurrence = indexed::display_occurrence(rel, self.ctx);
+                        writeln!(f, "{import}\n{occurrence}")?;
                     }
                 }
                 let mut positions: BTreeMap<TypeId, Vec<usize>> = BTreeMap::new();
@@ -376,9 +381,18 @@ impl DynamicContext<'_> {
                 for (typ, positions) in positions {
                     let field = display_element_index_field_name(rel, typ, self.ctx);
                     let values = positions.iter().map(|i| format!("row[{i}]")).join(", ");
+                    let record = match self.ctx.model_mode() {
+                        ModelMode::Native => {
+                            format!("self.{field}.entry(element).or_default().push(row);")
+                        }
+                        ModelMode::Desugared => {
+                            let occurrences = indexed::occurrences_field(typ, self.ctx);
+                            format!("self.{occurrences}[element as usize].push(occurrence);")
+                        }
+                    };
                     writedoc! {f, "
                         for element in [{values}].into_iter().collect::<std::collections::BTreeSet<_>>() {{
-                            self.{field}.entry(element).or_default().push(row);
+                            {record}
                     "}?;
                     let is_member = match rel {
                         FlatRel::ModelMember(member) => member == typ,
@@ -388,10 +402,19 @@ impl DynamicContext<'_> {
                         let camel = self.ctx.type_name(typ).to_case(Case::UpperCamel);
                         let snake = self.ctx.type_name(typ).to_case(Case::Snake);
                         // Imported membership may only be recorded under an alias.
+                        let record = match self.ctx.model_mode() {
+                            ModelMode::Native => {
+                                format!("self.{field}.entry(root).or_default().push(row);")
+                            }
+                            ModelMode::Desugared => {
+                                let occurrences = indexed::occurrences_field(typ, self.ctx);
+                                format!("self.{occurrences}[root as usize].push(occurrence);")
+                            }
+                        };
                         writedoc! {f, "
                             let root = self.root_{snake}({camel}(element)).0;
                             if root != element {{
-                                self.{field}.entry(root).or_default().push(row);
+                                {record}
                             }}
                         "}?;
                     }

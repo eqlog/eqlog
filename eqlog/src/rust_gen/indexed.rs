@@ -14,9 +14,9 @@ use std::sync::Arc;
 
 use super::indices::source_relation;
 use super::{
-    display_element_index_field_name, display_index_field_name, display_module_env_struct_name,
-    display_out_set_field_name, display_rel, display_type, display_type_fields,
-    display_weight_static_name, module_env_in_rels, module_env_out_rels, ElVar, RustGenCtx,
+    display_index_field_name, display_module_env_struct_name, display_out_set_field_name,
+    display_rel, display_type, display_type_fields, display_weight_static_name, module_env_in_rels,
+    module_env_out_rels, ElVar, RustGenCtx,
 };
 use crate::algebra::signature::TypeId;
 use crate::flat_eqlog::{
@@ -190,18 +190,12 @@ pub(super) fn display_struct<'a>(
                 format!("{field}: eqlog_runtime::IndexedTable<{arity}>,")
             })
             .join("\n");
-        let element_index_fields = iter_flat_rels(ctx.signature())
-            .flat_map(|rel| {
-                let arity = rel.arity(ctx.signature());
-                let arity_len = arity.len();
-                arity
-                    .into_iter()
-                    .collect::<BTreeSet<TypeId>>()
-                    .into_iter()
-                    .map(move |typ| {
-                        let field = display_element_index_field_name(rel, typ, ctx);
-                        format!("{field}: BTreeMap<u32, Vec<[u32; {arity_len}]>>,")
-                    })
+        let element_index_fields = ctx
+            .signature()
+            .iter_types()
+            .map(|typ| {
+                let field = occurrences_field(typ, ctx);
+                format!("{field}: Vec<Vec<u64>>,")
             })
             .join("\n");
         let type_fields = ctx
@@ -260,16 +254,12 @@ pub(super) fn display_new_fn<'a>(
                 format!("{field}: {init},")
             })
             .join("\n");
-        let element_indices = iter_flat_rels(ctx.signature())
-            .flat_map(|rel| {
-                rel.arity(ctx.signature())
-                    .into_iter()
-                    .collect::<BTreeSet<TypeId>>()
-                    .into_iter()
-                    .map(move |typ| {
-                        let field = display_element_index_field_name(rel, typ, ctx);
-                        format!("{field}: BTreeMap::new(),")
-                    })
+        let element_indices = ctx
+            .signature()
+            .iter_types()
+            .map(|typ| {
+                let field = occurrences_field(typ, ctx);
+                format!("{field}: Vec::new(),")
             })
             .join("\n");
         let types = ctx
@@ -585,88 +575,65 @@ pub(super) fn display_close<'a>(
     })
 }
 
-fn row_args(len: usize) -> Vec<ElVar> {
-    (0..len).map(ElVar::from).collect()
+/// The tag that occurrence entries carry for rows of a relation.
+fn relation_tag(rel: FlatRel, ctx: &RustGenCtx<'_>) -> usize {
+    iter_flat_rels(ctx.signature())
+        .position(|other| other == rel)
+        .expect("relations are flat relations of the signature")
 }
 
-/// Rows of the relation, unpacked into `el{i}` variables, that contain an
-/// uprooted element are removed and inserted again with representatives.
-fn display_canonicalize_rel_block<'a>(rel: FlatRel, ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
-    FmtFn(move |f| {
-        let supported_insert = ctx.supported_insert_name(rel);
-        let arity = rel.arity(ctx.signature());
-        let arity_len = arity.len();
-        let args = row_args(arity_len);
-        let field = table_field(&FlatInRel::Rel(rel), ctx);
-        let collect = arity
-            .iter()
-            .copied()
-            .collect::<BTreeSet<_>>()
-            .into_iter()
-            .map(|typ| {
-                let type_snake = display_type(typ, ctx).to_string().to_case(Case::Snake);
-                let element_index = display_element_index_field_name(rel, typ, ctx);
-                format!(
-                    "for el in self.{type_snake}_uprooted.iter().copied() {{ if let Some(rows) = self.{element_index}.remove(&el.0) {{ non_canonical_rows.push(rows); }} }}"
-                )
-            })
-            .join("\n");
-        let reduce_weights = arity
-            .iter()
-            .enumerate()
-            .map(|(i, &typ)| {
-                let type_snake = display_type(typ, ctx).to_string().to_case(Case::Snake);
-                let weight = display_weight_static_name(rel, ctx);
-                format!(
-                    "let weight{i}: &mut usize = &mut self.{type_snake}_weights[el{i} as usize];\n*weight{i} = weight{i}.saturating_sub({weight});"
-                )
-            })
-            .join("\n");
-        let insert_args = args
-            .iter()
-            .zip(arity.iter())
-            .map(|(arg, &typ)| {
-                let type_camel = display_type(typ, ctx).to_string().to_case(Case::UpperCamel);
-                format!("{type_camel}({arg})")
-            })
-            .join(", ");
-        let args = args.iter().join(", ");
-        writedoc! {f, "
-            #[allow(unused_mut)]
-            let mut non_canonical_rows: Vec<Vec<[u32; {arity_len}]>> = Vec::new();
-            {collect}
-            for [{args}] in non_canonical_rows.into_iter().flatten() {{
-                if !self.{field}.remove([{args}]) {{
-                    continue;
-                }}
-                {reduce_weights}
-                self.{supported_insert}(true, {insert_args});
-            }}
-        "}
-    })
+/// The field listing, for each element of a type, the rows it occurs in.
+pub(super) fn occurrences_field(typ: TypeId, ctx: &RustGenCtx<'_>) -> String {
+    let name = type_snake(typ, ctx);
+    format!("__occurrences_{name}")
+}
+
+/// Binds `occurrence` to the entry of the row just inserted into a table.
+pub(super) fn display_occurrence(rel: FlatRel, ctx: &RustGenCtx<'_>) -> String {
+    let field = table_field(&FlatInRel::Rel(rel), ctx);
+    let tag = relation_tag(rel, ctx);
+    format!("let occurrence = u64::from(self.{field}.log_len() - 1) | ({tag} << 32);")
+}
+
+/// Rows of a relation in which `arg{position}` occurs, including rows that
+/// have since been rewritten.
+pub(super) fn display_occurrence_rows(
+    rel: FlatRel,
+    typ: TypeId,
+    position: usize,
+    ctx: &RustGenCtx<'_>,
+) -> String {
+    let occurrences = occurrences_field(typ, ctx);
+    let field = table_field(&FlatInRel::Rel(rel), ctx);
+    let tag = relation_tag(rel, ctx);
+    format!(
+        "self.{occurrences}[arg{position}.0 as usize].iter().filter(|&&entry| entry >> 32 == {tag}).map(|&entry| self.{field}.row_at(entry as u32))"
+    )
 }
 
 pub(super) fn display_canonicalize_fn<'a>(ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
     FmtFn(move |f| {
-        let rels: Vec<FlatRel> = iter_flat_rels(ctx.signature())
-            .filter(|rel| rel.is_model_membership_relation())
-            .chain(
-                iter_flat_rels(ctx.signature()).filter(|rel| !rel.is_model_membership_relation()),
-            )
-            .collect();
-        let calls = rels
-            .iter()
-            .map(|&rel| {
-                let name = display_rel(rel, ctx).to_case(Case::Snake);
-                format!("self.__canonicalize_rows_{name}();")
-            })
-            .join("\n");
-        let clear_uprooted = ctx
+        let rewrite_types = ctx
             .signature()
             .iter_types()
             .map(|typ| {
-                let type_snake = display_type(typ, ctx).to_string().to_case(Case::Snake);
-                format!("self.{type_snake}_uprooted.clear();")
+                let name = type_snake(typ, ctx);
+                let occurrences = occurrences_field(typ, ctx);
+                formatdoc! {"
+                    for el in std::mem::take(&mut self.{name}_uprooted) {{
+                        rewritten = true;
+                        for entry in std::mem::take(&mut self.{occurrences}[el.0 as usize]) {{
+                            self.__rewrite_row(entry);
+                        }}
+                    }}
+                "}
+            })
+            .join("\n");
+        let arms = iter_flat_rels(ctx.signature())
+            .map(|rel| {
+                let tag = relation_tag(rel, ctx);
+                let name = display_rel(rel, ctx).to_case(Case::Snake);
+                format!("{tag} => self.__rewrite_{name}(stamp),")
             })
             .join("\n");
         writedoc! {f, "
@@ -678,18 +645,64 @@ pub(super) fn display_canonicalize_fn<'a>(ctx: &'a RustGenCtx<'a>) -> impl Displ
                 self.__canonicalize_relations();
             }}
 
+            #[allow(unused_mut)]
             fn __canonicalize_relations(&mut self) {{
-                {calls}
-                {clear_uprooted}
+                loop {{
+                    let mut rewritten = false;
+                    {rewrite_types}
+                    if !rewritten {{
+                        return;
+                    }}
+                }}
+            }}
+
+            /// Replaces a row by its canonical form unless it was removed since
+            /// the occurrence was recorded.
+            #[inline(never)]
+            #[allow(unused_variables)]
+            fn __rewrite_row(&mut self, entry: u64) {{
+                let stamp = entry as u32;
+                match entry >> 32 {{
+                    {arms}
+                    _ => unreachable!(\"occurrence tags name relations\"),
+                }}
             }}
         "}?;
-        for rel in rels {
+        for rel in iter_flat_rels(ctx.signature()) {
             let name = display_rel(rel, ctx).to_case(Case::Snake);
-            let block = display_canonicalize_rel_block(rel, ctx);
+            let field = table_field(&FlatInRel::Rel(rel), ctx);
+            let supported_insert = ctx.supported_insert_name(rel);
+            let arity = rel.arity(ctx.signature());
+            let args = (0..arity.len()).map(ElVar::from).collect::<Vec<_>>();
+            let reduce_weights = arity
+                .iter()
+                .enumerate()
+                .map(|(i, &typ)| {
+                    let type_snake = type_snake(typ, ctx);
+                    let weight = display_weight_static_name(rel, ctx);
+                    format!(
+                        "let weight{i}: &mut usize = &mut self.{type_snake}_weights[el{i} as usize];\n*weight{i} = weight{i}.saturating_sub({weight});"
+                    )
+                })
+                .join("\n");
+            let insert_args = args
+                .iter()
+                .zip(arity.iter())
+                .map(|(arg, &typ)| {
+                    let type_camel = display_type(typ, ctx).to_string().to_case(Case::UpperCamel);
+                    format!("{type_camel}({arg})")
+                })
+                .join(", ");
+            let args = args.iter().join(", ");
             writedoc! {f, "
                 #[inline(never)]
-                fn __canonicalize_rows_{name}(&mut self) {{
-                    {block}
+                #[allow(unused_variables)]
+                fn __rewrite_{name}(&mut self, stamp: u32) {{
+                    let Some([{args}]) = self.{field}.remove_stamped(stamp) else {{
+                        return;
+                    }};
+                    {reduce_weights}
+                    self.{supported_insert}(true, {insert_args});
                 }}
             "}?;
         }
