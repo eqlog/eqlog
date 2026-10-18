@@ -15,8 +15,8 @@ use std::sync::Arc;
 use super::indices::source_relation;
 use super::{
     display_index_field_name, display_module_env_struct_name, display_out_set_field_name,
-    display_rel, display_type, display_type_fields, display_weight_static_name, module_env_in_rels,
-    module_env_out_rels, ElVar, RustGenCtx,
+    display_out_set_type, display_rel, display_type, display_type_fields,
+    display_weight_static_name, module_env_in_rels, module_env_out_rels, ElVar, RustGenCtx,
 };
 use crate::algebra::signature::{FuncId, Signature, TypeId};
 use crate::flat_eqlog::{
@@ -379,8 +379,20 @@ pub(super) fn display_strata<'a>(
                     }};
                 "}?;
             }
-            writeln!(f, "{{")?;
-            for &m in &stratum.groups {
+            for (i, &m) in stratum.groups.iter().enumerate() {
+                for rel in module_env_out_rels(&modules[m]) {
+                    let field = display_out_set_field_name(&rel, ctx);
+                    let typ = display_out_set_type(&rel, ctx);
+                    writeln!(f, "let mut __out_{i}_{field}: {typ} = Vec::new();")?;
+                }
+            }
+            let count = stratum.groups.len();
+            writedoc! {f, "
+                {{
+                let work = now.iter().zip(&since).map(|(now, since)| (now - since) as usize).sum();
+                let mut tasks: Vec<eqlog_runtime::Task<'_>> = Vec::with_capacity({count});
+            "}?;
+            for (i, &m) in stratum.groups.iter().enumerate() {
                 let module = &modules[m];
                 let env = display_module_env_struct_name(module);
                 let name = &module.name;
@@ -410,11 +422,18 @@ pub(super) fn display_strata<'a>(
                 }
                 for rel in module_env_out_rels(module) {
                     let field = display_out_set_field_name(&rel, ctx);
-                    writeln!(f, "{field}: &mut delta.{field},")?;
+                    writeln!(f, "{field}: &mut __out_{i}_{field},")?;
                 }
-                writeln!(f, "}}; {name}(env);")?;
+                writeln!(f, "}}; tasks.push(Box::new(move || {name}(env)));")?;
             }
+            writeln!(f, "eqlog_runtime::run_tasks(work, tasks);")?;
             writeln!(f, "}}")?;
+            for (i, &m) in stratum.groups.iter().enumerate() {
+                for rel in module_env_out_rels(&modules[m]) {
+                    let field = display_out_set_field_name(&rel, ctx);
+                    writeln!(f, "delta.{field}.append(&mut __out_{i}_{field});")?;
+                }
+            }
             let outputs: BTreeSet<_> = stratum
                 .groups
                 .iter()

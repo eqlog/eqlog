@@ -58,6 +58,7 @@ mod indexed;
 mod lazy_index;
 mod model;
 mod model_hom;
+mod parallel;
 mod signature;
 mod table;
 mod versions;
@@ -213,6 +214,8 @@ pub use crate::indexed::{
     Either, FunctionInsert, Restrictions, RowsRestrictions, RowsView, Table as IndexedTable, Trie,
     TrieView,
 };
+#[doc(hidden)]
+pub use crate::parallel::{run_tasks, Task};
 #[doc(hidden)]
 pub use crate::prefix_tree::{
     PrefixTree0, PrefixTree1, PrefixTree2, PrefixTree3, PrefixTree4, PrefixTree5, PrefixTree6,
