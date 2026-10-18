@@ -2,24 +2,27 @@ Evaluate desugared models over indexed tables
 
 Desugared models now store each relation in a mutable table instead of
 persistent prefix trees. Rows are stamped with their position in the
-table's insertion log, and every rule input reads a stamp-bounded view
-of a hash trie index or a sorted copy of new rows: a stratum's old rows
-are those stamped before its previous read and its new rows are the
-rest. Semi-naive evaluation thus needs neither snapshots nor structural
-set differences.
+table's insertion log. A stratum's old rows are those stamped before
+its previous read and its new rows are the rest: rules read old and all
+rows through hash trie indices, bounding old rows by stamp, and new rows
+through sorted copies of the log. Semi-naive evaluation thus needs
+neither snapshots nor structural set differences.
 
 Function tables report a second result for the same arguments when a
 row is inserted. Evaluation equates such results after every stratum
 instead of running generated functionality rules, and the ordinary rules
-of a recursive component share one stratum per round.
+of a recursive component share one stratum per round. Rules skip rows
+that their tables hold already, equal lookups within a routine are
+shared, and premises inverting a function choose their plan at run time.
 
 The rule modules of a stratum run as tasks on a small thread pool, each
-writing its own output buffers, which are appended in module order so
+writing its own output buffers, which are consumed in module order so
 that results do not depend on scheduling. While closing, tables defer
 trie updates to one parallel batch per trie before each stratum.
 EQLOG_THREADS sets the number of threads; 1 evaluates sequentially.
 
 Native models keep the persistent storage and morphism transport. The
-ETT checker compiles its kernel as a desugared model; it checks the
-Nat and Vec developments about 13x faster than before this branch
-(8.4x with EQLOG_THREADS=1).
+ETT checker compiles its kernel as a desugared model, weakens each
+scope element once and resolves older elements through the scope chain.
+It checks the Nat and Vec developments about 16x faster than before
+this branch, and 10x faster with EQLOG_THREADS=1.

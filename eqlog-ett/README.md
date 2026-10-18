@@ -7,7 +7,8 @@ cargo run --release -p eqlog-ett -- eqlog-ett/nat.ett eqlog-ett/vec.ett
 ```
 
 Use a release build. The kernel is compiled as a desugared Eqlog model, which
-stores the facts transported along substitutions explicitly.
+stores the facts transported along substitutions explicitly. Closing uses up
+to eight threads; set `EQLOG_THREADS=1` to check sequentially.
 
 Run the checker integration suite with:
 

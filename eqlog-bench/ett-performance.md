@@ -16,6 +16,48 @@ The Nat and Vec source modules, fresh contexts, equality reflection, partial
 morphisms, three-expansion budget, and single `close()` call are unchanged.
 All closure timings exclude Rust compilation.
 
+## Desugared indexed evaluation
+
+The checker now compiles its kernel as a desugared model, so facts
+transported along substitutions are ordinary rows. Desugared models store
+every relation in a mutable table (`eqlog-runtime/src/indexed.rs`) whose
+rows are stamped with their position in an insertion log. A stratum
+remembers how far it read each table: its old rows are stamped before that
+position and its new rows are the rest, read as sorted copies. Old and all
+rows are read through hash tries, which bound old rows by stamp.
+
+Function tables report a conflicting result when a row is inserted, and
+the conflicts are equated after every stratum, so no functionality rules
+are generated. Each element lists the rows it occurs in, and
+canonicalization rewrites exactly the rows of merged elements. Rules check
+their output tables before writing a row, plans that invert a function by
+its result choose between two orders at run time, and equal lookups within
+a routine are shared.
+
+Rule modules of a stratum run as tasks on a small thread pool. Each writes
+its own output buffers, which are consumed in module order, so the closure
+does not depend on scheduling. While closing, tables defer trie updates to
+one parallel batch per trie before each stratum. `EQLOG_THREADS` sets the
+number of threads; `EQLOG_THREADS=1` evaluates sequentially. Native models
+are unchanged.
+
+The frontend requests each weakening once and records only the images of
+a parent's elements in a child scope, resolving older elements through the
+scope chain.
+
+Interleaved release runs of the unchanged Nat+Vec development, ten each on
+the same host:
+
+| Build | Wall time, median (min) | CPU time | Peak RSS |
+| --- | --- | --- | --- |
+| `6092cd4`, native | 11.20 s (10.39 s) | 11.07 s | 249 MB |
+| Desugared, default threads | 0.67 s (0.60 s) | 1.64 s | 188 MB |
+| Desugared, `EQLOG_THREADS=1` | 1.13 s (1.07 s) | 1.14 s | 191 MB |
+
+Callgrind counts 49.7G instructions for the baseline and 5.0G for the
+sequential desugared run. The sections below describe the earlier work on
+native evaluation; `profile-ett.py` instruments native kernels only.
+
 ## Commit milestones
 
 These are end-to-end runs of the unchanged 52-declaration Nat+Vec
@@ -536,8 +578,9 @@ artifacts above record the exact build metadata separately from test validation.
 
 ## Reproduction
 
-`profile-ett.py` is a diagnostic for this generated kernel shape, not a stable
-profiling API. It discovers the current global strata and instrumentation
+`profile-ett.py` is a diagnostic for the native kernel shape, not a stable
+profiling API. Set `model_mode` to `ModelMode::Native` in `eqlog-ett/build.rs`
+before running it; it rejects desugared kernels. It discovers the current global strata and instrumentation
 methods, and fails if required generated structures are missing. It first
 builds the release evaluator, then instruments only copies in the chosen output
 directory. Production source and generated evaluator files are not patched.
