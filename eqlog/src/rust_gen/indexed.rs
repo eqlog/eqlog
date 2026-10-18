@@ -437,9 +437,13 @@ pub(super) fn display_strata<'a>(
                             .collect::<Vec<_>>();
                         let converted = args.iter().map(|arg| format!("{arg}.into()")).join(", ");
                         let args = args.join(", ");
-                        // Insertion rejects duplicate rows with one hash probe.
+                        let table = table_field(&FlatInRel::Rel(*rel), ctx);
+                        // Tables only hold canonical rows, so a row found as
+                        // derived needs no canonicalization before skipping it.
                         writedoc! {f, "
-                            for [{args}] in delta.{field}.drain(..) {{ self.{insert}({converted}); }}
+                            for [{args}] in delta.{field}.drain(..) {{
+                                if !self.{table}.contains([{args}]) {{ self.{insert}({converted}); }}
+                            }}
                         "}?;
                     }
                     FlatOutRel::Equality(_) | FlatOutRel::FuncDomain(_) => {}
