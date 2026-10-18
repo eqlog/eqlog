@@ -163,6 +163,20 @@ struct StratumInputs {
     reads: Vec<((FlatInRel, IndexSpec), usize)>,
 }
 
+/// The output buffers of a stratum's rule modules: each module writes its
+/// own buffer per output relation so that modules can run concurrently.
+fn output_buffers(groups: &[usize], modules: &[RamModule]) -> Vec<(usize, FlatOutRel)> {
+    groups
+        .iter()
+        .enumerate()
+        .flat_map(|(i, &m)| {
+            module_env_out_rels(&modules[m])
+                .into_iter()
+                .map(move |rel| (i, rel))
+        })
+        .collect()
+}
+
 fn stratum_inputs(groups: &[usize], modules: &[RamModule]) -> StratumInputs {
     let reads: BTreeSet<(FlatInRel, IndexSpec)> = groups
         .iter()
@@ -234,6 +248,19 @@ pub(super) fn display_struct<'a>(
                 format!("__since_{s}: [u32; {len}],")
             })
             .join("\n");
+        let output_fields = strata
+            .iter()
+            .enumerate()
+            .flat_map(|(s, stratum)| {
+                output_buffers(&stratum.groups, &program.modules)
+                    .into_iter()
+                    .map(move |(i, rel)| {
+                        let field = display_out_set_field_name(&rel, ctx);
+                        let typ = display_out_set_type(&rel, ctx);
+                        format!("__out_{s}_{i}_{field}: {typ},")
+                    })
+            })
+            .join("\n");
         writedoc! {f, "
             /// A model of the `{name}` theory.
             pub struct {name} {{
@@ -246,6 +273,7 @@ pub(super) fn display_struct<'a>(
                 {functional_fields}
                 __stratum_initialized: [bool; {count}],
                 {since_fields}
+                {output_fields}
             }}
             type Model = {name};
         "}
@@ -303,6 +331,18 @@ pub(super) fn display_new_fn<'a>(
                 format!("__since_{s}: [0; {len}],")
             })
             .join("\n");
+        let outputs = strata
+            .iter()
+            .enumerate()
+            .flat_map(|(s, stratum)| {
+                output_buffers(&stratum.groups, &program.modules)
+                    .into_iter()
+                    .map(move |(i, rel)| {
+                        let field = display_out_set_field_name(&rel, ctx);
+                        format!("__out_{s}_{i}_{field}: Vec::new(),")
+                    })
+            })
+            .join("\n");
         writedoc! {f, "
             /// Creates an empty model.
             #[allow(dead_code)]
@@ -317,6 +357,7 @@ pub(super) fn display_new_fn<'a>(
                     {functional}
                     __stratum_initialized: [false; {count}],
                     {since}
+                    {outputs}
                 }}
             }}
         "}
@@ -347,6 +388,7 @@ pub(super) fn display_strata<'a>(
             .join("\n");
         writedoc! {f, "
             /// Brings the tries of all tables up to date, one task per trie.
+            #[allow(unused_mut)]
             fn __sync_tables(&mut self) {{
                 {{
                     let mut tasks: Vec<eqlog_runtime::Task<'_>> = Vec::new();
@@ -359,6 +401,7 @@ pub(super) fn display_strata<'a>(
 
             /// Closing defers trie updates to the synchronization before
             /// each stratum; outside, tries are updated row by row.
+            #[allow(unused_variables)]
             fn __set_tables_deferred(&mut self, deferred: bool) {{
                 self.__sync_tables();
                 {set_deferred}
@@ -415,12 +458,13 @@ pub(super) fn display_strata<'a>(
                     }};
                 "}?;
             }
-            for (i, &m) in stratum.groups.iter().enumerate() {
-                for rel in module_env_out_rels(&modules[m]) {
-                    let field = display_out_set_field_name(&rel, ctx);
-                    let typ = display_out_set_type(&rel, ctx);
-                    writeln!(f, "let mut __out_{i}_{field}: {typ} = Vec::new();")?;
-                }
+            let buffers = output_buffers(&stratum.groups, modules);
+            for (i, rel) in &buffers {
+                let field = display_out_set_field_name(rel, ctx);
+                writeln!(
+                    f,
+                    "let mut __out_{i}_{field} = std::mem::take(&mut self.__out_{s}_{i}_{field});"
+                )?;
             }
             let count = stratum.groups.len();
             writedoc! {f, "
@@ -464,27 +508,27 @@ pub(super) fn display_strata<'a>(
             }
             writeln!(f, "eqlog_runtime::run_tasks(work, tasks);")?;
             writeln!(f, "}}")?;
-            for (i, &m) in stratum.groups.iter().enumerate() {
-                for rel in module_env_out_rels(&modules[m]) {
-                    let field = display_out_set_field_name(&rel, ctx);
-                    writeln!(f, "delta.{field}.append(&mut __out_{i}_{field});")?;
-                }
-            }
-            let outputs: BTreeSet<_> = stratum
-                .groups
-                .iter()
-                .flat_map(|&m| module_env_out_rels(&modules[m]))
-                .collect();
+            let outputs: BTreeSet<_> = buffers.iter().map(|(_, rel)| rel).collect();
+            let producers = |output: &FlatOutRel| -> Vec<usize> {
+                buffers
+                    .iter()
+                    .filter(|(_, rel)| rel == output)
+                    .map(|(i, _)| *i)
+                    .collect()
+            };
             let mut equalities = Vec::new();
-            for output in &outputs {
+            for &output in &outputs {
                 match output {
                     FlatOutRel::Equality(typ) => {
                         let name = display_type(*typ, ctx).to_string().to_case(Case::Snake);
-                        writedoc! {f, "
-                            for [lhs, rhs] in delta.new_{name}_equalities.drain(..) {{
-                                self.__equate_{name}(lhs.into(), rhs.into());
-                            }}
-                        "}?;
+                        let field = display_out_set_field_name(output, ctx);
+                        for i in producers(output) {
+                            writedoc! {f, "
+                                for [lhs, rhs] in __out_{i}_{field}.drain(..) {{
+                                    self.__equate_{name}(lhs.into(), rhs.into());
+                                }}
+                            "}?;
+                        }
                         equalities.push(format!("!self.{name}_uprooted.is_empty()"));
                     }
                     FlatOutRel::Rel(_) | FlatOutRel::FuncDomain(_) => {}
@@ -494,10 +538,10 @@ pub(super) fn display_strata<'a>(
                 let changed = equalities.join(" || ");
                 writeln!(f, "if {changed} {{ self.__canonicalize_relations(); }}")?;
             }
-            for output in &outputs {
+            for &output in &outputs {
+                let field = display_out_set_field_name(output, ctx);
                 match output {
                     FlatOutRel::Rel(rel) => {
-                        let field = display_out_set_field_name(output, ctx);
                         let insert = ctx.internal_insert_name(*rel);
                         let args = (0..rel.arity(ctx.signature()).len())
                             .map(|i| format!("arg{i}"))
@@ -505,16 +549,28 @@ pub(super) fn display_strata<'a>(
                         let converted = args.iter().map(|arg| format!("{arg}.into()")).join(", ");
                         let args = args.join(", ");
                         let table = table_field(&FlatInRel::Rel(*rel), ctx);
-                        // Tables only hold canonical rows, so a row found as
-                        // derived needs no canonicalization before skipping it.
-                        writedoc! {f, "
-                            for [{args}] in delta.{field}.drain(..) {{
-                                if !self.{table}.contains([{args}]) {{ self.{insert}({converted}); }}
-                            }}
-                        "}?;
+                        for i in producers(output) {
+                            // Tables only hold canonical rows, so a row found as
+                            // derived needs no canonicalization before skipping it.
+                            writedoc! {f, "
+                                for [{args}] in __out_{i}_{field}.drain(..) {{
+                                    if !self.{table}.contains([{args}]) {{ self.{insert}({converted}); }}
+                                }}
+                            "}?;
+                        }
                     }
-                    FlatOutRel::Equality(_) | FlatOutRel::FuncDomain(_) => {}
+                    // Functions are defined at the next allocation barrier.
+                    FlatOutRel::FuncDomain(_) => {
+                        for i in producers(output) {
+                            writeln!(f, "delta.{field}.append(&mut __out_{i}_{field});")?;
+                        }
+                    }
+                    FlatOutRel::Equality(_) => {}
                 }
+            }
+            for (i, rel) in &buffers {
+                let field = display_out_set_field_name(rel, ctx);
+                writeln!(f, "self.__out_{s}_{i}_{field} = __out_{i}_{field};")?;
             }
             writeln!(f, "self.__normalize_functions();")?;
             writeln!(f, "true }}")?;

@@ -1076,7 +1076,7 @@ impl<const N: usize> Table<N> {
     pub fn delta<const W: usize>(&self, index: usize, since: u32) -> Vec<[u32; W]> {
         let index = &self.indices[index];
         assert_eq!(index.columns.len(), W, "delta width must match the index");
-        let mut rows = Vec::new();
+        let mut rows = Vec::with_capacity(self.log.len() - since as usize);
         let mut key = [0u32; MAX_ARITY];
         for (row, stamp) in self.log[since as usize..].iter().zip(since..) {
             if !self.removed[stamp as usize] && project(&index.columns, &index.equal, row, &mut key)

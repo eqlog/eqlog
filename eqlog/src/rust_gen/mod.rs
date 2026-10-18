@@ -3570,6 +3570,15 @@ pub fn display_module<'a>(
             .modules
             .iter()
             .flat_map(module_env_out_rels)
+            .filter(|rel| match ctx.model_mode() {
+                ModelMode::Native => true,
+                // Desugared strata consume rows and equalities from the
+                // output buffers of their modules.
+                ModelMode::Desugared => match rel {
+                    FlatOutRel::FuncDomain(_) => true,
+                    FlatOutRel::Rel(_) | FlatOutRel::Equality(_) => false,
+                },
+            })
             .collect();
         let model_delta_struct = display_model_delta_struct(&outputs, ctx);
         write!(f, "{}", model_delta_struct)?;
