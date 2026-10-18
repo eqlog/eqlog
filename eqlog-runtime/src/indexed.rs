@@ -9,6 +9,8 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
 
+use crate::parallel::Task;
+
 const SEED: u64 = 0xf135_7aea_2e62_a9c5;
 
 /// A fast, deterministic hasher for small integer keys.
@@ -750,6 +752,37 @@ struct Index {
     trie: Option<Trie>,
 }
 
+impl Index {
+    fn insert<const N: usize>(&mut self, row: &[u32; N], stamp: u32) {
+        let Index {
+            columns,
+            equal,
+            trie,
+        } = self;
+        let mut key = [0u32; MAX_ARITY];
+        if let Some(trie) = trie {
+            if project(columns, equal, row, &mut key) {
+                trie.insert(&key[..columns.len()], stamp);
+            }
+        }
+    }
+
+    fn remove<const N: usize>(&mut self, row: &[u32; N]) {
+        let Index {
+            columns,
+            equal,
+            trie,
+        } = self;
+        let mut key = [0u32; MAX_ARITY];
+        if let Some(trie) = trie {
+            if project(columns, equal, row, &mut key) {
+                let removed = trie.remove(&key[..columns.len()]);
+                debug_assert!(removed);
+            }
+        }
+    }
+}
+
 /// Writes the key of `row` in an index with these columns and equalities,
 /// unless the row is not in the index.
 #[inline]
@@ -776,6 +809,13 @@ pub struct Table<const N: usize> {
     // Whether the row with this stamp has been removed.
     removed: Vec<bool>,
     indices: Vec<Index>,
+    // While deferred, insertions and removals reach the tries only when they
+    // are synchronized, in one batch per trie.
+    deferred: bool,
+    // The tries hold the live rows stamped before this position, except for
+    // the stale rows.
+    synced: u32,
+    stale: Vec<u32>,
     // For the graph of a function, the first result inserted for each
     // argument tuple, keyed by rows whose result column is zero. Entries
     // outlive their rows: a row only disappears when one of its elements
@@ -816,6 +856,9 @@ impl<const N: usize> Table<N> {
             live: FxHashMap::default(),
             removed: Vec::new(),
             indices,
+            deferred: false,
+            synced: 0,
+            stale: Vec::new(),
             results: None,
         }
     }
@@ -886,26 +929,18 @@ impl<const N: usize> Table<N> {
                 true
             }
         };
-        if absent {
-            self.log.push(row);
-            self.removed.push(false);
-            let mut key = [0u32; MAX_ARITY];
-            for Index {
-                columns,
-                equal,
-                trie,
-            } in &mut self.indices
-            {
-                if let Some(trie) = trie {
-                    if project(columns, equal, &row, &mut key) {
-                        trie.insert(&key[..columns.len()], stamp);
-                    }
-                }
-            }
-            true
-        } else {
-            false
+        if !absent {
+            return false;
         }
+        self.log.push(row);
+        self.removed.push(false);
+        if !self.deferred {
+            for index in &mut self.indices {
+                index.insert(&row, stamp);
+            }
+            self.synced = self.log_len();
+        }
+        true
     }
 
     /// Removes a row and returns whether it was present.
@@ -915,18 +950,13 @@ impl<const N: usize> Table<N> {
             return false;
         };
         self.removed[stamp as usize] = true;
-        let mut key = [0u32; MAX_ARITY];
-        for Index {
-            columns,
-            equal,
-            trie,
-        } in &mut self.indices
-        {
-            if let Some(trie) = trie {
-                if project(columns, equal, &row, &mut key) {
-                    let removed = trie.remove(&key[..columns.len()]);
-                    debug_assert!(removed);
-                }
+        if self.deferred {
+            if stamp < self.synced {
+                self.stale.push(stamp);
+            }
+        } else {
+            for index in &mut self.indices {
+                index.remove(&row);
             }
         }
         true
@@ -949,6 +979,59 @@ impl<const N: usize> Table<N> {
         Some(row)
     }
 
+    /// Defers updating the tries until the next synchronization, or updates
+    /// them right away again after synchronizing them.
+    pub fn set_deferred(&mut self, deferred: bool) {
+        if !deferred {
+            let mut tasks = Vec::new();
+            self.sync_tasks(&mut tasks);
+            for task in tasks {
+                task();
+            }
+            self.finish_sync();
+        }
+        self.deferred = deferred;
+    }
+
+    /// Adds a task per trie that applies the deferred insertions and
+    /// removals to it, and returns how many rows they apply. The tasks must
+    /// run before [`Table::finish_sync`].
+    pub fn sync_tasks<'a>(&'a mut self, tasks: &mut Vec<Task<'a>>) -> usize {
+        let start = self.synced as usize;
+        if start == self.log.len() && self.stale.is_empty() {
+            return 0;
+        }
+        let Table {
+            log,
+            removed,
+            indices,
+            stale,
+            ..
+        } = self;
+        let (log, removed, stale) = (&*log, &*removed, &*stale);
+        let mut work = 0;
+        for index in indices.iter_mut().filter(|index| index.trie.is_some()) {
+            work += log.len() - start + stale.len();
+            tasks.push(Box::new(move || {
+                for &stamp in stale {
+                    index.remove(&log[stamp as usize]);
+                }
+                for (row, stamp) in log[start..].iter().zip(start as u32..) {
+                    if !removed[stamp as usize] {
+                        index.insert(row, stamp);
+                    }
+                }
+            }));
+        }
+        work
+    }
+
+    /// Records that the tasks of [`Table::sync_tasks`] have run.
+    pub fn finish_sync(&mut self) {
+        self.synced = self.log_len();
+        self.stale.clear();
+    }
+
     /// The position the next inserted row will be stamped with.
     #[inline]
     pub fn log_len(&self) -> u32 {
@@ -965,6 +1048,10 @@ impl<const N: usize> Table<N> {
 
     #[inline]
     fn trie(&self, index: usize) -> &Trie {
+        debug_assert!(
+            self.synced == self.log_len() && self.stale.is_empty(),
+            "views need synchronized tries"
+        );
         self.indices[index]
             .trie
             .as_ref()
@@ -1136,6 +1223,40 @@ mod tests {
         let keys: Vec<u32> = restricted.iter_restrictions().map(|(key, _)| key).collect();
         assert_eq!(keys, vec![3, 6]);
         assert!(view.get(3).is_none());
+    }
+
+    #[test]
+    fn deferred_tries_catch_up_with_removals_and_reinsertions() {
+        let mut table: Table<2> = Table::new(&[(&[0, 1], &[], true), (&[1, 0], &[], true)]);
+        assert!(table.insert([1, 2]));
+        assert!(table.insert([3, 4]));
+        table.set_deferred(true);
+        let seen = table.log_len();
+        // Removed while its stamp is synchronized, then inserted again.
+        assert!(table.remove([1, 2]));
+        assert!(table.insert([1, 2]));
+        // Inserted and removed between two synchronizations.
+        assert!(table.insert([5, 6]));
+        assert!(table.remove([5, 6]));
+        assert!(table.insert([7, 8]));
+        assert!(table.remove([3, 4]));
+        let mut tasks = Vec::new();
+        assert!(table.sync_tasks(&mut tasks) > 0);
+        assert_eq!(tasks.len(), 2);
+        for task in tasks {
+            task();
+        }
+        table.finish_sync();
+        let expected = BTreeSet::from([vec![1, 2], vec![7, 8]]);
+        assert_eq!(rows(table.view(0), 2), expected);
+        assert_eq!(
+            rows(table.view(1), 2),
+            BTreeSet::from([vec![2, 1], vec![8, 7]])
+        );
+        assert!(rows(table.view_before(0, seen), 2).is_empty());
+        table.set_deferred(false);
+        assert!(table.insert([9, 9]));
+        assert!(rows(table.view(0), 2).contains(&vec![9, 9]));
     }
 
     #[test]

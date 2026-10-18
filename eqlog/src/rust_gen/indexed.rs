@@ -329,6 +329,41 @@ pub(super) fn display_strata<'a>(
     ctx: &'a RustGenCtx<'a>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
+        let fields: Vec<_> = tables
+            .sources()
+            .map(|source| table_field(source, ctx))
+            .collect();
+        let sync_tasks = fields
+            .iter()
+            .map(|field| format!("work += self.{field}.sync_tasks(&mut tasks);"))
+            .join("\n");
+        let finish_sync = fields
+            .iter()
+            .map(|field| format!("self.{field}.finish_sync();"))
+            .join("\n");
+        let set_deferred = fields
+            .iter()
+            .map(|field| format!("self.{field}.set_deferred(deferred);"))
+            .join("\n");
+        writedoc! {f, "
+            /// Brings the tries of all tables up to date, one task per trie.
+            fn __sync_tables(&mut self) {{
+                {{
+                    let mut tasks: Vec<eqlog_runtime::Task<'_>> = Vec::new();
+                    let mut work = 0;
+                    {sync_tasks}
+                    eqlog_runtime::run_tasks(work, tasks);
+                }}
+                {finish_sync}
+            }}
+
+            /// Closing defers trie updates to the synchronization before
+            /// each stratum; outside, tries are updated row by row.
+            fn __set_tables_deferred(&mut self, deferred: bool) {{
+                self.__sync_tables();
+                {set_deferred}
+            }}
+        "}?;
         let modules = &program.modules;
         for (s, stratum) in program.schedule.strata.iter().enumerate() {
             let inputs = stratum_inputs(&stratum.groups, modules);
@@ -362,6 +397,7 @@ pub(super) fn display_strata<'a>(
                 }}
                 self.__stratum_initialized[{s}] = true;
                 self.__since_{s} = now;
+                self.__sync_tables();
             "}?;
             for (k, ((rel, index), source)) in inputs.reads.iter().enumerate() {
                 match index.age {
@@ -580,6 +616,13 @@ pub(super) fn display_close<'a>(
             }}
 
             fn __close_until(&mut self, condition: Option<&dyn Fn(&Self) -> bool>) -> bool {{
+                self.__set_tables_deferred(true);
+                let result = self.__close_until_deferred(condition);
+                self.__set_tables_deferred(false);
+                result
+            }}
+
+            fn __close_until_deferred(&mut self, condition: Option<&dyn Fn(&Self) -> bool>) -> bool {{
                 if self.__closed {{
                     return condition.is_some_and(|condition| condition(self));
                 }}
@@ -592,7 +635,10 @@ pub(super) fn display_close<'a>(
         emit_schedule(f, &program.schedule.body, None, 0)?;
         writedoc! {f, "
                     self.__allocated = false;
+                    // Defining functions evaluates them through the tries.
+                    self.__set_tables_deferred(false);
                     delta.apply_func_defs(self);
+                    self.__set_tables_deferred(true);
                     let normalized = self.__normalize_functions();
                     if !self.__allocated && !normalized {{
                         std::mem::swap(&mut self.__pending_delta, &mut delta);
@@ -676,6 +722,7 @@ pub(super) fn display_canonicalize_fn<'a>(ctx: &'a RustGenCtx<'a>) -> impl Displ
             #[allow(dead_code)]
             pub fn canonicalize(&mut self) {{
                 self.__canonicalize_relations();
+                self.__sync_tables();
             }}
 
             #[allow(unused_mut)]
