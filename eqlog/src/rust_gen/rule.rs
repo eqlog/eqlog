@@ -100,7 +100,15 @@ pub fn display_module_env_struct<'a>(
                             let typ = display_index_type(&rel, ctx);
                             write!(f, "{name}: &'a {typ},")
                         }
-                        ModelMode::Desugared => write!(f, "{name}: eqlog_runtime::TrieView<'a>,"),
+                        ModelMode::Desugared => match index_spec.age {
+                            IndexAge::New => {
+                                let width = index_spec.order.len();
+                                write!(f, "{name}: eqlog_runtime::RowsView<'a, {width}>,")
+                            }
+                            IndexAge::Old | IndexAge::All => {
+                                write!(f, "{name}: eqlog_runtime::TrieView<'a>,")
+                            }
+                        },
                     }
                 })
             })
@@ -343,6 +351,18 @@ fn display_stmt_pre<'a>(ram_stmt: &'a RamStmt, ctx: &'a RustGenCtx<'a>) -> impl 
             }
             let loop_var_set = display_set_var(loop_var_set, ctx);
             let limit = if *first_only { ".take(1)" } else { "" };
+            // Old rows come first in trie views of age all only until a
+            // removal reorders their entries.
+            let iterator = match ctx.model_mode() {
+                ModelMode::Desugared if *first_only => {
+                    let [set] = sets.as_slice() else {
+                        panic!("desugared anchors read one set")
+                    };
+                    let set = display_set_var(set, ctx);
+                    format!("{set}.oldest_restriction().into_iter()")
+                }
+                ModelMode::Native | ModelMode::Desugared => iterator.to_string(),
+            };
             writedoc! {f, "
                     #[allow(unused_variables)]
                     for

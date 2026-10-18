@@ -32,16 +32,15 @@ fn rules_accept_prepared_secondary_inputs() {
 #[cfg(feature = "desugared")]
 #[test]
 fn rules_accept_prepared_secondary_inputs() {
-    let mut ends = IndexedTable::<1>::new(&[(&[0], &[])]);
-    ends.insert([2]);
     let mut edges = IndexedTable::<2>::new(&[(&[1, 0], &[])]);
     edges.insert([1, 2]);
+    let ends = [[2]];
     let mut output = Vec::new();
     let env = BackwardStepEnv {
         phantom: std::marker::PhantomData,
-        end_old_order_0: TrieView::empty(),
-        end_new_order_0: ends.view(0, 0, u32::MAX),
-        edge_new_order_0_1: TrieView::empty(),
+        end_new_order_0: RowsView::new(&ends),
+        end_all_order_0: TrieView::empty(),
+        edge_new_order_0_1: RowsView::empty(),
         edge_old_order_1_0: edges.view(0, 0, u32::MAX),
         new_backward: &mut output,
     };

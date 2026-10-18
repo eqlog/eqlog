@@ -125,12 +125,11 @@ fn query_view(
     )
 }
 
-/// Inputs and scratch tries used by one stratum.
+/// The tables and rule inputs read by one stratum.
 struct StratumInputs {
     sources: Vec<FlatInRel>,
-    // Rule input, its source position in `sources`, and for new rows the
-    // scratch trie that can hold a copy of them.
-    reads: Vec<((FlatInRel, IndexSpec), usize, Option<usize>)>,
+    // Rule input and its source position in `sources`.
+    reads: Vec<((FlatInRel, IndexSpec), usize)>,
 }
 
 fn stratum_inputs(groups: &[usize], modules: &[RamModule]) -> StratumInputs {
@@ -144,7 +143,6 @@ fn stratum_inputs(groups: &[usize], modules: &[RamModule]) -> StratumInputs {
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect();
-    let mut scratch = 0;
     let reads = reads
         .into_iter()
         .map(|(rel, index)| {
@@ -152,33 +150,10 @@ fn stratum_inputs(groups: &[usize], modules: &[RamModule]) -> StratumInputs {
                 .iter()
                 .position(|other| *other == source_relation(&rel))
                 .expect("sources contain every read relation");
-            let slot = match index.age {
-                IndexAge::New => {
-                    scratch += 1;
-                    Some(scratch - 1)
-                }
-                IndexAge::Old => None,
-            };
-            ((rel, index), source, slot)
+            ((rel, index), source)
         })
         .collect();
     StratumInputs { sources, reads }
-}
-
-fn scratch_count(program: &RamProgram) -> usize {
-    program
-        .schedule
-        .strata
-        .iter()
-        .map(|stratum| {
-            stratum_inputs(&stratum.groups, &program.modules)
-                .reads
-                .iter()
-                .filter(|(_, _, slot)| slot.is_some())
-                .count()
-        })
-        .max()
-        .unwrap_or(0)
 }
 
 pub(super) fn display_struct<'a>(
@@ -238,7 +213,6 @@ pub(super) fn display_struct<'a>(
                 __pending_delta: ModelDelta,
                 __stratum_initialized: [bool; {count}],
                 {since_fields}
-                __scratch: Vec<eqlog_runtime::Trie>,
             }}
             type Model = {name};
         "}
@@ -293,7 +267,6 @@ pub(super) fn display_new_fn<'a>(
                 format!("__since_{s}: [0; {len}],")
             })
             .join("\n");
-        let scratch = scratch_count(program);
         writedoc! {f, "
             /// Creates an empty model.
             #[allow(dead_code)]
@@ -307,7 +280,6 @@ pub(super) fn display_new_fn<'a>(
                     __pending_delta: ModelDelta::new(),
                     __stratum_initialized: [false; {count}],
                     {since}
-                    __scratch: (0..{scratch}).map(|_| eqlog_runtime::Trie::new(0)).collect(),
                 }}
             }}
         "}
@@ -354,16 +326,21 @@ pub(super) fn display_strata<'a>(
                 self.__stratum_initialized[{s}] = true;
                 self.__since_{s} = now;
             "}?;
-            for ((rel, index), source, slot) in &inputs.reads {
-                let Some(slot) = slot else {
-                    continue;
-                };
+            for (k, ((rel, index), source)) in inputs.reads.iter().enumerate() {
+                match index.age {
+                    IndexAge::New => {}
+                    IndexAge::Old | IndexAge::All => continue,
+                }
                 let field = table_field(&inputs.sources[*source], ctx);
                 let position = tables.position(rel, &index.order);
-                writeln!(
-                    f,
-                    "let copied_{slot} = since[{source}] < now[{source}] && self.{field}.fill_delta({position}, since[{source}], &mut self.__scratch[{slot}]);"
-                )?;
+                let width = index.order.len();
+                writedoc! {f, "
+                    let delta_{k}: Vec<[u32; {width}]> = if since[{source}] < now[{source}] {{
+                        self.{field}.delta::<{width}>({position}, since[{source}])
+                    }} else {{
+                        Vec::new()
+                    }};
+                "}?;
             }
             writeln!(f, "{{")?;
             for &m in &stratum.groups {
@@ -373,31 +350,25 @@ pub(super) fn display_strata<'a>(
                 writeln!(f, "let env = {env} {{ phantom: std::marker::PhantomData,")?;
                 for (rel, index) in module_env_in_rels(module) {
                     let env_field = display_index_field_name(&rel, &index, ctx);
-                    let (_, source, slot) = inputs
+                    let k = inputs
                         .reads
                         .iter()
-                        .find(|(read, _, _)| read.0 == rel && read.1 == index)
+                        .position(|(read, _)| read.0 == rel && read.1 == index)
                         .expect("stratum inputs contain module inputs");
-                    let field = table_field(&inputs.sources[*source], ctx);
+                    let source = inputs.reads[k].1;
+                    let field = table_field(&inputs.sources[source], ctx);
                     let position = tables.position(&rel, &index.order);
                     match index.age {
-                        IndexAge::Old => {
-                            writeln!(
-                                f,
-                                "{env_field}: self.{field}.view({position}, 0, since[{source}]),"
-                            )?;
-                        }
+                        IndexAge::Old => writeln!(
+                            f,
+                            "{env_field}: self.{field}.view({position}, 0, since[{source}]),"
+                        )?,
+                        IndexAge::All => writeln!(
+                            f,
+                            "{env_field}: self.{field}.view({position}, 0, u32::MAX),"
+                        )?,
                         IndexAge::New => {
-                            let slot = slot.expect("new rows have a scratch slot");
-                            writedoc! {f, "
-                                {env_field}: if since[{source}] == now[{source}] {{
-                                    eqlog_runtime::TrieView::empty()
-                                }} else if copied_{slot} {{
-                                    self.__scratch[{slot}].view_all()
-                                }} else {{
-                                    self.{field}.view({position}, since[{source}], u32::MAX)
-                                }},
-                            "}?;
+                            writeln!(f, "{env_field}: eqlog_runtime::RowsView::new(&delta_{k}),")?
                         }
                     }
                 }

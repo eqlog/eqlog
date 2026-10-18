@@ -3005,6 +3005,7 @@ impl Display for IndexAge {
         match self {
             IndexAge::New => write!(f, "new"),
             IndexAge::Old => write!(f, "old"),
+            IndexAge::All => write!(f, "all"),
         }
     }
 }

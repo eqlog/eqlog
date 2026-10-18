@@ -29,7 +29,7 @@ fn functionality_emits_a_linear_number_of_equalities_per_domain() {
     }
 }
 
-#[cfg(feature = "desugared")]
+#[cfg(all(feature = "desugared", not(feature = "naive")))]
 #[test]
 fn functionality_emits_a_linear_number_of_equalities_per_domain() {
     let mut rows = IndexedTable::<3>::new(&[(&[0, 1, 2], &[])]);
@@ -39,11 +39,12 @@ fn functionality_emits_a_linear_number_of_equalities_per_domain() {
     for result in 200..208 {
         rows.insert([10, 12, result]);
     }
+    let new = rows.delta::<3>(0, 0);
     let mut output = Vec::new();
     functionality_choose(FunctionalityChooseEnv {
         phantom: std::marker::PhantomData,
-        choose_new_order_0_1_2: rows.view(0, 0, u32::MAX),
-        choose_old_order_0_1_2: TrieView::empty(),
+        choose_new_order_0_1_2: RowsView::new(&new),
+        choose_all_order_0_1_2: rows.view(0, 0, u32::MAX),
         new_el_equalities: &mut output,
     });
     assert_eq!(output.len(), 127 + 7);

@@ -530,6 +530,23 @@ impl<'a> TrieView<'a> {
         }
     }
 
+    /// The restriction holding the oldest row, which on the last column
+    /// prefers rows a consumer has already seen.
+    #[inline]
+    pub fn oldest_restriction(&self) -> Option<(u32, TrieView<'a>)> {
+        let (level, rest) = self.levels.split_first()?;
+        if !rest.is_empty() {
+            return self.iter_restrictions().next();
+        }
+        level.nodes[self.node as usize]
+            .entries
+            .as_slice()
+            .iter()
+            .filter(|&&(_, stamp)| self.lo <= stamp && stamp < self.hi)
+            .min_by_key(|&&(_, stamp)| stamp)
+            .map(|&(key, _)| (key, TrieView::unit(self.lo, self.hi)))
+    }
+
     /// Iterates over the distinct keys of the first column together with
     /// their restrictions.
     #[inline]
@@ -566,6 +583,110 @@ impl<'a> Iterator for Restrictions<'a> {
                 return Some((key, child));
             }
         }
+    }
+}
+
+/// A window onto rows sorted in index order that share a fixed prefix.
+#[derive(Clone, Copy)]
+pub struct RowsView<'a, const W: usize> {
+    rows: &'a [[u32; W]],
+    depth: usize,
+}
+
+impl<const W: usize> Default for RowsView<'_, W> {
+    #[inline]
+    fn default() -> Self {
+        RowsView::empty()
+    }
+}
+
+impl<'a, const W: usize> RowsView<'a, W> {
+    /// Views sorted rows; see [`Table::delta`].
+    #[inline]
+    pub fn new(rows: &'a [[u32; W]]) -> Self {
+        debug_assert!(rows.windows(2).all(|pair| pair[0] < pair[1]));
+        RowsView { rows, depth: 0 }
+    }
+
+    #[inline]
+    pub fn empty() -> Self {
+        RowsView {
+            rows: &[],
+            depth: W,
+        }
+    }
+
+    /// Restricts the first remaining column to `key`.
+    #[inline]
+    pub fn get(&self, key: u32) -> Option<RowsView<'a, W>> {
+        let depth = self.depth;
+        if depth >= W {
+            return None;
+        }
+        let start = self.rows.partition_point(|row| row[depth] < key);
+        let len = self.rows[start..].partition_point(|row| row[depth] == key);
+        (len > 0).then(|| RowsView {
+            rows: &self.rows[start..start + len],
+            depth: depth + 1,
+        })
+    }
+
+    #[inline]
+    pub fn contains(&self, key: u32) -> bool {
+        self.get(key).is_some()
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.rows.is_empty()
+    }
+
+    /// An upper bound on the number of distinct keys in the first column.
+    #[inline]
+    pub fn len_upper_bound(&self) -> usize {
+        self.rows.len()
+    }
+
+    #[inline]
+    pub fn iter_restrictions(&self) -> RowsRestrictions<'a, W> {
+        RowsRestrictions {
+            rows: if self.depth < W { self.rows } else { &[] },
+            depth: self.depth,
+        }
+    }
+
+    /// Every row is new, so any restriction is as old as another.
+    #[inline]
+    pub fn oldest_restriction(&self) -> Option<(u32, RowsView<'a, W>)> {
+        self.iter_restrictions().next()
+    }
+}
+
+pub struct RowsRestrictions<'a, const W: usize> {
+    rows: &'a [[u32; W]],
+    depth: usize,
+}
+
+impl<'a, const W: usize> Iterator for RowsRestrictions<'a, W> {
+    type Item = (u32, RowsView<'a, W>);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        let depth = self.depth;
+        let key = self.rows.first()?[depth];
+        let len = self.rows[1..]
+            .iter()
+            .position(|row| row[depth] != key)
+            .map_or(self.rows.len(), |pos| pos + 1);
+        let (group, rest) = self.rows.split_at(len);
+        self.rows = rest;
+        Some((
+            key,
+            RowsView {
+                rows: group,
+                depth: depth + 1,
+            },
+        ))
     }
 }
 
@@ -691,25 +812,21 @@ impl<const N: usize> Table<N> {
         self.indices[index].trie.view(lo, hi)
     }
 
-    /// Prepares the rows stamped at or after `since` for reading through the
-    /// given index. Returns true if they were copied into `scratch`; otherwise
-    /// they should be read from the table's index directly.
+    /// The rows stamped at or after `since`, through the given index of
+    /// width `W`, sorted for reading with a [`RowsView`].
     #[inline(never)]
-    pub fn fill_delta(&self, index: usize, since: u32, scratch: &mut Trie) -> bool {
-        let candidates = self.log.len() - since as usize;
-        // Scanning a large index for few new rows would cost more than copying.
-        if since == 0 || candidates.saturating_mul(4) >= self.live.len() {
-            return false;
-        }
+    pub fn delta<const W: usize>(&self, index: usize, since: u32) -> Vec<[u32; W]> {
         let index = &self.indices[index];
-        scratch.reset(index.columns.len());
+        assert_eq!(index.columns.len(), W, "delta width must match the index");
+        let mut rows = Vec::new();
         let mut key = [0u32; MAX_ARITY];
         for (row, stamp) in self.log[since as usize..].iter().zip(since..) {
             if self.live.get(row) == Some(&stamp) && index.project(row, &mut key) {
-                scratch.insert(&key[..index.columns.len()], stamp);
+                rows.push(key[..W].try_into().unwrap());
             }
         }
-        true
+        rows.sort_unstable();
+        rows
     }
 
     /// All rows, sorted, for deterministic public iteration.
@@ -807,19 +924,18 @@ mod tests {
             rows(table.view(1, 0, u32::MAX), 2),
             BTreeSet::from([vec![5, 2]])
         );
-        let mut scratch = Trie::new(0);
         assert!(table.changed_since(seen));
         assert!(!table.changed_since(table.log_len()));
-        let copied = table.fill_delta(0, seen, &mut scratch);
-        let delta = if copied {
-            scratch.view_all()
-        } else {
-            table.view(0, seen, u32::MAX)
-        };
-        assert_eq!(
-            rows(delta, 3),
-            BTreeSet::from([vec![2, 2, 5], vec![1, 2, 6]])
-        );
+        assert_eq!(table.delta::<3>(0, seen), vec![[1, 2, 6], [2, 2, 5]]);
+        assert_eq!(table.delta::<2>(1, seen), vec![[5, 2]]);
+        let delta = table.delta::<3>(0, 0);
+        let view = RowsView::new(&delta);
+        let keys: Vec<u32> = view.iter_restrictions().map(|(key, _)| key).collect();
+        assert_eq!(keys, vec![1, 2]);
+        let restricted = view.get(1).and_then(|view| view.get(2)).unwrap();
+        let keys: Vec<u32> = restricted.iter_restrictions().map(|(key, _)| key).collect();
+        assert_eq!(keys, vec![3, 6]);
+        assert!(view.get(3).is_none());
     }
 
     #[test]
@@ -854,6 +970,19 @@ mod tests {
                     .collect()
             )
         );
+    }
+
+    #[test]
+    fn oldest_restrictions_survive_reordering_removals() {
+        let mut trie = Trie::new(1);
+        trie.insert(&[5], 0);
+        trie.insert(&[6], 1);
+        trie.insert(&[7], 2);
+        assert!(trie.remove(&[5]));
+        // Removal moved the newest key in front of the older one.
+        assert_eq!(trie.view_all().iter_restrictions().next().unwrap().0, 7);
+        assert_eq!(trie.view_all().oldest_restriction().unwrap().0, 6);
+        assert_eq!(trie.view(2, u32::MAX).oldest_restriction().unwrap().0, 7);
     }
 
     #[test]

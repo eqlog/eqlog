@@ -731,6 +731,7 @@ impl<'s> Codegen<'s> {
                         let age = match index.age {
                             IndexAge::Old => "old",
                             IndexAge::New => "new",
+                            IndexAge::All => unreachable!("native rules read ages separately"),
                         };
                         let i = self.inputs[&source_relation(&rel)];
                         if let Some(id) = native_indices::find(self.native_indices, &rel, &index) {

@@ -209,7 +209,9 @@ mod unification;
 pub mod wbtree;
 
 #[doc(hidden)]
-pub use crate::indexed::{Restrictions, Table as IndexedTable, Trie, TrieView};
+pub use crate::indexed::{
+    Restrictions, RowsRestrictions, RowsView, Table as IndexedTable, Trie, TrieView,
+};
 #[doc(hidden)]
 pub use crate::prefix_tree::{
     PrefixTree0, PrefixTree1, PrefixTree2, PrefixTree3, PrefixTree4, PrefixTree5, PrefixTree6,

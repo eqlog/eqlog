@@ -109,7 +109,7 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
         }
         // ALL scans can produce OLD suffixes under a NEW-named variable.
         let canonical_filter = indices.iter().any(|index| match index.age {
-            IndexAge::Old => true,
+            IndexAge::Old | IndexAge::All => true,
             IndexAge::New => false,
         });
         let order = &indices[0].order;
@@ -245,7 +245,7 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
                     // New results must join an old representative when one
                     // exists, or a singleton delta could select itself.
                     sets.sort_by_key(|set| match set.name.index.age {
-                        IndexAge::Old => 0,
+                        IndexAge::Old | IndexAge::All => 0,
                         IndexAge::New => 1,
                     });
                 }
@@ -307,15 +307,78 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
     }
 }
 
+/// Desugared tables answer a premise of age all through one view, so its
+/// old and new sets merge into a single set of that age.
+fn merge_all_age_sets(routine: &mut RamRoutine) {
+    let all: BTreeSet<usize> = routine
+        .flat_rule
+        .premise
+        .iter()
+        .enumerate()
+        .filter_map(|(i, stmt)| match stmt.age {
+            QueryAge::All => Some(i),
+            QueryAge::New | QueryAge::Old => None,
+        })
+        .collect();
+    let rename = |name: &mut SetVarName| {
+        if all.contains(&name.stmt_index) {
+            name.index.age = IndexAge::All;
+        }
+    };
+    let merge = |sets: &mut Vec<SetVar>| {
+        for set in sets.iter_mut() {
+            rename(&mut set.name);
+        }
+        let mut seen = BTreeSet::new();
+        sets.retain(|set| seen.insert(set.name.clone()));
+    };
+    let mut defined = BTreeSet::new();
+    let mut stmts = Vec::new();
+    for mut stmt in std::mem::take(&mut routine.stmts) {
+        match &mut stmt {
+            RamStmt::DefineSet(define) => {
+                rename(&mut define.defined_var.name);
+                match &mut define.expr {
+                    InSetExpr::GetIndex(get) => {
+                        get.index_spec = define.defined_var.name.index.clone();
+                    }
+                    InSetExpr::Restrict(restrict) => rename(&mut restrict.set.name),
+                }
+                if !defined.insert(define.defined_var.name.clone()) {
+                    continue;
+                }
+            }
+            RamStmt::Iter(iter) => {
+                merge(&mut iter.sets);
+                merge(&mut iter.lookup_drivers);
+                rename(&mut iter.loop_var_set.name);
+            }
+            RamStmt::GuardInhabited(guard) => merge(&mut guard.sets),
+            RamStmt::GuardPlan(plan) => {
+                merge(&mut plan.original);
+                merge(&mut plan.alternative);
+            }
+            RamStmt::Insert(_) => {}
+        }
+        stmts.push(stmt);
+    }
+    routine.stmts = stmts;
+}
+
 fn flat_rule_group_to_ram(
     flat_rule_group: FlatRuleGroup,
     index_selection: &IndexSelection,
+    mode: ModelMode,
 ) -> RamModule {
     let routines = flat_rule_group
         .rules
         .into_iter()
         .flat_map(|flat_rule| residual::plans(flat_rule, index_selection))
         .map(|mut routine| {
+            match mode {
+                ModelMode::Native => {}
+                ModelMode::Desugared => merge_all_age_sets(&mut routine),
+            }
             make_ram_lazy(routine.stmts.as_mut_slice());
             let parameters = routine
                 .flat_rule
@@ -344,7 +407,7 @@ pub fn flat_rule_groups_to_ram(
 ) -> RamProgram {
     let modules: Vec<_> = groups
         .into_iter()
-        .map(|group| flat_rule_group_to_ram(group, index_selection))
+        .map(|group| flat_rule_group_to_ram(group, index_selection, mode))
         .collect();
     let (preparations, model_preparations, native_indices) =
         plan_index_preparation(&modules, &schedule, index_selection, signature, mode);
