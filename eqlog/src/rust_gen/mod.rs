@@ -5,6 +5,7 @@ mod indices;
 mod native_indices;
 mod rule;
 mod stratified;
+mod transport;
 mod types;
 
 pub(crate) use context::RustGenCtx;
@@ -471,14 +472,20 @@ fn display_dependent_type_checks<'a>(
             if membership_self_type(rel) == Some(typ) {
                 continue;
             }
-            if arity_types.get(..parents.len()) != Some(parents.as_slice()) {
+            if rel.parent_columns(ctx.signature()).is_none()
+                && arity_types.get(..parents.len()) != Some(parents.as_slice())
+            {
                 continue;
             }
 
             let member = rel_args[pos].to_string();
-            let parents = rel_args[..parents.len()]
+            let columns = rel
+                .parent_columns(ctx.signature())
+                .map(|columns| columns[pos].clone())
+                .unwrap_or_else(|| (0..parents.len()).collect());
+            let parents = columns
                 .iter()
-                .map(ToString::to_string)
+                .map(|&column| rel_args[column].to_string())
                 .collect();
             let checks = display_member_parent_checks(typ, &member, parents, ctx);
             write!(f, "{checks}")?;
@@ -1481,11 +1488,74 @@ fn display_canonicalize_rel_block<'a>(
     })
 }
 
+fn inherited_rewrite_scopes(
+    rel: FlatRel,
+    index: &IndexSpec,
+    ctx: &RustGenCtx<'_>,
+) -> Option<(BTreeSet<TypeId>, BTreeSet<TypeId>)> {
+    if index.order.first() != Some(&0) {
+        return None;
+    }
+    let arity = rel.arity(ctx.signature());
+    let owner = *arity.first()?;
+    if ctx.signature().type_(owner).kind != TypeKind::Model
+        || !ctx.signature().type_(owner).parents.is_empty()
+    {
+        return None;
+    }
+    let mut members = BTreeSet::new();
+    let mut unrestricted = BTreeSet::from([owner]);
+    for (column, &typ) in arity.iter().enumerate().skip(1) {
+        if rel.column_maps_under(ctx.signature(), column, owner) {
+            members.insert(typ);
+        } else {
+            unrestricted.insert(typ);
+        }
+    }
+    (!members.is_empty()).then_some((members, unrestricted))
+}
+
 fn display_canonicalize_fn<'a>(
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
+        let shared: Vec<_> = index_selection
+            .current_indices()
+            .filter(|(rel, index)| {
+                ctx.has_shared_indices(rel) && index_selection.is_primary(rel, index)
+            })
+            .map(|(rel, index)| {
+                let relation = match rel {
+                    FlatInRel::Rel(relation) => *relation,
+                    FlatInRel::RelWithDiagonals { .. }
+                    | FlatInRel::TypeSet(_)
+                    | FlatInRel::Equality(_) => {
+                        unreachable!("only relations have shared primary indices")
+                    }
+                };
+                (rel, index, inherited_rewrite_scopes(relation, index, ctx))
+            })
+            .collect();
+        let affected_owners = FmtFn(|f| {
+            let member_types: BTreeSet<_> = shared
+                .iter()
+                .filter_map(|(_, _, scope)| scope.as_ref())
+                .flat_map(|(members, _)| members.iter().copied())
+                .collect();
+            for typ in member_types {
+                let name = display_type(typ, ctx).to_string().to_case(Snake);
+                let membership =
+                    display_element_index_field_name(FlatRel::ModelMember(typ), typ, ctx);
+                // Membership aliases disappear during owned canonicalization.
+                writedoc! {f, "
+                    let {name}_affected_owners: BTreeSet<u32> = self.{name}_uprooted.iter()
+                        .filter_map(|el| self.{membership}.get(&el.0))
+                        .flatten().map(|row| row[0]).collect();
+                "}?;
+            }
+            Ok(())
+        });
         let rel_blocks = iter_flat_rels(ctx.signature())
             .filter(|rel| rel.is_model_membership_relation())
             .chain(
@@ -1518,35 +1588,94 @@ fn display_canonicalize_fn<'a>(
             ModelMode::Native => "self.recompute_model_indices();",
             ModelMode::Desugared => "",
         };
-        let reset_inherited = FmtFn(|f| {
-            let shared: Vec<_> = index_selection
-                .current_indices()
-                .filter(|(rel, index)| {
-                    ctx.has_shared_indices(rel) && index_selection.is_primary(rel, index)
-                })
-                .collect();
+        let prune_transport = transport::prune(ctx, index_selection);
+        let canonicalize_inherited = FmtFn(|f| {
             if shared.is_empty() {
                 return Ok(());
             }
-            let changed = ctx
-                .signature()
-                .iter_types()
-                .map(|typ| {
-                    let name = display_type(typ, ctx).to_string().to_case(Snake);
-                    format!("!self.{name}_uprooted.is_empty()")
-                })
-                .join(" || ");
-            writeln!(f, "if {changed} {{")?;
-            for (rel, index) in shared {
+            let types: BTreeSet<_> = shared
+                .iter()
+                .flat_map(|(rel, _, _)| rel.arity(ctx.signature()))
+                .collect();
+            for typ in types {
+                let name = display_type(typ, ctx).to_string().to_case(Snake);
+                writedoc! {f, "
+                    let {name}_replacements: BTreeMap<u32, u32> = self.{name}_uprooted
+                        .iter().map(|&el| (el.0, self.root_{name}(el).0)).collect();
+                "}?;
+            }
+            let scoped_owners: BTreeSet<_> = shared
+                .iter()
+                .filter(|(_, _, scope)| scope.is_some())
+                .map(|(rel, _, _)| rel.arity(ctx.signature())[0])
+                .collect();
+            for owner in scoped_owners {
+                let camel = display_type(owner, ctx).to_string().to_case(UpperCamel);
+                let name = camel.to_case(Snake);
+                writedoc! {f, "
+                    let {name}_exceptional_owners: Option<BTreeSet<u32>> = self.__morphism_graph_{name}
+                        .conflicting_codomain_targets([]).map(|owners| owners.into_iter()
+                            .map(|owner| self.root_{name}({camel}(owner)).0).collect());
+                "}?;
+            }
+            for (rel, index, scope) in &shared {
                 let field = display_current_index_field_name(rel, index, ctx);
-                writeln!(f, "self.{field}_all = self.{field}_own.clone();")?;
+                let arity = rel.arity(ctx.signature());
+                let replacements = index
+                    .order
+                    .iter()
+                    .map(|&column| {
+                        let name = display_type(arity[column], ctx).to_string().to_case(Snake);
+                        format!("&{name}_replacements")
+                    })
+                    .collect_vec();
+                let relation = match rel {
+                    FlatInRel::Rel(relation) => *relation,
+                    FlatInRel::RelWithDiagonals { .. }
+                    | FlatInRel::TypeSet(_)
+                    | FlatInRel::Equality(_) => {
+                        unreachable!("only relations have shared primary indices")
+                    }
+                };
+                let invalidate = indices::invalidate(relation, index_selection, ctx);
+                let replacement_args = replacements.join(", ");
+                let mut rewrite = format!("self.{field}_all.replace_keys([{replacement_args}])");
+                if let Some((members, unrestricted)) = scope {
+                    let owner_name = display_type(arity[0], ctx).to_string().to_case(Snake);
+                    let unaffected = unrestricted
+                        .iter()
+                        .map(|&typ| {
+                            let name = display_type(typ, ctx).to_string().to_case(Snake);
+                            format!("{name}_replacements.is_empty()")
+                        })
+                        .join(" && ");
+                    let prefixes = members
+                        .iter()
+                        .map(|&typ| {
+                            let name = display_type(typ, ctx).to_string().to_case(Snake);
+                            format!("&{name}_affected_owners")
+                        })
+                        .chain(once(format!(
+                            "{owner_name}_exceptional_owners.as_ref().unwrap()"
+                        )))
+                        .join(", ");
+                    let suffix_replacements = replacements[1..].join(", ");
+                    rewrite = formatdoc! {"
+                        if {owner_name}_exceptional_owners.is_some() && {unaffected} {{
+                            self.{field}_all.replace_keys_in_prefixes(&[{prefixes}], [{suffix_replacements}])
+                        }} else {{
+                            {rewrite}
+                        }}
+                    "};
+                }
+                writedoc! {f, "
+                    if let Some(canonical) = {rewrite} {{
+                        self.{field}_all = canonical;
+                        {invalidate}
+                    }}
+                "}?;
             }
-            for rel in iter_flat_rels(ctx.signature())
-                .filter(|rel| ctx.has_shared_indices(&FlatInRel::Rel(*rel)))
-            {
-                write!(f, "{}", indices::invalidate(rel, index_selection, ctx))?;
-            }
-            writeln!(f, "}}")
+            Ok(())
         });
         writedoc! {f, "
             /// Rewrites facts using the current equality representatives without running rules.
@@ -1560,9 +1689,11 @@ fn display_canonicalize_fn<'a>(
             }}
 
             fn __canonicalize_relations(&mut self) {{
+                {affected_owners}
                 {rel_blocks}
 
-                {reset_inherited}
+                {canonicalize_inherited}
+                {prune_transport}
                 {clear_uprooted_vecs}
             }}
         "}
@@ -1750,6 +1881,7 @@ fn parent_prefix_len(rel: &FlatInRel, ctx: &RustGenCtx<'_>) -> usize {
 }
 
 fn morphism_index_column_kind(
+    rel: &FlatInRel,
     parent_model_type: TypeId,
     column_index: usize,
     prefix_len: usize,
@@ -1767,12 +1899,15 @@ fn morphism_index_column_kind(
         return MorphismIndexColumnKind::Parent;
     }
 
-    if ctx
-        .signature()
-        .type_(typ)
-        .parents
-        .contains(&parent_model_type)
-    {
+    let maps = match rel {
+        FlatInRel::Rel(rel) => {
+            rel.column_maps_under(ctx.signature(), column_index, parent_model_type)
+        }
+        FlatInRel::RelWithDiagonals { .. } | FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => {
+            unreachable!("morphism indices use full member relations")
+        }
+    };
+    if maps {
         return MorphismIndexColumnKind::Member(typ);
     }
 
@@ -1854,6 +1989,7 @@ fn display_morphism_index_prefix_walk<'a>(
             source_tree.clone(),
             source_tree_is_ref,
             Vec::new(),
+            None,
         );
         write!(f, "{body}")
     })
@@ -1866,6 +2002,7 @@ fn display_morphism_index_prefix_walk_from(
     source_tree: String,
     source_tree_is_ref: bool,
     target_prefix: Vec<String>,
+    driving_map: Option<usize>,
 ) -> String {
     if pos == columns.len() {
         let target_prefix = target_prefix.iter().format(", ");
@@ -1902,6 +2039,7 @@ fn display_morphism_index_prefix_walk_from(
                 subtree.clone(),
                 true,
                 target_prefix,
+                driving_map,
             );
             formatdoc! {"
                 if let Some({subtree}) = {source_tree}.get({source}) {{
@@ -1917,9 +2055,22 @@ fn display_morphism_index_prefix_walk_from(
                 pos + 1,
                 current_dim - 1,
                 subtree.clone(),
-                subtree_is_ref,
+                subtree_is_ref || driving_map == Some(pos),
                 target_prefix,
+                driving_map,
             );
+            if driving_map == Some(pos) {
+                return formatdoc! {"
+                    for ({el}, images) in map_{el}.iter_restrictions() {{
+                        let Some({subtree}) = {source_tree}.get({el}) else {{
+                            continue;
+                        }};
+                        for [mapped_{el}] in images.iter() {{
+                            {body}
+                        }}
+                    }}
+                "};
+            }
             formatdoc! {"
                 for ({el}, {subtree}) in {source_tree}.iter_restrictions() {{
                     let Some(images) = map_{el}.get({el}) else {{
@@ -1941,6 +2092,7 @@ fn display_morphism_index_prefix_walk_from(
                 subtree.clone(),
                 subtree_is_ref,
                 target_prefix,
+                driving_map,
             );
             formatdoc! {"
                 for ({el}, {subtree}) in {source_tree}.iter_restrictions() {{
@@ -1958,6 +2110,21 @@ fn display_apply_morphism_index_propagated<'a>(
     suffix_len: usize,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
+        if suffix_len == 0 {
+            assert_eq!(prefix_len, arity_len);
+            return writedoc! {f, "
+                for (row, mapped_dom_set) in propagated {{
+                    if mapped_dom_set.is_empty() {{ continue; }}
+                    if !retain_own && {index_field_name}_own.contains(row) {{
+                        {index_field_name}_own.remove(row);
+                    }}
+                    if {index_field_name}_all.contains(row) {{ continue; }}
+                    let inserted = {index_field_name}_all.insert(row);
+                    changed |= retain_own && inserted;
+                    relation_changed |= inserted;
+                }}
+            "};
+        }
         let prefix_vars = (0..prefix_len)
             .map(|i| FmtFn(move |f| write!(f, "el{i}")))
             .format(", ");
@@ -1978,9 +2145,22 @@ fn display_apply_morphism_index_propagated<'a>(
             .format("\n");
 
         let suffix_type = display_prefix_tree_type(suffix_len);
+        let target_slice = (0..prefix_len)
+            .fold(format!("Some(&{index_field_name}_all)"), |tree, i| {
+                format!("{tree}.and_then(|tree| tree.get(el{i}))")
+            });
+        let own_slice = (0..prefix_len)
+            .fold(format!("Some(&*{index_field_name}_own)"), |tree, i| {
+                format!("{tree}.and_then(|tree| tree.get(el{i}))")
+            });
         writedoc! {f, "
             for ([{prefix_vars}], mapped_dom_set) in propagated {{
                 let mapped_dom_set: {suffix_type} = mapped_dom_set;
+                if (retain_own || {own_slice}.is_none())
+                    && {target_slice}.is_some_and(|existing| mapped_dom_set.is_subset(existing))
+                {{
+                    continue;
+                }}
                 {wrap_suffix}
                 if !retain_own {{
                     {index_field_name}_own.remove_restriction(el0, &mapped_dom_set);
@@ -1989,6 +2169,7 @@ fn display_apply_morphism_index_propagated<'a>(
                     continue;
                 }}
                 changed |= retain_own && !mapped_dom_set.is_empty();
+                relation_changed |= !mapped_dom_set.is_empty();
                 {index_field_name}_all.insert_restriction(el0, mapped_dom_set);
             }}
         "}
@@ -2009,6 +2190,7 @@ fn display_morphism_components<'a>(
     prepared: bool,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
+        let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
         let ids = ctx
             .signature()
             .ids_for_model_type(typ)
@@ -2066,8 +2248,8 @@ fn display_morphism_components<'a>(
 
         if parent_len == 0 {
             writedoc! {f, "
-                let components = eqlog_runtime::morphism_components(
-                    self.{dom}(), self.{cod}(), self.{obj}(),
+                let components = self.__morphism_graph_{type_snake}.components(
+                    parents, self.{dom}(), self.{cod}(), self.{obj}(),
                 );
             "}
         } else {
@@ -2075,12 +2257,9 @@ fn display_morphism_components<'a>(
             let cod = display_tree_prefix_slice(&cod, parent_len, 2);
             let obj = display_tree_prefix_slice(&obj, parent_len, 1);
             writedoc! {f, "
-                let mut objects = {obj}.clone();
-                // Propagated endpoints can precede parent equalities. Include
-                // them in the graph without asserting additional membership.
-                for [object, _] in {dom}.iter() {{ objects.insert([object]); }}
-                for [_, object] in {cod}.iter() {{ objects.insert([object]); }}
-                let components = eqlog_runtime::morphism_components({dom}, {cod}, &objects);
+                let components = self.__morphism_graph_{type_snake}.components(
+                    parents, {dom}, {cod}, {obj},
+                );
             "}
         }
     })
@@ -2120,6 +2299,7 @@ fn display_remap_parented_index<'a>(
             .copied()
             .map(|column_index| {
                 morphism_index_column_kind(
+                    &flat_in_rel,
                     parent_model_type,
                     column_index,
                     parent_cols,
@@ -2159,12 +2339,36 @@ fn display_remap_parented_index<'a>(
             })
             .format("\n");
 
-        let collect_propagated = display_morphism_index_prefix_walk(
-            prefix_columns,
-            arity.len(),
-            format!("{index_field_name}_all"),
-            true,
-        );
+        let owner_len = ctx.signature().type_(parent_model_type).parents.len() + 1;
+        let checkpointed = index_spec
+            .order
+            .iter()
+            .take(owner_len)
+            .copied()
+            .eq(0..owner_len);
+        let target_prefix: Vec<_> = (0..owner_len - 1)
+            .map(|i| format!("parents[{i}]"))
+            .chain(once("*cod".to_string()))
+            .collect();
+        let collect_propagated = if checkpointed {
+            display_morphism_index_prefix_walk_from(
+                prefix_columns,
+                owner_len,
+                arity.len() - owner_len,
+                "source_delta".to_string(),
+                true,
+                target_prefix.clone(),
+                None,
+            )
+        } else {
+            display_morphism_index_prefix_walk(
+                prefix_columns,
+                arity.len(),
+                format!("{index_field_name}_all"),
+                true,
+            )
+            .to_string()
+        };
         let apply_propagated = display_apply_morphism_index_propagated(
             index_field_name,
             arity.len(),
@@ -2180,16 +2384,117 @@ fn display_remap_parented_index<'a>(
             }
         };
         let invalidate = indices::invalidate(relation, index_selection, ctx);
+        if !checkpointed {
+            return writedoc! {f, r#"
+                {{
+                {preparation}
+                {member_maps}
+                let {index_field_name}_all = &mut self.{index_field_name}_all;
+                let {index_field_name}_own = &mut self.{index_field_name}_own;
+                let mut propagated: Vec<([u32; {prefix_len}], {suffix_type})> = Vec::new();
+                {collect_propagated}
+                {apply_propagated}
+                {invalidate}
+                }}
+            "#};
+        }
+        let checkpoint = transport::field(&flat_in_rel, parent_model_type, ctx);
+        let key = (0..owner_len - 1)
+            .map(|i| format!("parents[{i}]"))
+            .chain(["*morph".to_string(), "*dom".to_string(), "*cod".to_string()])
+            .join(", ");
+        let source_slice = |owner: &str| {
+            (0..owner_len).fold(format!("Some(&self.{index_field_name}_all)"), |tree, i| {
+                let el = if i + 1 == owner_len {
+                    owner.to_string()
+                } else {
+                    format!("parents[{i}]")
+                };
+                format!("{tree}.and_then(|tree| tree.get({el}))")
+            })
+        };
+        let dim = arity.len() - owner_len;
+        let source_slice = format!(
+            "{}.unwrap_or_else(|| PrefixTree{dim}::empty())",
+            source_slice("*dom")
+        );
+        let maps = prefix_columns
+            .iter()
+            .enumerate()
+            .filter_map(|(i, column)| match column {
+                MorphismIndexColumnKind::Member(_) => Some(format!("map_el{i}.clone()")),
+                MorphismIndexColumnKind::OuterParent(_)
+                | MorphismIndexColumnKind::Parent
+                | MorphismIndexColumnKind::Copy => None,
+            })
+            .join(", ");
+        let map_columns: Vec<_> = prefix_columns
+            .iter()
+            .enumerate()
+            .filter_map(|(column, kind)| match kind {
+                MorphismIndexColumnKind::Member(_) => Some(column),
+                MorphismIndexColumnKind::OuterParent(_)
+                | MorphismIndexColumnKind::Parent
+                | MorphismIndexColumnKind::Copy => None,
+            })
+            .collect();
+        let collect_map_deltas = map_columns
+            .iter()
+            .enumerate()
+            .map(|(map, &column)| {
+                let collect = display_morphism_index_prefix_walk_from(
+                    prefix_columns,
+                    owner_len,
+                    arity.len() - owner_len,
+                    "source".to_owned(),
+                    true,
+                    target_prefix.clone(),
+                    Some(column),
+                );
+                let stable = if map + 1 < map_columns.len() {
+                    // Attribute a combination to its first changed map column,
+                    // so simultaneous image changes do not repeat its suffix.
+                    formatdoc! {"
+                        let stable_map_el{column} = map_el{column}.difference(&map_deltas[{map}]);
+                        let map_el{column} = &stable_map_el{column};
+                    "}
+                } else {
+                    String::new()
+                };
+                formatdoc! {"
+                    if !map_deltas[{map}].is_empty() {{
+                        let map_el{column} = &map_deltas[{map}];
+                        {collect}
+                    }}
+                    {stable}
+                "}
+            })
+            .join("\n");
         writedoc! {f, r#"
+            {{
             {preparation}
             {member_maps}
-            let mut {index_field_name}_all = self.{index_field_name}_all.clone();
+            let checkpoint_key = [{key}];
+            let source = {source_slice}.clone();
+            let (source_delta, map_deltas) = self.{checkpoint}.entry(checkpoint_key)
+                .or_insert_with(eqlog_runtime::__private::TransportCheckpoint::new)
+                .prepare(&source, &[{maps}], retain_own);
+            let maps_changed = map_deltas.iter().any(|map| !map.is_empty());
+            if !source_delta.is_empty() || maps_changed {{
+            let {index_field_name}_all = &mut self.{index_field_name}_all;
             let {index_field_name}_own = &mut self.{index_field_name}_own;
             let mut propagated: Vec<([u32; {prefix_len}], {suffix_type})> = Vec::new();
+            let source_delta = &source_delta;
             {collect_propagated}
+            if maps_changed {{
+            let source = source.difference(source_delta);
+            let source = &source;
+            {collect_map_deltas}
+            }}
             {apply_propagated}
-            self.{index_field_name}_all = {index_field_name}_all;
             {invalidate}
+            }}
+            }}
         "#}
     })
 }
@@ -2213,7 +2518,7 @@ fn display_propagate_model_morphisms_fn<'a>(
             }
             Ok(())
         });
-        let remaps = index_selection
+        let relations: Vec<_> = index_selection
             .indices
             .iter()
             .filter(|(rel, _)| ctx.has_shared_indices(rel))
@@ -2229,16 +2534,31 @@ fn display_propagate_model_morphisms_fn<'a>(
                 | FlatInRel::Equality(_)
                 | FlatInRel::TypeSet(_) => false,
             })
-            .map(|(rel, _)| {
+            .map(|(rel, _)| rel)
+            .collect();
+        let relation_count = relations.len();
+        let frontier = transport::prepare_frontier(typ, &relations, plan, ctx, index_selection);
+        let finish_frontier = transport::finish_frontier(typ, &relations, ctx, index_selection);
+        let remaps = relations
+            .iter()
+            .enumerate()
+            .map(|(relation_index, &rel)| {
                 let index = index_selection.current_primary(rel);
-                display_remap_parented_index(
+                let remap = display_remap_parented_index(
                     rel.clone(),
                     index.clone(),
                     typ,
                     ctx,
                     index_selection,
                     plan.and_then(|plan| plan.map_indices.get(&(typ, rel.clone()))),
-                )
+                );
+                formatdoc! {"
+                    if active[{relation_index}] {{
+                        let mut relation_changed = false;
+                        {remap}
+                        inserted[{relation_index}] = relation_changed;
+                    }}
+                "}
             })
             .format("\n");
 
@@ -2268,8 +2588,12 @@ fn display_propagate_model_morphisms_fn<'a>(
             ) -> bool {{
                 {prepare_graph}
                 {components}
+                {frontier}
+                if !transport_all && transport_work.iter().all(|work| work.is_empty()) {{
+                    return false;
+                }}
                 let mut changed = false;
-                for component in components {{
+                for component in components.iter() {{
                     let cyclic = !component.internal.is_empty();
                     let retain_component_own = retain_own || cyclic;
                     loop {{
@@ -2278,9 +2602,19 @@ fn display_propagate_model_morphisms_fn<'a>(
                             {children}
                         }}
                         for morphism in &component.internal {{
-                            component_changed |= self.__propagate_{type_snake}_morphism{suffix}(
-                                parents, morphism, retain_component_own,
+                            let active: [bool; {relation_count}] = std::array::from_fn(
+                                |i| transport_all || transport_work[i].needs_visit(morphism),
                             );
+                            if !active.iter().any(|&active| active) {{ continue; }}
+                            let mut inserted = [false; {relation_count}];
+                            component_changed |= self.__propagate_{type_snake}_morphism_selected{suffix}(
+                                parents, morphism, retain_component_own, &active, &mut inserted,
+                            );
+                            if !transport_all {{
+                                for (work, inserted) in transport_work.iter_mut().zip(inserted) {{
+                                    if inserted {{ work.mark_changed(morphism.cod); }}
+                                }}
+                            }}
                         }}
                         changed |= component_changed;
                         if !cyclic || !component_changed {{
@@ -2288,11 +2622,22 @@ fn display_propagate_model_morphisms_fn<'a>(
                         }}
                     }}
                     for morphism in &component.outgoing {{
-                        changed |= self.__propagate_{type_snake}_morphism{suffix}(
-                            parents, morphism, retain_own,
+                        let active: [bool; {relation_count}] = std::array::from_fn(
+                            |i| transport_all || transport_work[i].needs_visit(morphism),
                         );
+                        if !active.iter().any(|&active| active) {{ continue; }}
+                        let mut inserted = [false; {relation_count}];
+                        changed |= self.__propagate_{type_snake}_morphism_selected{suffix}(
+                            parents, morphism, retain_own, &active, &mut inserted,
+                        );
+                        if !transport_all {{
+                            for (work, inserted) in transport_work.iter_mut().zip(inserted) {{
+                                if inserted {{ work.mark_changed(morphism.cod); }}
+                            }}
+                        }}
                     }}
                 }}
+                {finish_frontier}
                 changed
             }}
 
@@ -2300,8 +2645,22 @@ fn display_propagate_model_morphisms_fn<'a>(
             fn __propagate_{type_snake}_morphism{suffix}(
                 &mut self,
                 parents: [u32; {parent_len}],
+                morphism: &MorphismWithSignature,
+                retain_own: bool,
+            ) -> bool {{
+                self.__propagate_{type_snake}_morphism_selected{suffix}(
+                    parents, morphism, retain_own, &[true; {relation_count}], &mut [false; {relation_count}],
+                )
+            }}
+
+            #[allow(unused_variables, unused_mut)]
+            fn __propagate_{type_snake}_morphism_selected{suffix}(
+                &mut self,
+                parents: [u32; {parent_len}],
                 MorphismWithSignature {{ morph, dom, cod }}: &MorphismWithSignature,
                 retain_own: bool,
+                active: &[bool; {relation_count}],
+                inserted: &mut [bool; {relation_count}],
             ) -> bool {{
                 let mut changed = false;
                 {remaps}
@@ -2354,6 +2713,7 @@ fn display_recompute_model_indices_fn<'a>(
         writedoc! {f, "
             {propagation_functions}
 
+            #[allow(dead_code)]
             fn recompute_model_indices{suffix}(&mut self) {{
                 {invalidate}
                 {propagate}
@@ -2397,6 +2757,7 @@ fn display_new_fn<'a>(
         writeln!(f, "Self {{").unwrap();
         writeln!(f, "__pending_delta: ModelDelta::new(),")?;
         write!(f, "{}", native_indices::init(native_plans))?;
+        write!(f, "{}", transport::fields(ctx, index_selection, true))?;
         write!(f, "{}", codegen.init(index_selection, ctx))?;
         for typ in ctx.signature().iter_types() {
             let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
@@ -2561,14 +2922,14 @@ fn display_define_fn<'a>(
                 format!("{outer}, parent_el")
             }
         } else {
-            assert_eq!(
-                ctx.signature().func(func).parents.as_slice(),
-                codomain_parents.as_slice()
-            );
-            func_arg_vars[..codomain_parents.len()]
-                .iter()
-                .cloned()
-                .map(display_var)
+            let columns = ctx
+                .signature()
+                .func_parent_columns(func)
+                .map(|columns| columns.last().unwrap().clone())
+                .unwrap_or_else(|| (0..codomain_parents.len()).collect());
+            columns
+                .into_iter()
+                .map(|column| display_var(func_arg_vars[column].clone()))
                 .format(", ")
                 .to_string()
         };
@@ -2805,6 +3166,7 @@ fn display_theory_struct<'a>(
             .format("\n");
 
         let scheduler_fields = FmtFn(move |f| {
+            write!(f, "{}", transport::fields(ctx, index_selection, false))?;
             write!(f, "{}", native_indices::fields(native_plans, ctx))?;
             write!(f, "{}", codegen.fields(ctx, index_selection))?;
             Ok(())

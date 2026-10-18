@@ -470,12 +470,18 @@ impl Model {
             | FunctionKind::MorphismCodomain(_)
             | FunctionKind::MorphismIdentity(_)
             | FunctionKind::MorphismComposition(_) => {
-                if !result_parents.is_empty() && result_parents != &descriptor.parents {
+                if let Some(columns) = self
+                    .signature
+                    .argument_parents(&descriptor.name, domain.len())
+                {
+                    columns.iter().map(|&column| arguments[column]).collect()
+                } else if !result_parents.is_empty() && result_parents != &descriptor.parents {
                     return Err(Error::InvalidSignature(
                         "function result has different enclosing models".into(),
                     ));
+                } else {
+                    arguments[..result_parents.len()].to_vec()
                 }
-                arguments[..result_parents.len()].to_vec()
             }
         };
         let result = self.allocate(result_type, &parents)?;
@@ -569,8 +575,13 @@ impl Model {
                 | FunctionKind::MorphismComposition(_),
             ) => None,
         };
-        for &element in tuple {
+        for (column, &element) in tuple.iter().enumerate() {
             let parents = &self.signature.type_(element.type_)?.parents;
+            if let Some(columns) = self.signature.argument_parents(&relation.name, column) {
+                let owners: Vec<_> = columns.iter().map(|&column| tuple[column]).collect();
+                self.check_membership(element, &owners)?;
+                continue;
+            }
             if membership != Some(element.type_)
                 && !parents.is_empty()
                 && relation.arity.starts_with(parents)

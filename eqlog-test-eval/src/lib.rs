@@ -1,4 +1,5 @@
 use eqlog_runtime::eqlog_mod;
+eqlog_mod!(pub dependent_signatures);
 eqlog_mod!(recursive_component);
 #[cfg(test)]
 mod recursive_component_test;

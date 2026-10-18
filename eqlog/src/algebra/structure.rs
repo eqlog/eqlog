@@ -354,7 +354,15 @@ impl Structure {
                 let Some(&arity_tid) = pred_data.arity.get(i) else {
                     break;
                 };
-                if let Some(ct) = concrete_type_at(signature, arity_tid, &app.parents) {
+                if let Some(ct) = concrete_type_at_columns(
+                    signature,
+                    arity_tid,
+                    &app.parents,
+                    &app.args,
+                    signature
+                        .pred_parent_columns(app.pred)
+                        .map(|columns| columns[app.parents.len() + i].as_slice()),
+                ) {
                     if self.impose_concrete_type(arg, ct) {
                         changed = true;
                     }
@@ -1671,7 +1679,15 @@ fn func_domain_type_at(signature: &Signature, app: &FuncApp, index: usize) -> Op
         return None;
     }
     let tid = *signature.func(app.func).domain.get(index)?;
-    concrete_type_at(signature, tid, &app.parents)
+    concrete_type_at_columns(
+        signature,
+        tid,
+        &app.parents,
+        &app.args,
+        signature
+            .func_parent_columns(app.func)
+            .map(|columns| columns[app.parents.len() + index].as_slice()),
+    )
 }
 
 /// Materialises the ordinary codomain type of `app`.
@@ -1683,13 +1699,37 @@ fn func_codomain_type_at(signature: &Signature, app: &FuncApp) -> Option<Concret
     if signature.type_for_mor_app_func(app.func).is_some() {
         return None;
     }
-    concrete_type_at(signature, signature.func(app.func).codomain, &app.parents)
+    concrete_type_at_columns(
+        signature,
+        signature.func(app.func).codomain,
+        &app.parents,
+        &app.args,
+        signature
+            .func_parent_columns(app.func)
+            .map(|columns| columns.last().unwrap().as_slice()),
+    )
 }
 
 /// Materialises the [`ConcreteType`] a given [`TypeId`] has in a relation
 /// application whose enclosing-model elements are `parents`. Returns `None`
 /// when those parents do not instantiate the type's full parent chain.
-fn concrete_type_at(signature: &Signature, tid: TypeId, parents: &[ElId]) -> Option<ConcreteType> {
+fn concrete_type_at_columns(
+    signature: &Signature,
+    tid: TypeId,
+    parents: &[ElId],
+    args: &[ElId],
+    columns: Option<&[usize]>,
+) -> Option<ConcreteType> {
+    if let Some(columns) = columns {
+        let values: Vec<_> = parents.iter().chain(args).copied().collect();
+        return Some(ConcreteType {
+            typ: tid,
+            parents: columns
+                .iter()
+                .map(|&column| values.get(column).copied())
+                .collect::<Option<_>>()?,
+        });
+    }
     let n = signature.type_(tid).parents.len();
     if n > parents.len() {
         return None;

@@ -1,0 +1,8 @@
+workload,variant,run,phase,process_seconds,cpu_user_seconds,cpu_system_seconds,peak_rss_kib,checked_declarations,contexts_before,contexts_after,morphisms_before,morphisms_after,types_before,types_after,terms_before,terms_after,graph_components,graph_largest,graph_internal,graph_outgoing,close_ns,elaboration_ns,primary_edge_visits,graph_preparations,transport_batches,transport_changed_inputs,allocation_rounds,normalization_stratum_calls,consumer_stratum_calls,canonicalize_calls,merged_roots,inherited_rewrites
+full,optimized_profile,1,initial,51.72868735799784,51.476093,0.17602399999999999,313556,52,430,430,13261,11240,47657,2547,26889,4905,397,3,116,11124,50401446294,604202927,170838,3703,6744029,509239,41,2884,777,2013,81130,1971
+nat,optimized_profile,1,initial,6.719459402000211,6.648316,0.05989,96788,31,207,207,4455,3882,14283,831,8671,1638,194,2,57,3825,6423649474,112264383,49806,1618,891757,145794,21,1228,368,809,25246,787
+nat,optimized_profile,1,no_change,,,,,,,,,,,,,,,,,,221,0,0,0,0,0,0,0,0,0,0,0
+nat,optimized_profile,1,isolated_context,,,,,,,,,,,,,,,,,,2559051,0,0,9,0,0,1,4,3,2,0,0
+nat,optimized_profile,1,isolated_equality,,,,,,,,,,,,,,,,,,2252261,0,0,4,0,0,1,1,1,2,1,1
+full,optimized_cli,1,initial,56.07737820900002,55.79294,0.19195399999999999,312972,52,,,,,,,,,,,,,,,,,,,,,,,,
+full,optimized_cli,2,initial,50.17999870300264,49.920014,0.175792,313236,52,,,,,,,,,,,,,,,,,,,,,,,,

@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::algebra::signature::{Signature, TypeId};
 use crate::flat_eqlog::{
-    infer_rule_scopes, iter_flat_rels, morphism_preservation_rules, FlatInRel, FlatOutRel,
-    FlatRuleGroup, RuleScope,
+    functionality_anchor, infer_rule_scopes, iter_flat_rels, morphism_preservation_rules,
+    FlatInRel, FlatOutRel, FlatRuleGroup, RuleScope,
 };
 use crate::options::ModelMode;
 
@@ -148,27 +148,16 @@ pub fn schedule_rule_groups(
         }
     }
     let members: Vec<_> = (0..groups.len()).collect();
-    loop {
-        let mut strata = Vec::new();
-        match schedule_scope(
-            None,
-            &members,
-            groups,
-            &dependencies,
-            signature,
-            &mut strata,
-        ) {
-            Ok(body) => return RuleSchedule { strata, body },
-            Err(fallback) => {
-                // Ambient feedback cannot be closed with one owner bound.
-                for group in fallback {
-                    for rule in &mut groups[group].rules {
-                        rule.scope = RuleScope::Global;
-                    }
-                }
-            }
-        }
-    }
+    let mut strata = Vec::new();
+    let body = schedule_scope(
+        None,
+        &members,
+        groups,
+        &dependencies,
+        signature,
+        &mut strata,
+    );
+    RuleSchedule { strata, body }
 }
 
 fn schedule_scope(
@@ -178,7 +167,7 @@ fn schedule_scope(
     dependencies: &Dependencies,
     signature: &Signature,
     strata: &mut Vec<Stratum>,
-) -> Result<Schedule, Vec<usize>> {
+) -> Schedule {
     let edges = &dependencies.edges;
     let depth = scope.map_or(0, |model| signature.type_(model).parents.len() + 1);
     let mut units = BTreeMap::new();
@@ -218,28 +207,24 @@ fn schedule_scope(
             }
         }
     }
-    let components = components(&unit_edges);
-    if scope.is_none() {
-        let mut fallback = Vec::new();
-        for component in components.iter().filter(|component| component.len() > 1) {
-            for &unit in component {
-                if units[unit].0.is_none() {
-                    continue;
-                }
-                for &source in &units[unit].1 {
-                    if edges[source].iter().any(|target| {
-                        let target = unit_of[target];
-                        target != unit && component.contains(&target)
-                    }) {
-                        fallback.push(source);
-                    }
-                }
-            }
-        }
-        if !fallback.is_empty() {
-            return Err(fallback);
+    for (unit, (model, members)) in units.iter().enumerate() {
+        if model.is_some()
+            && members.iter().any(|&group| {
+                groups[group]
+                    .rules
+                    .iter()
+                    .flat_map(|rule| &rule.conclusion)
+                    .any(|stmt| match stmt.rel {
+                        FlatOutRel::Equality(_) => true,
+                        FlatOutRel::Rel(_) | FlatOutRel::FuncDomain(_) => false,
+                    })
+            })
+        {
+            // Shared member IDs can enable joins in an owner visited earlier.
+            unit_edges[unit].push(unit);
         }
     }
+    let components = components(&unit_edges);
     let mut bodies = Vec::new();
     for component in &components {
         let recursive = component.len() > 1 || unit_edges[component[0]].contains(&component[0]);
@@ -262,7 +247,7 @@ fn schedule_scope(
                         dependencies,
                         signature,
                         strata,
-                    )?;
+                    );
                     children.push(Schedule::ModelComponents {
                         model: *model,
                         body: Box::new(body),
@@ -273,7 +258,7 @@ fn schedule_scope(
         }
         if !rules.is_empty() {
             rules.sort_unstable();
-            let stable_inputs = rules
+            let stable_inputs: BTreeSet<_> = rules
                 .iter()
                 .flat_map(|&group| dependencies.reads[group].iter())
                 .filter(|rel| recursive && !writes.contains(*rel))
@@ -291,15 +276,71 @@ fn schedule_scope(
                 })
                 .cloned()
                 .collect();
-            let id = StratumId(strata.len());
-            strata.push(Stratum {
-                groups: rules,
-                model: scope,
-                stable_inputs,
-            });
-            children.insert(0, Schedule::Rules(id));
+            let (functional, ordinary): (Vec<_>, Vec<_>) =
+                rules.iter().copied().partition(|&group| {
+                    groups[group]
+                        .rules
+                        .iter()
+                        .all(|rule| functionality_anchor(rule).is_some())
+                });
+            let functional_groups: BTreeSet<_> = functional.iter().copied().collect();
+            let partitions = if scope.is_none() && recursive && !ordinary.is_empty() {
+                let mut partitions = Vec::new();
+                if !functional.is_empty() {
+                    partitions.push((functional, true));
+                }
+                // Commit producers before the next consumer takes its snapshot.
+                partitions.extend(ordinary.into_iter().map(|group| (vec![group], false)));
+                partitions
+            } else if recursive && !functional.is_empty() && !ordinary.is_empty() {
+                vec![(functional, true), (ordinary, false)]
+            } else {
+                vec![(rules, false)]
+            };
+            let mut rule_steps = Vec::new();
+            let mut normalizer = None;
+            for (groups, normalize) in partitions {
+                let repeat = scope.is_none()
+                    && !normalize
+                    && groups.len() == 1
+                    && dependencies.edges[groups[0]].contains(&groups[0]);
+                let needs_normalization = groups.iter().any(|&group| {
+                    dependencies.edges[group]
+                        .iter()
+                        .any(|target| functional_groups.contains(target))
+                });
+                let inputs: BTreeSet<_> = groups
+                    .iter()
+                    .flat_map(|&group| &dependencies.reads[group])
+                    .cloned()
+                    .collect();
+                let id = StratumId(strata.len());
+                strata.push(Stratum {
+                    groups,
+                    model: scope,
+                    stable_inputs: stable_inputs.intersection(&inputs).cloned().collect(),
+                });
+                let rules = Schedule::Rules(id);
+                // Other joins should see canonical function results. Separate
+                // checkpoints keep their pending matches across normalization.
+                rule_steps.push(if normalize {
+                    normalizer = Some(id);
+                    Schedule::Saturate(Box::new(rules))
+                } else if repeat {
+                    let mut steps = vec![rules];
+                    if let Some(normalizer) = normalizer.filter(|_| needs_normalization) {
+                        steps.push(Schedule::Saturate(Box::new(Schedule::Rules(normalizer))));
+                    }
+                    Schedule::Saturate(Box::new(sequence(steps)))
+                } else {
+                    rules
+                });
+            }
+            children.splice(0..0, rule_steps);
         }
         let body = sequence(children);
+        // An ambient cycle repeats the owner traversal after global feedback.
+        // Its rule bodies can therefore keep their owner-bound inputs.
         bodies.push(Some(if recursive {
             Schedule::Saturate(Box::new(body))
         } else {
@@ -325,7 +366,7 @@ fn schedule_scope(
             }
         }
     }
-    Ok(order_components(&incoming, &adjacent, &mut bodies))
+    order_components(&incoming, &adjacent, &mut bodies)
 }
 
 fn sequence(mut children: Vec<Schedule>) -> Schedule {

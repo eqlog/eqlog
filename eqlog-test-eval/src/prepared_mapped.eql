@@ -1,0 +1,29 @@
+model Bundle {
+    model Fiber {
+        type El;
+        pred pair(El, El);
+        pred fixed_pair(El, El);
+        pred local_reached(El);
+        rule reverse_local {
+            if local_reached(y);
+            if pair(x, y);
+            then local_reached(x);
+        }
+    }
+}
+
+pred reached(b: Bundle, f: b.Fiber, x: f.El);
+pred fixed_reached(b: Bundle, f: b.Fiber, x: f.El);
+
+rule reverse_reachable {
+    if reached(b, f, y);
+    if f.pair(x, y);
+    then reached(b, f, x);
+    then f.pair(y, x);
+}
+
+rule fixed_reachable {
+    if fixed_reached(b, f, y);
+    if f.fixed_pair(x, y);
+    then fixed_reached(b, f, x);
+}

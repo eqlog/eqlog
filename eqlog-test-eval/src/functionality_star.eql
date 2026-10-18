@@ -1,0 +1,7 @@
+type El;
+func choose(El, El) -> El;
+
+model Container {
+    type Member;
+    func chosen(Member) -> Member;
+}

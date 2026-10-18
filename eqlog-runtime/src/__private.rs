@@ -3,6 +3,8 @@
 pub use super::data::{RelationData, RelationIndex, TypeData};
 pub use super::lazy_index::{IndexSeed, LazyIndex};
 pub use super::table::Table;
+pub use super::toposort::{MorphismGraph, MorphismGraphCache};
+pub use super::transport::{TransportCheckpoint, TransportFrontier, TransportWork};
 pub use super::versions::{RelationVersions, RelationView, SnapshotSet};
 use super::{Error, Model, RelationId, Signature, TypeId};
 

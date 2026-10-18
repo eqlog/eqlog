@@ -4,6 +4,7 @@ resolver = "2"
 members = [
   "eqlog",
   "eqlog-runtime",
+  "eqlog-ett",
   "eqlog-test-eval",
   "eqlog-test-compile",
   "eqlog-test-opt",
@@ -12,8 +13,7 @@ members = [
   # "examples/inference",
 ]
 
-# Keep examples out of workspace. It should be possible to build them without a
-# local eqlog checkout.
+# Standalone examples should build without a local eqlog checkout.
 exclude = [
   "examples/semilattice",
   "cwf-theory",

@@ -1,6 +1,62 @@
 use crate::morphism_preservation::*;
 
 #[cfg(not(feature = "desugared"))]
+use eqlog_runtime::__private::{from_parts, relation_data, type_data, RelationIndex};
+#[cfg(not(feature = "desugared"))]
+use eqlog_runtime::CompiledModel;
+
+#[cfg(not(feature = "desugared"))]
+#[test]
+fn member_equalities_canonicalize_facts_outside_declared_owners() {
+    for (roundtrip, malformed) in [(false, false), (true, false), (false, true)] {
+        let mut model = MorphismPreservation::new();
+        let a = model.new_world();
+        let b = model.new_world();
+        let c = model.new_world();
+        let x = model.new_el(a);
+        let y0 = model.new_el(b);
+        let y1 = model.new_el(b);
+        let label = model.new_ambient();
+        model.insert_tagged(a, x, label);
+        let f = model.new_world_mor();
+        model.insert_world_mor_dom(f, a);
+        model.insert_world_mor_cod(f, b);
+        model.insert_el_mor_app(f, x, y0);
+        model.insert_el_mor_app(f, x, y1);
+        model.insert_world_mor_cod(f, c);
+        if malformed {
+            let snapshot = model.to_dynamic();
+            let signature = MorphismPreservation::dynamic_signature();
+            let types = signature
+                .types()
+                .map(|(id, _)| type_data(&snapshot, id).unwrap().clone())
+                .collect();
+            let mut relations: Vec<_> = signature
+                .relations()
+                .map(|(id, _)| relation_data(&snapshot, id).unwrap().clone())
+                .collect();
+            let codomain = signature.relation_named("world_mor_cod").unwrap();
+            relations[codomain.0].rows = RelationIndex::new(2);
+            relations[codomain.0].rows.table.insert(&[f.0, c.0]);
+            let imported = from_parts(signature, types, relations).unwrap();
+            model = MorphismPreservation::from_dynamic(&imported).unwrap();
+        }
+        model.canonicalize();
+        assert_eq!(model.iter_tagged().count(), if malformed { 3 } else { 5 });
+
+        model.equate_el(b, y0, y1);
+        if roundtrip {
+            model = MorphismPreservation::from_dynamic(&model.to_dynamic()).unwrap();
+        }
+        model.canonicalize();
+        assert!(model
+            .iter_tagged()
+            .all(|(_, el, _)| model.root_el(el) == el));
+        assert_eq!(model.iter_tagged().count(), if malformed { 2 } else { 3 });
+    }
+}
+
+#[cfg(not(feature = "desugared"))]
 #[test]
 fn conflicting_endpoints_preserve_owned_support_until_equality() {
     let mut model = MorphismPreservation::new();

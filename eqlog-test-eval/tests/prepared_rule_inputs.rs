@@ -17,6 +17,7 @@ fn rules_accept_prepared_secondary_inputs() {
     let mut output = Vec::new();
     let env = BackwardStepEnv {
         phantom: std::marker::PhantomData,
+        __canonical_el: &[true; 3],
         end_old_order_0: PrefixTree1::empty(),
         end_new_order_0: &ends,
         edge_new_order_0_1: PrefixTree2::empty(),
@@ -25,4 +26,46 @@ fn rules_accept_prepared_secondary_inputs() {
     };
     backward_step(env);
     assert_eq!(output, vec![[1]]);
+}
+
+#[test]
+fn private_old_witnesses_survive_aliases_without_becoming_bound_variables() {
+    let mut starts = PrefixTree1::new();
+    starts.insert([1]);
+    let mut old_edges = PrefixTree2::new();
+    old_edges.insert([1, 2]);
+    let mut output = Vec::new();
+    private_outgoing(PrivateOutgoingEnv {
+        phantom: std::marker::PhantomData,
+        start_old_order_0: PrefixTree1::empty(),
+        start_new_order_0: &starts,
+        edge_old_order_0_1: &old_edges,
+        edge_new_order_0_1: PrefixTree2::empty(),
+        new_has_outgoing: &mut output,
+    });
+    assert_eq!(output, vec![[1]]);
+}
+
+#[test]
+fn all_age_scans_filter_aliases_at_each_bound_column() {
+    let mut old_edges = PrefixTree2::new();
+    for row in [[0, 6], [1, 2], [4, 5]] {
+        old_edges.insert(row);
+    }
+    let mut new_edges = PrefixTree2::new();
+    for row in [[1, 3], [1, 6]] {
+        new_edges.insert(row);
+    }
+    let mut output = Vec::new();
+    scan_edges(ScanEdgesEnv {
+        phantom: std::marker::PhantomData,
+        __canonical_el: &[false, true, false, true, true, true, true],
+        scan_old_order_: PrefixTree0::empty(),
+        scan_new_order_: &PrefixTree0(Some(())),
+        edge_old_order_0_1: &old_edges,
+        edge_new_order_0_1: &new_edges,
+        new_scanned: &mut output,
+    });
+    output.sort_unstable();
+    assert_eq!(output, vec![[1, 3], [1, 6], [4, 5]]);
 }

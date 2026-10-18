@@ -5,9 +5,9 @@ use itertools::Itertools;
 
 use super::indices::projection;
 use super::{
-    display_index_type, display_mor_app_map_expr, display_morphism_components,
-    display_morphism_index_prefix_walk, display_own_index_field_name, morphism_index_column_kind,
-    parent_prefix_len, MorphismIndexColumnKind, RustGenCtx,
+    display_all_index_field_name, display_index_type, display_mor_app_map_expr,
+    display_morphism_components, display_morphism_index_prefix_walk, display_own_index_field_name,
+    morphism_index_column_kind, parent_prefix_len, MorphismIndexColumnKind, RustGenCtx,
 };
 use crate::algebra::signature::TypeId;
 use crate::flat_eqlog::{FlatInRel, IndexSelection, IndexSpec};
@@ -62,8 +62,14 @@ pub(super) fn methods<'a>(
             let typ = display_index_type(&plan.rel, ctx);
             let primary = indices.current_primary(&plan.rel);
             let owned = display_own_index_field_name(&plan.rel, primary, ctx);
+            let all = display_all_index_field_name(&plan.rel, primary, ctx);
             let project = projection(&plan.rel, &plan.index, primary);
             writedoc! {f, "
+                fn __prepare_native_index_from_primary_{id}(&mut self) {{
+                    let index = self.__native_seed_{id}.update(&self.{all}, {project});
+                    self.__native_input_{id}.publish(&index);
+                }}
+
                 fn __prepare_native_index_{id}(&mut self) {{
                     let mut index = self.__native_seed_{id}.update(&self.{owned}, {project});
                     self.__native_{id}_model_0([], &mut index, false);
@@ -98,7 +104,7 @@ pub(super) fn methods<'a>(
                     ) -> bool {{
                         {components}
                         let mut changed = false;
-                        for component in components {{
+                        for component in components.iter() {{
                             let cyclic = !component.internal.is_empty();
                             let track_component = track_changes || cyclic;
                             loop {{
@@ -145,7 +151,14 @@ fn remap<'a>(
             .order
             .iter()
             .map(|&column| {
-                morphism_index_column_kind(model, column, parent_cols, arity[column], ctx)
+                morphism_index_column_kind(
+                    &plan.rel,
+                    model,
+                    column,
+                    parent_cols,
+                    arity[column],
+                    ctx,
+                )
             })
             .collect();
         let prefix_len = columns

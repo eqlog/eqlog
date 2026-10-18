@@ -155,6 +155,43 @@ fn digest_program(theory_name: &str, src: &str, options: &CompileOptions) -> Dig
         .into()
 }
 
+fn digest_component_inputs(config: &ComponentConfig) -> Result<Digest> {
+    let runtime_path = config.runtime_rlib_path.display();
+    let runtime = fs::read(&config.runtime_rlib_path)
+        .with_context(|| format!("Reading runtime library {runtime_path}"))?;
+    let compiler = Command::new(&config.rustc_path)
+        .arg("-vV")
+        .output()
+        .context("Reading rustc version")?;
+    if !compiler.status.success() {
+        let status = compiler.status;
+        return Err(anyhow!("Reading rustc version failed with status {status}"));
+    }
+    // Cargo can replace an rlib without changing its path. Its bytes, rather
+    // than that path or a timestamp, identify the runtime used by components.
+    Ok(Sha256::new()
+        .chain_update(Sha256::digest(&runtime))
+        .chain_update(Sha256::digest(&compiler.stdout))
+        .chain_update(Sha256::digest(
+            config.rustc_path.as_os_str().as_encoded_bytes(),
+        ))
+        .chain_update(Sha256::digest(config.opt_level.as_bytes()))
+        .chain_update([u8::from(config.debug)])
+        .finalize()
+        .into())
+}
+
+fn digest_with_component_inputs(source: Digest, inputs: Option<&Digest>) -> Digest {
+    match inputs {
+        Some(inputs) => Sha256::new()
+            .chain_update(source)
+            .chain_update(inputs)
+            .finalize()
+            .into(),
+        None => source,
+    }
+}
+
 fn component_out_dir(in_file: &Path, config: &ComponentConfig) -> PathBuf {
     config.component_out_dir.join(in_file)
 }
@@ -352,6 +389,7 @@ fn compile_component_rlib(
     component_src_path: &Path,
     component_out_dir: &Path,
     component_config: &ComponentConfig,
+    component_inputs: &Digest,
     source_content: &str,
 ) -> Result<()> {
     let component_name = component_src_path
@@ -365,7 +403,10 @@ fn compile_component_rlib(
     let digest_filename = format!("{}.digest", component_name);
     let digest_path = component_out_dir.join(digest_filename);
 
-    let digest = digest_source(component_name, source_content);
+    let digest = digest_with_component_inputs(
+        digest_source(component_name, source_content),
+        Some(component_inputs),
+    );
 
     let source_digest_matches = match fs::read(&digest_path) {
         Ok(content) => parse_digest_hex(&content) == Some(digest),
@@ -414,7 +455,7 @@ fn compile_component_rlib(
     Ok(())
 }
 
-fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
+fn process_file(in_file: &Path, config: &Config, component_inputs: Option<&Digest>) -> Result<()> {
     let module_parent = match in_file.parent() {
         None => config.out_dir.clone(),
         Some(p) => config.out_dir.join(p),
@@ -436,8 +477,10 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     let source = fs::read_to_string(config.in_dir.join(in_file))
         .with_context(|| format!("Reading file {}", in_file.display()))?;
 
-    // TODO: Build type should contribute to the source digest.
-    let src_digest = digest_program(theory_name.as_str(), source.as_str(), &config.options);
+    let src_digest = digest_with_component_inputs(
+        digest_program(theory_name.as_str(), source.as_str(), &config.options),
+        component_inputs,
+    );
     let out_digest = read_digest(in_file, config)?;
 
     if out_digest.as_ref().map(|od| od.as_slice()) == Some(src_digest.as_slice()) {
@@ -513,6 +556,14 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     let mut flat_rule_groups = flatten(&flatten_ctx, &config.options);
     let schedule =
         schedule_rule_groups(&mut flat_rule_groups, &signature, config.options.model_mode);
+    for rule in flat_rule_groups
+        .iter_mut()
+        .flat_map(|group| &mut group.rules)
+    {
+        if rule.scope.model().is_some() {
+            sort_premise(rule);
+        }
+    }
     let flat_rules_iter = flat_rule_groups.iter().flat_map(|group| group.rules.iter());
     let index_selection = select_indices(flat_rules_iter, &signature, config.options.model_mode);
 
@@ -567,6 +618,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
                 rule_out_file.as_path(),
                 component_out_dir.as_path(),
                 component_config,
+                component_inputs.expect("component builds have an input digest"),
                 &rule_lib,
             )?;
             Ok(())
@@ -759,8 +811,14 @@ pub fn process(config: &Config) -> Result<()> {
     let in_files = eqlog_files(config.in_dir.as_path())
         .with_context(|| format!("Searching for eqlog files in {}", config.in_dir.display()))?;
 
+    let component_inputs = config
+        .component_build
+        .as_ref()
+        .map(digest_component_inputs)
+        .transpose()?;
+
     for in_file in in_files {
-        process_file(in_file.as_path(), config)?;
+        process_file(in_file.as_path(), config, component_inputs.as_ref())?;
     }
 
     Ok(())

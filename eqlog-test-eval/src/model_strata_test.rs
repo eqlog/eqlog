@@ -378,3 +378,54 @@ fn outer_transport_can_change_a_previously_evaluated_child_graph() {
     assert!(m.child_reached(b, b0, x));
     assert!(!m.child_reached(a, a0, x));
 }
+
+#[test]
+fn member_equalities_revisit_other_owners_with_shared_elements() {
+    let mut m = ModelStrata::new();
+    let a = m.new_equality_scope();
+    let b = m.new_equality_scope();
+    let isolated = m.new_equality_scope();
+    let x = m.new_el(a);
+    let y = m.new_el(a);
+    let u = m.new_el(b);
+    let v = m.new_el(b);
+    let isolated_el = m.new_el(isolated);
+    m.insert_shared_left(a, x);
+    m.insert_shared_right(a, y);
+    m.insert_shared_merge(b, a, x, y);
+    m.insert_shared_left(b, u);
+    m.insert_shared_right(b, v);
+    m.insert_shared_merge(a, b, u, v);
+    m.close();
+    assert!(m.shared_match(a, x));
+    assert!(m.shared_match(b, u));
+    assert_eq!(m.iter_shared_match().count(), 2);
+    assert!(!m.shared_match(isolated, isolated_el));
+}
+
+#[test]
+fn member_equalities_make_previously_partial_transport_available() {
+    let mut m = ModelStrata::new();
+    let source = m.new_equality_scope();
+    let target = m.new_equality_scope();
+    let x = m.new_el(source);
+    let y = m.new_el(source);
+    let z = m.new_el(source);
+    let u = m.new_el(target);
+    let v = m.new_el(target);
+    let f = m.new_equality_scope_mor();
+    m.insert_equality_scope_mor_dom(f, source);
+    m.insert_equality_scope_mor_cod(f, target);
+    m.insert_el_mor_app(f, x, u);
+    m.insert_el_mor_app(f, z, v);
+    m.insert_shared_pair(source, x, y);
+    m.insert_shared_match(target, v);
+    m.close();
+    assert!(!m.shared_pair(target, u, v));
+    assert!(!m.shared_match(target, u));
+    m.insert_shared_merge(source, source, y, z);
+    m.close();
+    assert!(m.shared_pair(target, u, v));
+    assert!(m.shared_match(target, u));
+    assert!(!m.shared_pair(target, v, u));
+}

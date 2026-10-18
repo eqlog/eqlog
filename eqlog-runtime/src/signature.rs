@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::Error;
 
@@ -79,9 +79,72 @@ pub struct Signature {
     types: Vec<Type>,
     relations: Vec<Relation>,
     memberships: Vec<Option<RelationId>>,
+    argument_parents: BTreeMap<String, BTreeMap<usize, Vec<usize>>>,
 }
 
 impl Signature {
+    /// Records which earlier columns own a dependent argument or result.
+    /// Lexical model parameters remain separate: only those determine which
+    /// relations a model morphism preserves.
+    pub fn with_argument_parents(
+        mut self,
+        bindings: Vec<(RelationId, usize, Vec<usize>)>,
+    ) -> Result<Self, Error> {
+        for (relation, column, owners) in bindings {
+            let descriptor = self.relation(relation)?;
+            let Some(&typ) = descriptor.arity.get(column) else {
+                return Err(Error::InvalidSignature(
+                    "dependent column is out of range".into(),
+                ));
+            };
+            let parents = &self.type_(typ)?.parents;
+            if owners.len() != parents.len()
+                || owners.iter().zip(parents).any(|(&owner, parent)| {
+                    owner >= column || descriptor.arity.get(owner) != Some(parent)
+                })
+            {
+                return Err(Error::InvalidSignature(
+                    "invalid dependent parent columns".into(),
+                ));
+            }
+            let name = descriptor.name.clone();
+            if self
+                .argument_parents
+                .entry(name)
+                .or_default()
+                .insert(column, owners)
+                .is_some()
+            {
+                return Err(Error::InvalidSignature(
+                    "duplicate dependent parent columns".into(),
+                ));
+            }
+        }
+        for (name, bindings) in &self.argument_parents {
+            for owners in bindings.values() {
+                for (depth, &owner) in owners.iter().enumerate() {
+                    let expected = self
+                        .argument_parents(name, owner)
+                        .map(|columns| columns.to_vec())
+                        .unwrap_or_else(|| (0..depth).collect());
+                    if expected != owners[..depth] {
+                        return Err(Error::InvalidSignature(
+                            "inconsistent dependent parent chain".into(),
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(self)
+    }
+
+    pub fn argument_parents(&self, relation: &str, column: usize) -> Option<&[usize]> {
+        self.argument_parents
+            .get(relation)
+            .and_then(|bindings| bindings.get(&column))
+            .map(Vec::as_slice)
+    }
+
     /// Validates descriptors and assigns IDs by their positions in the input vectors.
     ///
     /// Names must be nonempty and unique in each namespace. Parent chains must
@@ -100,6 +163,7 @@ impl Signature {
             memberships: vec![None; types.len()],
             types,
             relations,
+            argument_parents: BTreeMap::new(),
         };
         let mut names = BTreeSet::new();
         for (id, type_) in signature.types() {

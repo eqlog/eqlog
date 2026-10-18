@@ -391,6 +391,50 @@ impl<V: Clone> Node<V> {
         (Some(balanced_node), old_value)
     }
 
+    fn update_entry<F, G, R>(
+        node: Option<Rc<Self>>,
+        key: u32,
+        default: F,
+        update: G,
+    ) -> (Rc<Self>, bool, R)
+    where
+        F: FnOnce() -> V,
+        G: FnOnce(&mut V) -> R,
+    {
+        let mut node = match node {
+            Some(node) => node,
+            None => {
+                let mut value = default();
+                let result = update(&mut value);
+                return (Rc::new(Self::new(key, value)), true, result);
+            }
+        };
+        let data = match Rc::make_mut(&mut node) {
+            Node::Data(data) => data,
+            Node::Mapping(_) => unreachable!("entry updates materialize mappings"),
+        };
+        let (inserted, result) = match key.cmp(&data.key) {
+            Ordering::Equal => (false, update(&mut data.value)),
+            Ordering::Less => {
+                let (child, inserted, result) =
+                    Self::update_entry(data.left.take(), key, default, update);
+                data.left = Some(child);
+                (inserted, result)
+            }
+            Ordering::Greater => {
+                let (child, inserted, result) =
+                    Self::update_entry(data.right.take(), key, default, update);
+                data.right = Some(child);
+                (inserted, result)
+            }
+        };
+        if inserted {
+            data.update_size_internal();
+            node = Self::balance(node);
+        }
+        (node, inserted, result)
+    }
+
     fn remove_min(mut node: Rc<Node<V>>) -> (u32, V, Option<Rc<Node<V>>>) {
         // First handle mapping nodes by recursing through them
         match node.as_ref() {
@@ -682,16 +726,18 @@ impl<V: Clone> Node<V> {
 
     // Borrow bounded portions of the right tree instead of allocating split
     // trees, which also keeps shared roots available for cancellation.
-    fn difference<F>(
+    fn difference<F, E>(
         left: Option<Rc<Node<V>>>,
         mut right: Option<&Rc<Node<V>>>,
         lower: Option<u32>,
         upper: Option<u32>,
         diff: &mut F,
         cancel_shared: bool,
+        same_value: &E,
     ) -> Option<Rc<Node<V>>>
     where
         F: FnMut(&u32, V, V) -> Option<V>,
+        E: Fn(&V, &V) -> bool,
     {
         let left = left?;
         while let Some(node) = right {
@@ -713,7 +759,10 @@ impl<V: Clone> Node<V> {
         if cancel_shared && Rc::ptr_eq(&left, right) {
             return None;
         }
-        let data = Self::unwrap_to_data(left);
+        let data = match left.as_ref() {
+            Node::Data(data) => data,
+            Node::Mapping(_) => unreachable!("set operations materialize mappings"),
+        };
         let mut candidate = Some(right);
         let mut value = None;
         while let Some(node) = candidate {
@@ -730,29 +779,139 @@ impl<V: Clone> Node<V> {
                 }
             }
         }
-        let left = Self::difference(
-            data.left,
+        let new_left = Self::difference(
+            data.left.clone(),
             Some(right),
             lower,
             Some(data.key),
             diff,
             cancel_shared,
+            same_value,
         );
-        let right = Self::difference(
-            data.right,
+        let new_right = Self::difference(
+            data.right.clone(),
             Some(right),
             Some(data.key),
             upper,
             diff,
             cancel_shared,
+            same_value,
         );
+        let matched = value.is_some();
         let value = match value {
-            Some(value) => diff(&data.key, data.value, value.clone()),
-            None => Some(data.value),
+            Some(value) => diff(&data.key, data.value.clone(), value.clone()),
+            None => Some(data.value.clone()),
         };
         match value {
-            Some(value) => Self::join(left, data.key, value, right),
-            None => match (left, right) {
+            Some(value) => {
+                let same_left = match (&new_left, &data.left) {
+                    (Some(new), Some(old)) => Rc::ptr_eq(new, old),
+                    (None, None) => true,
+                    (Some(_), None) | (None, Some(_)) => false,
+                };
+                let same_right = match (&new_right, &data.right) {
+                    (Some(new), Some(old)) => Rc::ptr_eq(new, old),
+                    (None, None) => true,
+                    (Some(_), None) | (None, Some(_)) => false,
+                };
+                if same_left && same_right && (!matched || same_value(&data.value, &value)) {
+                    Some(left)
+                } else {
+                    Self::join(new_left, data.key, value, new_right)
+                }
+            }
+            None => match (new_left, new_right) {
+                (None, tree) | (tree, None) => tree,
+                (Some(left), Some(right)) => Self::join_without_key(left, right),
+            },
+        }
+    }
+
+    fn intersection<F, E>(
+        left: Option<&Rc<Node<V>>>,
+        mut right: Option<&Rc<Node<V>>>,
+        lower: Option<u32>,
+        upper: Option<u32>,
+        intersect: &mut F,
+        same_value: &E,
+    ) -> Option<Rc<Node<V>>>
+    where
+        F: FnMut(&u32, &V, &V) -> Option<V>,
+        E: Fn(&V, &V) -> bool,
+    {
+        let left = left?;
+        while let Some(node) = right {
+            let data = match node.as_ref() {
+                Node::Data(data) => data,
+                Node::Mapping(_) => unreachable!("set operations materialize mappings"),
+            };
+            if lower.is_some_and(|lower| data.key <= lower) {
+                right = data.right.as_ref();
+            } else if upper.is_some_and(|upper| data.key >= upper) {
+                right = data.left.as_ref();
+            } else {
+                break;
+            }
+        }
+        let right = right?;
+        if Rc::ptr_eq(left, right) {
+            return Some(left.clone());
+        }
+        let data = match left.as_ref() {
+            Node::Data(data) => data,
+            Node::Mapping(_) => unreachable!("set operations materialize mappings"),
+        };
+        let mut candidate = Some(right);
+        let mut value = None;
+        while let Some(node) = candidate {
+            let other = match node.as_ref() {
+                Node::Data(other) => other,
+                Node::Mapping(_) => unreachable!("set operations materialize mappings"),
+            };
+            match data.key.cmp(&other.key) {
+                Ordering::Less => candidate = other.left.as_ref(),
+                Ordering::Greater => candidate = other.right.as_ref(),
+                Ordering::Equal => {
+                    value = intersect(&data.key, &data.value, &other.value);
+                    break;
+                }
+            }
+        }
+        let new_left = Self::intersection(
+            data.left.as_ref(),
+            Some(right),
+            lower,
+            Some(data.key),
+            intersect,
+            same_value,
+        );
+        let new_right = Self::intersection(
+            data.right.as_ref(),
+            Some(right),
+            Some(data.key),
+            upper,
+            intersect,
+            same_value,
+        );
+        match value {
+            Some(value) => {
+                let same_left = match (&new_left, &data.left) {
+                    (Some(new), Some(old)) => Rc::ptr_eq(new, old),
+                    (None, None) => true,
+                    (Some(_), None) | (None, Some(_)) => false,
+                };
+                let same_right = match (&new_right, &data.right) {
+                    (Some(new), Some(old)) => Rc::ptr_eq(new, old),
+                    (None, None) => true,
+                    (Some(_), None) | (None, Some(_)) => false,
+                };
+                if same_left && same_right && same_value(&data.value, &value) {
+                    Some(left.clone())
+                } else {
+                    Self::join(new_left, data.key, value, new_right)
+                }
+            }
+            None => match (new_left, new_right) {
                 (None, tree) | (tree, None) => tree,
                 (Some(left), Some(right)) => Self::join_without_key(left, right),
             },
@@ -767,12 +926,40 @@ impl<V: Clone> WBTreeMap<V> {
         Difference::new(self, other)
     }
 
+    /// Visits entries requiring comparison in key order until a callback returns false.
+    /// Shared subtrees are skipped; true means every callback continued.
+    pub fn all_difference_entries<'a>(
+        &'a self,
+        other: &'a Self,
+        mut visit: impl FnMut(u32, &'a V, Option<&'a V>) -> bool,
+    ) -> bool {
+        if self.has_mapping() || other.has_mapping() {
+            return self
+                .difference_entries(other)
+                .all(|(key, left, right)| visit(key, left, right));
+        }
+        difference::all(
+            self.root.as_ref(),
+            other.root.as_ref(),
+            None,
+            None,
+            &mut visit,
+        )
+    }
+
     pub(crate) fn shares_root(&self, other: &Self) -> bool {
         match (&self.root, &other.root) {
             (None, None) => true,
             (Some(left), Some(right)) => Rc::ptr_eq(left, right),
             (None, Some(_)) | (Some(_), None) => false,
         }
+    }
+
+    /// The identity remains valid while a snapshot of this root is alive.
+    pub(crate) fn root_identity(&self) -> usize {
+        self.root
+            .as_ref()
+            .map_or(0, |root| Rc::as_ptr(root) as usize)
     }
 
     pub const fn new() -> Self {
@@ -809,7 +996,34 @@ impl<V: Clone> WBTreeMap<V> {
         old_value
     }
 
+    pub(crate) fn update_entry<F, G, R>(&mut self, key: u32, default: F, update: G) -> R
+    where
+        F: FnOnce() -> V,
+        G: FnOnce(&mut V) -> R,
+    {
+        self.materialize();
+        let (root, inserted, result) = Node::update_entry(self.root.take(), key, default, update);
+        self.root = Some(root);
+        self.len += usize::from(inserted);
+        result
+    }
+
     pub fn get(&self, key: &u32) -> Option<&V> {
+        let mut current = self.root.as_deref();
+        while let Some(node) = current {
+            match node {
+                Node::Data(data_node) => match key.cmp(&data_node.key) {
+                    Ordering::Less => current = data_node.left.as_deref(),
+                    Ordering::Greater => current = data_node.right.as_deref(),
+                    Ordering::Equal => return Some(&data_node.value),
+                },
+                Node::Mapping(_) => return self.get_mapped(key),
+            }
+        }
+        None
+    }
+
+    fn get_mapped(&self, key: &u32) -> Option<&V> {
         // Accumulate mappings as we traverse
         let mut mappings: Vec<&PrefixTree2> = Vec::new();
         let mut current = &self.root;
@@ -884,6 +1098,12 @@ impl<V: Clone> WBTreeMap<V> {
         } else {
             self.len
         }
+    }
+
+    /// Includes keys filtered by lazy mappings, without traversing them.
+    #[doc(hidden)]
+    pub fn len_upper_bound(&self) -> usize {
+        self.len
     }
 
     pub fn clear(&mut self) {
@@ -1005,25 +1225,67 @@ impl<V: Clone> WBTreeMap<V> {
         }
     }
 
+    // Shared roots bypass intersect, so it must be idempotent. same_value must
+    // imply equality; retaining unchanged roots preserves version checkpoints.
+    pub(crate) fn intersection_shared<F, E>(
+        &self,
+        other: &Self,
+        mut intersect: F,
+        same_value: E,
+    ) -> Self
+    where
+        F: FnMut(&u32, &V, &V) -> Option<V>,
+        E: Fn(&V, &V) -> bool,
+    {
+        if self.shares_root(other) {
+            return self.clone();
+        }
+        if self.root.is_none() || other.root.is_none() {
+            return Self::new();
+        }
+        let mut left = self.clone();
+        let mut right = other.clone();
+        left.materialize();
+        right.materialize();
+        let root = Node::intersection(
+            left.root.as_ref(),
+            right.root.as_ref(),
+            None,
+            None,
+            &mut intersect,
+            &same_value,
+        );
+        let len = Node::size(&root);
+        Self { root, len }
+    }
+
     pub fn difference<F>(&self, other: &Self, diff: F) -> Self
     where
         F: FnMut(&u32, V, V) -> Option<V>,
     {
-        self.difference_impl(other, diff, false)
+        self.difference_impl(other, diff, false, |_, _| false)
     }
 
-    // Set subtraction cancels identical subtrees; arbitrary map callbacks need
-    // not do so, even when both inputs share every node.
-    pub(crate) fn difference_shared<F>(&self, other: &Self, diff: F) -> Self
+    // Shared roots bypass diff, so equal values must cancel without effects.
+    // same_value must imply equality; retaining unchanged roots preserves sharing.
+    pub(crate) fn difference_shared<F, E>(&self, other: &Self, diff: F, same_value: E) -> Self
     where
         F: FnMut(&u32, V, V) -> Option<V>,
+        E: Fn(&V, &V) -> bool,
     {
-        self.difference_impl(other, diff, true)
+        self.difference_impl(other, diff, true, same_value)
     }
 
-    fn difference_impl<F>(&self, other: &Self, mut diff: F, cancel_shared: bool) -> Self
+    fn difference_impl<F, E>(
+        &self,
+        other: &Self,
+        mut diff: F,
+        cancel_shared: bool,
+        same_value: E,
+    ) -> Self
     where
         F: FnMut(&u32, V, V) -> Option<V>,
+        E: Fn(&V, &V) -> bool,
     {
         if self.root.is_none() {
             return Self::new();
@@ -1045,6 +1307,7 @@ impl<V: Clone> WBTreeMap<V> {
             None,
             &mut diff,
             cancel_shared,
+            &same_value,
         );
         let new_len = Node::size(&new_root);
         WBTreeMap {
@@ -1087,77 +1350,55 @@ impl<V: Clone> WBTreeMap<V> {
     }
 }
 
-// Iterator implementation
-// We need to track pointers to DataNodes since Node is an enum
-// Each stack entry includes the accumulated mappings at that point
 pub struct Iter<'a, V: Clone> {
-    // Stack entries: (data_node, accumulated_mappings_at_this_level)
-    // TODO: We shouldn't save the full path of mappings for element in the stack.
-    // This looks like (log n)^2 complexity instead of log n.
-    // Instead, we should just maintain the current_mappings value for the current path of
-    // mappings, and `stack` should probably be `Node` instead of just `DataNode`.
-    // Then, when we pop a MappingNode from `stack`, we have to pop an element from
-    // `current_mappings` as well, but not if we pop a `DataNode`.
-    stack: Vec<(&'a DataNode<V>, Vec<&'a PrefixTree2>)>,
+    stack: Vec<(&'a DataNode<V>, usize)>,
     current: Option<&'a Option<Rc<Node<V>>>>,
-    // Current accumulated mappings (grows as we descend through mapping nodes)
     current_mappings: Vec<&'a PrefixTree2>,
 }
 
 impl<'a, V: Clone> Iter<'a, V> {
-    fn descend_left(&mut self) {
+    fn next_node(&mut self) -> Option<&'a DataNode<V>> {
         while let Some(opt_node) = self.current {
             match opt_node {
                 None => {
                     self.current = None;
-                    return;
                 }
                 Some(node) => match node.as_ref() {
                     Node::Data(data_node) => {
-                        // Push this node with a snapshot of current mappings
-                        self.stack.push((data_node, self.current_mappings.clone()));
+                        // Singleton suffixes do not need an allocated ancestor stack.
+                        if data_node.left.is_none() {
+                            self.current = Some(&data_node.right);
+                            return Some(data_node);
+                        }
+                        self.stack.push((data_node, self.current_mappings.len()));
                         self.current = Some(&data_node.left);
                     }
                     Node::Mapping(mapping_node) => {
-                        // Accumulate this mapping
                         self.current_mappings.push(&mapping_node.mapping);
                         self.current = Some(&mapping_node.child);
                     }
                 },
             }
         }
+        let (data_node, mapping_depth) = self.stack.pop()?;
+        // Descendants only append mappings, so the ancestor's prefix stays valid.
+        self.current_mappings.truncate(mapping_depth);
+        self.current = Some(&data_node.right);
+        Some(data_node)
     }
 }
 
 impl<'a, V: Clone> Iterator for Iter<'a, V> {
-    // Return owned key since we compute it by applying mappings
     type Item = (u32, &'a V);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            // First descend left as far as possible
-            self.descend_left();
-
-            // Pop from stack and return
-            if let Some((data_node, mappings)) = self.stack.pop() {
-                // Restore the mapping state for when we go right
-                self.current_mappings = mappings.clone();
-                self.current = Some(&data_node.right);
-
-                // Apply accumulated mappings to the key
-                let mapped_key = if mappings.is_empty() {
-                    Some(data_node.key)
-                } else {
-                    apply_mappings(&mappings, data_node.key)
-                };
-
-                // If key is in mapping domain, yield it; otherwise skip
-                if let Some(mk) = mapped_key {
-                    return Some((mk, &data_node.value));
-                }
-                // Key not in mapping domain, continue to next
-            } else {
-                return None;
+            let data_node = self.next_node()?;
+            if self.current_mappings.is_empty() {
+                return Some((data_node.key, &data_node.value));
+            }
+            if let Some(key) = apply_mappings(&self.current_mappings, data_node.key) {
+                return Some((key, &data_node.value));
             }
         }
     }

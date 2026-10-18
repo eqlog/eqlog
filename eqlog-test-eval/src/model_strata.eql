@@ -126,3 +126,27 @@ rule explicit_ambient_write {
     if owner.export_seed(x);
     then scope_output(owner, x);
 }
+
+model EqualityScope {
+    type El;
+    pred shared_left(El);
+    pred shared_right(El);
+    pred shared_merge(other: EqualityScope, x: other.El, y: other.El);
+    pred shared_match(El);
+    pred shared_pair(El, El);
+    rule reflect_shared {
+        if shared_merge(other, x, y);
+        then x = y;
+        then other = other;
+    }
+    rule join_shared {
+        if shared_left(x);
+        if shared_right(x);
+        then shared_match(x);
+    }
+    rule reverse_shared {
+        if shared_match(y);
+        if shared_pair(x, y);
+        then shared_match(x);
+    }
+}

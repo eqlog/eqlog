@@ -128,10 +128,15 @@ fn support_indices(
         };
         add(objects, (0..parent_len + 1).collect());
         for (column, &typ) in arity.iter().enumerate() {
-            if column < parent_len
-                || (column < parent_cols && typ == model)
-                || !signature.type_(typ).parents.contains(&model)
-            {
+            let maps = match rel {
+                FlatInRel::Rel(rel) => rel.column_maps_under(signature, column, model),
+                FlatInRel::RelWithDiagonals { .. }
+                | FlatInRel::TypeSet(_)
+                | FlatInRel::Equality(_) => {
+                    unreachable!("transport plans use full member relations")
+                }
+            };
+            if column < parent_len || (column < parent_cols && typ == model) || !maps {
                 continue;
             }
             let app = signature
@@ -231,27 +236,16 @@ pub fn plan_index_preparation(
             .iter()
             .flat_map(|&i| modules[i].input_indices())
             .collect();
-        // Canonical membership probes cannot find obsolete aliases. Iteration
-        // must filter them, or equality collapses can multiply rule matches.
-        let mut membership_only: BTreeSet<_> = inputs
+        // Iterators reject noncanonical bindings, so checkpoints can retain
+        // equality-replaced rows without materializing their intersection.
+        let membership_only: BTreeSet<_> = inputs
             .iter()
-            .filter(|(_, index)| index.age == IndexAge::Old)
             .cloned()
+            .map(|(rel, mut index)| {
+                index.age = IndexAge::Old;
+                (rel, index)
+            })
             .collect();
-        for stmt in groups
-            .iter()
-            .flat_map(|&i| &modules[i].routines)
-            .flat_map(|routine| &routine.stmts)
-        {
-            let sets = match stmt {
-                RamStmt::Iter(stmt) => &stmt.sets,
-                RamStmt::GuardInhabited(stmt) => &stmt.sets,
-                RamStmt::DefineSet(_) | RamStmt::Insert(_) => continue,
-            };
-            for set in sets.iter().filter(|set| set.arity != 0) {
-                membership_only.remove(&(set.name.rel.clone(), set.name.index.clone()));
-            }
-        }
         if model.is_some() {
             for stmt in groups
                 .iter()
@@ -266,7 +260,10 @@ pub fn plan_index_preparation(
                         }
                         FlatOutRel::Equality(_) | FlatOutRel::FuncDomain(_) => {}
                     },
-                    RamStmt::DefineSet(_) | RamStmt::Iter(_) | RamStmt::GuardInhabited(_) => {}
+                    RamStmt::DefineSet(_)
+                    | RamStmt::Iter(_)
+                    | RamStmt::GuardInhabited(_)
+                    | RamStmt::GuardPlan(_) => {}
                 }
             }
         }
@@ -308,7 +305,17 @@ pub fn plan_index_preparation(
                 let mut models = signature.type_(parent).parents.clone();
                 models.push(parent);
                 let support_indices = support_indices(rel, &models, signature, indices);
+                let owner_columns = signature.type_(parent).parents.len() + 1;
+                // Scoped consumers read only the owner slices already prepared
+                // by traversal. Replaying transport for each index duplicates
+                // that work. Copy-only indices retain shared payload trees.
+                let from_primary = (owner_columns..relation.arity(signature).len()).any(|column| {
+                    models
+                        .iter()
+                        .any(|&model| relation.column_maps_under(signature, column, model))
+                });
                 native.push(NativeIndexPreparation {
+                    from_primary,
                     rel: rel.clone(),
                     index,
                     models,
@@ -320,6 +327,7 @@ pub fn plan_index_preparation(
         }
         let prepared_support = required_native
             .iter()
+            .filter(|&&id| !native[id].from_primary)
             .flat_map(|&id| native[id].support_indices.iter().cloned())
             .collect();
         let mut propagation = propagation_plan(&inputs, signature, indices, mode);
@@ -392,6 +400,7 @@ pub fn plan_index_preparation(
             .collect();
         let stable_support = stable_native
             .iter()
+            .filter(|&&id| !native[id].from_primary)
             .flat_map(|&id| native[id].support_indices.iter().cloned())
             .collect();
         preparation
@@ -402,6 +411,7 @@ pub fn plan_index_preparation(
             .native
             .native_indices
             .iter()
+            .filter(|&&id| !native[id].from_primary)
             .flat_map(|&id| native[id].support_indices.iter().cloned())
             .collect();
         preparation.native.propagation =

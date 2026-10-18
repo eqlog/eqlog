@@ -23,6 +23,50 @@ pub use scope::*;
 pub use semi_naive::*;
 pub use sort::*;
 
+pub fn functionality_anchor(rule: &FlatRule) -> Option<&FlatVar> {
+    let [first, second] = rule.premise.as_slice() else {
+        return None;
+    };
+    let [output] = rule.conclusion.as_slice() else {
+        return None;
+    };
+    match first.rel {
+        FlatInRel::Rel(FlatRel::Func(_)) => {}
+        FlatInRel::Rel(FlatRel::Pred(_) | FlatRel::ModelMember(_))
+        | FlatInRel::RelWithDiagonals { .. }
+        | FlatInRel::TypeSet(_)
+        | FlatInRel::Equality(_) => return None,
+    }
+    match (first.age, second.age) {
+        (QueryAge::New | QueryAge::All, QueryAge::All) => {}
+        (QueryAge::Old, QueryAge::All)
+        | (QueryAge::New | QueryAge::All | QueryAge::Old, QueryAge::New | QueryAge::Old) => {
+            return None;
+        }
+    }
+    if first.rel != second.rel {
+        return None;
+    }
+    let (first_result, first_domain) = first.args.split_last()?;
+    let (second_result, second_domain) = second.args.split_last()?;
+    if first_domain != second_domain
+        || first_result == second_result
+        || first_domain.contains(first_result)
+        || first_domain.contains(second_result)
+    {
+        return None;
+    }
+    match output.rel {
+        FlatOutRel::Equality(typ) if typ == first_result.typ && typ == second_result.typ => {}
+        FlatOutRel::Equality(_) | FlatOutRel::Rel(_) | FlatOutRel::FuncDomain(_) => return None,
+    }
+    let [lhs, rhs] = output.args.as_slice() else {
+        return None;
+    };
+    ((lhs == first_result && rhs == second_result) || (lhs == second_result && rhs == first_result))
+        .then_some(second_result)
+}
+
 pub fn functionality_rule(
     func: FuncId,
     signature: &Signature,

@@ -50,10 +50,13 @@ fn collect_stmt_dependencies(
             }
             RamStmt::Iter(IterStmt {
                 sets,
+                lookup_drivers,
                 loop_var_el,
                 loop_var_set,
+                first_only: _,
+                canonical_filter: _,
             }) => {
-                for set in sets {
+                for set in sets.iter().chain(lookup_drivers) {
                     let set_def_site = *set_var_def_sites
                         .get(&set.name)
                         .expect("Variable must be defined before use");
@@ -69,11 +72,16 @@ fn collect_stmt_dependencies(
                         RamStmt::DefineSet(_) => true,
                         RamStmt::Iter(_) => true,
                         RamStmt::Insert(_) => false,
-                        RamStmt::GuardInhabited(_) => true,
+                        RamStmt::GuardInhabited(_) | RamStmt::GuardPlan(_) => true,
                     };
                     if depends_on_j {
                         dependencies.insert(j);
                     }
+                }
+            }
+            RamStmt::GuardPlan(stmt) => {
+                for set in stmt.original.iter().chain(&stmt.alternative) {
+                    dependencies.insert(set_var_def_sites[&set.name]);
                 }
             }
             RamStmt::GuardInhabited(GuardInhabitedStmt { sets }) => {
@@ -92,7 +100,7 @@ fn collect_stmt_dependencies(
 
 fn ram_stmt_cost(stmt: &RamStmt) -> usize {
     match stmt {
-        RamStmt::GuardInhabited(_) => 1,
+        RamStmt::GuardInhabited(_) | RamStmt::GuardPlan(_) => 1,
         RamStmt::Insert(_) => 2,
         RamStmt::DefineSet(DefineSetStmt { defined_var, expr }) => match expr {
             InSetExpr::GetIndex(_) => 0,
@@ -101,7 +109,13 @@ fn ram_stmt_cost(stmt: &RamStmt) -> usize {
                 Strictness::Strict => 4,
             },
         },
-        RamStmt::Iter(_) => 5,
+        RamStmt::Iter(stmt) => {
+            if stmt.first_only {
+                4
+            } else {
+                5
+            }
+        }
     }
 }
 
@@ -115,36 +129,28 @@ pub fn sort_ram_stmts(stmts: &[RamStmt], parameters: &BTreeSet<Arc<str>>) -> Vec
         }
     }
 
-    let mut open_stmts: Vec<usize> = dependencies
+    let mut open_stmts: BTreeSet<(usize, usize)> = dependencies
         .iter()
         .enumerate()
-        .filter_map(|(i, deps)| if deps.is_empty() { Some(i) } else { None })
+        .filter_map(|(i, deps)| deps.is_empty().then(|| (ram_stmt_cost(&stmts[i]), i)))
         .collect();
 
     let mut result_stmts: Vec<RamStmt> = Vec::new();
 
     while result_stmts.len() != stmts.len() {
-        assert!(
-            !open_stmts.is_empty(),
-            "The dependency graph must not contain cycles"
-        );
+        let (_, i) = open_stmts
+            .pop_first()
+            .expect("The dependency graph must not contain cycles");
+        result_stmts.push(stmts[i].clone());
 
-        let mut stmts: Vec<&RamStmt> = open_stmts.iter().copied().map(|i| &stmts[i]).collect();
-        stmts.sort_by_key(|stmt| ram_stmt_cost(*stmt));
-
-        result_stmts.extend(stmts.into_iter().cloned());
-
-        let mut new_open_stmts = Vec::new();
-        for i in open_stmts.into_iter() {
-            for j in reverse_dependencies[i].iter().copied() {
-                dependencies[j].retain(|i0| *i0 != i);
-                if dependencies[j].is_empty() {
-                    new_open_stmts.push(j);
-                }
+        // A newly enabled guard can reject this branch before another loop
+        // expands it. Reconsider priorities after every dependency is satisfied.
+        for &j in &reverse_dependencies[i] {
+            dependencies[j].remove(&i);
+            if dependencies[j].is_empty() {
+                open_stmts.insert((ram_stmt_cost(&stmts[j]), j));
             }
-            reverse_dependencies[i].clear();
         }
-        open_stmts = new_open_stmts;
     }
 
     result_stmts

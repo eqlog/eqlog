@@ -56,8 +56,11 @@ pub struct DefineSetStmt {
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct IterStmt {
     pub sets: Vec<SetVar>,
+    pub lookup_drivers: Vec<SetVar>,
     pub loop_var_el: ElVar,
     pub loop_var_set: SetVar,
+    pub first_only: bool,
+    pub canonical_filter: bool,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
@@ -72,11 +75,19 @@ pub struct GuardInhabitedStmt {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct GuardPlanStmt {
+    pub original: Vec<SetVar>,
+    pub alternative: Vec<SetVar>,
+    pub select_alternative: bool,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub enum RamStmt {
     DefineSet(DefineSetStmt),
     Iter(IterStmt),
     Insert(InsertStmt),
     GuardInhabited(GuardInhabitedStmt),
+    GuardPlan(GuardPlanStmt),
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
@@ -141,6 +152,7 @@ pub struct PropagationPlan {
 }
 
 pub struct NativeIndexPreparation {
+    pub from_primary: bool,
     pub rel: FlatInRel,
     pub index: IndexSpec,
     pub models: Vec<TypeId>,
@@ -173,7 +185,10 @@ impl RamRoutine {
                     }
                     InSetExpr::Restrict(_) => None,
                 },
-                RamStmt::Iter(_) | RamStmt::Insert(_) | RamStmt::GuardInhabited(_) => None,
+                RamStmt::Iter(_)
+                | RamStmt::Insert(_)
+                | RamStmt::GuardInhabited(_)
+                | RamStmt::GuardPlan(_) => None,
             })
             .collect()
     }

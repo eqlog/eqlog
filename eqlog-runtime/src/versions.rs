@@ -13,6 +13,9 @@ pub trait SnapshotSet: Clone {
     fn shares_root(&self, other: &Self) -> bool;
     fn is_subset(&self, other: &Self) -> bool;
     fn difference(&self, other: &Self) -> Self;
+    fn intersection(&self, other: &Self) -> Self {
+        self.difference(&self.difference(other))
+    }
     fn visit_difference(&self, other: &Self, visit: &mut impl FnMut(Self::Row));
     fn insert_row(&mut self, row: Self::Row);
     fn remove_row(&mut self, row: Self::Row);
@@ -44,6 +47,9 @@ macro_rules! snapshot_set {
                 let $left = self;
                 let $right = other;
                 $shares
+            }
+            fn intersection(&self, other: &Self) -> Self {
+                self.intersection(other)
             }
             fn difference(&self, other: &Self) -> Self {
                 self.difference(other)
@@ -131,6 +137,7 @@ pub struct RelationView<T> {
 /// Consumers advance to shared published roots, never to independently updated copies.
 pub struct RelationVersions<T, Consumer = usize> {
     current: Rc<Version<T>>,
+    equal_source: Option<T>,
     empty: Rc<Version<T>>,
     seen: BTreeMap<Consumer, Rc<Version<T>>>,
     views: BTreeMap<u64, RelationView<Option<T>>>,
@@ -146,6 +153,7 @@ impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
             empty: current.clone(),
             seen: BTreeMap::new(),
             current,
+            equal_source: None,
             views: BTreeMap::new(),
         }
     }
@@ -161,14 +169,21 @@ impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
     /// Keep supplied trees shared with storage and other consumers. Equal rebuilt
     /// trees retain the previous published root so checkpoints do not diverge.
     pub fn publish(&mut self, rows: &T) {
-        if self.current.rows.shares_root(rows) {
+        if self.current.rows.shares_root(rows)
+            || self
+                .equal_source
+                .as_ref()
+                .is_some_and(|source| source.shares_root(rows))
+        {
             return;
         }
         // Most publications add rows; check that direction first so the first
         // addition proves a change without walking the remaining edits.
         if rows.is_subset(&self.current.rows) && self.current.rows.is_subset(rows) {
+            self.equal_source = Some(rows.clone());
             return;
         }
+        self.equal_source = None;
         self.current = Rc::new(Version {
             id: self
                 .current
@@ -193,9 +208,9 @@ impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
         self.consume_view::<OLD, NEW, true>(consumer)
     }
 
-    /// When removals only replace noncanonical IDs, canonical membership probes
-    /// can share the old checkpoint without filtering equality replacements.
-    /// The caller must not enumerate the old view to bind variables.
+    /// When removals only replace noncanonical IDs, the old checkpoint can be
+    /// shared directly. Bound keys must be canonical; obsolete suffixes may
+    /// only serve as private existence witnesses.
     pub fn consume_membership<const OLD: bool, const NEW: bool>(
         &mut self,
         consumer: Consumer,
@@ -229,13 +244,9 @@ impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
         } else {
             view.old
                 .get_or_insert_with(|| {
-                    // Removing obsolete IDs is safe; replacing them by their roots here
-                    // would hide joins that only became possible after an equality.
-                    let mut old = seen.rows.clone();
-                    seen.rows.visit_difference(&self.current.rows, &mut |row| {
-                        old.remove_row(row);
-                    });
-                    old
+                    // Keep old canonical rows only: replacing removed IDs with their
+                    // roots would hide joins newly enabled by equality.
+                    seen.rows.intersection(&self.current.rows)
                 })
                 .clone()
         };

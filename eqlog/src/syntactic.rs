@@ -75,10 +75,7 @@ impl<'a> SyntacticChecker<'a> {
 
     fn check_signature_type_expr(&self, type_expr: TypeExprId) -> Check {
         match *self.ast.type_expr(type_expr) {
-            TypeExpr::Member(id) => Err(CompileError::IllegalMemberTypeExprInArgDecl {
-                location: self.ast.loc(id),
-            }),
-            TypeExpr::Ambient(_) | TypeExpr::Mor(_) => Ok(()),
+            TypeExpr::Member(_) | TypeExpr::Ambient(_) | TypeExpr::Mor(_) => Ok(()),
         }
     }
 

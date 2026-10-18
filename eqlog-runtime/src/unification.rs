@@ -5,6 +5,7 @@ use std::fmt;
 pub struct Unification<T> {
     parents: Vec<T>,
     sizes: Vec<u32>,
+    canonical: Vec<bool>,
 }
 
 impl<T: Copy + PartialEq + From<u32> + Into<u32>> Unification<T> {
@@ -12,6 +13,7 @@ impl<T: Copy + PartialEq + From<u32> + Into<u32>> Unification<T> {
         Unification {
             parents: Vec::new(),
             sizes: Vec::new(),
+            canonical: Vec::new(),
         }
     }
     pub fn root(&mut self, mut el: T) -> T {
@@ -35,16 +37,22 @@ impl<T: Copy + PartialEq + From<u32> + Into<u32>> Unification<T> {
         assert!(lhs == self.root(lhs));
         assert!(rhs == self.root(rhs));
         self.parents[lhs.into() as usize] = rhs;
+        self.canonical[lhs.into() as usize] = lhs == rhs;
     }
     pub fn increase_size_to(&mut self, new_size: usize) {
         assert!(new_size >= self.len());
         assert!((u32::MAX as usize) > new_size);
         for i in self.len()..new_size {
             self.parents.push(T::from(i as u32));
+            self.canonical.push(true);
         }
     }
     pub fn len(&self) -> usize {
         self.parents.len()
+    }
+
+    pub fn canonical_roots(&self) -> &[bool] {
+        &self.canonical
     }
 
     /// Copies the forest using another handle type, preserving all numeric IDs.
@@ -52,6 +60,7 @@ impl<T: Copy + PartialEq + From<u32> + Into<u32>> Unification<T> {
         Unification {
             parents: self.parents.iter().map(|&el| U::from(el.into())).collect(),
             sizes: self.sizes.clone(),
+            canonical: self.canonical.clone(),
         }
     }
 }

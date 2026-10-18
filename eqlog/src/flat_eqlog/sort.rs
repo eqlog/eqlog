@@ -7,8 +7,11 @@ use super::ast::*;
 struct IfStmtGoodness {
     is_equal: bool,
     age: QueryAge,
+    bounded: bool,
     new_variables: usize,
+    free_inputs: usize,
     restrained_variables: usize,
+    consumed_result: bool,
 }
 
 impl Default for IfStmtGoodness {
@@ -16,16 +19,21 @@ impl Default for IfStmtGoodness {
         IfStmtGoodness {
             is_equal: false,
             age: QueryAge::All,
+            bounded: false,
             new_variables: 0,
+            free_inputs: 0,
             restrained_variables: 0,
+            consumed_result: false,
         }
     }
 }
 
 fn cmp_age_goodness(lhs: QueryAge, rhs: QueryAge) -> std::cmp::Ordering {
-    let lhs_is_new = matches!(lhs, QueryAge::New);
-    let rhs_is_new = matches!(rhs, QueryAge::New);
-    lhs_is_new.cmp(&rhs_is_new)
+    let is_new = |age| match age {
+        QueryAge::New => true,
+        QueryAge::Old | QueryAge::All => false,
+    };
+    is_new(lhs).cmp(&is_new(rhs))
 }
 
 impl Ord for IfStmtGoodness {
@@ -34,15 +42,21 @@ impl Ord for IfStmtGoodness {
         let is_equal = self.is_equal.cmp(&other.is_equal);
         // True is better than false.
         let age_goodness = cmp_age_goodness(self.age, other.age);
+        let bounded = self.bounded.cmp(&other.bounded);
         // Smaller is better than greater.
         let new_variables = self.new_variables.cmp(&other.new_variables).reverse();
         // Greater is better than smaller.
         let restrained_variables = self.restrained_variables.cmp(&other.restrained_variables);
+        let free_inputs = self.free_inputs.cmp(&other.free_inputs).reverse();
+        let consumed_result = self.consumed_result.cmp(&other.consumed_result);
 
         is_equal
             .then(age_goodness)
-            .then(new_variables)
+            .then(bounded)
             .then(restrained_variables)
+            .then(free_inputs)
+            .then(new_variables)
+            .then(consumed_result)
     }
 }
 
@@ -106,7 +120,11 @@ fn more_restrained_variables_is_better() {
     assert!(many_vars > few_vars);
 }
 
-fn if_stmt_goodness(stmt: &FlatIfStmt, fixed_vars: &BTreeSet<FlatVar>) -> IfStmtGoodness {
+fn if_stmt_goodness(
+    stmt: &FlatIfStmt,
+    remaining: &[FlatIfStmt],
+    fixed_vars: &BTreeSet<FlatVar>,
+) -> IfStmtGoodness {
     let is_equal = match stmt.rel {
         FlatInRel::Equality(_) => true,
         FlatInRel::Rel(_) | FlatInRel::TypeSet(_) | FlatInRel::RelWithDiagonals { .. } => false,
@@ -124,23 +142,63 @@ fn if_stmt_goodness(stmt: &FlatIfStmt, fixed_vars: &BTreeSet<FlatVar>) -> IfStmt
         .unique()
         .filter(|var| fixed_vars.contains(var))
         .count();
+    let free_inputs = match &stmt.rel {
+        FlatInRel::Rel(FlatRel::Func(_)) => stmt.args[..stmt.args.len() - 1]
+            .iter()
+            .unique()
+            .filter(|var| !fixed_vars.contains(var))
+            .count(),
+        FlatInRel::Rel(FlatRel::Pred(_) | FlatRel::ModelMember(_))
+        | FlatInRel::RelWithDiagonals { .. }
+        | FlatInRel::TypeSet(_)
+        | FlatInRel::Equality(_) => new_variables,
+    };
+    // Bound domains are lookups. For remaining joins, prefer existing keys to
+    // introducing an independent range whose size is hidden by a short tuple.
+    let bounded = free_inputs == 0;
+    // Prefer a computed join key to a terminal value when both queries bind
+    // the same number of variables. Terminal values cannot constrain the join.
+    let consumed_result = match &stmt.rel {
+        FlatInRel::Rel(FlatRel::Func(_)) => stmt.args.last().is_some_and(|result| {
+            !fixed_vars.contains(result)
+                && remaining
+                    .iter()
+                    .any(|other| !std::ptr::eq(stmt, other) && other.args.contains(result))
+        }),
+        FlatInRel::Rel(FlatRel::Pred(_) | FlatRel::ModelMember(_))
+        | FlatInRel::RelWithDiagonals { .. }
+        | FlatInRel::TypeSet(_)
+        | FlatInRel::Equality(_) => false,
+    };
     IfStmtGoodness {
         is_equal,
         age,
+        bounded,
         new_variables,
+        free_inputs,
         restrained_variables,
+        consumed_result,
     }
 }
 
 fn find_best_index(stmts: &[FlatIfStmt], fixed_vars: &BTreeSet<FlatVar>) -> Option<usize> {
-    (0..stmts.len()).max_by_key(|i| if_stmt_goodness(&stmts[*i], fixed_vars))
+    (0..stmts.len()).max_by_key(|i| if_stmt_goodness(&stmts[*i], stmts, fixed_vars))
 }
 
 /// A pass that optimizes the order of [FlatIfStmt]s in the premise of a [FlatRule].
 pub fn sort_premise<'a>(rule: &mut FlatRule) {
+    sort_premise_from(rule, 0);
+}
+
+pub fn sort_premise_from(rule: &mut FlatRule, start: usize) {
     let premise = &mut rule.premise;
-    let mut fixed_vars: BTreeSet<FlatVar> = BTreeSet::new();
-    for sorted_until in 0..premise.len() {
+    let mut fixed_vars: BTreeSet<FlatVar> = rule.scope.owners().iter().cloned().collect();
+    fixed_vars.extend(
+        premise[..start]
+            .iter()
+            .flat_map(|stmt| stmt.args.iter().cloned()),
+    );
+    for sorted_until in start..premise.len() {
         let best_index = sorted_until
             + find_best_index(&premise[sorted_until..], &fixed_vars)
                 .expect("a non-empty slice of if statements should have a best element");

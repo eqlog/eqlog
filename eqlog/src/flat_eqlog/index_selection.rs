@@ -172,6 +172,34 @@ pub struct IndexSelection {
 }
 
 impl IndexSelection {
+    pub fn existing_query(&self, rel: &FlatInRel, query: &QuerySpec) -> Option<Vec<IndexSpec>> {
+        if let Some(indices) = self.queries.get(&(rel.clone(), query.clone())) {
+            return Some(indices.clone());
+        }
+        let available = self.indices.get(rel)?;
+        let ages = match query.age {
+            QueryAge::New => &[IndexAge::New][..],
+            QueryAge::Old => &[IndexAge::Old][..],
+            QueryAge::All => &[IndexAge::New, IndexAge::Old][..],
+        };
+        available.iter().find_map(|index| {
+            if !index.order[..query.projections.len()]
+                .iter()
+                .all(|column| query.projections.contains(column))
+            {
+                return None;
+            }
+            ages.iter()
+                .map(|age| {
+                    available
+                        .iter()
+                        .find(|other| other.order == index.order && other.age == *age)
+                        .cloned()
+                })
+                .collect()
+        })
+    }
+
     /// Storage has one current tree per order; ages belong to rule inputs.
     pub fn current_indices(&self) -> impl Iterator<Item = (&FlatInRel, &IndexSpec)> {
         self.indices.iter().flat_map(|(rel, indices)| {
