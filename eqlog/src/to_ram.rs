@@ -310,7 +310,7 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
 /// Desugared tables answer a premise of age all through one view, so its
 /// old and new sets merge into a single set of that age.
 fn merge_all_age_sets(routine: &mut RamRoutine) {
-    let all: BTreeSet<usize> = routine
+    let mut all: BTreeSet<usize> = routine
         .flat_rule
         .premise
         .iter()
@@ -320,6 +320,29 @@ fn merge_all_age_sets(routine: &mut RamRoutine) {
             QueryAge::New | QueryAge::Old => None,
         })
         .collect();
+    // Plan probes follow the premises; a probe of a premise of age all reads
+    // both an old and a new set.
+    let mut probe_ages: BTreeMap<usize, BTreeSet<IndexAge>> = BTreeMap::new();
+    for stmt in &routine.stmts {
+        match stmt {
+            RamStmt::DefineSet(define) => {
+                let name = &define.defined_var.name;
+                if name.stmt_index >= routine.flat_rule.premise.len() {
+                    probe_ages
+                        .entry(name.stmt_index)
+                        .or_default()
+                        .insert(name.index.age);
+                }
+            }
+            RamStmt::Iter(_)
+            | RamStmt::Insert(_)
+            | RamStmt::GuardInhabited(_)
+            | RamStmt::GuardPlan(_) => {}
+        }
+    }
+    all.extend(probe_ages.into_iter().filter_map(|(probe, ages)| {
+        (ages.contains(&IndexAge::Old) && ages.contains(&IndexAge::New)).then_some(probe)
+    }));
     let rename = |name: &mut SetVarName| {
         if all.contains(&name.stmt_index) {
             name.index.age = IndexAge::All;
