@@ -54,6 +54,7 @@
 static TAG: &'static str = concat!("EQLOG_RUNTIME_TAG_", env!("OUT_DIR"));
 
 mod data;
+mod indexed;
 mod lazy_index;
 mod model;
 mod model_hom;
@@ -207,6 +208,8 @@ mod unification;
 #[doc(hidden)]
 pub mod wbtree;
 
+#[doc(hidden)]
+pub use crate::indexed::{Restrictions, Table as IndexedTable, Trie, TrieView};
 #[doc(hidden)]
 pub use crate::prefix_tree::{
     PrefixTree0, PrefixTree1, PrefixTree2, PrefixTree3, PrefixTree4, PrefixTree5, PrefixTree6,

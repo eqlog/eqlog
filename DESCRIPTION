@@ -1,0 +1,10 @@
+Evaluate desugared models over indexed tables
+
+Desugared models now store each relation in a mutable table instead of
+persistent prefix trees. Rows are stamped with their position in the
+table's insertion log, and every rule input reads a stamp-bounded view
+of a hash trie index: a stratum's old rows are those stamped before its
+previous read and its new rows are the rest. Semi-naive evaluation thus
+needs neither snapshots nor structural set differences.
+
+Native models keep the persistent storage and morphism transport.

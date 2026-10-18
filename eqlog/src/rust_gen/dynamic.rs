@@ -10,6 +10,7 @@ use crate::flat_eqlog::{iter_flat_rels, FlatInRel, FlatRel, IndexSelection};
 use crate::fmt_util::FmtFn;
 use crate::options::ModelMode;
 
+use super::indexed::table_field;
 use super::{
     display_all_index_field_name, display_current_index_field_name,
     display_element_index_field_name, display_index_expr, display_own_index_field_name,
@@ -163,12 +164,20 @@ impl DynamicContext<'_> {
             for typ in self.ctx.signature().iter_types() {
                 let snake = self.ctx.type_name(typ).to_case(Case::Snake);
                 let rel = FlatInRel::TypeSet(typ);
-                let elements =
-                    display_index_expr(&rel, self.indices.current_primary(&rel), self.ctx);
+                let elements = match self.ctx.model_mode() {
+                    ModelMode::Native => {
+                        let index = self.indices.current_primary(&rel);
+                        format!("(*{}).clone()", display_index_expr(&rel, index, self.ctx))
+                    }
+                    ModelMode::Desugared => {
+                        let field = table_field(&rel, self.ctx);
+                        format!("PrefixTree1::from(&self.{field})")
+                    }
+                };
                 writedoc! {f, "
                     eqlog_runtime::__private::TypeData {{
                         equalities: self.{snake}_equalities.retype(),
-                        elements: (*{elements}).clone(),
+                        elements: {elements},
                         weights: self.{snake}_weights.clone(),
                         uprooted: self.{snake}_uprooted.iter().map(|el| el.0).collect(),
                     }},
@@ -183,13 +192,28 @@ impl DynamicContext<'_> {
                 )?;
 
                 let flat = FlatInRel::Rel(rel);
-                let index = self.indices.current_primary(&flat);
-                let expression = display_index_expr(&flat, index, self.ctx);
-                let order = index.order.iter().join(", ");
+                let (order, tree) = match self.ctx.model_mode() {
+                    ModelMode::Native => {
+                        let index = self.indices.current_primary(&flat);
+                        let expression = display_index_expr(&flat, index, self.ctx);
+                        (
+                            index.order.iter().join(", "),
+                            format!("(*{expression}).clone()"),
+                        )
+                    }
+                    ModelMode::Desugared => {
+                        let arity = rel.arity(self.ctx.signature()).len();
+                        let field = table_field(&flat, self.ctx);
+                        (
+                            (0..arity).join(", "),
+                            format!("PrefixTree{arity}::from(&self.{field})"),
+                        )
+                    }
+                };
                 writedoc! {f, "
                     rows: eqlog_runtime::__private::RelationIndex {{
                         order: vec![{order}],
-                        table: eqlog_runtime::__private::Table::from((*{expression}).clone()),
+                        table: eqlog_runtime::__private::Table::from({tree}),
                     }},
                 "}?;
                 writeln!(f, "}},")?;
@@ -232,11 +256,18 @@ impl DynamicContext<'_> {
                     self.indices.current_primary(&rel),
                     self.ctx,
                 );
+                let elements = match self.ctx.model_mode() {
+                    ModelMode::Native => format!("model.{elements} = data.elements.clone();"),
+                    ModelMode::Desugared => {
+                        let field = table_field(&rel, self.ctx);
+                        format!("for row in data.elements.iter() {{ model.{field}.insert(row); }}")
+                    }
+                };
                 writedoc! {f, "
                     let data = eqlog_runtime::__private::type_data(source, {type_})?;
                     model.{snake}_equalities = data.equalities.retype();
                     model.{snake}_weights = vec![0; data.equalities.len()];
-                    model.{elements} = data.elements.clone();
+                    {elements}
                     model.{snake}_uprooted = (0..data.equalities.len() as u32)
                         .filter(|&index| data.equalities.root_const(index) != index)
                         .map({camel})
@@ -247,7 +278,28 @@ impl DynamicContext<'_> {
                 .enumerate()
                 .map(|(id, rel)| (rel, id))
                 .collect();
+            match self.ctx.model_mode() {
+                ModelMode::Native => {}
+                ModelMode::Desugared => {
+                    // Rows of other relations are inserted with their element indices below.
+                    for (id, rel) in iter_flat_rels(self.ctx.signature()).enumerate() {
+                        if !rel.arity(self.ctx.signature()).is_empty() {
+                            continue;
+                        }
+                        let field = table_field(&FlatInRel::Rel(rel), self.ctx);
+                        writedoc! {f, "
+                            if eqlog_runtime::__private::relation_data(source, eqlog_runtime::RelationId({id}))?.tuples().next().is_some() {{
+                                model.{field}.insert([]);
+                            }}
+                        "}?;
+                    }
+                }
+            }
             for (flat, index) in self.indices.current_indices() {
+                match self.ctx.model_mode() {
+                    ModelMode::Native => {}
+                    ModelMode::Desugared => continue,
+                }
                 let rel = match flat {
                     FlatInRel::Rel(rel) => *rel,
                     FlatInRel::RelWithDiagonals { .. }
@@ -271,24 +323,54 @@ impl DynamicContext<'_> {
                 }
             }
             for (id, rel) in iter_flat_rels(self.ctx.signature()).enumerate() {
+                if rel.arity(self.ctx.signature()).is_empty() {
+                    continue;
+                }
+                let name = self.ctx.rel_name(rel).to_case(Case::Snake);
+                writeln!(
+                    f,
+                    "model.__import_{name}(eqlog_runtime::__private::relation_data(source, eqlog_runtime::RelationId({id}))?);"
+                )?;
+            }
+            writedoc! {f, "
+                    Ok(model)
+                }}
+            "}
+        })
+    }
+
+    fn import_helpers(&self, name: &str) -> impl Display + '_ {
+        let name = name.to_owned();
+        FmtFn(move |f| {
+            writeln!(f, "impl {name} {{")?;
+            for rel in iter_flat_rels(self.ctx.signature()) {
                 let arity = rel.arity(self.ctx.signature());
                 if arity.is_empty() {
                     continue;
                 }
                 let len = arity.len();
                 let weight = display_weight_static_name(rel, self.ctx);
+                let name = self.ctx.rel_name(rel).to_case(Case::Snake);
                 writedoc! {f, "
-                    for row in eqlog_runtime::__private::relation_data(source, eqlog_runtime::RelationId({id}))?
-                        .tuples().collect::<std::collections::BTreeSet<_>>()
+                    #[inline(never)]
+                    fn __import_{name}(&mut self, data: &eqlog_runtime::__private::RelationData) {{
+                    for row in data.tuples().collect::<std::collections::BTreeSet<_>>()
                     {{
                         let row: [u32; {len}] = row.try_into().expect(\"matching signature arity\");
                 "}?;
+                match self.ctx.model_mode() {
+                    ModelMode::Native => {}
+                    ModelMode::Desugared => {
+                        let field = table_field(&FlatInRel::Rel(rel), self.ctx);
+                        writeln!(f, "self.{field}.insert(row);")?;
+                    }
+                }
                 let mut positions: BTreeMap<TypeId, Vec<usize>> = BTreeMap::new();
                 for (i, &typ) in arity.iter().enumerate() {
                     positions.entry(typ).or_default().push(i);
                     let snake = self.ctx.type_name(typ).to_case(Case::Snake);
                     writedoc! {f, "
-                        let weight = &mut model.{snake}_weights[row[{i}] as usize];
+                        let weight = &mut self.{snake}_weights[row[{i}] as usize];
                         *weight = weight.saturating_add({weight});
                     "}?;
                 }
@@ -297,7 +379,7 @@ impl DynamicContext<'_> {
                     let values = positions.iter().map(|i| format!("row[{i}]")).join(", ");
                     writedoc! {f, "
                         for element in [{values}].into_iter().collect::<std::collections::BTreeSet<_>>() {{
-                            model.{field}.entry(element).or_default().push(row);
+                            self.{field}.entry(element).or_default().push(row);
                     "}?;
                     let is_member = match rel {
                         FlatRel::ModelMember(member) => member == typ,
@@ -308,20 +390,17 @@ impl DynamicContext<'_> {
                         let snake = self.ctx.type_name(typ).to_case(Case::Snake);
                         // Imported membership may only be recorded under an alias.
                         writedoc! {f, "
-                            let root = model.root_{snake}({camel}(element)).0;
+                            let root = self.root_{snake}({camel}(element)).0;
                             if root != element {{
-                                model.{field}.entry(root).or_default().push(row);
+                                self.{field}.entry(root).or_default().push(row);
                             }}
                         "}?;
                     }
                     writeln!(f, "}}")?;
                 }
-                writeln!(f, "}}")?;
+                writeln!(f, "}}}}")?;
             }
-            writedoc! {f, "
-                    Ok(model)
-                }}
-            "}
+            writeln!(f, "}}")
         })
     }
 
@@ -455,6 +534,7 @@ pub(super) fn display_dynamic_impl<'a>(
         let export = dynamic.export();
         let import = dynamic.import();
         let edits = dynamic.edits();
+        let import_helpers = dynamic.import_helpers(name);
         writedoc! {f, "
             #[allow(unused_mut)]
             impl eqlog_runtime::CompiledModel for {name} {{
@@ -463,6 +543,7 @@ pub(super) fn display_dynamic_impl<'a>(
                 {import}
                 {edits}
             }}
+            {import_helpers}
         "}
     })
 }

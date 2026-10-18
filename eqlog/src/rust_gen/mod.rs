@@ -1,6 +1,7 @@
 mod context;
 mod dynamic;
 mod flat_eqlog;
+mod indexed;
 mod indices;
 mod native_indices;
 mod rule;
@@ -223,26 +224,31 @@ fn display_nested_mor_app_source_parents<'a>(
         let member_rel = FlatInRel::Rel(FlatRel::ModelMember(types.member_type));
         let query = QuerySpec::member_parents(types.member_type, ctx.signature());
         let index = index_selection.current_query(&member_rel, query);
-        let parent_rows = {
-            let index_expr = display_index_expr(&member_rel, index, ctx);
-            assert_eq!(index.order[0], parent_types.len());
-            let unpack = index.order[1..]
-                .iter()
-                .map(|i| format!("parent{i}"))
-                .format(", ");
-            let parents = parent_types
-                .iter()
-                .enumerate()
-                .map(|(i, &typ)| {
-                    let type_name = display_type(typ, ctx).to_string().to_case(UpperCamel);
-                    format!("{type_name}::from(parent{i})")
-                })
-                .format(", ");
-            formatdoc! {"
+        let parent_rows = match ctx.model_mode() {
+            ModelMode::Desugared => {
+                indexed::display_member_parent_rows(types.member_type, arg, ctx)
+            }
+            ModelMode::Native => {
+                let index_expr = display_index_expr(&member_rel, index, ctx);
+                assert_eq!(index.order[0], parent_types.len());
+                let unpack = index.order[1..]
+                    .iter()
+                    .map(|i| format!("parent{i}"))
+                    .format(", ");
+                let parents = parent_types
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &typ)| {
+                        let type_name = display_type(typ, ctx).to_string().to_case(UpperCamel);
+                        format!("{type_name}::from(parent{i})")
+                    })
+                    .format(", ");
+                formatdoc! {"
                     {index_expr}.get({arg}.0).into_iter()
                         .flat_map(|rows| rows.iter())
                         .map(|[{unpack}]| ({parents}))
                 "}
+            }
         };
         let source_pattern = (0..=outer_len)
             .map(|i| format!("parent{i}"))
@@ -566,6 +572,7 @@ fn display_pub_predicate_holds_fn<'a>(
             FlatRel::Pred(_) | FlatRel::Func(_) => Ok(()),
         });
 
+        let indexed_contains = indexed::display_holds_expr(rel, ctx);
         let rel = FlatInRel::Rel(rel);
         let query = QuerySpec::one(rel.clone(), ctx.signature());
         let index = index_selection.current_query(&rel, query);
@@ -574,7 +581,10 @@ fn display_pub_predicate_holds_fn<'a>(
         let contains = if is_membership {
             format!("self.__contains_{relation_snake}({rel_args_doc})")
         } else {
-            format!("{index_expr}.contains([{row_args}])")
+            match ctx.model_mode() {
+                ModelMode::Native => format!("{index_expr}.contains([{row_args}])"),
+                ModelMode::Desugared => indexed_contains,
+            }
         };
         let membership_check = FmtFn(|f| {
             if !is_membership {
@@ -669,13 +679,27 @@ fn display_pub_function_eval_fn<'a>(
         let query_spec = QuerySpec::eval_func(func, ctx.signature());
         let flat_in_rel = FlatInRel::Rel(FlatRel::Func(func));
 
-        let index = index_selection.current_query(&flat_in_rel, query_spec);
+        let index = index_selection.current_query(&flat_in_rel, query_spec.clone());
         let index_expr = display_index_expr(&flat_in_rel, index, ctx);
         assert_eq!(*index.order.last().unwrap(), flat_dom_len);
         let gets = index.order[..flat_dom_len]
             .iter()
             .map(|i| format!("let set = set.get(arg{i}.0)?;"))
             .format("\n");
+        let lookup = match ctx.model_mode() {
+            ModelMode::Native => formatdoc! {"
+                let set = {index_expr};
+                {gets}
+                let [result] = set.iter().next()?;
+            "},
+            ModelMode::Desugared => indexed::display_eval_body(
+                rel,
+                query_spec,
+                index_selection,
+                &indexed::Tables::new(index_selection),
+                ctx,
+            ),
+        };
 
         writedoc! {f, "
             /// Evaluates `{relation_snake}({doc_args})`.
@@ -684,9 +708,7 @@ fn display_pub_function_eval_fn<'a>(
             {canonicalize}
             {dependent_checks}
 
-            let set = {index_expr};
-            {gets}
-            let [result] = set.iter().next()?;
+            {lookup}
             Some(result.into())
             }}
         "}
@@ -748,8 +770,16 @@ fn display_pub_iter_fn<'a>(
         let flat_in_rel = FlatInRel::Rel(rel);
         let query_spec = QuerySpec::all();
         let index = index_selection.current_query(&flat_in_rel, query_spec);
-        let index_expr = display_index_expr(&flat_in_rel, index, ctx);
-        let row_unpack_args = index.order.iter().map(|i| format!("arg{i}")).format(", ");
+        let (index_expr, row_unpack_args) = match ctx.model_mode() {
+            ModelMode::Native => (
+                display_index_expr(&flat_in_rel, index, ctx).to_string(),
+                index.order.iter().map(|i| format!("arg{i}")).join(", "),
+            ),
+            ModelMode::Desugared => (
+                indexed::display_iter_expr(rel, ctx),
+                (0..arity_tys.len()).map(|i| format!("arg{i}")).join(", "),
+            ),
+        };
         let row_args = arity_tys
             .iter()
             .enumerate()
@@ -900,7 +930,12 @@ fn display_pub_insert_relation<'a>(
             "}
         };
 
-        let index_inserts = display_insert_row_block(rel_args, rel, ctx, index_selection);
+        let index_inserts = match ctx.model_mode() {
+            ModelMode::Native => {
+                display_insert_row_block(rel_args, rel, ctx, index_selection).to_string()
+            }
+            ModelMode::Desugared => String::new(),
+        };
 
         let flat_rel = FlatInRel::Rel(rel);
         let index_spec = index_selection.current_primary(&flat_rel);
@@ -915,13 +950,16 @@ fn display_pub_insert_relation<'a>(
             };
             let IndexSpec { order, age: _ } = index_spec;
             let row_args = order.iter().map(|i| rel_args[*i].clone()).format(", ");
-            FmtFn(move |f| {
-                writedoc! {f, "
-                        if {index_expr}.contains([{row_args}]) {{
-                        return;
-                        }}
-                    "}
-            })
+            match ctx.model_mode() {
+                ModelMode::Native => formatdoc! {"
+                    if {index_expr}.contains([{row_args}]) {{
+                    return;
+                    }}
+                "},
+                ModelMode::Desugared => {
+                    indexed::display_insert_rows(rel, rel_args, ctx).to_string()
+                }
+            }
         };
 
         let mut type_positions: BTreeMap<TypeId, Vec<usize>> = BTreeMap::new();
@@ -961,9 +999,18 @@ fn display_pub_insert_relation<'a>(
             })
             .format("\n");
 
-        let invalidate = indices::invalidate(rel, index_selection, ctx);
+        let invalidate = match ctx.model_mode() {
+            ModelMode::Native => indices::invalidate(rel, index_selection, ctx).to_string(),
+            ModelMode::Desugared => String::new(),
+        };
         let internal_insert = ctx.internal_insert_name(rel);
         let supported_insert = ctx.supported_insert_name(rel);
+        // Inlining every relation's insertion into canonicalization and output
+        // loops produces functions that overflow LLVM's loop analysis.
+        let supported_inline = match ctx.model_mode() {
+            ModelMode::Native => "",
+            ModelMode::Desugared => "#[inline(never)]",
+        };
         let args = rel_args.iter().format(", ").to_string();
         let parent_checks = FmtFn(|f| match rel {
             FlatRel::ModelMember(typ) => {
@@ -991,6 +1038,7 @@ fn display_pub_insert_relation<'a>(
             }}
 
             #[allow(unused_variables)]
+            {supported_inline}
             fn {supported_insert}(&mut self, retain_support: bool, {rel_fn_args}) {{
                 {canonicalize}
                 {unwrap_args}
@@ -3194,21 +3242,36 @@ fn display_theory_impl<'a>(
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
     codegen: &'a stratified::Codegen<'a>,
+    tables: &'a indexed::Tables,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let ram_modules = program.modules.as_slice();
         writeln!(f, "impl {} {{", name)?;
-        write!(f, "{}", indices::accessors(index_selection, ctx))?;
-
-        let new_fn = display_new_fn(ctx, index_selection, codegen, &program.native_indices);
-        write!(f, "{}", new_fn)?;
-        writeln!(f, "")?;
+        match ctx.model_mode() {
+            ModelMode::Native => {
+                write!(f, "{}", indices::accessors(index_selection, ctx))?;
+                let new_fn = display_new_fn(ctx, index_selection, codegen, &program.native_indices);
+                write!(f, "{}", new_fn)?;
+                writeln!(f, "")?;
+            }
+            ModelMode::Desugared => {
+                write!(f, "{}", indexed::display_new_fn(ctx, tables, program))?;
+            }
+        }
 
         let close_fn = display_close_fn();
         write!(f, "{}", close_fn)?;
 
-        write!(f, "{}", codegen.methods(ram_modules, ctx, index_selection))?;
-        write!(f, "{}", codegen.close(ctx, index_selection))?;
+        match ctx.model_mode() {
+            ModelMode::Native => {
+                write!(f, "{}", codegen.methods(ram_modules, ctx, index_selection))?;
+                write!(f, "{}", codegen.close(ctx, index_selection))?;
+            }
+            ModelMode::Desugared => {
+                write!(f, "{}", indexed::display_strata(program, tables, ctx))?;
+                write!(f, "{}", indexed::display_close(program))?;
+            }
+        }
 
         for typ in ctx.signature().iter_types() {
             let iter_type_fn = display_iter_type_fn(typ, ctx, index_selection);
@@ -3297,8 +3360,15 @@ fn display_theory_impl<'a>(
             writeln!(f, "")?;
         }
 
-        let canonicalize_fn = display_canonicalize_fn(ctx, index_selection);
-        write!(f, "{canonicalize_fn}\n")?;
+        match ctx.model_mode() {
+            ModelMode::Native => {
+                let canonicalize_fn = display_canonicalize_fn(ctx, index_selection);
+                write!(f, "{canonicalize_fn}\n")?;
+            }
+            ModelMode::Desugared => {
+                write!(f, "{}\n", indexed::display_canonicalize_fn(ctx))?;
+            }
+        }
 
         match ctx.model_mode() {
             ModelMode::Native => {
@@ -3466,21 +3536,34 @@ pub fn display_module<'a>(
         write!(f, "{}", model_delta_struct)?;
 
         let codegen = stratified::Codegen::new(&program.schedule, program);
-        write!(f, "{}", codegen.loop_input_types(index_selection, ctx))?;
-        let theory_struct = display_theory_struct(
-            name,
-            ctx,
-            index_selection,
-            &codegen,
-            &program.native_indices,
-        );
-        write!(f, "{}", theory_struct)?;
+        let tables = indexed::Tables::new(index_selection);
+        match ctx.model_mode() {
+            ModelMode::Native => {
+                write!(f, "{}", codegen.loop_input_types(index_selection, ctx))?;
+                let theory_struct = display_theory_struct(
+                    name,
+                    ctx,
+                    index_selection,
+                    &codegen,
+                    &program.native_indices,
+                );
+                write!(f, "{}", theory_struct)?;
+            }
+            ModelMode::Desugared => {
+                write!(
+                    f,
+                    "{}",
+                    indexed::display_struct(name, ctx, &tables, program)
+                )?;
+            }
+        }
 
         let model_delta_impl = display_model_delta_impl(&outputs, ctx);
         write!(f, "{}", model_delta_impl)?;
         write!(f, "\n")?;
 
-        let theory_impl = display_theory_impl(name, program, ctx, index_selection, &codegen);
+        let theory_impl =
+            display_theory_impl(name, program, ctx, index_selection, &codegen, &tables);
         write!(f, "{}", theory_impl)?;
 
         let dynamic_impl = dynamic::display_dynamic_impl(name, ctx, index_selection);

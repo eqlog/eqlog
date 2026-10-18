@@ -1,6 +1,7 @@
 use crate::algebra::signature::{Signature, TypeId};
 use crate::flat_eqlog::*;
 use crate::fmt_util::*;
+use crate::options::ModelMode;
 use crate::rust_gen::flat_eqlog::display_flat_rule;
 use crate::rust_gen::*;
 use convert_case::{Case, Casing};
@@ -94,9 +95,13 @@ pub fn display_module_env_struct<'a>(
             .map(|(rel, index_spec)| {
                 FmtFn(move |f| {
                     let name = display_index_field_name(&rel, &index_spec, ctx);
-                    let typ = display_index_type(&rel, ctx);
-
-                    write!(f, "{name}: &'a {typ},")
+                    match ctx.model_mode() {
+                        ModelMode::Native => {
+                            let typ = display_index_type(&rel, ctx);
+                            write!(f, "{name}: &'a {typ},")
+                        }
+                        ModelMode::Desugared => write!(f, "{name}: eqlog_runtime::TrieView<'a>,"),
+                    }
                 })
             })
             .format("\n");
@@ -114,7 +119,12 @@ pub fn display_module_env_struct<'a>(
             .format("\n");
 
         let name = display_module_env_struct_name(ram_module);
-        let canonical = module_env_iter_types(ram_module, ctx.signature())
+        let canonical_types = match ctx.model_mode() {
+            ModelMode::Native => module_env_iter_types(ram_module, ctx.signature()),
+            // Tables only hold canonical rows.
+            ModelMode::Desugared => BTreeSet::new(),
+        };
+        let canonical = canonical_types
             .iter()
             .map(|&typ| {
                 let name = display_type(typ, ctx).to_string().to_case(Snake);
@@ -168,10 +178,15 @@ fn display_in_set_expr<'a>(expr: &'a InSetExpr, ctx: &'a RustGenCtx<'a>) -> impl
         }) => {
             let result_arity = set.arity - 1;
             let set = display_set_var(set, ctx);
-            write!(
-                f,
-                "{set}.get({first_column_var}).unwrap_or_else(|| PrefixTree{result_arity}::empty())"
-            )
+            match ctx.model_mode() {
+                ModelMode::Native => write!(
+                    f,
+                    "{set}.get({first_column_var}).unwrap_or_else(|| PrefixTree{result_arity}::empty())"
+                ),
+                ModelMode::Desugared => {
+                    write!(f, "{set}.get({first_column_var}).unwrap_or_default()")
+                }
+            }
         }
     })
 }
@@ -181,10 +196,10 @@ fn display_key_count<'a>(sets: &'a [SetVar], ctx: &'a RustGenCtx<'a>) -> impl 'a
         write!(f, "0usize")?;
         for set in sets {
             let name = display_set_var(set, ctx);
-            let count = if set.arity == 1 {
-                "set.len()"
-            } else {
-                "map.len_upper_bound()"
+            let count = match ctx.model_mode() {
+                ModelMode::Native if set.arity == 1 => "set.len()",
+                ModelMode::Native => "map.len_upper_bound()",
+                ModelMode::Desugared => "len_upper_bound()",
             };
             write!(f, ".saturating_add({name}.{count})")?;
         }
@@ -246,10 +261,9 @@ fn display_iter_expr<'a>(stmt: &'a IterStmt, ctx: &'a RustGenCtx<'a>) -> impl 'a
                 write!(f, ")")?;
             }
         }
-        let copy = if stmt.sets[0].arity == 1 {
-            ".cloned()"
-        } else {
-            ""
+        let copy = match ctx.model_mode() {
+            ModelMode::Native if stmt.sets[0].arity == 1 => ".cloned()",
+            ModelMode::Native | ModelMode::Desugared => "",
         };
         write!(
             f,
@@ -292,7 +306,11 @@ fn display_stmt_pre<'a>(ram_stmt: &'a RamStmt, ctx: &'a RustGenCtx<'a>) -> impl 
                 canonical_filter,
             },
         ) => {
-            let filter = if *canonical_filter {
+            let canonical_filter = match ctx.model_mode() {
+                ModelMode::Native => *canonical_filter,
+                ModelMode::Desugared => false,
+            };
+            let filter = if canonical_filter {
                 let typ = iteration_type(iter, ctx.signature());
                 let typ = display_type(typ, ctx).to_string().to_case(Snake);
                 format!(".filter(|(key, _)| env.__canonical_{typ}[*key as usize])")

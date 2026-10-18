@@ -5,6 +5,7 @@ include!(concat!(
     "/eqlog-test-eval/src/functionality_star.eql.rs"
 ));
 
+#[cfg(not(feature = "desugared"))]
 #[test]
 fn functionality_emits_a_linear_number_of_equalities_per_domain() {
     let mut rows = PrefixTree3::new();
@@ -28,6 +29,31 @@ fn functionality_emits_a_linear_number_of_equalities_per_domain() {
     }
 }
 
+#[cfg(feature = "desugared")]
+#[test]
+fn functionality_emits_a_linear_number_of_equalities_per_domain() {
+    let mut rows = IndexedTable::<3>::new(&[(&[0, 1, 2], &[])]);
+    for result in 0..128 {
+        rows.insert([10, 11, result]);
+    }
+    for result in 200..208 {
+        rows.insert([10, 12, result]);
+    }
+    let mut output = Vec::new();
+    functionality_choose(FunctionalityChooseEnv {
+        phantom: std::marker::PhantomData,
+        choose_new_order_0_1_2: rows.view(0, 0, u32::MAX),
+        choose_old_order_0_1_2: TrieView::empty(),
+        new_el_equalities: &mut output,
+    });
+    assert_eq!(output.len(), 127 + 7);
+    for [left, right] in output {
+        assert!(left < 128 && right < 128 || left >= 200 && right >= 200);
+    }
+}
+
+// Desugared tables never hold rows with noncanonical elements.
+#[cfg(not(feature = "desugared"))]
 #[test]
 fn functionality_skips_obsolete_anchors_before_choosing_a_result() {
     for old_results in [vec![0, 1], vec![0]] {
