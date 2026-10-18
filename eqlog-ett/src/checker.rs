@@ -1,4 +1,4 @@
-use std::collections::{hash_map, BTreeMap, BTreeSet, HashMap};
+use std::collections::{btree_map, BTreeMap, BTreeSet};
 
 use crate::kernel::{
     Args, Call, Constructor, Context, ContextMor, Data, Definition, Kernel, Telescope, Tm, Ty,
@@ -39,6 +39,8 @@ struct Scope {
     context: Context,
     parent: Option<(usize, ContextMor)>,
     locals: BTreeMap<String, Tm>,
+    // The images of the parent's elements and the scope's own elements.
+    // Elements of older scopes are found through the parent chain.
     types: BTreeMap<Ty, Ty>,
     terms: BTreeMap<Tm, Tm>,
     application_bases: BTreeMap<Tm, ContextMor>,
@@ -139,8 +141,30 @@ impl Checker {
         self.scopes[source]
             .locals
             .iter()
-            .map(|(name, term)| (name.clone(), self.scopes[target].terms[term]))
+            .map(|(name, &term)| (name.clone(), self.term_image(target, term)))
             .collect()
+    }
+
+    fn type_image(&self, scope: usize, ty: Ty) -> Ty {
+        if let Some(&image) = self.scopes[scope].types.get(&ty) {
+            return image;
+        }
+        let (parent, _) = self.scopes[scope]
+            .parent
+            .expect("types come from enclosing scopes");
+        let ty = self.type_image(parent, ty);
+        self.scopes[scope].types[&ty]
+    }
+
+    fn term_image(&self, scope: usize, term: Tm) -> Tm {
+        if let Some(&image) = self.scopes[scope].terms.get(&term) {
+            return image;
+        }
+        let (parent, _) = self.scopes[scope]
+            .parent
+            .expect("terms come from enclosing scopes");
+        let term = self.term_image(parent, term);
+        self.scopes[scope].terms[&term]
     }
 
     fn remember_type(&mut self, scope: usize, ty: Ty) -> Ty {
@@ -174,59 +198,50 @@ impl Checker {
         } else {
             self.model.insert_advance(source, context, morphism);
         }
-        // Scope maps send the elements of every ancestor to the same parent
-        // element, so most values repeat; each is weakened only once.
-        let mut type_images = HashMap::new();
-        let mut types = Vec::new();
-        for (&origin, &ty) in &self.scopes[parent].types {
-            let image = match type_images.entry(ty) {
-                hash_map::Entry::Occupied(entry) => *entry.get(),
-                hash_map::Entry::Vacant(entry) => {
+        // The parent's maps hold its images under their origins and under
+        // themselves, so values repeat; each is weakened only once.
+        let mut types = BTreeMap::new();
+        for &ty in self.scopes[parent].types.values() {
+            match types.entry(ty) {
+                btree_map::Entry::Occupied(_) => {}
+                btree_map::Entry::Vacant(entry) => {
                     let image = self.model.new_ty(context);
                     self.model
                         .insert_type_image(morphism, source, ty, context, image);
-                    *entry.insert(image)
+                    entry.insert(image);
                 }
-            };
-            types.push((origin, image));
+            }
         }
-        let mut term_images = HashMap::new();
-        let mut terms = Vec::new();
-        for (&origin, &term) in &self.scopes[parent].terms {
-            let image = match term_images.entry(term) {
-                hash_map::Entry::Occupied(entry) => *entry.get(),
-                hash_map::Entry::Vacant(entry) => {
+        let mut terms = BTreeMap::new();
+        for &term in self.scopes[parent].terms.values() {
+            match terms.entry(term) {
+                btree_map::Entry::Occupied(_) => {}
+                btree_map::Entry::Vacant(entry) => {
                     let image = self.model.new_tm(context);
                     self.model
                         .insert_term_image(morphism, source, term, context, image);
-                    *entry.insert(image)
+                    entry.insert(image);
                 }
-            };
-            terms.push((origin, image));
+            }
         }
-        types.extend(type_images.values().map(|&image| (image, image)));
-        terms.extend(term_images.values().map(|&image| (image, image)));
-        let types: BTreeMap<_, _> = types.into_iter().collect();
-        let terms: BTreeMap<_, _> = terms.into_iter().collect();
+        let type_images: Vec<_> = types.values().copied().collect();
+        types.extend(type_images.into_iter().map(|image| (image, image)));
+        let term_images: Vec<_> = terms.values().copied().collect();
+        terms.extend(term_images.into_iter().map(|image| (image, image)));
         let locals = self.scopes[parent]
             .locals
             .iter()
-            .map(|(name, term)| (name.clone(), term_images[term]))
+            .map(|(name, term)| (name.clone(), terms[term]))
             .collect();
         let mut application_bases = BTreeMap::new();
         for (term, base) in &self.scopes[parent].application_bases {
             let base = self.model.define_compose(*base, morphism);
-            application_bases.insert(term_images[term], base);
+            application_bases.insert(terms[term], base);
         }
         let calls = self.scopes[parent]
             .calls
             .iter()
-            .map(|(term, call)| {
-                (
-                    term_images[term],
-                    self.model.define_image_call(*call, morphism),
-                )
-            })
+            .map(|(term, call)| (terms[term], self.model.define_image_call(*call, morphism)))
             .collect();
         let id = self.scopes.len();
         self.scopes.push(Scope {
@@ -757,13 +772,13 @@ impl Checker {
                     return Err(Error("Type is reserved".to_owned()));
                 }
                 let scope = self.child(scope, None);
-                let expected = self.scopes[scope].types[&expected];
+                let expected = self.type_image(scope, expected);
                 let ty = self.ty(scope, annotation)?;
                 let (scope, term, ty) = self.body(scope, value, ty)?;
                 let term = self.goal(format!("let {name}"), scope, term, ty);
                 self.scopes[scope].locals.insert(name.clone(), term);
                 let scope = self.child(scope, None);
-                let expected = self.scopes[scope].types[&expected];
+                let expected = self.type_image(scope, expected);
                 self.body(scope, rest, expected)
             }
             Expr::Name(_, _) | Expr::Equal(_, _) | Expr::Refl | Expr::Rec { .. } => {
@@ -883,7 +898,7 @@ impl Checker {
                         self.scopes[parent]
                             .locals
                             .get(name)
-                            .map(|old| self.scopes[base_scope].terms[old] == *term)
+                            .map(|&old| self.term_image(base_scope, old) == *term)
                             .unwrap_or(false)
                     })
                     .unwrap_or(true)
@@ -1042,7 +1057,7 @@ impl Checker {
             let expected_args = self.args(start, &indices);
             let branch_scope = self.child(start, None);
             self.scopes[branch_scope].locals = self.transport_environment(&body_env, branch_scope);
-            let expected = self.scopes[branch_scope].types[&expected];
+            let expected = self.type_image(branch_scope, expected);
             let (end, body, expected) = self.body(branch_scope, &case.body, expected)?;
             self.stage_path(start, end);
             let branch = self
@@ -1117,7 +1132,7 @@ impl Checker {
     ) -> BTreeMap<String, Tm> {
         environment
             .iter()
-            .map(|(name, term)| (name.clone(), self.scopes[scope].terms[term]))
+            .map(|(name, &term)| (name.clone(), self.term_image(scope, term)))
             .collect()
     }
 
