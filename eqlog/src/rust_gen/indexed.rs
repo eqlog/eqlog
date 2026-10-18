@@ -438,9 +438,8 @@ pub(super) fn display_strata<'a>(
                             .collect::<Vec<_>>();
                         let converted = args.iter().map(|arg| format!("{arg}.into()")).join(", ");
                         let args = args.join(", ");
+                        // Insertion rejects duplicate rows with one hash probe.
                         writedoc! {f, "
-                            delta.{field}.sort_unstable();
-                            delta.{field}.dedup();
                             for [{args}] in delta.{field}.drain(..) {{ self.{insert}({converted}); }}
                         "}?;
                     }

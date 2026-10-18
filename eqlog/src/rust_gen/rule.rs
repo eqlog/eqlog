@@ -299,7 +299,11 @@ fn display_stmt_pre<'a>(ram_stmt: &'a RamStmt, ctx: &'a RustGenCtx<'a>) -> impl 
     FmtFn(move |f| match ram_stmt {
         RamStmt::DefineSet(DefineSetStmt { defined_var, expr }) => {
             let expr = display_in_set_expr(expr, ctx);
-            let strictness = defined_var.strictness;
+            // Restricting a desugared view is a cheap inlined probe.
+            let strictness = match ctx.model_mode() {
+                ModelMode::Native => defined_var.strictness,
+                ModelMode::Desugared => Strictness::Strict,
+            };
             let defined_var = display_set_var(defined_var, ctx);
             match strictness {
                 Strictness::Lazy => {

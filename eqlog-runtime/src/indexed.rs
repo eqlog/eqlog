@@ -917,7 +917,7 @@ impl<const N: usize> Table<N> {
                 rows.push(key[..W].try_into().unwrap());
             }
         }
-        rows.sort_unstable();
+        sort_rows(&mut rows);
         rows
     }
 
@@ -952,6 +952,45 @@ macro_rules! prefix_tree_from_table {
 prefix_tree_from_table! {
     PrefixTree0(0), PrefixTree1(1), PrefixTree2(2), PrefixTree3(3), PrefixTree4(4),
     PrefixTree5(5), PrefixTree6(6), PrefixTree7(7), PrefixTree8(8), PrefixTree9(9),
+}
+
+/// Sorts rows lexicographically, comparing packed integer keys when the
+/// elements are small enough for all columns to fit into one.
+fn sort_rows<const W: usize>(rows: &mut [[u32; W]]) {
+    let max = rows.iter().flatten().copied().max().unwrap_or(0);
+    let bits = (u32::BITS - max.leading_zeros()) as usize;
+    if bits * W <= 64 {
+        let mut keys: Vec<u64> = rows
+            .iter()
+            .map(|row| row.iter().fold(0, |key, &el| (key << bits) | u64::from(el)))
+            .collect();
+        keys.sort_unstable();
+        let mask = (1u64 << bits) - 1;
+        for (row, mut key) in rows.iter_mut().zip(keys) {
+            for el in row.iter_mut().rev() {
+                *el = (key & mask) as u32;
+                key >>= bits;
+            }
+        }
+    } else if bits * W <= 128 {
+        let mut keys: Vec<u128> = rows
+            .iter()
+            .map(|row| {
+                row.iter()
+                    .fold(0, |key, &el| (key << bits) | u128::from(el))
+            })
+            .collect();
+        keys.sort_unstable();
+        let mask = (1u128 << bits) - 1;
+        for (row, mut key) in rows.iter_mut().zip(keys) {
+            for el in row.iter_mut().rev() {
+                *el = (key & mask) as u32;
+                key >>= bits;
+            }
+        }
+    } else {
+        rows.sort_unstable();
+    }
 }
 
 trait TryInsertStamp<const N: usize> {
@@ -1094,6 +1133,28 @@ mod tests {
         assert_eq!(outcome(table.insert_function([1, 2, 4])), Some(Some(3)));
         assert_eq!(outcome(table.insert_function([1, 5, 4])), Some(None));
         assert_eq!(table.len(), 3);
+    }
+
+    #[test]
+    fn packed_sorting_matches_lexicographic_order() {
+        for max in [0u32, 1, 7, 1 << 20, u32::MAX] {
+            let mut rows: Vec<[u32; 3]> = (0..200u32)
+                .map(|i| {
+                    [
+                        i.wrapping_mul(7) % 3,
+                        (i * 13) % 11,
+                        i.wrapping_mul(2654435761) % (max / 2 + 1),
+                    ]
+                })
+                .map(|row| row.map(|el| el.min(max)))
+                .collect();
+            rows.sort_unstable();
+            rows.dedup();
+            let mut shuffled = rows.clone();
+            shuffled.reverse();
+            sort_rows(&mut shuffled);
+            assert_eq!(shuffled, rows);
+        }
     }
 
     #[test]
