@@ -139,7 +139,7 @@ fn query_view(
     let field = table_field(&flat, ctx);
     let position = tables.position(&flat, &index.order);
     (
-        format!("self.{field}.view({position}, 0, u32::MAX)"),
+        format!("self.{field}.view({position})"),
         index.order.clone(),
     )
 }
@@ -386,12 +386,11 @@ pub(super) fn display_strata<'a>(
                     match index.age {
                         IndexAge::Old => writeln!(
                             f,
-                            "{env_field}: self.{field}.view({position}, 0, since[{source}]),"
+                            "{env_field}: self.{field}.view_before({position}, since[{source}]),"
                         )?,
-                        IndexAge::All => writeln!(
-                            f,
-                            "{env_field}: self.{field}.view({position}, 0, u32::MAX),"
-                        )?,
+                        IndexAge::All => {
+                            writeln!(f, "{env_field}: self.{field}.view({position}),")?
+                        }
                         IndexAge::New => {
                             writeln!(f, "{env_field}: eqlog_runtime::RowsView::new(&delta_{k}),")?
                         }

@@ -105,8 +105,11 @@ pub fn display_module_env_struct<'a>(
                                 let width = index_spec.order.len();
                                 write!(f, "{name}: eqlog_runtime::RowsView<'a, {width}>,")
                             }
-                            IndexAge::Old | IndexAge::All => {
-                                write!(f, "{name}: eqlog_runtime::TrieView<'a>,")
+                            IndexAge::Old => {
+                                write!(f, "{name}: eqlog_runtime::TrieView<'a, true>,")
+                            }
+                            IndexAge::All => {
+                                write!(f, "{name}: eqlog_runtime::TrieView<'a, false>,")
                             }
                         },
                     }

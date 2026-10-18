@@ -41,7 +41,7 @@ fn rules_accept_prepared_secondary_inputs() {
         end_new_order_0: RowsView::new(&ends),
         end_all_order_0: TrieView::empty(),
         edge_new_order_0_1: RowsView::empty(),
-        edge_old_order_1_0: edges.view(0, 0, u32::MAX),
+        edge_old_order_1_0: edges.view_before(0, u32::MAX),
         new_backward: &mut output,
     };
     backward_step(env);

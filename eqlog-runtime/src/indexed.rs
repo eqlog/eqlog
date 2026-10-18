@@ -132,10 +132,9 @@ impl Entries {
 #[derive(Clone)]
 struct Node {
     entries: Entries,
-    // Conservative stamp bounds of the rows below this node. Removals leave
-    // them unchanged, so they can only make a view visit an empty subtree.
+    // The smallest stamp of the rows below this node. Removals leave it
+    // unchanged, so it can only make a view visit an empty subtree.
     min: u32,
-    max: u32,
     indexed: bool,
 }
 
@@ -144,7 +143,6 @@ impl Node {
         Node {
             entries: Entries::Inline(0, [(0, 0); 2]),
             min: u32::MAX,
-            max: 0,
             indexed: false,
         }
     }
@@ -303,7 +301,6 @@ impl Trie {
         for (column, &key) in row.iter().enumerate() {
             let entry = &mut self.levels[column].nodes[node as usize];
             entry.min = entry.min.min(stamp);
-            entry.max = entry.max.max(stamp);
             if column == last {
                 debug_assert!(self.levels[column].find(node, key).is_none());
                 self.levels[column].push(node, key, stamp);
@@ -375,21 +372,16 @@ impl Trie {
         unreachable!("the loop returns at the last column")
     }
 
-    /// A view of the rows whose stamps lie in `lo..hi`.
     #[inline]
-    pub fn view(&self, lo: u32, hi: u32) -> TrieView<'_> {
-        if lo >= hi {
-            return TrieView::empty();
-        }
+    fn root<const BOUNDED: bool>(&self, before: u32) -> TrieView<'_, BOUNDED> {
         match self.levels.first() {
             Some(_) => TrieView {
                 levels: &self.levels,
                 node: 0,
-                lo,
-                hi,
+                before,
             },
             None => match self.unit {
-                Some(stamp) if lo <= stamp && stamp < hi => TrieView::unit(lo, hi),
+                Some(stamp) if !BOUNDED || stamp < before => TrieView::unit(before),
                 Some(_) | None => TrieView::empty(),
             },
         }
@@ -397,8 +389,14 @@ impl Trie {
 
     /// A view of all rows.
     #[inline]
-    pub fn view_all(&self) -> TrieView<'_> {
-        self.view(0, u32::MAX)
+    pub fn view(&self) -> TrieView<'_, false> {
+        self.root(u32::MAX)
+    }
+
+    /// A view of the rows stamped before `before`.
+    #[inline]
+    pub fn view_before(&self, before: u32) -> TrieView<'_, true> {
+        self.root(before)
     }
 
     /// Visits all rows in an arbitrary but deterministic order.
@@ -432,66 +430,59 @@ impl Trie {
     }
 }
 
-/// A read-only window onto the rows of a trie below some fixed prefix, limited
-/// to rows whose stamps lie in `lo..hi`.
+/// A read-only window onto the rows of a trie below some fixed prefix. A
+/// `BOUNDED` view only contains rows stamped before `before`.
 ///
-/// Stamp bounds of inner nodes are conservative, so `is_empty` and `get` can
-/// report a nonempty subtree that contains no row in range. Iteration and the
-/// last column check stamps exactly.
+/// Stamp bounds of inner nodes are conservative, so a bounded view's
+/// `is_empty` and `get` can report a nonempty subtree that contains no row
+/// in range. Iteration and the last column check stamps exactly.
 #[derive(Clone, Copy)]
-pub struct TrieView<'a> {
+pub struct TrieView<'a, const BOUNDED: bool> {
     // The levels below the fixed prefix; empty for rows of a nullary suffix.
     levels: &'a [Level],
     // `NONE` marks the empty view when `levels` is empty.
     node: u32,
-    lo: u32,
-    hi: u32,
+    before: u32,
 }
 
-impl Default for TrieView<'_> {
+impl<const BOUNDED: bool> Default for TrieView<'_, BOUNDED> {
     #[inline]
     fn default() -> Self {
         TrieView::empty()
     }
 }
 
-impl<'a> TrieView<'a> {
+impl<'a, const BOUNDED: bool> TrieView<'a, BOUNDED> {
     #[inline]
     pub fn empty() -> Self {
         TrieView {
             levels: &[],
             node: NONE,
-            lo: 0,
-            hi: 0,
+            before: 0,
         }
     }
 
     #[inline]
-    fn unit(lo: u32, hi: u32) -> Self {
+    fn unit(before: u32) -> Self {
         TrieView {
             levels: &[],
             node: 0,
-            lo,
-            hi,
+            before,
         }
     }
 
     #[inline(always)]
-    fn child(&self, rest: &'a [Level], value: u32) -> Option<TrieView<'a>> {
+    fn child(&self, rest: &'a [Level], value: u32) -> Option<TrieView<'a, BOUNDED>> {
         match rest.first() {
-            None => (self.lo <= value && value < self.hi).then(|| TrieView::unit(self.lo, self.hi)),
+            None => (!BOUNDED || value < self.before).then(|| TrieView::unit(self.before)),
             Some(level) => {
-                if self.lo > 0 || self.hi < u32::MAX {
-                    let node = &level.nodes[value as usize];
-                    if node.max < self.lo || node.min >= self.hi {
-                        return None;
-                    }
+                if BOUNDED && level.nodes[value as usize].min >= self.before {
+                    return None;
                 }
                 Some(TrieView {
                     levels: rest,
                     node: value,
-                    lo: self.lo,
-                    hi: self.hi,
+                    before: self.before,
                 })
             }
         }
@@ -499,7 +490,7 @@ impl<'a> TrieView<'a> {
 
     /// Restricts the first remaining column to `key`.
     #[inline(always)]
-    pub fn get(&self, key: u32) -> Option<TrieView<'a>> {
+    pub fn get(&self, key: u32) -> Option<TrieView<'a, BOUNDED>> {
         let (level, rest) = self.levels.split_first()?;
         let (_, value) = level.find(self.node, key)?;
         self.child(rest, value)
@@ -516,7 +507,7 @@ impl<'a> TrieView<'a> {
             None => self.node == NONE,
             Some(level) => {
                 let node = &level.nodes[self.node as usize];
-                node.entries.len() == 0 || node.max < self.lo || node.min >= self.hi
+                node.entries.len() == 0 || (BOUNDED && node.min >= self.before)
             }
         }
     }
@@ -533,7 +524,7 @@ impl<'a> TrieView<'a> {
     /// The restriction holding the oldest row, which on the last column
     /// prefers rows a consumer has already seen.
     #[inline]
-    pub fn oldest_restriction(&self) -> Option<(u32, TrieView<'a>)> {
+    pub fn oldest_restriction(&self) -> Option<(u32, TrieView<'a, BOUNDED>)> {
         let (level, rest) = self.levels.split_first()?;
         if !rest.is_empty() {
             return self.iter_restrictions().next();
@@ -542,15 +533,15 @@ impl<'a> TrieView<'a> {
             .entries
             .as_slice()
             .iter()
-            .filter(|&&(_, stamp)| self.lo <= stamp && stamp < self.hi)
+            .filter(|&&(_, stamp)| !BOUNDED || stamp < self.before)
             .min_by_key(|&&(_, stamp)| stamp)
-            .map(|&(key, _)| (key, TrieView::unit(self.lo, self.hi)))
+            .map(|&(key, _)| (key, TrieView::unit(self.before)))
     }
 
     /// Iterates over the distinct keys of the first column together with
     /// their restrictions.
     #[inline]
-    pub fn iter_restrictions(&self) -> Restrictions<'a> {
+    pub fn iter_restrictions(&self) -> Restrictions<'a, BOUNDED> {
         match self.levels.split_first() {
             None => Restrictions {
                 entries: [].iter(),
@@ -566,14 +557,14 @@ impl<'a> TrieView<'a> {
     }
 }
 
-pub struct Restrictions<'a> {
+pub struct Restrictions<'a, const BOUNDED: bool> {
     entries: std::slice::Iter<'a, (u32, u32)>,
     rest: &'a [Level],
-    view: TrieView<'a>,
+    view: TrieView<'a, BOUNDED>,
 }
 
-impl<'a> Iterator for Restrictions<'a> {
-    type Item = (u32, TrieView<'a>);
+impl<'a, const BOUNDED: bool> Iterator for Restrictions<'a, BOUNDED> {
+    type Item = (u32, TrieView<'a, BOUNDED>);
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
@@ -898,10 +889,16 @@ impl<const N: usize> Table<N> {
             .any(|(row, stamp)| self.live.get(row) == Some(&stamp))
     }
 
-    /// Rows stamped in `lo..hi` through the given index.
+    /// All rows through the given index.
     #[inline]
-    pub fn view(&self, index: usize, lo: u32, hi: u32) -> TrieView<'_> {
-        self.indices[index].trie.view(lo, hi)
+    pub fn view(&self, index: usize) -> TrieView<'_, false> {
+        self.indices[index].trie.view()
+    }
+
+    /// The rows stamped before `before` through the given index.
+    #[inline]
+    pub fn view_before(&self, index: usize, before: u32) -> TrieView<'_, true> {
+        self.indices[index].trie.view_before(before)
     }
 
     /// The rows stamped at or after `since`, through the given index of
@@ -1015,7 +1012,7 @@ mod tests {
     use super::*;
     use std::collections::BTreeSet;
 
-    fn rows(view: TrieView<'_>, arity: usize) -> BTreeSet<Vec<u32>> {
+    fn rows<const BOUNDED: bool>(view: TrieView<'_, BOUNDED>, arity: usize) -> BTreeSet<Vec<u32>> {
         if arity == 0 {
             return if view.is_empty() {
                 BTreeSet::new()
@@ -1044,17 +1041,14 @@ mod tests {
         assert!(table.insert([1, 2, 6]));
         assert!(table.remove([1, 1, 4]));
         assert_eq!(
-            rows(table.view(0, 0, seen), 3),
+            rows(table.view_before(0, seen), 3),
             BTreeSet::from([vec![1, 2, 3]])
         );
         assert_eq!(
-            rows(table.view(0, seen, u32::MAX), 3),
-            BTreeSet::from([vec![2, 2, 5], vec![1, 2, 6]])
+            rows(table.view(0), 3),
+            BTreeSet::from([vec![1, 2, 3], vec![2, 2, 5], vec![1, 2, 6]])
         );
-        assert_eq!(
-            rows(table.view(1, 0, u32::MAX), 2),
-            BTreeSet::from([vec![5, 2]])
-        );
+        assert_eq!(rows(table.view(1), 2), BTreeSet::from([vec![5, 2]]));
         assert!(table.changed_since(seen));
         assert!(!table.changed_since(table.log_len()));
         assert_eq!(table.delta::<3>(0, seen), vec![[1, 2, 6], [2, 2, 5]]);
@@ -1086,17 +1080,16 @@ mod tests {
             trie.insert(&[i % 3, i], 100 + i);
             expected.insert(vec![i % 3, i]);
         }
-        assert_eq!(rows(trie.view_all(), 2), expected);
+        assert_eq!(rows(trie.view(), 2), expected);
         assert_eq!(trie.len(), expected.len());
         for row in &expected {
             assert!(trie.stamp(row).is_some());
         }
         assert_eq!(
-            trie.view(100, u32::MAX).get(0).map(|view| rows(view, 1)),
+            trie.view_before(100).get(0).map(|view| rows(view, 1)),
             Some(
                 (0..100u32)
-                    .step_by(14)
-                    .filter(|i| i % 3 == 0)
+                    .filter(|i| i % 3 == 0 && i % 7 != 0)
                     .map(|i| vec![i])
                     .collect()
             )
@@ -1111,9 +1104,10 @@ mod tests {
         trie.insert(&[7], 2);
         assert!(trie.remove(&[5]));
         // Removal moved the newest key in front of the older one.
-        assert_eq!(trie.view_all().iter_restrictions().next().unwrap().0, 7);
-        assert_eq!(trie.view_all().oldest_restriction().unwrap().0, 6);
-        assert_eq!(trie.view(2, u32::MAX).oldest_restriction().unwrap().0, 7);
+        assert_eq!(trie.view().iter_restrictions().next().unwrap().0, 7);
+        assert_eq!(trie.view().oldest_restriction().unwrap().0, 6);
+        assert_eq!(trie.view_before(2).oldest_restriction().unwrap().0, 6);
+        assert!(trie.view_before(1).oldest_restriction().is_none());
     }
 
     // `None` for a present row, otherwise the conflicting result, if any.
@@ -1160,12 +1154,12 @@ mod tests {
     #[test]
     fn nullary_tables_hold_one_row() {
         let mut table: Table<0> = Table::new(&[(&[], &[])]);
-        assert!(table.view(0, 0, u32::MAX).is_empty());
+        assert!(table.view(0).is_empty());
         assert!(table.insert([]));
         assert!(!table.insert([]));
-        assert!(!table.view(0, 0, u32::MAX).is_empty());
-        assert!(table.view(0, 1, u32::MAX).is_empty());
+        assert!(!table.view(0).is_empty());
+        assert!(table.view_before(0, 0).is_empty());
         assert!(table.remove([]));
-        assert!(table.view(0, 0, u32::MAX).is_empty());
+        assert!(table.view(0).is_empty());
     }
 }
