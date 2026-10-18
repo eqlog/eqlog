@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{btree_map, BTreeMap, BTreeSet};
 
 use crate::kernel::{
     Args, Call, Constructor, Context, ContextMor, Data, Definition, Kernel, Telescope, Tm, Ty,
@@ -102,6 +102,7 @@ struct Checker {
     goals: Vec<(String, Definition)>,
     names: Vec<String>,
     type_goals: Vec<(String, usize, Ty, Ty)>,
+    weakenings: BTreeMap<(usize, usize), ContextMor>,
 }
 
 impl Checker {
@@ -126,6 +127,7 @@ impl Checker {
             goals: Vec::new(),
             names: Vec::new(),
             type_goals: Vec::new(),
+            weakenings: BTreeMap::new(),
         }
     }
 
@@ -172,36 +174,36 @@ impl Checker {
         } else {
             self.model.insert_advance(source, context, morphism);
         }
-        let mut types = BTreeMap::new();
-        let mut terms = BTreeMap::new();
+        // Scope maps send the elements of every ancestor to the same parent
+        // element, so most values repeat; each is weakened only once.
         let mut type_images = BTreeMap::new();
         let mut term_images = BTreeMap::new();
         for &ty in self.scopes[parent].types.values() {
-            let image = *type_images
-                .entry(ty)
-                .or_insert_with(|| self.model.new_ty(context));
-            self.model
-                .insert_type_image(morphism, source, ty, context, image);
+            if let btree_map::Entry::Vacant(entry) = type_images.entry(ty) {
+                let image = *entry.insert(self.model.new_ty(context));
+                self.model
+                    .insert_type_image(morphism, source, ty, context, image);
+            }
         }
         for &term in self.scopes[parent].terms.values() {
-            let image = *term_images
-                .entry(term)
-                .or_insert_with(|| self.model.new_tm(context));
-            self.model
-                .insert_term_image(morphism, source, term, context, image);
+            if let btree_map::Entry::Vacant(entry) = term_images.entry(term) {
+                let image = *entry.insert(self.model.new_tm(context));
+                self.model
+                    .insert_term_image(morphism, source, term, context, image);
+            }
         }
-        for (&origin, ty) in &self.scopes[parent].types {
-            types.insert(origin, type_images[ty]);
-        }
-        for &image in type_images.values() {
-            types.insert(image, image);
-        }
-        for (&origin, term) in &self.scopes[parent].terms {
-            terms.insert(origin, term_images[term]);
-        }
-        for &image in term_images.values() {
-            terms.insert(image, image);
-        }
+        let types = self.scopes[parent]
+            .types
+            .iter()
+            .map(|(&origin, ty)| (origin, type_images[ty]))
+            .chain(type_images.values().map(|&image| (image, image)))
+            .collect();
+        let terms = self.scopes[parent]
+            .terms
+            .iter()
+            .map(|(&origin, term)| (origin, term_images[term]))
+            .chain(term_images.values().map(|&image| (image, image)))
+            .collect();
         let locals = self.scopes[parent]
             .locals
             .iter()
@@ -244,14 +246,22 @@ impl Checker {
     }
 
     fn weakening(&mut self, source: usize, target: usize) -> Result<ContextMor, Error> {
-        if source == target {
-            return Ok(self.model.define_identity_sub(self.context(source)));
+        // Defining a weakening again returns the same morphism, so walking the
+        // scope chain once per pair suffices.
+        if let Some(&weakening) = self.weakenings.get(&(source, target)) {
+            return Ok(weakening);
         }
-        let (parent, projection) = self.scopes[target]
-            .parent
-            .ok_or_else(|| Error("construction is outside its defining scope".to_owned()))?;
-        let previous = self.weakening(source, parent)?;
-        Ok(self.model.define_compose(previous, projection))
+        let weakening = if source == target {
+            self.model.define_identity_sub(self.context(source))
+        } else {
+            let (parent, projection) = self.scopes[target]
+                .parent
+                .ok_or_else(|| Error("construction is outside its defining scope".to_owned()))?;
+            let previous = self.weakening(source, parent)?;
+            self.model.define_compose(previous, projection)
+        };
+        self.weakenings.insert((source, target), weakening);
+        Ok(weakening)
     }
 
     fn stage_path(&mut self, start: usize, end: usize) {
