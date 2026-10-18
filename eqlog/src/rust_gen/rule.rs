@@ -85,6 +85,15 @@ pub fn module_env_out_rels(ram_module: &RamModule) -> BTreeSet<FlatOutRel> {
         .collect()
 }
 
+/// The env field through which desugared rules see the rows that a table
+/// already holds before they output a row.
+pub fn display_out_rows_field_name<'a>(rel: FlatRel, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let rel_snake = display_rel(rel, ctx).to_string().to_case(Snake);
+        write!(f, "{rel_snake}_rows")
+    })
+}
+
 pub fn display_module_env_struct<'a>(
     ram_module: &'a RamModule,
     ctx: &'a RustGenCtx<'a>,
@@ -123,8 +132,18 @@ pub fn display_module_env_struct<'a>(
                 FmtFn(move |f| {
                     let name = display_out_set_field_name(&rel, ctx);
                     let typ = display_out_set_type(&rel, ctx);
-
-                    write!(f, "{name}: &'a mut {typ},")
+                    write!(f, "{name}: &'a mut {typ},")?;
+                    match ctx.model_mode() {
+                        ModelMode::Native => Ok(()),
+                        ModelMode::Desugared => match &rel {
+                            FlatOutRel::Rel(out_rel) => {
+                                let rows = display_out_rows_field_name(*out_rel, ctx);
+                                let arity = out_rel.arity(ctx.signature()).len();
+                                write!(f, "\n{rows}: &'a eqlog_runtime::IndexedTable<{arity}>,")
+                            }
+                            FlatOutRel::Equality(_) | FlatOutRel::FuncDomain(_) => Ok(()),
+                        },
+                    }
                 })
             })
             .format("\n");
@@ -412,7 +431,25 @@ fn display_stmt_pre<'a>(ram_stmt: &'a RamStmt, ctx: &'a RustGenCtx<'a>) -> impl 
                             }}
                         "}
                 }
-                FlatOutRel::Rel(_) | FlatOutRel::FuncDomain(_) => {
+                FlatOutRel::Rel(out_rel) => {
+                    let args = args.iter().join(", ");
+                    match ctx.model_mode() {
+                        ModelMode::Native => writedoc! {f, "
+                            env.{rel_field}.push([{args}]);
+                        "},
+                        // Skipping rows that the table holds already spares
+                        // the sequential insertion most derived rows.
+                        ModelMode::Desugared => {
+                            let rows = display_out_rows_field_name(*out_rel, ctx);
+                            writedoc! {f, "
+                                if !env.{rows}.contains([{args}]) {{
+                                    env.{rel_field}.push([{args}]);
+                                }}
+                            "}
+                        }
+                    }
+                }
+                FlatOutRel::FuncDomain(_) => {
                     let args = args.iter().format(", ");
                     writedoc! {f, "
                             env.{rel_field}.push([{args}]);

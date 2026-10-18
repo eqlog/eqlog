@@ -14,9 +14,10 @@ use std::sync::Arc;
 
 use super::indices::source_relation;
 use super::{
-    display_index_field_name, display_module_env_struct_name, display_out_set_field_name,
-    display_out_set_type, display_rel, display_type, display_type_fields,
-    display_weight_static_name, module_env_in_rels, module_env_out_rels, ElVar, RustGenCtx,
+    display_index_field_name, display_module_env_struct_name, display_out_rows_field_name,
+    display_out_set_field_name, display_out_set_type, display_rel, display_type,
+    display_type_fields, display_weight_static_name, module_env_in_rels, module_env_out_rels,
+    ElVar, RustGenCtx,
 };
 use crate::algebra::signature::{FuncId, Signature, TypeId};
 use crate::flat_eqlog::{
@@ -518,6 +519,14 @@ pub(super) fn display_strata<'a>(
                 for rel in module_env_out_rels(module) {
                     let field = display_out_set_field_name(&rel, ctx);
                     writeln!(f, "{field}: &mut __out_{i}_{field},")?;
+                    match rel {
+                        FlatOutRel::Rel(out_rel) => {
+                            let rows = display_out_rows_field_name(out_rel, ctx);
+                            let table = table_field(&FlatInRel::Rel(out_rel), ctx);
+                            writeln!(f, "{rows}: &self.{table},")?;
+                        }
+                        FlatOutRel::Equality(_) | FlatOutRel::FuncDomain(_) => {}
+                    }
                 }
                 writeln!(f, "}}; tasks.push(Box::new(move || {name}(env)));")?;
             }
