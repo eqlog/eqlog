@@ -148,12 +148,21 @@ impl Node {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
+enum Lookup {
+    // Positions and values of entries of indexed nodes, keyed by node and key.
+    Hashed(FxHashMap<u64, (u32, u32)>),
+    // Positions and values of the entries of the root, the only node of its
+    // level, indexed by key. Element IDs are dense, and absent keys have
+    // `NONE` positions.
+    Direct(Vec<(u32, u32)>),
+}
+
+#[derive(Clone)]
 struct Level {
     nodes: Vec<Node>,
     free: Vec<u32>,
-    // Positions and values of entries of indexed nodes, keyed by node and key.
-    lookup: FxHashMap<u64, (u32, u32)>,
+    lookup: Lookup,
 }
 
 #[inline]
@@ -162,12 +171,37 @@ fn lookup_key(node: u32, key: u32) -> u64 {
 }
 
 impl Level {
+    fn inner() -> Self {
+        Level {
+            nodes: Vec::new(),
+            free: Vec::new(),
+            lookup: Lookup::Hashed(FxHashMap::default()),
+        }
+    }
+
+    fn root() -> Self {
+        let mut level = Level {
+            nodes: Vec::new(),
+            free: Vec::new(),
+            lookup: Lookup::Direct(Vec::new()),
+        };
+        let root = level.alloc();
+        level.nodes[root as usize].indexed = true;
+        level
+    }
+
     /// Returns the position and value of `key` in `node`.
     #[inline(always)]
     fn find(&self, node: u32, key: u32) -> Option<(u32, u32)> {
         let entries = &self.nodes[node as usize];
         if entries.indexed {
-            self.lookup.get(&lookup_key(node, key)).copied()
+            match &self.lookup {
+                Lookup::Hashed(lookup) => lookup.get(&lookup_key(node, key)).copied(),
+                Lookup::Direct(slots) => slots
+                    .get(key as usize)
+                    .copied()
+                    .filter(|&(pos, _)| pos != NONE),
+            }
         } else {
             entries
                 .entries
@@ -195,19 +229,35 @@ impl Level {
         self.free.push(node);
     }
 
-    #[inline]
+    #[inline(always)]
     fn push(&mut self, node: u32, key: u32, value: u32) {
         let entry = &mut self.nodes[node as usize];
         entry.entries.push((key, value));
-        let len = entry.entries.len();
+        let pos = (entry.entries.len() - 1) as u32;
         if entry.indexed {
-            self.lookup
-                .insert(lookup_key(node, key), ((len - 1) as u32, value));
-        } else if len > SCAN_LIMIT {
+            match &mut self.lookup {
+                Lookup::Hashed(lookup) => {
+                    lookup.insert(lookup_key(node, key), (pos, value));
+                }
+                Lookup::Direct(slots) => {
+                    let key = key as usize;
+                    if slots.len() <= key {
+                        slots.resize((key + 1).max(2 * slots.len()), (NONE, 0));
+                    }
+                    slots[key] = (pos, value);
+                }
+            }
+        } else if entry.entries.len() > SCAN_LIMIT {
             entry.indexed = true;
-            for (pos, &(key, value)) in entry.entries.as_slice().iter().enumerate() {
-                self.lookup
-                    .insert(lookup_key(node, key), (pos as u32, value));
+            match &mut self.lookup {
+                Lookup::Hashed(lookup) => {
+                    for (pos, &(key, value)) in entry.entries.as_slice().iter().enumerate() {
+                        lookup.insert(lookup_key(node, key), (pos as u32, value));
+                    }
+                }
+                Lookup::Direct(_) => {
+                    unreachable!("only roots are directly addressed and they start indexed")
+                }
             }
         }
     }
@@ -220,22 +270,25 @@ impl Level {
         let entry = &mut self.nodes[node as usize];
         let moved = entry.entries.swap_remove(pos as usize);
         if entry.indexed {
-            self.lookup.remove(&lookup_key(node, key));
-            if let Some(moved) = moved {
-                let slot = self
-                    .lookup
-                    .get_mut(&lookup_key(node, moved))
-                    .expect("indexed entries are in the lookup table");
-                slot.0 = pos;
+            match &mut self.lookup {
+                Lookup::Hashed(lookup) => {
+                    lookup.remove(&lookup_key(node, key));
+                    if let Some(moved) = moved {
+                        let slot = lookup
+                            .get_mut(&lookup_key(node, moved))
+                            .expect("indexed entries are in the lookup table");
+                        slot.0 = pos;
+                    }
+                }
+                Lookup::Direct(slots) => {
+                    slots[key as usize] = (NONE, 0);
+                    if let Some(moved) = moved {
+                        slots[moved as usize].0 = pos;
+                    }
+                }
             }
         }
         true
-    }
-
-    fn clear(&mut self) {
-        self.nodes.clear();
-        self.free.clear();
-        self.lookup.clear();
     }
 }
 
@@ -251,10 +304,12 @@ pub struct Trie {
 impl Trie {
     pub fn new(arity: usize) -> Self {
         assert!(arity <= MAX_ARITY, "relation arity exceeds {MAX_ARITY}");
-        let mut levels: Vec<Level> = (0..arity).map(|_| Level::default()).collect();
-        if let Some(root) = levels.first_mut() {
-            root.alloc();
-        }
+        let levels = (0..arity)
+            .map(|column| match column {
+                0 => Level::root(),
+                _ => Level::inner(),
+            })
+            .collect();
         Trie {
             levels,
             unit: None,
@@ -272,20 +327,6 @@ impl Trie {
 
     pub fn is_empty(&self) -> bool {
         self.len == 0
-    }
-
-    /// Removes all rows and changes the arity, keeping allocated capacity.
-    pub fn reset(&mut self, arity: usize) {
-        assert!(arity <= MAX_ARITY, "relation arity exceeds {MAX_ARITY}");
-        self.levels.resize_with(arity, Level::default);
-        for level in &mut self.levels {
-            level.clear();
-        }
-        if let Some(root) = self.levels.first_mut() {
-            root.alloc();
-        }
-        self.unit = None;
-        self.len = 0;
     }
 
     /// Inserts a row that must not be present yet.
