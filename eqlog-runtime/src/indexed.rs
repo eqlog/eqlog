@@ -584,7 +584,7 @@ impl<'a, const BOUNDED: bool> TrieView<'a, BOUNDED> {
 
     /// Iterates over the distinct keys of the first column together with
     /// their restrictions.
-    #[inline]
+    #[inline(always)]
     pub fn iter_restrictions(&self) -> Restrictions<'a, BOUNDED> {
         match self.levels.split_first() {
             None => Restrictions {
@@ -610,7 +610,7 @@ pub struct Restrictions<'a, const BOUNDED: bool> {
 impl<'a, const BOUNDED: bool> Iterator for Restrictions<'a, BOUNDED> {
     type Item = (u32, TrieView<'a, BOUNDED>);
 
-    #[inline]
+    #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let &(key, value) = self.entries.next()?;
@@ -705,7 +705,7 @@ pub struct RowsRestrictions<'a, const W: usize> {
 impl<'a, const W: usize> Iterator for RowsRestrictions<'a, W> {
     type Item = (u32, RowsView<'a, W>);
 
-    #[inline]
+    #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         let depth = self.depth;
         let key = self.rows.first()?[depth];
