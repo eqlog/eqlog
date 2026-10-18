@@ -13,9 +13,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         source.push('\n');
     }
     let checked = eqlog_ett::check(&source)?;
-    for name in checked.declarations {
+    for name in &checked.declarations {
         println!("checked {name}");
     }
+    // The process exits next; freeing the many allocations of the closed
+    // model one by one would only delay that.
+    std::mem::forget(checked.model);
     Ok(())
 }
 
