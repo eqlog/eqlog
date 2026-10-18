@@ -16,6 +16,32 @@ The Nat and Vec source modules, fresh contexts, equality reflection, partial
 morphisms, three-expansion budget, and single `close()` call are unchanged.
 All closure timings exclude Rust compilation.
 
+## Commit milestones
+
+These are end-to-end runs of the unchanged 52-declaration Nat+Vec
+development, excluding Rust compilation and instrumentation. They are
+historical observations on this machine; host variation prevents treating
+small differences as precise speedups.
+
+| Implementation commit | Recorded time | Milestone |
+| --- | --- | --- |
+| `b23fca3` | 50.180-56.077 s | First below one minute; results recorded in `8dfa987`. |
+| `676d1e6` | 21.980 s | Recursive normalization and local transport scheduling. |
+| `22a2b1d` | 20.466 s | Constrained joins and ordinary iteration. |
+| `a7cf045` | 17.283 s | Inline singleton suffixes and shared intersections. |
+| `2c019b4` | 16.804 s | Unary index operations exposed across component crates. |
+| `8da252e` | 14.846 s | Shared historical inputs and selective join probes. |
+| `bd48d1c` | 13.598-15.431 s | Borrowed difference traversal and publication caching. |
+| `f3a494a` | Final combined timing pending | Validated residual joins and direct transport borrowing. |
+
+Optimization is paused at `f3a494a`; the five-second target is unmet.
+That checkpoint passed 283 evaluator library tests, nine four-mode
+optimization oracles, 12 focused four-mode checks, and 49 combined native
+checks. Independent reviews approved correctness and general applicability.
+Separate candidate runs reached approximately 12 seconds, but they do not
+establish a final combined performance milestone. Unpromoted experiments
+remain outside the branch.
+
 ## Owner-scoped scheduling checkpoint
 
 The following schedule refinement saturates each self-recursive global group
