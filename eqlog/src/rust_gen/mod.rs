@@ -564,7 +564,14 @@ fn display_pub_predicate_holds_fn<'a>(
                         format!("self.root_{snake}({camel}(row[{i}])) == arg{i}")
                     })
                     .format(" && ");
+                let canonical = match ctx.model_mode() {
+                    ModelMode::Native => String::new(),
+                    ModelMode::Desugared => {
+                        format!("{} ||", indexed::display_holds_expr(rel, ctx))
+                    }
+                };
                 writedoc! {f, "
+                    {canonical}
                     self.{element_index}.get(&arg{member_pos}.0)
                         .is_some_and(|rows| rows.iter().any(|row| {checks}))
                 "}

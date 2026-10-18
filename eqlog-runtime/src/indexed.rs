@@ -77,7 +77,7 @@ enum Entries {
 }
 
 impl Entries {
-    #[inline]
+    #[inline(always)]
     fn as_slice(&self) -> &[(u32, u32)] {
         match self {
             Entries::Inline(len, entries) => &entries[..*len as usize],
@@ -85,7 +85,7 @@ impl Entries {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     fn len(&self) -> usize {
         match self {
             Entries::Inline(len, _) => *len as usize,
@@ -165,7 +165,7 @@ fn lookup_key(node: u32, key: u32) -> u64 {
 
 impl Level {
     /// Returns the position and value of `key` in `node`.
-    #[inline]
+    #[inline(always)]
     fn find(&self, node: u32, key: u32) -> Option<(u32, u32)> {
         let entries = &self.nodes[node as usize];
         if entries.indexed {
@@ -476,7 +476,7 @@ impl<'a> TrieView<'a> {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     fn child(&self, rest: &'a [Level], value: u32) -> Option<TrieView<'a>> {
         match rest.first() {
             None => (self.lo <= value && value < self.hi).then(|| TrieView::unit(self.lo, self.hi)),
@@ -498,7 +498,7 @@ impl<'a> TrieView<'a> {
     }
 
     /// Restricts the first remaining column to `key`.
-    #[inline]
+    #[inline(always)]
     pub fn get(&self, key: u32) -> Option<TrieView<'a>> {
         let (level, rest) = self.levels.split_first()?;
         let (_, value) = level.find(self.node, key)?;
@@ -510,7 +510,7 @@ impl<'a> TrieView<'a> {
         self.get(key).is_some()
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn is_empty(&self) -> bool {
         match self.levels.first() {
             None => self.node == NONE,
@@ -687,6 +687,24 @@ impl<'a, const W: usize> Iterator for RowsRestrictions<'a, W> {
                 depth: depth + 1,
             },
         ))
+    }
+}
+
+/// One of two iterators over the same items, chosen at run time.
+pub enum Either<L, R> {
+    Left(L),
+    Right(R),
+}
+
+impl<L: Iterator, R: Iterator<Item = L::Item>> Iterator for Either<L, R> {
+    type Item = L::Item;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Either::Left(left) => left.next(),
+            Either::Right(right) => right.next(),
+        }
     }
 }
 

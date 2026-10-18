@@ -250,6 +250,21 @@ fn display_iter_expr<'a>(stmt: &'a IterStmt, ctx: &'a RustGenCtx<'a>) -> impl 'a
             return write!(f, "{direct}");
         }
         let loop_set = display_set_var(&stmt.loop_var_set, ctx);
+        match ctx.model_mode() {
+            ModelMode::Native => {}
+            ModelMode::Desugared => {
+                // Desugared premises read a single set of one age.
+                let [set] = stmt.sets.as_slice() else {
+                    panic!("desugared premises read one set")
+                };
+                let set = display_set_var(set, ctx);
+                let inverse = display_iter_sources(&stmt.lookup_drivers, ctx, true);
+                return write!(
+                    f,
+                    "if {loop_set}_use_lookup {{ eqlog_runtime::Either::Right({inverse}.filter_map(|(key, _)| {set}.get(key).map(|suffix| (key, suffix)))) }} else {{ eqlog_runtime::Either::Left({direct}) }}"
+                );
+            }
+        }
         let inverse = display_iter_sources(&stmt.lookup_drivers, ctx, true);
         write!(
             f,
