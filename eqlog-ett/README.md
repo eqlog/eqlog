@@ -129,9 +129,10 @@ term or type variable after the relevant obligations have been recorded.
 `advance` adds a scope without a variable, and `context_parent` records
 ancestry. `closed_context` and `variable_context` describe that ancestry,
 rather than certifying well-formedness; a context without local variables has
-a unique substitution to a fixed target. Identities use Eqlog's native `id`.
-`compose` records which composites need restrictions through source ancestry,
-keeping this allocation finite.
+a unique substitution to a fixed target. Identities and composition use
+Eqlog's native `id` and `>>`. `restrict_to_parents` requests restriction of
+selected substitutions through their finite source ancestry. Branch-body
+composites are requested only after the branch substitution has endpoints.
 
 The frontend is part of the trusted checker. It resolves lexical names,
 constructs motives and branch obligations, records inferred types, and places

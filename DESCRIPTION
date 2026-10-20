@@ -15,6 +15,10 @@ and keep recursor results out of their branch-checking templates.
 Create weakening images only for referenced values and in-scope
 equality syntax.
 
+Use native morphism composition and explicitly request finite
+restrictions through source contexts. Keep branch-body composition
+after the branch substitution has acquired its endpoints.
+
 Cover invalid arguments, circular proof attempts, lexical bindings,
 error ordering, partial computation, and the arithmetic and vector
 developments with evaluator integration tests.

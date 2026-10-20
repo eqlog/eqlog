@@ -66,8 +66,8 @@ pred type_extension(e: Context, g: Context, p: Mor(Context));
 pred advance(g: Context, e: Context, p: Mor(Context));
 func variable(g: Context) -> g.Tm;
 func type_variable(g: Context) -> g.Ty;
-// Restricting only requested composites keeps the allocation diagram finite.
-func compose(Mor(Context), Mor(Context)) -> Mor(Context);
+// Restricting only requested substitutions keeps the allocation diagram finite.
+pred restrict_to_parents(Mor(Context));
 // Both kinds of variable extension and statement scopes share this ancestry.
 pred context_parent(Context, Context, Mor(Context));
 pred closed_context(Context);
@@ -118,20 +118,14 @@ rule variable_statement {
     then variable_context(e);
     then p = p;
 }
-rule composition {
-    if h = compose(f, g);
-    if cod(f) = dom(g);
-    then h = f >> g;
-}
 // Restriction descends the finite source-context ancestry, without allocating terms.
-rule composition_restriction {
-    if h = compose(f, g);
+rule substitution_restriction {
+    if restrict_to_parents(h);
     if e = dom(h);
     if variable_context(e);
     if context_parent(e, parent, p);
-    then compose(p, h)!;
-    then f = f;
-    then g = g;
+    then k := (p >> h)!;
+    then restrict_to_parents(k);
     then parent = parent;
 }
 rule pairing {
@@ -378,7 +372,7 @@ rule image_application {
     if t = cod(f);
     if a = application(e, g, s, xs);
     if ys = f.Args(xs);
-    if h = compose(g, f);
+    if h = g >> f;
     if b = application(e, h, t, ys);
     then f.Tm(a) = b;
 }
@@ -389,7 +383,7 @@ rule open_application {
     if a = application(e, g, s, xs);
     if b = f.Tm(a);
     if ys = f.Args(xs);
-    if h = compose(g, f);
+    if h = g >> f;
     then application(e, h, t, ys) = b;
 }
 
@@ -434,7 +428,8 @@ rule image_call_base {
     if image_call(c, h)!;
     if call_shape(c, e, f, g, xs);
     if dom(h) = g;
-    then compose(f, h)!;
+    then base := (f >> h)!;
+    then restrict_to_parents(base);
     then e = e;
     then xs = xs;
 }
@@ -444,7 +439,7 @@ rule image_call_shape {
     if dom(h) = g;
     if target = cod(h);
     if ys = h.Args(xs);
-    if base = compose(f, h);
+    if base = f >> h;
     then call_shape(d, e, base, target, ys);
 }
 rule literal_application {
@@ -534,7 +529,8 @@ rule branch_hypothesis {
     if recursive_args = f.Args(args);
     then projection = projection;
     then f.Ty(a)!;
-    then compose(instance, f)!;
+    then restricted := (instance >> f)!;
+    then restrict_to_parents(restricted);
     then ih := application(e, base, g, recursive_args)!;
     then expand(fuel, e, base, g, recursive_args);
     then p := pair(target, g, f, ih)!;
@@ -568,7 +564,11 @@ rule branch_body {
 rule branch_body_application {
     if h = run_branch(s, e, base, f, g, xs, fuel, actual);
     if body_base(s, b);
-    then compose(b, h)!;
+    // A pending branch result must not acquire endpoints from this composite.
+    if dom(h) = cod(b);
+    if cod(h) = g;
+    then target_base := (b >> h)!;
+    then restrict_to_parents(target_base);
     then e = e;
     then base = base;
     then f = f;
@@ -584,7 +584,7 @@ rule branch_body_expansion {
     if dom(h) = source;
     if cod(h) = g;
     if images = h.Args(args);
-    if target_base = compose(b, h);
+    if target_base = b >> h;
     then expand(fuel, nested, target_base, g, images);
     then e = e;
     then base = base;

@@ -301,10 +301,12 @@ impl Checker {
         self.model
             .insert_term_image(direct, self.context(origin), term, context, image);
         if let Some(base) = self.scopes[origin].application_bases.get(&term).copied() {
-            self.model.define_compose(base, direct);
+            let base = self.model.define_context_mor_comp(base, direct);
+            self.model.insert_restrict_to_parents(base);
         }
         if let Some(base) = self.scopes[parent].application_bases.get(&source).copied() {
-            let base = self.model.define_compose(base, morphism);
+            let base = self.model.define_context_mor_comp(base, morphism);
+            self.model.insert_restrict_to_parents(base);
             self.application_base(scope, image, base);
         }
         if let Some(call) = self.scopes[parent].calls.get(&source).copied() {
@@ -418,7 +420,11 @@ impl Checker {
         let bases = self.scopes[parent]
             .bases
             .iter()
-            .map(|base| self.model.define_compose(*base, morphism))
+            .map(|base| {
+                let base = self.model.define_context_mor_comp(*base, morphism);
+                self.model.insert_restrict_to_parents(base);
+                base
+            })
             .collect();
         let equations = self.scopes[parent].equations.clone();
         let id = self.scopes.len();
@@ -478,7 +484,9 @@ impl Checker {
                 Error::new("construction is outside its defining scope".to_owned())
             })?;
             let previous = self.weakening(source, parent)?;
-            self.model.define_compose(previous, projection)
+            let weakening = self.model.define_context_mor_comp(previous, projection);
+            self.model.insert_restrict_to_parents(weakening);
+            weakening
         };
         self.weakenings.insert((source, target), weakening);
         Ok(weakening)
@@ -523,7 +531,9 @@ impl Checker {
             return Ok(morphism);
         }
         let weakening = self.weakening(source, target)?;
-        Ok(self.model.define_compose(morphism, weakening))
+        let morphism = self.model.define_context_mor_comp(morphism, weakening);
+        self.model.insert_restrict_to_parents(morphism);
+        Ok(morphism)
     }
 
     fn goal(
@@ -1057,7 +1067,8 @@ impl Checker {
                 self.assume_type(*scope, term, ty);
                 self.term_syntax(*scope, term, ty, &values);
                 if let Some(base) = definition.application_base {
-                    let base = self.model.define_compose(base, morphism);
+                    let base = self.model.define_context_mor_comp(base, morphism);
+                    self.model.insert_restrict_to_parents(base);
                     self.application_base(*scope, term, base);
                 }
                 self.remember_term(*scope, term);
@@ -1070,7 +1081,8 @@ impl Checker {
         };
         let bases: Vec<_> = self.scopes[definition.end].bases.iter().copied().collect();
         for base in bases {
-            let base = self.model.define_compose(base, morphism);
+            let base = self.model.define_context_mor_comp(base, morphism);
+            self.model.insert_restrict_to_parents(base);
             self.scopes[*scope].bases.insert(base);
         }
         self.restore_environment(entry, *scope, &saved);

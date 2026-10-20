@@ -400,6 +400,82 @@ fn type_extensions_and_substitutions_are_structural() {
 }
 
 #[test]
+fn native_composition_recovers_substitution_restrictions() {
+    let mut model = Kernel::new();
+    let root = model.define_empty();
+    let ty = model.new_ty(root);
+    let source = model.new_context();
+    let projection = model.new_context_mor();
+    model.insert_extension(source, root, ty, projection);
+    let variable = model.define_variable(source);
+    let hidden = model.new_tm(source);
+    let argument = model.new_tm(root);
+    let identity = model.define_context_mor_id(root);
+    let substitution = model.define_pair(source, root, identity, argument);
+
+    let target = model.new_context();
+    let weakening = model.new_context_mor();
+    model.insert_advance(root, target, weakening);
+    let target_ty = model.new_ty(target);
+    let target_argument = model.new_tm(target);
+    model.insert_type_image(weakening, root, ty, target, target_ty);
+    model.insert_term_image(weakening, root, argument, target, target_argument);
+    let composite = model.define_context_mor_comp(substitution, weakening);
+    model.insert_restrict_to_parents(composite);
+    model.close();
+
+    let restriction = model.context_mor_comp(projection, composite).unwrap();
+    assert!(model.are_equal_context_mor(restriction, weakening));
+    let paired = model
+        .pair(source, target, weakening, target_argument)
+        .unwrap();
+    assert!(model.are_equal_context_mor(composite, paired));
+    assert!(model.are_equal_tm(
+        model.tm_mor_app(composite, variable).unwrap(),
+        target_argument
+    ));
+    assert!(model.tm_mor_app(composite, hidden).is_none());
+}
+
+#[test]
+fn branch_composition_waits_for_the_branch_result() {
+    let mut model = Kernel::new();
+    let root = model.define_empty();
+    let end = model.new_context();
+    let body_base = model.new_context_mor();
+    model.insert_advance(root, end, body_base);
+    model.insert_stage_step(root, end, root);
+    let body = model.new_tm(end);
+    let x = model.new_tm(root);
+    let y = model.new_tm(root);
+    let nil = model.define_nil_args(root);
+    let expected = model.define_cons_args(root, x, nil);
+    let actual = model.define_cons_args(root, y, nil);
+    let step = model.new_branch_steps();
+    model.insert_finish_step(step, root, expected, end, body);
+    model.insert_body_base(step, body_base);
+    let eliminator = model.new_eliminator();
+    let base = model.define_context_mor_id(root);
+    let fuel = model.new_expansion();
+    let result = model.define_run_branch(step, eliminator, base, base, root, nil, fuel, actual);
+    model.close();
+
+    assert!(model.context_mor_dom(result).is_none());
+    assert!(model.context_mor_cod(result).is_none());
+    assert!(model.context_mor_comp(body_base, result).is_none());
+
+    let equality = model.define_equality(root, x, y);
+    let witness = model.new_tm(root);
+    model.insert_has_type(root, witness, equality);
+    model.close();
+
+    assert_eq!(model.context_mor_dom(result), Some(end));
+    assert_eq!(model.context_mor_cod(result), Some(root));
+    let composite = model.context_mor_comp(body_base, result).unwrap();
+    assert!(model.are_equal_context_mor(composite, base));
+}
+
+#[test]
 fn checker_records_obligations_in_eqlog() {
     let checked = check(&formatdoc! {"
         {NAT}
