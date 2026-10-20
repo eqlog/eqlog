@@ -205,8 +205,14 @@ impl WBTreeSet {
                 Ok(2)
             }
             Storage::Ranges(ranges) => {
-                fuel.consume(1)?;
-                Ok((ranges.len as u64).saturating_add(1))
+                let run_work = match &ranges.runs {
+                    Runs::Small(_) => {
+                        fuel.consume(1)?;
+                        1
+                    }
+                    Runs::Tree(runs) => runs.iteration_work(fuel, |_last, _fuel| Ok(0))?,
+                };
+                Ok(run_work.saturating_add(ranges.len as u64))
             }
             Storage::Tree(map) => map.iteration_work(fuel, |(), _fuel| Ok(0)),
         }

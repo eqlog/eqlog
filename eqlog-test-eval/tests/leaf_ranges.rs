@@ -145,6 +145,10 @@ fn interval_leaf_folds_resume_in_order_at_every_boundary() {
         vec![u32::MAX],
         vec![0, 1, 5, 6, u32::MAX - 1, u32::MAX],
         (0..128).map(|i| i * 2).collect(),
+        (0..128).flat_map(|i| [i * 4, i * 4 + 1]).collect(),
+        (0..64)
+            .flat_map(|i| [u32::MAX - 253 + i * 4, u32::MAX - 252 + i * 4])
+            .collect(),
     ] {
         let source = set(values.iter().copied());
         for consumed in 0..=values.len() + 1 {

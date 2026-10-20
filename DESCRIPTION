@@ -35,3 +35,6 @@ per-element trees.
 Validate interval promotion with dense holes, retained snapshots, edits
 at both integer boundaries, remapping, and predecessor lookups through
 filtered mapped views.
+
+Charge persistent interval traversal separately from member expansion,
+without increasing the budget for a single large dense interval.
