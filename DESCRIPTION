@@ -1,25 +1,21 @@
-Share mapped member relations lazily
+Share mapped members without broad rebuilding
 
 Carry monotone element maps through keys and child prefix trees so
-member transport can share entire relation subtrees, including unchanged
-columns between members. Compress contiguous IDs into offset runs.
-Cache transformed children on demand so reads can borrow values without
-rebuilding every prefix. Drop children without surviving rows.
+native transport can share entire inherited relation subtrees. Cache
+transformed children on demand and filter empty images. Shared transform
+descriptors keep ordinary data nodes small and let edited paths retain
+untouched mapped child views and immutable snapshots.
 
-Keep sparse updates map-driven and avoid preparing large image maps for
-small source slices. General and temporarily non-functional maps retain
-all images through an eager fallback that builds its result in place.
-Store mapping metadata separately to preserve ordinary node size.
-Mutations and canonicalization materialize affected levels while
-preserving existing snapshots.
-When a full level must be rebuilt, its sorted keys allow linear work.
+Keep sparse updates and comparisons driven by the few changed keys.
+Normalize small mapped sets without scanning their entire cardinality.
+Build general image sets in place, preserving empty-result sharing,
+and use sorted keys for any full-level rebuild that is still needed.
 
-Compare both key and value mapping identities before skipping shared
-differences. Account for deferred transformations and filtered suffixes
-in finite-fuel traversal without forcing them before charging the work.
+Represent contiguous leaf elements as shared intervals while keeping
+scattered sets in trees. Preserve canonical current rows, historical
+snapshots, and bounded work accounting through equality and updates.
 
-Validation: runtime, evaluator, and compile suites pass. Focused tests
-cover selective reads, composition, equality, partial maps, sparse
-updates, randomized set operations, and finite fuel. Generated member
-mapping cases pass in native and desugared modes under both evaluation
-strategies. Formatting and patch checks pass.
+Validation covers mapped edits, filtered pivots, partial and conflicting
+images, composition, random set operations, source and owner equality,
+dynamic roundtrips, and finite fuel. Native and desugared generated
+models retain the same results under both evaluation strategies.

@@ -507,3 +507,179 @@ fn mapped_edits_agree_with_a_btree_map() {
         }
     }
 }
+
+#[test]
+fn sparse_mapped_edits_leave_unvisited_values_lazy() {
+    let calls = Rc::new(Cell::new(0));
+    let mut source = WBTreeMap::new();
+    let mut relation = PrefixTree2::new();
+    for key in 0..4096 {
+        source.insert(key, key);
+        relation.insert([key, key + 8192]);
+    }
+    let counted_calls = calls.clone();
+    let mut edited =
+        source.mapped_entries(Some(MonotoneMap::new(&relation).unwrap()), move |value| {
+            counted_calls.set(counted_calls.get() + 1);
+            Some(value + 100)
+        });
+    let original = edited.clone();
+    *edited.get_mut(&10240).unwrap() += 7;
+    assert_eq!(edited.remove(&8193), Some(101));
+    assert_eq!(edited.insert(13000, 17), None);
+    let mut delta = WBTreeMap::new();
+    delta.insert(8194, 3);
+    edited = edited.union(&delta, |_, left, right| left + right);
+    delta.clear();
+    delta.insert(8195, 5);
+    edited = edited.difference(&delta, |_, _, _| None);
+    assert!(calls.get() < 128, "a sparse edit forced unrelated values");
+    assert_eq!(edited.get(&10240), Some(&2155));
+    assert_eq!(edited.get(&8194), Some(&105));
+    assert_eq!(edited.get(&8193), None);
+    assert_eq!(edited.get(&8195), None);
+    assert_eq!(edited.get(&13000), Some(&17));
+    assert_eq!(original.get(&10240), Some(&2148));
+    assert_eq!(original.get(&8193), Some(&101));
+    assert_eq!(original.get(&8195), Some(&103));
+    assert_eq!(original.get(&13000), None);
+    assert_eq!(edited.len(), 4095);
+    assert_eq!(original.len(), 4096);
+    assert_eq!(source.len(), 4096);
+}
+
+#[test]
+fn repeated_mapping_and_sparse_edits_keep_cache_coordinates_stable() {
+    for seed in 0..12u64 {
+        let mut state = seed;
+        let mut actual = WBTreeMap::new();
+        let mut expected = BTreeMap::new();
+        for key in 0..256 {
+            actual.insert(key, key);
+            expected.insert(key, key);
+        }
+        for step in 0..160 {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let key = (state >> 32) as u32 % 768;
+            let snapshot = actual.clone();
+            let previous = expected.clone();
+            match step % 5 {
+                0 => {
+                    let mut relation = PrefixTree2::new();
+                    for &source in expected.keys() {
+                        if source % 5 != 0 {
+                            relation.insert([source, source + 1]);
+                        }
+                    }
+                    actual = actual
+                        .mapped_entries(Some(MonotoneMap::new(&relation).unwrap()), |value| {
+                            (value % 7 != 0).then_some(value + 3)
+                        });
+                    expected = expected
+                        .into_iter()
+                        .filter_map(|(key, value)| {
+                            (key % 5 != 0 && value % 7 != 0).then_some((key + 1, value + 3))
+                        })
+                        .collect();
+                }
+                1 => assert_eq!(actual.insert(key, step), expected.insert(key, step)),
+                2 => {
+                    if let Some(value) = actual.get_mut(&key) {
+                        *value += 2;
+                    }
+                    if let Some(value) = expected.get_mut(&key) {
+                        *value += 2;
+                    }
+                }
+                3 => assert_eq!(actual.remove(&key), expected.remove(&key)),
+                4 => {
+                    let mut right = WBTreeMap::new();
+                    for offset in 0..7 {
+                        right.insert(key + offset, offset);
+                        *expected.entry(key + offset).or_default() += offset;
+                    }
+                    actual = actual.union(&right, |_, left, right| left + right);
+                }
+                _ => unreachable!(),
+            }
+            assert_eq!(
+                actual
+                    .iter()
+                    .map(|(key, &value)| (key, value))
+                    .collect::<BTreeMap<_, _>>(),
+                expected,
+                "seed {seed}, step {step}"
+            );
+            assert_eq!(
+                snapshot
+                    .iter()
+                    .map(|(key, &value)| (key, value))
+                    .collect::<BTreeMap<_, _>>(),
+                previous,
+                "snapshot for seed {seed}, step {step}"
+            );
+            assert_eq!(actual.len(), expected.len());
+            for key in 0..768 {
+                assert_eq!(
+                    actual.get(&key),
+                    expected.get(&key),
+                    "seed {seed}, step {step}, key {key}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn sparse_difference_visits_only_requested_mapped_values() {
+    let mut source = WBTreeMap::new();
+    let mut relation = PrefixTree2::new();
+    for key in 0..128 {
+        source.insert(key, key);
+        if key != 127 {
+            relation.insert([key, key + 1000]);
+        }
+    }
+    let applied = Rc::new(Cell::new(0));
+    let counter = applied.clone();
+    let target = source.mapped_entries(MonotoneMap::new(&relation), move |value| {
+        counter.set(counter.get() + 1);
+        (value % 5 != 0).then_some(value * 10)
+    });
+    let mut candidate = WBTreeMap::new();
+    for key in [1124, 1125, 1127, 2000] {
+        candidate.insert(key, key);
+    }
+    let mut actual = Vec::new();
+    assert!(
+        candidate.all_difference_entries(&target, |key, left, right| {
+            actual.push((key, *left, right.copied()));
+            true
+        })
+    );
+    assert_eq!(
+        actual,
+        [
+            (1124, 1124, Some(1240)),
+            (1125, 1125, None),
+            (1127, 1127, None),
+            (2000, 2000, None),
+        ]
+    );
+    assert_eq!(applied.get(), 2);
+
+    let mut candidate_mapping = PrefixTree2::new();
+    for key in [1124, 1125, 1127, 2000] {
+        candidate_mapping.insert([key, key]);
+    }
+    let candidate = candidate.mapped(candidate_mapping);
+    let mut visited = 0;
+    assert!(!candidate.all_difference_entries(&target, |_, _, _| {
+        visited += 1;
+        false
+    }));
+    assert_eq!(visited, 1);
+    assert!(target.all_difference_entries(&target.clone(), |_, _, _| {
+        panic!("identical snapshots need no value comparison")
+    }));
+}

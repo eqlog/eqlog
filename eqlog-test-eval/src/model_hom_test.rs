@@ -771,14 +771,15 @@ fn isomorphism_fuel_accounts_for_mapped_suffix_storage() {
     identity.insert([0, 0]);
 
     let mut nested = PrefixTree1::new();
-    nested.insert([0]);
-    nested.insert([1]);
+    for i in 0..64 {
+        nested.insert([2 * i]);
+    }
     for _ in 0..256 {
         nested = nested.mapped(Some(identity.clone()));
     }
     let mut filtered = PrefixTree1::new();
     for i in 0..2_048 {
-        filtered.insert([i]);
+        filtered.insert([2 * i]);
     }
     filtered = filtered.mapped(Some(identity));
 
@@ -818,7 +819,7 @@ fn isomorphism_fuel_accounts_for_deferred_column_mappings() {
     }
     let mut filtered = PrefixTree2::new();
     for i in 0..2_048 {
-        filtered.insert([0, i]);
+        filtered.insert([0, 2 * i]);
     }
     filtered = filtered.mapped(Some(identity.clone()), Some(identity));
 

@@ -50,6 +50,19 @@ impl MonotoneMap {
         (run.source <= key).then(|| run.target + (key - run.source))
     }
 
+    pub(super) fn map_range(&self, first: u32, last: u32, mut visit: impl FnMut(u32, u32)) {
+        let start = self.runs.partition_point(|run| run.last < first);
+        for run in &self.runs[start..] {
+            if run.source > last {
+                break;
+            }
+            visit(
+                run.target + (first.max(run.source) - run.source),
+                run.target + (last.min(run.last) - run.source),
+            );
+        }
+    }
+
     pub fn preimage(&self, key: u32) -> Option<u32> {
         let index = self
             .runs

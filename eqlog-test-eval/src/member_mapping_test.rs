@@ -1,5 +1,7 @@
 use std::collections::BTreeSet;
 
+use eqlog_runtime::CompiledModel;
+
 use crate::member_mapping::*;
 
 #[test]
@@ -263,4 +265,84 @@ fn multi_column_member_transport_filters_partial_maps_and_merges_images() {
             expected.len()
         );
     }
+}
+
+#[test]
+fn member_transport_can_move_inherited_rows_outside_the_original_image() {
+    let mut model = MemberMapping::new();
+    let source = model.new_world();
+    let target = model.new_world();
+    let other = model.new_world();
+    let members: Vec<_> = (0..24).map(|_| model.new_el(source)).collect();
+    let images: Vec<_> = (0..24).map(|_| model.new_el(target)).collect();
+    let representative = model.new_el(other);
+    let labels: Vec<_> = (0..128).map(|_| model.new_label()).collect();
+    let morphism = model.new_world_mor();
+    model.insert_world_mor_dom(morphism, source);
+    model.insert_world_mor_cod(morphism, target);
+    for i in 0..24 {
+        model.insert_el_mor_app(morphism, members[i], images[i]);
+        for j in 0..24 {
+            if (i + j) % 3 != 0 {
+                model.insert_labelled_edge(source, members[i], labels[i % 2], members[j]);
+            }
+        }
+    }
+    for &label in &labels {
+        model.insert_tagged(other, representative, label);
+    }
+    model.close();
+
+    // Own facts make the representative win even though its ID is outside the image.
+    model.equate_world(target, other);
+    model.equate_el(target, images[17], representative);
+    model.canonicalize();
+    model.canonicalize();
+    assert_eq!(model.root_el(images[17]), representative);
+    model.insert_labelled_edge(source, members[17], labels[2], members[17]);
+    for label in &labels[..3] {
+        model.insert_request_label(other, *label);
+    }
+    model.close();
+
+    let target = model.root_world(target);
+    let mut expected = BTreeSet::new();
+    for i in 0..24 {
+        for j in 0..24 {
+            if (i + j) % 3 != 0 {
+                expected.insert((
+                    model.root_el(images[i]),
+                    labels[i % 2],
+                    model.root_el(images[j]),
+                ));
+            }
+        }
+    }
+    expected.insert((representative, labels[2], representative));
+    for actual in [
+        model
+            .iter_labelled_edge()
+            .filter_map(|(world, x, label, y)| (world == target).then_some((x, label, y)))
+            .collect::<BTreeSet<_>>(),
+        model
+            .iter_matched_labelled_edge()
+            .filter_map(|(world, x, label, y)| (world == target).then_some((x, label, y)))
+            .collect(),
+    ] {
+        assert_eq!(actual, expected);
+    }
+    assert!(model.iter_labelled_edge().all(|(world, x, label, y)| {
+        model.root_world(world) == world
+            && model.root_el(x) == x
+            && model.root_label(label) == label
+            && model.root_el(y) == y
+    }));
+    let snapshot = model.to_dynamic();
+    assert!(snapshot.is_canonical());
+    let mut restored = MemberMapping::from_dynamic(&snapshot).unwrap();
+    restored.close();
+    assert_eq!(
+        restored.iter_labelled_edge().collect::<BTreeSet<_>>(),
+        model.iter_labelled_edge().collect()
+    );
 }
