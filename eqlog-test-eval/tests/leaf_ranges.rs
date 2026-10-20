@@ -160,3 +160,74 @@ fn interval_leaf_folds_resume_in_order_at_every_boundary() {
         }
     }
 }
+
+#[test]
+fn fragmented_dense_leaves_preserve_interval_snapshots() {
+    let values = (0..2048).chain(u32::MAX - 2047..=u32::MAX);
+    let mut actual = set(values.clone());
+    let mut expected: BTreeSet<_> = values.collect();
+    let original = actual.clone();
+    let original_expected = expected.clone();
+    let keys: Vec<_> = (0..256)
+        .flat_map(|index| {
+            let offset = (index * 127 % 512) * 4 + 1;
+            [offset, u32::MAX - offset]
+        })
+        .chain([0, 1, u32::MAX - 1, u32::MAX])
+        .collect();
+    let mut snapshots = Vec::new();
+    for (index, key) in keys.iter().enumerate() {
+        if index % 32 == 0 {
+            snapshots.push((actual.clone(), expected.clone()));
+        }
+        assert_eq!(actual.remove(key), expected.remove(key));
+        assert!(!actual.remove(key));
+    }
+    check(&actual, &expected);
+    for key in keys.iter().rev() {
+        assert_eq!(actual.insert(*key), expected.insert(*key));
+        assert!(!actual.insert(*key));
+    }
+    check(&actual, &expected);
+    check(&original, &original_expected);
+    for (snapshot, expected) in snapshots {
+        check(&snapshot, &expected);
+    }
+}
+
+#[test]
+fn fragmented_algebra_results_remain_editable_and_mappable() {
+    let dense = set(0..8192);
+    let holes = set((0..8192).step_by(11));
+    let mut actual = dense.difference(&holes);
+    let snapshot = actual.clone();
+    let mut expected: BTreeSet<_> = (0..8192).filter(|key| key % 11 != 0).collect();
+    assert!(actual.insert(0));
+    expected.insert(0);
+    assert!(actual.remove(&1));
+    expected.remove(&1);
+    check(&actual, &expected);
+    check(&snapshot, &(0..8192).filter(|key| key % 11 != 0).collect());
+
+    let mut mapping = PrefixTree2::new();
+    for key in 0..8192 {
+        if key % 7 != 0 {
+            mapping.insert([key, u32::MAX - 8191 + key]);
+        }
+    }
+    let mapped = PrefixTree1 { set: actual }.mapped(Some(mapping));
+    let expected: BTreeSet<_> = expected
+        .into_iter()
+        .filter(|key| key % 7 != 0)
+        .map(|key| u32::MAX - 8191 + key)
+        .collect();
+    check(&mapped.set, &expected);
+    let mut changed = mapped.clone();
+    assert!(changed.set.remove(&u32::MAX));
+    assert!(changed.set.insert(0));
+    check(&mapped.set, &expected);
+    let mut changed_expected = expected;
+    changed_expected.remove(&u32::MAX);
+    changed_expected.insert(0);
+    check(&changed.set, &changed_expected);
+}

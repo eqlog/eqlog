@@ -24,3 +24,14 @@ Validation covers mapped edits, filtered pivots, partial and conflicting
 images, composition, random set operations, source and owner equality,
 dynamic roundtrips, and finite fuel. Native and desugared generated
 models retain the same results under both evaluation strategies.
+
+Keep fragmented dense leaves in persistent interval trees so sparse
+holes copy interval paths instead of expanding every surviving member.
+Promote bulk interval results before publication, avoiding unexpected
+materialization on their first edit. Small interval vectors retain the
+existing dense-leaf behavior, while ordinary scattered sets keep their
+per-element trees.
+
+Validate interval promotion with dense holes, retained snapshots, edits
+at both integer boundaries, remapping, and predecessor lookups through
+filtered mapped views.
