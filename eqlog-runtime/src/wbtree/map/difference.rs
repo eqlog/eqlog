@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::rc::Rc;
 
 use super::{apply_mappings, Node, WBTreeMap};
-use crate::PrefixTree2;
+use crate::wbtree::mapping::MonotoneMap;
 
 // Bounds avoid allocating split trees while preserving the left traversal order.
 pub(super) fn all<'a, V: Clone>(
@@ -57,7 +57,7 @@ pub(super) fn all<'a, V: Clone>(
         && all(data.right.as_ref(), right, Some(data.key), upper, visit)
 }
 
-type Mappings<'a> = Option<Rc<Vec<&'a PrefixTree2>>>;
+type Mappings<'a> = Option<Rc<Vec<&'a MonotoneMap>>>;
 
 enum Pending<'a, V: Clone> {
     Tree(&'a Rc<Node<V>>, Mappings<'a>),
@@ -162,7 +162,7 @@ fn same_mappings(left: &Mappings<'_>, right: &Mappings<'_>) -> bool {
         && left
             .iter()
             .zip(right)
-            .all(|(left, right)| left.map.shares_root(&right.map))
+            .all(|(left, right)| left.same_snapshot(right))
 }
 
 fn size<V: Clone>(node: &Node<V>) -> usize {

@@ -1,6 +1,8 @@
+use std::cell::OnceCell;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::versions::SnapshotSet;
+use crate::wbtree::mapping::MonotoneMap;
 use crate::wbtree::{map, map::WBTreeMap, set::WBTreeSet};
 
 // type definitions
@@ -1885,36 +1887,31 @@ impl PrefixTree9 {
     }
 }
 
-// mapped methods
+// Preparing maps once per column avoids rescanning their rows at every prefix.
+struct ColumnMapping {
+    relation: PrefixTree2,
+    monotone: OnceCell<Option<MonotoneMap>>,
+}
 
-// TODO: This currently clones the whole tree. Instead, we should use copy-on-write semantics here.
-// The idea would be to introduce new type of node in WBTreeMap which represents applying a mapping
-// to all keys and values under the mapping node.
-// Things to consider:
-// - The new node could be called something like MapNode, but that's ambiguous because the "Map"
-//   here refers to the monotone mapping, not the map as in the WBTreeMap the node is part of.
-// - The monotone mapping on keys should be represented as a WBTreeMap<K, K>, at least for now.
-//   Introduce a type alias for it though; later on we want to transition to a more efficient
-//   representation.
-// - The new `Node` type should be an enum: Either the `Node` as it is currently (find an
-//   appropriate name) or the new mapping node that represents a transformation of the subtree.
-// - In terms of balancing, ignore the mapping nodes at first: mapping nodes shouldn't
-//   contribute to the of a node/subtree. This might be close to the best thing that we can do,
-//   as mapped subtrees will usually be shared with other trees, so allowing more imbalance in
-//   order to avoid cloning might be a reasonable trade-off.
-// - Balancing might require shifting mapping nodes around, cloning them, I'm not sure. Figure it
-//   out.
-// - The map on values should be given by an Fn(V) -> V. Use sometihg like an Rc<dyn Fn ...> to
-//   hold it, the concrete type of the function shouldn't be part of WBTreeMap.
-// - In principle you could imagine applying a mapping on keys separately from values, but this is
-//   never actually used. So the mapping node should do both at the same time.
-// - Keep in mind that there might be multiple mapping nodes on the way from the root node down to
-//   some specific node. You'll need to apply multiple mappings, potentially.
-// - When inserting a (key, value) pair, that (key, value) pair might belong somewhere under a
-//   mapping node. But we don't have reverse mappings or something like that, and insertions
-//   currently recreate the path from the root node anyway. So just continue doing that: Recreate
-//   the path from the new root node. However, this might require splitting a subtree under a
-//   mapping node, in which both parts of the split must be put under separate mapping node.
+impl ColumnMapping {
+    fn new(relation: PrefixTree2) -> Self {
+        Self {
+            relation,
+            monotone: OnceCell::new(),
+        }
+    }
+
+    fn monotone_for(&self, source_len: usize) -> Option<&MonotoneMap> {
+        // A small source delta is cheaper to map directly than to prepare a large image map.
+        if self.monotone.get().is_none() && source_len < self.relation.map.len_upper_bound() {
+            return None;
+        }
+        self.monotone
+            .get_or_init(|| MonotoneMap::new(&self.relation))
+            .as_ref()
+    }
+}
+
 impl PrefixTree0 {
     pub fn mapped(&self) -> Self {
         self.clone()
@@ -1923,260 +1920,74 @@ impl PrefixTree0 {
 
 impl PrefixTree1 {
     pub fn mapped(&self, map0: Option<PrefixTree2>) -> Self {
-        match map0 {
-            None => self.clone(),
-            Some(map) => {
+        let map0 = map0.map(ColumnMapping::new);
+        self.mapped_prepared(map0.as_ref())
+    }
+
+    fn mapped_prepared(&self, map0: Option<&ColumnMapping>) -> Self {
+        let Some(mapping) = map0 else {
+            return self.clone();
+        };
+        if let Some(monotone) = mapping.monotone_for(self.set.len_upper_bound()) {
+            return Self {
+                set: self.set.mapped(monotone.clone()),
+            };
+        }
+        let mut result = Self::new();
+        for key in self.set.iter() {
+            if let Some(images) = mapping.relation.get(key) {
+                result = result.union(images);
+            }
+        }
+        result
+    }
+}
+
+macro_rules! mapped_tree {
+    ($tree:ident, $($map:ident),+) => {
+        impl $tree {
+            pub fn mapped(&self, map0: Option<PrefixTree2>, $($map: Option<PrefixTree2>),+) -> Self {
+                let map0 = map0.map(ColumnMapping::new);
+                $(let $map = $map.map(ColumnMapping::new);)+
+                self.mapped_prepared(map0.as_ref(), $($map.as_ref()),+)
+            }
+
+            fn mapped_prepared(&self, map0: Option<&ColumnMapping>, $($map: Option<&ColumnMapping>),+) -> Self {
+                if [$($map.is_none()),+].into_iter().all(|identity| identity) {
+                    match map0 {
+                        None => return self.clone(),
+                        Some(mapping) => {
+                            if let Some(monotone) = mapping.monotone_for(self.map.len_upper_bound()) {
+                                return Self { map: self.map.mapped_keys(monotone.clone()) };
+                            }
+                        }
+                    }
+                }
                 let mut result = Self::new();
-                for el in self.set.iter() {
-                    if let Some(restriction) = map.get(el) {
-                        let mapped = restriction
-                            .set
-                            .iter()
-                            .next()
-                            .expect("empty restriction in map");
-                        result.set.insert(mapped);
+                for (key, value) in self.map.iter() {
+                    match map0 {
+                        None => result.insert_restriction(key, value.mapped_prepared($($map),+)),
+                        Some(mapping) => {
+                            if let Some(images) = mapping.relation.get(key) {
+                                let value = value.mapped_prepared($($map),+);
+                                for [image] in images.iter() {
+                                    result.insert_restriction(image, value.clone());
+                                }
+                            }
+                        }
                     }
                 }
                 result
             }
         }
-    }
+    };
 }
 
-impl PrefixTree2 {
-    pub fn mapped(&self, map0: Option<PrefixTree2>, map1: Option<PrefixTree2>) -> Self {
-        let mut result = Self::new();
-        for (k, v) in self.map.iter() {
-            let new_k_opt = match &map0 {
-                None => Some(k),
-                Some(map) => map
-                    .get(k)
-                    .and_then(|restriction| restriction.set.iter().next()),
-            };
-            if let Some(new_k) = new_k_opt {
-                let new_v = v.mapped(map1.clone());
-                result.insert_restriction(new_k, new_v);
-            }
-        }
-        result
-    }
-}
-
-impl PrefixTree3 {
-    pub fn mapped(
-        &self,
-        map0: Option<PrefixTree2>,
-        map1: Option<PrefixTree2>,
-        map2: Option<PrefixTree2>,
-    ) -> Self {
-        let mut result = Self::new();
-        for (k, v) in self.map.iter() {
-            let new_k_opt = match &map0 {
-                None => Some(k),
-                Some(map) => map
-                    .get(k)
-                    .and_then(|restriction| restriction.set.iter().next()),
-            };
-            if let Some(new_k) = new_k_opt {
-                let new_v = v.mapped(map1.clone(), map2.clone());
-                result.insert_restriction(new_k, new_v);
-            }
-        }
-        result
-    }
-}
-
-impl PrefixTree4 {
-    pub fn mapped(
-        &self,
-        map0: Option<PrefixTree2>,
-        map1: Option<PrefixTree2>,
-        map2: Option<PrefixTree2>,
-        map3: Option<PrefixTree2>,
-    ) -> Self {
-        let mut result = Self::new();
-        for (k, v) in self.map.iter() {
-            let new_k_opt = match &map0 {
-                None => Some(k),
-                Some(map) => map
-                    .get(k)
-                    .and_then(|restriction| restriction.set.iter().next()),
-            };
-            if let Some(new_k) = new_k_opt {
-                let new_v = v.mapped(map1.clone(), map2.clone(), map3.clone());
-                result.insert_restriction(new_k, new_v);
-            }
-        }
-        result
-    }
-}
-
-impl PrefixTree5 {
-    pub fn mapped(
-        &self,
-        map0: Option<PrefixTree2>,
-        map1: Option<PrefixTree2>,
-        map2: Option<PrefixTree2>,
-        map3: Option<PrefixTree2>,
-        map4: Option<PrefixTree2>,
-    ) -> Self {
-        let mut result = Self::new();
-        for (k, v) in self.map.iter() {
-            let new_k_opt = match &map0 {
-                None => Some(k),
-                Some(map) => map
-                    .get(k)
-                    .and_then(|restriction| restriction.set.iter().next()),
-            };
-            if let Some(new_k) = new_k_opt {
-                let new_v = v.mapped(map1.clone(), map2.clone(), map3.clone(), map4.clone());
-                result.insert_restriction(new_k, new_v);
-            }
-        }
-        result
-    }
-}
-
-impl PrefixTree6 {
-    pub fn mapped(
-        &self,
-        map0: Option<PrefixTree2>,
-        map1: Option<PrefixTree2>,
-        map2: Option<PrefixTree2>,
-        map3: Option<PrefixTree2>,
-        map4: Option<PrefixTree2>,
-        map5: Option<PrefixTree2>,
-    ) -> Self {
-        let mut result = Self::new();
-        for (k, v) in self.map.iter() {
-            let new_k_opt = match &map0 {
-                None => Some(k),
-                Some(map) => map
-                    .get(k)
-                    .and_then(|restriction| restriction.set.iter().next()),
-            };
-            if let Some(new_k) = new_k_opt {
-                let new_v = v.mapped(
-                    map1.clone(),
-                    map2.clone(),
-                    map3.clone(),
-                    map4.clone(),
-                    map5.clone(),
-                );
-                result.insert_restriction(new_k, new_v);
-            }
-        }
-        result
-    }
-}
-
-impl PrefixTree7 {
-    pub fn mapped(
-        &self,
-        map0: Option<PrefixTree2>,
-        map1: Option<PrefixTree2>,
-        map2: Option<PrefixTree2>,
-        map3: Option<PrefixTree2>,
-        map4: Option<PrefixTree2>,
-        map5: Option<PrefixTree2>,
-        map6: Option<PrefixTree2>,
-    ) -> Self {
-        let mut result = Self::new();
-        for (k, v) in self.map.iter() {
-            let new_k_opt = match &map0 {
-                None => Some(k),
-                Some(map) => map
-                    .get(k)
-                    .and_then(|restriction| restriction.set.iter().next()),
-            };
-            if let Some(new_k) = new_k_opt {
-                let new_v = v.mapped(
-                    map1.clone(),
-                    map2.clone(),
-                    map3.clone(),
-                    map4.clone(),
-                    map5.clone(),
-                    map6.clone(),
-                );
-                result.insert_restriction(new_k, new_v);
-            }
-        }
-        result
-    }
-}
-
-impl PrefixTree8 {
-    pub fn mapped(
-        &self,
-        map0: Option<PrefixTree2>,
-        map1: Option<PrefixTree2>,
-        map2: Option<PrefixTree2>,
-        map3: Option<PrefixTree2>,
-        map4: Option<PrefixTree2>,
-        map5: Option<PrefixTree2>,
-        map6: Option<PrefixTree2>,
-        map7: Option<PrefixTree2>,
-    ) -> Self {
-        let mut result = Self::new();
-        for (k, v) in self.map.iter() {
-            let new_k_opt = match &map0 {
-                None => Some(k),
-                Some(map) => map
-                    .get(k)
-                    .and_then(|restriction| restriction.set.iter().next()),
-            };
-            if let Some(new_k) = new_k_opt {
-                let new_v = v.mapped(
-                    map1.clone(),
-                    map2.clone(),
-                    map3.clone(),
-                    map4.clone(),
-                    map5.clone(),
-                    map6.clone(),
-                    map7.clone(),
-                );
-                result.insert_restriction(new_k, new_v);
-            }
-        }
-        result
-    }
-}
-
-impl PrefixTree9 {
-    pub fn mapped(
-        &self,
-        map0: Option<PrefixTree2>,
-        map1: Option<PrefixTree2>,
-        map2: Option<PrefixTree2>,
-        map3: Option<PrefixTree2>,
-        map4: Option<PrefixTree2>,
-        map5: Option<PrefixTree2>,
-        map6: Option<PrefixTree2>,
-        map7: Option<PrefixTree2>,
-        map8: Option<PrefixTree2>,
-    ) -> Self {
-        let mut result = Self::new();
-        for (k, v) in self.map.iter() {
-            let new_k_opt = match &map0 {
-                None => Some(k),
-                Some(map) => map
-                    .get(k)
-                    .and_then(|restriction| restriction.set.iter().next()),
-            };
-            if let Some(new_k) = new_k_opt {
-                let new_v = v.mapped(
-                    map1.clone(),
-                    map2.clone(),
-                    map3.clone(),
-                    map4.clone(),
-                    map5.clone(),
-                    map6.clone(),
-                    map7.clone(),
-                    map8.clone(),
-                );
-                result.insert_restriction(new_k, new_v);
-            }
-        }
-        result
-    }
-}
+mapped_tree!(PrefixTree2, map1);
+mapped_tree!(PrefixTree3, map1, map2);
+mapped_tree!(PrefixTree4, map1, map2, map3);
+mapped_tree!(PrefixTree5, map1, map2, map3, map4);
+mapped_tree!(PrefixTree6, map1, map2, map3, map4, map5);
+mapped_tree!(PrefixTree7, map1, map2, map3, map4, map5, map6);
+mapped_tree!(PrefixTree8, map1, map2, map3, map4, map5, map6, map7);
+mapped_tree!(PrefixTree9, map1, map2, map3, map4, map5, map6, map7, map8);

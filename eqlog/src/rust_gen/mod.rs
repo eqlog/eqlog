@@ -1944,12 +1944,10 @@ enum MorphismIndexColumnKind {
 }
 
 impl MorphismIndexColumnKind {
-    fn needs_mapping(self) -> bool {
+    fn needs_prefix_walk(self) -> bool {
         match self {
-            MorphismIndexColumnKind::OuterParent(_)
-            | MorphismIndexColumnKind::Parent
-            | MorphismIndexColumnKind::Member(_) => true,
-            MorphismIndexColumnKind::Copy => false,
+            MorphismIndexColumnKind::OuterParent(_) | MorphismIndexColumnKind::Parent => true,
+            MorphismIndexColumnKind::Member(_) | MorphismIndexColumnKind::Copy => false,
         }
     }
 }
@@ -2089,14 +2087,54 @@ fn display_morphism_index_prefix_walk_from(
     target_prefix: Vec<String>,
     driving_map: Option<usize>,
 ) -> String {
-    if pos == columns.len() {
-        let target_prefix = target_prefix.iter().format(", ");
-        let suffix = if source_tree_is_ref {
+    let prefix_len = columns
+        .iter()
+        .rposition(|column| column.needs_prefix_walk())
+        .unwrap()
+        + 1;
+    let walk_len = driving_map.map_or(prefix_len, |column| prefix_len.max(column + 1));
+    if pos == walk_len {
+        let maps = columns[pos..]
+            .iter()
+            .enumerate()
+            .map(|(i, column)| {
+                let i = pos + i;
+                match column {
+                    MorphismIndexColumnKind::Member(_) => format!("Some(map_el{i}.clone())"),
+                    MorphismIndexColumnKind::Copy => "None".to_owned(),
+                    MorphismIndexColumnKind::OuterParent(_) | MorphismIndexColumnKind::Parent => {
+                        unreachable!("parents belong to the prefix")
+                    }
+                }
+            })
+            .join(", ");
+        let suffix = if columns[pos..].iter().any(|column| match column {
+            MorphismIndexColumnKind::Member(_) => true,
+            MorphismIndexColumnKind::Copy => false,
+            MorphismIndexColumnKind::OuterParent(_) | MorphismIndexColumnKind::Parent => {
+                unreachable!("parents belong to the prefix")
+            }
+        }) {
+            format!("{source_tree}.mapped({maps})")
+        } else if source_tree_is_ref {
             format!("(*{source_tree}).clone()")
         } else {
             format!("{source_tree}.clone()")
         };
-        return format!("propagated.push(([{target_prefix}], {suffix}));");
+        // Sparse image deltas still drive lookups before rebuilding the shared suffix.
+        let wrap = (prefix_len..pos).rev().map(|i| {
+            let dim = current_dim + pos - i;
+            let key = &target_prefix[i];
+            format!("let mapped = {{ let mut tree = PrefixTree{dim}::new(); tree.insert_restriction({key}, mapped); tree }};")
+        }).join("\n");
+        let target_prefix = target_prefix[..prefix_len].iter().format(", ");
+        return formatdoc! {"
+            {{
+                let mapped = {suffix};
+                {wrap}
+                propagated.push(([{target_prefix}], mapped));
+            }}
+        "};
     }
 
     let el = format!("el{pos}");
@@ -2395,13 +2433,11 @@ fn display_remap_parented_index<'a>(
             .collect();
         let prefix_len = columns
             .iter()
-            .rposition(|column| column.needs_mapping())
+            .rposition(|column| column.needs_prefix_walk())
             .expect("index over a parented relation should contain the parent")
             + 1;
         let suffix_len = arity.len() - prefix_len;
-        let prefix_columns = &columns[..prefix_len];
-
-        let member_maps = prefix_columns
+        let member_maps = columns
             .iter()
             .copied()
             .enumerate()
@@ -2437,7 +2473,7 @@ fn display_remap_parented_index<'a>(
             .collect();
         let collect_propagated = if checkpointed {
             display_morphism_index_prefix_walk_from(
-                prefix_columns,
+                &columns,
                 owner_len,
                 arity.len() - owner_len,
                 "source_delta".to_string(),
@@ -2447,7 +2483,7 @@ fn display_remap_parented_index<'a>(
             )
         } else {
             display_morphism_index_prefix_walk(
-                prefix_columns,
+                &columns,
                 arity.len(),
                 format!("{index_field_name}_all"),
                 true,
@@ -2503,7 +2539,7 @@ fn display_remap_parented_index<'a>(
             "{}.unwrap_or_else(|| PrefixTree{dim}::empty())",
             source_slice("*dom")
         );
-        let maps = prefix_columns
+        let maps = columns
             .iter()
             .enumerate()
             .filter_map(|(i, column)| match column {
@@ -2513,7 +2549,7 @@ fn display_remap_parented_index<'a>(
                 | MorphismIndexColumnKind::Copy => None,
             })
             .join(", ");
-        let map_columns: Vec<_> = prefix_columns
+        let map_columns: Vec<_> = columns
             .iter()
             .enumerate()
             .filter_map(|(column, kind)| match kind {
@@ -2528,7 +2564,7 @@ fn display_remap_parented_index<'a>(
             .enumerate()
             .map(|(map, &column)| {
                 let collect = display_morphism_index_prefix_walk_from(
-                    prefix_columns,
+                    &columns,
                     owner_len,
                     arity.len() - owner_len,
                     "source".to_owned(),

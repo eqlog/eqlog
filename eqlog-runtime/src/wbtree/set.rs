@@ -1,4 +1,5 @@
 use super::map::*;
+use super::mapping::MonotoneMap;
 use std::fmt;
 use std::mem;
 
@@ -114,9 +115,10 @@ impl WBTreeSet {
     }
 
     pub fn is_empty(&self) -> bool {
-        match self.storage {
+        match &self.storage {
             Storage::Empty => true,
-            Storage::Singleton(_) | Storage::Tree(_) => false,
+            Storage::Singleton(_) => false,
+            Storage::Tree(map) => map.is_empty(),
         }
     }
 
@@ -129,7 +131,23 @@ impl WBTreeSet {
     }
 
     pub(crate) fn len_upper_bound(&self) -> usize {
-        self.len()
+        match &self.storage {
+            Storage::Empty => 0,
+            Storage::Singleton(_) => 1,
+            Storage::Tree(map) => map.len_upper_bound(),
+        }
+    }
+
+    pub(crate) fn mapped(&self, mapping: MonotoneMap) -> Self {
+        match &self.storage {
+            Storage::Empty => Self::new(),
+            Storage::Singleton(value) => mapping
+                .apply(*value)
+                .map_or_else(Self::new, Self::singleton),
+            Storage::Tree(map) => Self {
+                storage: Storage::Tree(map.mapped_keys(mapping)),
+            },
+        }
     }
 
     pub fn clear(&mut self) {

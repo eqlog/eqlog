@@ -70,6 +70,9 @@ eqlog_mod!(morphism_helper_names);
 eqlog_mod!(morphism_preservation);
 eqlog_mod!(morphism_category);
 eqlog_mod!(member_parents);
+eqlog_mod!(member_mapping);
+#[cfg(test)]
+mod member_mapping_test;
 eqlog_mod!(canonicalization);
 
 #[cfg(test)]

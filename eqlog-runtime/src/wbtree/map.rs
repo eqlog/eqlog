@@ -3,6 +3,7 @@ use std::fmt;
 use std::mem;
 use std::rc::Rc;
 
+use super::mapping::MonotoneMap;
 use crate::{Error, Fuel, PrefixTree2};
 
 mod difference;
@@ -31,7 +32,7 @@ impl<V: Clone> DataNode<V> {
 
 #[derive(Clone)]
 struct MappingNode<V: Clone> {
-    mapping: PrefixTree2,
+    mapping: MonotoneMap,
     child: Option<Rc<Node<V>>>,
 }
 
@@ -42,29 +43,14 @@ enum Node<V: Clone> {
     Mapping(MappingNode<V>),
 }
 
-/// Apply a single mapping to a u32 value.
-/// Returns None if the mapping doesn't have an entry for the value.
-fn apply_single_mapping(mapping: &PrefixTree2, val: u32) -> Option<u32> {
-    mapping
-        .get(val)
-        .and_then(|restriction| restriction.set.iter().next())
-}
-
-/// Apply a sequence of mappings to a u32 value. Each mapping in the slice is a PrefixTree2.
-/// Mappings are applied in reverse order: last mapping first, first mapping last.
-/// This is because mappings are accumulated outermost-first during tree traversal,
-/// but should be applied innermost-first (closest to data first).
-/// Returns None if any mapping doesn't have an entry for the value.
-fn apply_mappings(mappings: &[&PrefixTree2], val: u32) -> Option<u32> {
+// Traversal accumulates outer mappings first, but keys start in the inner domain.
+fn apply_mappings(mappings: &[&MonotoneMap], val: u32) -> Option<u32> {
     let mut result = val;
     for mapping in mappings.iter().rev() {
-        result = apply_single_mapping(mapping, result)?;
+        result = mapping.apply(result)?;
     }
     Some(result)
 }
-
-// TODO: Make this more sophisticated, e.g. by checking the invariant that the mapping is monotone,
-// special cases for maps of the form (+ <offset>) etc.
 
 // Weight balance parameters
 const DELTA: usize = 3;
@@ -121,7 +107,7 @@ impl<V: Clone> Node<V> {
     }
 
     #[allow(dead_code)]
-    fn wrapped_in_mappings(mappings: &[&PrefixTree2], node: Option<Rc<Self>>) -> Option<Rc<Self>> {
+    fn wrapped_in_mappings(mappings: &[&MonotoneMap], node: Option<Rc<Self>>) -> Option<Rc<Self>> {
         let mut result = node;
         for mapping in mappings.iter().rev() {
             result = Some(Rc::new(Self::Mapping(MappingNode {
@@ -1007,6 +993,7 @@ impl<V: Clone> WBTreeMap<V> {
     }
 
     pub fn get(&self, key: &u32) -> Option<&V> {
+        let mut key = *key;
         let mut current = self.root.as_deref();
         while let Some(node) = current {
             match node {
@@ -1015,49 +1002,14 @@ impl<V: Clone> WBTreeMap<V> {
                     Ordering::Greater => current = data_node.right.as_deref(),
                     Ordering::Equal => return Some(&data_node.value),
                 },
-                Node::Mapping(_) => return self.get_mapped(key),
+                Node::Mapping(mapping) => {
+                    // Inverting the query avoids scanning when a search pivot is filtered out.
+                    key = mapping.mapping.preimage(key)?;
+                    current = mapping.child.as_deref();
+                }
             }
         }
         None
-    }
-
-    fn get_mapped(&self, key: &u32) -> Option<&V> {
-        // Accumulate mappings as we traverse
-        let mut mappings: Vec<&PrefixTree2> = Vec::new();
-        let mut current = &self.root;
-        loop {
-            match current {
-                None => return None,
-                Some(node) => match node.as_ref() {
-                    Node::Data(data_node) => {
-                        // Apply all accumulated mappings to the stored key
-                        let mapped_key = if mappings.is_empty() {
-                            Some(data_node.key)
-                        } else {
-                            apply_mappings(&mappings, data_node.key)
-                        };
-
-                        match mapped_key {
-                            None => {
-                                // A filtered pivot says nothing about its descendants.
-                                return self.iter().find_map(|(candidate, value)| {
-                                    (candidate == *key).then_some(value)
-                                });
-                            }
-                            Some(mk) => match key.cmp(&mk) {
-                                Ordering::Less => current = &data_node.left,
-                                Ordering::Greater => current = &data_node.right,
-                                Ordering::Equal => return Some(&data_node.value),
-                            },
-                        }
-                    }
-                    Node::Mapping(mapping_node) => {
-                        mappings.push(&mapping_node.mapping);
-                        current = &mapping_node.child;
-                    }
-                },
-            }
-        }
     }
 
     pub fn get_mut(&mut self, key: &u32) -> Option<&mut V> {
@@ -1136,13 +1088,7 @@ impl<V: Clone> WBTreeMap<V> {
                         pending.push((&data.right, mapping_work));
                     }
                     Node::Mapping(mapping) => {
-                        // Full mapping traversal bounds a lookup, including nested
-                        // mappings. Filtered keys still cost work to visit.
-                        let lookup_work =
-                            mapping.mapping.map.iteration_work(fuel, |row, fuel| {
-                                fuel.consume(1)?;
-                                Ok((row.set.len() as u64).saturating_add(1))
-                            })?;
+                        let lookup_work = mapping.mapping.run_count() as u64;
                         let mapping_work =
                             mapping_work.saturating_add(lookup_work).saturating_add(1);
                         work = work.saturating_add(1);
@@ -1313,24 +1259,18 @@ impl<V: Clone> WBTreeMap<V> {
         }
     }
 
-    /// Returns a new map where all keys have been transformed by the given mapping.
-    /// The mapping must be monotone (order-preserving) for the tree structure to remain valid.
-    /// Keys not in the mapping's domain are filtered out.
-    /// This operation is O(1) - it just wraps the tree in a mapping node.
-    /// Counting and partial-domain lookups may traverse the tree. Structural edits
-    /// and set operations materialize mapped inputs before comparing stored keys.
+    /// Keys outside the domain are filtered out. Non-increasing maps are rejected.
+    /// Preparing the offset runs takes time linear in the mapping's row count.
     pub fn mapped(&self, mapping: PrefixTree2) -> Self {
-        debug_assert!(
-            {
-                let mut last_value: Option<u32> = None;
-                mapping.iter().all(|[_, v]| {
-                    let ok = last_value.map_or(true, |prev| prev < v);
-                    last_value = Some(v);
-                    ok
-                })
-            },
-            "mapping must be monotone"
-        );
+        let mapping = MonotoneMap::new(&mapping).expect("mapping must be strictly increasing");
+        self.mapped_keys(mapping)
+    }
+
+    /// Wraps the shared root in O(1). Edits and set operations materialize keys.
+    pub fn mapped_keys(&self, mapping: MonotoneMap) -> Self {
+        if mapping.run_count() == 0 {
+            return Self::new();
+        }
         let new_root = self.root.clone().map(|root| {
             Rc::new(Node::Mapping(MappingNode {
                 mapping,
@@ -1350,7 +1290,7 @@ impl<V: Clone> WBTreeMap<V> {
 pub struct Iter<'a, V: Clone> {
     stack: Vec<(&'a DataNode<V>, usize)>,
     current: Option<&'a Option<Rc<Node<V>>>>,
-    current_mappings: Vec<&'a PrefixTree2>,
+    current_mappings: Vec<&'a MonotoneMap>,
 }
 
 impl<'a, V: Clone> Iter<'a, V> {
@@ -1404,9 +1344,9 @@ impl<'a, V: Clone> Iterator for Iter<'a, V> {
 // Mutable iterator implementation
 // Each stack entry includes the data node pointer and accumulated mappings at that point
 pub struct IterMut<'a, V: Clone> {
-    stack: Vec<(*mut DataNode<V>, Vec<PrefixTree2>)>,
+    stack: Vec<(*mut DataNode<V>, Vec<MonotoneMap>)>,
     current: Option<*mut Option<Rc<Node<V>>>>,
-    current_mappings: Vec<PrefixTree2>,
+    current_mappings: Vec<MonotoneMap>,
     _phantom: std::marker::PhantomData<&'a mut WBTreeMap<V>>,
 }
 
@@ -1462,7 +1402,7 @@ impl<'a, V: Clone> Iterator for IterMut<'a, V> {
                     let mapped_key = if mappings.is_empty() {
                         Some(data_node.key)
                     } else {
-                        let mapping_refs: Vec<&PrefixTree2> = mappings.iter().collect();
+                        let mapping_refs: Vec<&MonotoneMap> = mappings.iter().collect();
                         apply_mappings(&mapping_refs, data_node.key)
                     };
 

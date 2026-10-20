@@ -1,0 +1,25 @@
+Share member suffixes through monotone maps
+
+Avoid copying every transported member row when an increasing element
+map can preserve a shared tree level. Compress contiguous source and
+target IDs into offset runs, and use inverse lookup so gaps do not
+force a tree scan.
+
+Share the final mapped column and its unchanged suffix. Earlier mapped
+columns rebuild their prefixes because their values need transformation.
+Keep sparse image updates map-driven and avoid preparing large maps for
+small source deltas so incremental updates do not require full scans.
+
+Transport member suffixes as relations, retaining all images for
+partial, non-monotone, and temporarily non-functional maps. Keep
+canonicalization unchanged so equality merges continue to restore
+canonical rows.
+
+Cover offset runs, shared snapshots, conflicting images, late map
+growth, and source and target equality changes with runtime and
+evaluator tests.
+
+Validation: runtime, evaluator, and compile test suites pass. The
+member mapping and morphism preservation cases also pass in native
+and desugared models with naive and semi-naive evaluation. Formatting
+and patch checks pass.

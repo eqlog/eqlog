@@ -163,12 +163,12 @@ fn remap<'a>(
             .collect();
         let prefix_len = columns
             .iter()
-            .rposition(|column| column.needs_mapping())
+            .rposition(|column| column.needs_prefix_walk())
             .unwrap()
             + 1;
         let suffix_len = arity.len() - prefix_len;
         let typ = display_index_type(&plan.rel, ctx);
-        let maps = columns[..prefix_len]
+        let maps = columns
             .iter()
             .enumerate()
             .filter_map(|(i, column)| match column {
@@ -181,12 +181,8 @@ fn remap<'a>(
                 | MorphismIndexColumnKind::Copy => None,
             })
             .join("\n");
-        let collect = display_morphism_index_prefix_walk(
-            &columns[..prefix_len],
-            arity.len(),
-            "source".to_string(),
-            false,
-        );
+        let collect =
+            display_morphism_index_prefix_walk(&columns, arity.len(), "source".to_string(), false);
         let prefix = (0..prefix_len).map(|i| format!("el{i}")).join(", ");
         let wrap = (1..prefix_len).rev().map(|i| {
             let dim = arity.len() - i;

@@ -1,6 +1,108 @@
 use eqlog_runtime::wbtree::map::WBTreeMap;
+use eqlog_runtime::wbtree::mapping::MonotoneMap;
 use eqlog_runtime::PrefixTree2;
+use std::cell::Cell;
 use std::collections::BTreeMap;
+use std::rc::Rc;
+
+#[test]
+fn monotone_maps_compress_offsets_without_filling_gaps() {
+    let mut relation = PrefixTree2::new();
+    for key in 0..128 {
+        relation.insert([key, key + 150]);
+    }
+    let mapping = MonotoneMap::new(&relation).unwrap();
+    assert_eq!(mapping.run_count(), 1);
+    for key in 0..128 {
+        assert_eq!(mapping.apply(key), Some(key + 150));
+        assert_eq!(mapping.preimage(key + 150), Some(key));
+    }
+    assert_eq!(mapping.apply(128), None);
+    assert_eq!(mapping.preimage(149), None);
+    assert_eq!(mapping.preimage(278), None);
+
+    relation.insert([200, 300]);
+    relation.insert([201, 301]);
+    relation.insert([u32::MAX - 1, u32::MAX - 2]);
+    relation.insert([u32::MAX, u32::MAX - 1]);
+    let mapping = MonotoneMap::new(&relation).unwrap();
+    assert_eq!(mapping.run_count(), 3);
+    for [source, target] in relation.iter() {
+        assert_eq!(mapping.apply(source), Some(target));
+        assert_eq!(mapping.preimage(target), Some(source));
+    }
+    for key in [128, 199, 202, u32::MAX - 2] {
+        assert_eq!(mapping.apply(key), None);
+    }
+    for key in [278, 299, 302, u32::MAX] {
+        assert_eq!(mapping.preimage(key), None);
+    }
+}
+
+#[test]
+fn monotone_maps_reject_collisions_reordering_and_multiple_images() {
+    for rows in [[[0, 2], [1, 2]], [[0, 2], [1, 1]], [[0, 1], [0, 2]]] {
+        let mut relation = PrefixTree2::new();
+        for row in rows {
+            relation.insert(row);
+        }
+        assert!(MonotoneMap::new(&relation).is_none());
+    }
+}
+
+struct CountClones(Rc<Cell<usize>>);
+
+impl Clone for CountClones {
+    fn clone(&self) -> Self {
+        self.0.set(self.0.get() + 1);
+        Self(self.0.clone())
+    }
+}
+
+#[test]
+fn offset_mapping_and_lookup_share_values_until_mutation() {
+    let clones = Rc::new(Cell::new(0));
+    let mut base = WBTreeMap::new();
+    let mut mapping = PrefixTree2::new();
+    for key in 0..1024 {
+        base.insert(key, CountClones(clones.clone()));
+        mapping.insert([key, key + 2048]);
+    }
+    clones.set(0);
+    let mut mapped = base.mapped(mapping);
+    for key in 2048..3072 {
+        assert!(mapped.get(&key).is_some());
+    }
+    assert_eq!(mapped.iter().count(), 1024);
+    assert_eq!(clones.get(), 0);
+    mapped.remove(&2048);
+    assert!(base.get(&0).is_some());
+    assert!(mapped.get(&2048).is_none());
+}
+
+#[test]
+fn fragmented_mappings_compare_by_snapshot_without_cancelling_distinct_images() {
+    let mut base = WBTreeMap::new();
+    let mut mapping = PrefixTree2::new();
+    for key in 0..4096 {
+        base.insert(key, ());
+        mapping.insert([key, key * 2]);
+    }
+    let first = base.mapped(mapping.clone());
+    let same = base.mapped(mapping.clone());
+    assert_eq!(first.difference_entries(&same).count(), 0);
+    mapping.remove([4095, 8190]);
+    mapping.insert([4095, u32::MAX]);
+    let second = base.mapped(mapping);
+    assert_eq!(
+        first
+            .difference_entries(&second)
+            .filter_map(|(key, (), right)| right.is_none().then_some(key))
+            .collect::<Vec<_>>(),
+        [8190],
+    );
+    assert_eq!(second.get(&u32::MAX), Some(&()));
+}
 
 fn mapped_tree() -> WBTreeMap<u32> {
     let mut base = WBTreeMap::new();

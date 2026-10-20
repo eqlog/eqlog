@@ -1,0 +1,22 @@
+type Label;
+
+model World {
+    type El;
+    pred edge(El, El);
+    pred tagged(El, Label);
+    pred reached(El);
+    rule step {
+        if reached(x);
+        if edge(x, y);
+        then reached(y);
+    }
+}
+
+pred request(World);
+pred observed(World, Label);
+rule observe {
+    if request(w);
+    if w.reached(x);
+    if w.tagged(x, label);
+    then observed(w, label);
+}

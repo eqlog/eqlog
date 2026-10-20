@@ -48,6 +48,58 @@ fn filtering_a_later_column_does_not_leave_empty_prefixes() {
 }
 
 #[test]
+fn mapping_a_prefix_shares_its_unchanged_suffixes() {
+    let mut tree = PrefixTree3::new();
+    let mut mapping = PrefixTree2::new();
+    for key in 0..128 {
+        mapping.insert([key, key + 150]);
+        for suffix in 0..16 {
+            tree.insert([key, suffix, suffix + 1]);
+        }
+    }
+    let mut mapped = tree.mapped(Some(mapping), None, None);
+    for key in 0..128 {
+        assert!(SnapshotSet::shares_root(
+            tree.get(key).unwrap(),
+            mapped.get(key + 150).unwrap(),
+        ));
+    }
+    mapped.remove([150, 0, 1]);
+    assert!(tree.contains([0, 0, 1]));
+    assert!(!mapped.contains([150, 0, 1]));
+}
+
+#[test]
+fn column_mapping_preserves_all_images_and_merges_collisions() {
+    let mut tree = PrefixTree3::new();
+    let mut first = PrefixTree2::new();
+    let mut last = PrefixTree2::new();
+    for row in [[1, 5, 1], [2, 5, 2], [3, 6, 3], [4, 7, 4]] {
+        tree.insert(row);
+    }
+    for row in [[1, 20], [1, 21], [2, 20], [3, 19]] {
+        first.insert(row);
+    }
+    for row in [[1, 10], [2, 11], [2, 12], [3, 13], [4, 14]] {
+        last.insert(row);
+    }
+    let mapped = tree.mapped(Some(first), None, Some(last));
+    assert_eq!(
+        mapped.iter().collect::<Vec<_>>(),
+        [
+            [19, 6, 13],
+            [20, 5, 10],
+            [20, 5, 11],
+            [20, 5, 12],
+            [21, 5, 10]
+        ],
+    );
+    let empty = mapped.mapped(None, None, Some(PrefixTree2::new()));
+    assert!(empty.is_empty());
+    assert_eq!(empty.iter_restrictions().count(), 0);
+}
+
+#[test]
 fn set_operations_preserve_shared_prefixes() {
     let mut base = PrefixTree3::new();
     for i in 0..128 {
