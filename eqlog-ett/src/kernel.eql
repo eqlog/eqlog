@@ -9,58 +9,22 @@ model Context {
     type Ty;
     type Tm;
     type Args;
-    // What is is_type for? If for quantification:
-    // Why not replace if is_type(x); by if x: Ty;?
+    // Syntax is allocated before closure, so membership alone does not prove formation.
     pred is_type(Ty);
-    pred small(Ty);
     pred has_type(Tm, Ty);
     func type_of(Tm) -> Ty;
-    // Can we remove universes again?
-    // Replace by context extension by a type variable.
-    // I.e. not \Gamma.x: \sigma, but \Gamma.A where A is a type in context \Gamma.A.
-    // So \Gamma.A is the free extension by a fresh type of \Gamma.
-    func universe() -> Ty;
-    func quote(Ty) -> Tm;
-    func decode(Tm) -> Ty;
     func nil_args() -> Args;
     func cons_args(Tm, Args) -> Args;
+    func cons_type_args(Ty, Args) -> Args;
     func last_arg(Args) -> Tm;
     func data_type(Data, Args) -> Ty;
     func construct(Constructor, Args) -> Tm;
-    // Do we need Ty as argument here? Not sure in this case.
-    // Also, let's call it the equality type (-> extensional tt), not identity type (-> intensional).
-    func identity(Ty, Tm, Tm) -> Ty;
-    // Does this make sense? Don't we need to provide a term here?
-    // Or is the argument supposed to be an identity type already?
-    // Would be weird imo, let's replace by refl(tm) -> Tm;
-    // which would give you refl(tm): Eq tm tm
-    func refl(Ty) -> Tm;
+    func equality(Tm, Tm) -> Ty;
+    func refl(Tm) -> Tm;
 
     rule inferred_type {
         if has_type(t, a);
         then type_of(t) = a;
-    }
-    rule small_formation {
-        if small(a);
-        then is_type(a);
-    }
-    rule universe_formation {
-        if a = universe();
-        then is_type(a);
-    }
-    rule code_typing {
-        if t = quote(a);
-        if small(a);
-        then u := universe()!;
-        then has_type(t, u);
-        then decode(t) = a;
-    }
-    rule code_decoding {
-        if a = decode(t);
-        if u = universe();
-        if has_type(t, u);
-        then small(a);
-        then quote(a) = t;
     }
     rule last_singleton {
         if xs = cons_args(x, nil_args());
@@ -72,59 +36,62 @@ model Context {
         then last_arg(xs) = y;
         then x = x;
     }
-    rule identity_formation {
-        if a = identity(t, x, y);
+    rule last_type_cons {
+        if xs = cons_type_args(a, rest);
+        if y = last_arg(rest);
+        then last_arg(xs) = y;
+        then a = a;
+    }
+    rule equality_formation {
+        if a = equality(x, y);
         if has_type(x, t);
         if has_type(y, t);
         then is_type(a);
     }
-    rule small_identity {
-        if a = identity(t, x, y);
-        if is_type(a);
-        if small(t);
-        then small(a);
-        then x = x;
-        then y = y;
-    }
     rule refl_typing {
-        if a = identity(t, x, x);
-        if is_type(a);
-        if r = refl(a);
+        if r = refl(x);
+        if has_type(x, t);
+        then a := equality(x, x)!;
         then has_type(r, a);
         then t = t;
     }
     rule equality_reflection {
-        if a = identity(t, x, y);
+        if a = equality(x, y);
         if has_type(r, a);
         then x = y;
-        then t = t;
         then r = r;
     }
-    rule identity_uniqueness {
-        if a = identity(t, x, y);
+    rule equality_uniqueness {
+        if a = equality(x, y);
         if has_type(r, a);
         if has_type(s, a);
         then r = s;
-        then t = t;
         then x = x;
         then y = y;
     }
 }
 
 func empty() -> Context;
-pred valid(Context); // Why is this needed? Shouldn't every context be valid?
-pred substitution(Mor(Context)); // What is this for? Every morphism should be a substitution, no?
-pred extension(e: Context, g: Context, a: g.Ty);
-pred advance(g: Context, e: Context, p: Mor(Context)); // What's this doing?
-func projection(Context) -> Mor(Context); // Can we do projection(Gamma, sigma): Gamma -> Gamma.sigma?
-func variable(g: Context) -> g.Tm; // Likewise: Gamma.sigma \vdash variable(Gamma, sigma): sigma^+
-func identity_sub(Context) -> Mor(Context); // Doesn't eqlog already have identity morphisms?
-func compose(Mor(Context), Mor(Context)) -> Mor(Context); // Doesn't eqlog alreayd have compositiosn?
-pred context_parent(Context, Context, Mor(Context));  // What's this needed for, why not add morphism here as param to `extension`?
-pred closed_context(Context); // What's this doing? The global context, but potentially with more terms defined in it?
-pred variable_context(Context); // ?
-func closed_substitution(Context, Context) -> Mor(Context); // ?
-func pair(e: Context, d: Context, f: Mor(Context), t: d.Tm) -> Mor(Context); // ?
+// Contexts and morphisms also represent pending requests during elaboration.
+pred valid(Context);
+pred substitution(Mor(Context));
+pred extension(e: Context, g: Context, a: g.Ty, p: Mor(Context));
+pred type_extension(e: Context, g: Context, p: Mor(Context));
+// Fresh statement scopes keep reflected equalities from flowing into earlier statements.
+pred advance(g: Context, e: Context, p: Mor(Context));
+func variable(g: Context) -> g.Tm;
+func type_variable(g: Context) -> g.Ty;
+// Native composition can constrain its operands before their requests are checked.
+func compose(Mor(Context), Mor(Context)) -> Mor(Context);
+// Both kinds of variable extension and statement scopes share this ancestry.
+pred context_parent(Context, Context, Mor(Context));
+pred closed_context(Context);
+pred variable_context(Context);
+// A scope without local variables has at most one substitution to a given target.
+func closed_substitution(Context, Context) -> Mor(Context);
+// Pairing checks an argument before substituting it for the last variable.
+func pair(e: Context, d: Context, f: Mor(Context), t: d.Tm) -> Mor(Context);
+func pair_type(e: Context, d: Context, f: Mor(Context), a: d.Ty) -> Mor(Context);
 
 rule empty_context {
     if g = empty();
@@ -132,11 +99,10 @@ rule empty_context {
     then closed_context(g);
 }
 rule comprehension {
-    if extension(e, g, a);
+    if extension(e, g, a, p);
     if valid(g);
     if g.is_type(a);
     then valid(e);
-    then p := projection(e)!;
     then dom(p) = g;
     then cod(p) = e;
     then substitution(p);
@@ -145,6 +111,18 @@ rule comprehension {
     then b := p.Ty(a)!;
     then q := variable(e)!;
     then e.has_type(q, b);
+}
+rule type_comprehension {
+    if type_extension(e, g, p);
+    if valid(g);
+    then valid(e);
+    then dom(p) = g;
+    then cod(p) = e;
+    then substitution(p);
+    then context_parent(e, g, p);
+    then variable_context(e);
+    then a := type_variable(e)!;
+    then e.is_type(a);
 }
 rule statement_context {
     if advance(g, e, p);
@@ -168,9 +146,8 @@ rule variable_statement {
     then p = p;
 }
 rule identity_substitution {
-    if f = identity_sub(g);
+    if f = id(g);
     if valid(g);
-    then f = id(g);
     then substitution(f);
 }
 rule composition {
@@ -195,13 +172,12 @@ rule composition_restriction {
 }
 rule pairing {
     if h = pair(e, d, f, t);
-    if extension(e, g, a);
+    if extension(e, g, a, p);
     if substitution(f);
     if dom(f) = g;
     if cod(f) = d;
     if b = f.Ty(a);
     if d.has_type(t, b);
-    if p = projection(e);
     if q = variable(e);
     then dom(h) = e;
     then cod(h) = d;
@@ -210,17 +186,51 @@ rule pairing {
     then p >> h = f;
 }
 rule pairing_eta {
-    if extension(e, g, a);
+    if extension(e, g, a, p);
     if substitution(h);
     if dom(h) = e;
     if d = cod(h);
-    if p = projection(e);
     if q = variable(e);
     if t = h.Tm(q);
     if f = p >> h;
     then pair(e, d, f, t) = h;
     then g = g;
     then a = a;
+}
+
+rule type_pairing {
+    if h = pair_type(e, d, f, a);
+    if type_extension(e, g, p);
+    if substitution(f);
+    if dom(f) = g;
+    if cod(f) = d;
+    if d.is_type(a);
+    if q = type_variable(e);
+    then dom(h) = e;
+    then cod(h) = d;
+    then substitution(h);
+    then h.Ty(q) = a;
+    then p >> h = f;
+}
+rule type_pairing_eta {
+    if type_extension(e, g, p);
+    if substitution(h);
+    if dom(h) = e;
+    if d = cod(h);
+    if q = type_variable(e);
+    if a = h.Ty(q);
+    if f = p >> h;
+    then pair_type(e, d, f, a) = h;
+    then g = g;
+}
+
+// Bare rfl waits for its expected equality to become reflexive during closure.
+pred reflexivity_goal(g: Context, a: g.Ty, r: g.Tm);
+rule check_reflexivity {
+    if reflexivity_goal(g, a, r);
+    if a = g.equality(x, x);
+    if g.is_type(a);
+    then r = g.refl(x);
 }
 
 // Requests do not publish native images until their substitution is checked.
@@ -277,7 +287,7 @@ pred constructor_schema(g: Context, t: g.Tm, a: g.Ty);
 rule family_formation {
     if family_schema(g, a);
     if valid(g);
-    then g.small(a);
+    then g.is_type(a);
 }
 rule constructor_typing {
     if constructor_schema(g, t, a);
@@ -297,13 +307,26 @@ rule instantiate_end {
 rule instantiate_cons {
     if h = instantiate(telescope_cons(e, rest), d, f, xs);
     if xs = d.cons_args(x, tail);
-    if extension(e, g, a);
+    if extension(e, g, a, projection);
     if substitution(f);
     if dom(f) = g;
     if cod(f) = d;
+    then projection = projection;
     then f.Ty(a)!;
     then p := pair(e, d, f, x)!;
     then h = instantiate(rest, d, p, tail);
+}
+
+rule instantiate_type_cons {
+    if h = instantiate(telescope_cons(e, rest), d, f, xs);
+    if xs = d.cons_type_args(a, tail);
+    if type_extension(e, g, projection);
+    if substitution(f);
+    if dom(f) = g;
+    if cod(f) = d;
+    then p := pair_type(e, d, f, a)!;
+    then h = instantiate(rest, d, p, tail);
+    then projection = projection;
 }
 
 type Eliminator;
@@ -345,14 +368,6 @@ rule dependent_elimination {
     then checked_eliminator(e);
 }
 
-rule image_universe {
-    if substitution(f);
-    if s = dom(f);
-    if t = cod(f);
-    if a = s.universe();
-    if b = t.universe();
-    then f.Ty(a) = b;
-}
 rule image_nil {
     if substitution(f);
     if s = dom(f);
@@ -369,6 +384,16 @@ rule image_cons {
     if y = f.Tm(x);
     if ys = f.Args(xs);
     then b := t.cons_args(y, ys)!;
+    then f.Args(a) = b;
+}
+rule image_type_cons {
+    if substitution(f);
+    if s = dom(f);
+    if t = cod(f);
+    if a = s.cons_type_args(x, xs);
+    if y = f.Ty(x);
+    if ys = f.Args(xs);
+    then b := t.cons_type_args(y, ys)!;
     then f.Args(a) = b;
 }
 rule image_data_type {
@@ -389,42 +414,23 @@ rule image_constructor {
     if b = t.construct(c, ys);
     then f.Tm(a) = b;
 }
-rule image_quote {
+rule image_equality {
     if substitution(f);
     if s = dom(f);
     if t = cod(f);
-    if a = s.quote(x);
-    if y = f.Ty(x);
-    if b = t.quote(y);
-    then f.Tm(a) = b;
-}
-rule image_decode {
-    if substitution(f);
-    if s = dom(f);
-    if t = cod(f);
-    if a = s.decode(x);
-    if y = f.Tm(x);
-    if b = t.decode(y);
-    then f.Ty(a) = b;
-}
-rule image_identity {
-    if substitution(f);
-    if s = dom(f);
-    if t = cod(f);
-    if a = s.identity(ty, x, y);
-    if ty_1 = f.Ty(ty);
+    if a = s.equality(x, y);
     if x_1 = f.Tm(x);
     if y_1 = f.Tm(y);
-    if b = t.identity(ty_1, x_1, y_1);
+    if b = t.equality(x_1, y_1);
     then f.Ty(a) = b;
 }
 rule image_refl {
     if substitution(f);
     if s = dom(f);
     if t = cod(f);
-    if a = s.refl(ty);
-    if ty_1 = f.Ty(ty);
-    if b = t.refl(ty_1);
+    if a = s.refl(x);
+    if y = f.Tm(x);
+    if b = t.refl(y);
     then f.Tm(a) = b;
 }
 
@@ -557,6 +563,7 @@ rule through_statement {
 type BranchSteps;
 func case_steps(Eliminator, Constructor) -> BranchSteps;
 pred parameter_step(s: BranchSteps, g: Context, parameter: g.Tm, rest: BranchSteps);
+pred type_parameter_step(s: BranchSteps, g: Context, parameter: g.Ty, rest: BranchSteps);
 pred field_step(BranchSteps, Context, BranchSteps);
 pred hypothesis_step(s: BranchSteps, g: Context, args: g.Args, e: Context, instance: Mor(Context), rest: BranchSteps);
 pred finish_step(s: BranchSteps, g: Context, args: g.Args, end: Context, body: end.Tm);
@@ -584,14 +591,25 @@ rule branch_parameter {
     if x = f.Tm(parameter);
     then h = run_branch(rest, e, base, f, g, tail, fuel, actual);
 }
+rule branch_type_parameter {
+    if h = run_branch(s, e, base, f, g, xs, fuel, actual);
+    if type_parameter_step(s, source, parameter, rest);
+    if substitution(f);
+    if dom(f) = source;
+    if cod(f) = g;
+    if xs = g.cons_type_args(a, tail);
+    if a = f.Ty(parameter);
+    then h = run_branch(rest, e, base, f, g, tail, fuel, actual);
+}
 rule branch_field {
     if h = run_branch(s, e, base, f, g, xs, fuel, actual);
     if field_step(s, target, rest);
-    if extension(target, source, a);
+    if extension(target, source, a, projection);
     if substitution(f);
     if dom(f) = source;
     if cod(f) = g;
     if xs = g.cons_args(x, tail);
+    then projection = projection;
     then f.Ty(a)!;
     then p := pair(target, g, f, x)!;
     then h = run_branch(rest, e, base, p, g, tail, fuel, actual);
@@ -599,11 +617,12 @@ rule branch_field {
 rule branch_hypothesis {
     if h = run_branch(s, e, base, f, g, xs, fuel, actual);
     if hypothesis_step(s, source, args, target, instance, rest);
-    if extension(target, source, a);
+    if extension(target, source, a, projection);
     if substitution(f);
     if dom(f) = source;
     if cod(f) = g;
     if recursive_args = f.Args(args);
+    then projection = projection;
     then f.Ty(a)!;
     then compose(instance, f)!;
     then ih := application(e, base, g, recursive_args)!;

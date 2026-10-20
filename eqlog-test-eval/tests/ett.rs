@@ -51,9 +51,14 @@ fn indexed_constructor_instantiations_are_checked() {
 }
 
 #[test]
-fn universes_and_inductive_schemas_are_checked() {
+fn type_parameters_and_inductive_schemas_are_checked() {
     for declaration in [
         "def bad : Type := Type",
+        "def bad : Type := Nat",
+        "def bad (A : Type) : Type := A",
+        "inductive Bad : (A : Type) -> Type where",
+        "def bad (x : Nat.zero) : Nat := Nat.zero",
+        "def bad (A : Type) (B : Type) (x : A) : B := x",
         "inductive Bad where | mk (A : Type)",
         "inductive Bad (A : Type) where | mk (x : Bad Nat)",
         "inductive Bad (A : Type) where | mk : Bad Nat",
@@ -78,7 +83,7 @@ fn universes_and_inductive_schemas_are_checked() {
 }
 
 #[test]
-fn equal_fibers_do_not_identify_indices_for_beta() {
+fn types_are_not_terms_in_equality() {
     let prefix = formatdoc! {"
         {NAT}
         inductive I : (n : Nat) -> Type where
@@ -109,21 +114,17 @@ fn equal_fibers_do_not_identify_indices_for_beta() {
 fn equality_can_validate_a_previously_untyped_application() {
     check(&formatdoc! {"
         {NAT}
+        {VEC}
         def id (A : Type) (x : A) : A := x
         theorem same (A : Type) (x : A) : x = x := rfl
-        def code (n : Nat) : Type :=
-          rec n motive (k : Nat) => Type with
-          | zero => Nat
-          | succ k ih => ih
-          end
-        theorem code_nat (n : Nat) : code n = Nat :=
-          rec n motive (k : Nat) => code k = Nat with
-          | zero => rfl
-          | succ k ih => rfl
-          end
-        theorem before (n : Nat) : id (code n) Nat.zero = Nat.zero :=
-          let p : code n = Nat := code_nat n;
-          same Nat (id (code n) Nat.zero)
+        theorem before (n : Nat) (xs : Vec Nat (add Nat.zero n)) :
+          id (Vec Nat n) xs = xs :=
+          let p : add Nat.zero n = n :=
+            rec n motive (k : Nat) => add Nat.zero k = k with
+            | zero => rfl
+            | succ k ih => rfl
+            end;
+          same (Vec Nat n) (id (Vec Nat n) xs)
     "})
     .unwrap();
 }
@@ -242,8 +243,10 @@ fn fresh_contexts_and_partial_images() {
     m.insert_family_schema(root, ty);
     let x = m.new_context();
     let y = m.new_context();
-    m.insert_extension(x, root, ty);
-    m.insert_extension(y, root, ty);
+    let px = m.new_context_mor();
+    let py = m.new_context_mor();
+    m.insert_extension(x, root, ty, px);
+    m.insert_extension(y, root, ty, py);
     let x_args = m.define_nil_args(x);
     let x_ty = m.define_data_type(x, data, x_args);
     let x_zero = m.define_construct(x, zero, x_args);
@@ -263,10 +266,10 @@ fn fresh_contexts_and_partial_images() {
     m.insert_type_image(f, x, x_ty, target, image_ty);
     m.insert_term_image(f, x, body, target, image);
     let variable = m.define_variable(x);
-    let equality = m.define_identity(x, x_ty, variable, x_zero);
+    let equality = m.define_equality(x, variable, x_zero);
     let assumption = m.new_context();
-    m.insert_extension(assumption, x, equality);
-    let p = m.define_projection(assumption);
+    let p = m.new_context_mor();
+    m.insert_extension(assumption, x, equality, p);
     let local_variable = m.new_tm(assumption);
     let local_args = m.define_nil_args(assumption);
     let local_zero = m.define_construct(assumption, zero, local_args);
@@ -298,4 +301,120 @@ fn fresh_contexts_and_partial_images() {
     m.close();
     assert_eq!(m.tm_mor_app(f, hidden), Some(target_hidden));
     assert!(m.are_equal_tm(image, target_body));
+}
+
+#[test]
+fn fresh_type_parameters_support_polymorphic_substitution() {
+    check(&formatdoc! {"
+        {NAT}
+        {VEC}
+        def id (A : Type) (x : A) : A := x
+        def keep (A B : Type) (x : A) (y : B) : A := id A x
+        theorem keeps (A B : Type) (x : A) (y : B) :
+          keep A B x y = x := rfl
+        def proof_parameter (A : Type) (x : A) : x = x := id (x = x) rfl
+        inductive At (A : Type) (a : A) where
+        | mk
+        def out (B : Type) (b : B) (x : At B b) : B :=
+          rec x motive (y : At B b) => B with
+          | mk => b
+          end
+        theorem out_mk (B : Type) (b : B) : out B b (At.mk B b) = b := rfl
+        inductive Holds (n : Nat) (h : add Nat.zero n = n) where
+        | mk
+        def witness : Holds Nat.zero rfl := Holds.mk Nat.zero rfl
+    "})
+    .unwrap();
+    let prefix = formatdoc! {"
+        {NAT}
+        inductive Bit where | off
+        def id (A : Type) (x : A) : A := x
+    "};
+    for declaration in [
+        "def bad : Nat := id Nat.zero Nat.zero",
+        "def bad : Nat := id Type Nat.zero",
+        "def bad (A : Type) (x : A) : Nat := id Nat x",
+        "def bad (A : Type) (x : A) : A := id A Nat.zero",
+        "def bad (A : Type) (x : A) : A := id x x",
+        "theorem bad (A B : Type) : A = B := rfl",
+        "theorem bad (h : Nat.zero = Bit.off) : Nat.zero = Nat.zero := rfl",
+    ] {
+        assert!(
+            check(&format!("{prefix}\n{declaration}")).is_err(),
+            "{declaration}"
+        );
+    }
+}
+
+#[test]
+fn reflexivity_is_a_term_constructor() {
+    let mut m = Kernel::new();
+    let g = m.define_empty();
+    let ty = m.new_ty(g);
+    m.insert_family_schema(g, ty);
+    let x = m.new_tm(g);
+    m.insert_constructor_schema(g, x, ty);
+    let proof = m.define_refl(g, x);
+    let untyped = m.new_tm(g);
+    let untyped_proof = m.define_refl(g, untyped);
+    let ill_formed = m.define_equality(g, x, untyped);
+    let invalid = m.new_context();
+    let p = m.new_context_mor();
+    m.insert_extension(invalid, g, ill_formed, p);
+    m.close();
+    let equality = m.equality(g, x, x).unwrap();
+    assert!(m.is_type(g, equality));
+    assert!(m.has_type(g, proof, equality));
+    assert!(m.type_of(g, untyped_proof).is_none());
+    assert!(!m.is_type(g, ill_formed));
+    assert!(!m.valid(invalid));
+    assert!(!m.substitution(p));
+
+    let second_proof = m.new_tm(g);
+    m.insert_constructor_schema(g, second_proof, equality);
+    m.close();
+    assert!(m.are_equal_tm(proof, second_proof));
+}
+
+#[test]
+fn type_extension_is_fresh_and_type_pairing_waits_for_formation() {
+    let mut m = Kernel::new();
+    let root = m.define_empty();
+    let e = m.new_context();
+    let other = m.new_context();
+    let p = m.new_context_mor();
+    let other_p = m.new_context_mor();
+    m.insert_type_extension(e, root, p);
+    m.insert_type_extension(other, root, other_p);
+    let a = m.define_type_variable(e);
+    let other_a = m.define_type_variable(other);
+    let base = m.define_context_mor_id(root);
+    let ty = m.new_ty(root);
+    let pair = m.define_pair_type(e, root, base, ty);
+    let image = m.new_ty(root);
+    m.insert_type_image(pair, e, a, root, image);
+    m.close();
+    assert!(m.valid(e) && m.valid(other));
+    assert!(m.is_type(e, a) && m.is_type(other, other_a));
+    assert!(!m.are_equal_context(e, other));
+    assert!(!m.are_equal_ty(a, other_a));
+    assert!(!m.substitution(pair));
+    assert!(m.context_mor_dom(pair).is_none());
+    assert!(m.context_mor_cod(pair).is_none());
+    assert!(!m.is_type(root, image));
+
+    m.insert_family_schema(root, ty);
+    m.close();
+    assert!(m.substitution(pair));
+    assert!(m.are_equal_ty(m.ty_mor_app(pair, a).unwrap(), ty));
+    assert!(m.are_equal_ty(image, ty));
+    assert!(m.are_equal_context_mor(m.context_mor_comp(p, pair).unwrap(), base));
+
+    let other_ty = m.new_ty(root);
+    m.insert_family_schema(root, other_ty);
+    let other_pair = m.define_pair_type(e, root, base, other_ty);
+    m.close();
+    assert!(m.substitution(other_pair));
+    assert!(!m.are_equal_ty(ty, other_ty));
+    assert!(!m.are_equal_context_mor(pair, other_pair));
 }

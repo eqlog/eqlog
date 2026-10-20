@@ -24,6 +24,14 @@ pub fn check(source: &str) -> Result<Checked, Error> {
             )));
         }
     }
+    for (name, scope, ty) in &checker.formation_goals {
+        let context = checker.context(*scope);
+        if !checker.model.valid(context) || !checker.model.is_type(context, *ty) {
+            return Err(Error(format!(
+                "{name}: type checking did not establish type formation"
+            )));
+        }
+    }
     for (name, scope, a, b) in &checker.type_goals {
         if !checker.model.valid(checker.context(*scope)) || !checker.model.are_equal_ty(*a, *b) {
             return Err(Error(format!("{name}: incompatible index binder type")));
@@ -35,10 +43,38 @@ pub fn check(source: &str) -> Result<Checked, Error> {
     })
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Value {
+    Type(Ty),
+    Term(Tm),
+}
+
+impl Value {
+    fn term(self) -> Result<Tm, Error> {
+        match self {
+            Self::Term(term) => Ok(term),
+            Self::Type(_) => Err(Error("types cannot be used as terms".to_owned())),
+        }
+    }
+
+    fn ty(self) -> Result<Ty, Error> {
+        match self {
+            Self::Type(ty) => Ok(ty),
+            Self::Term(_) => Err(Error("terms cannot be used as types".to_owned())),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum ParameterType {
+    Type,
+    Term(Ty),
+}
+
 struct Scope {
     context: Context,
     parent: Option<(usize, ContextMor)>,
-    locals: BTreeMap<String, Tm>,
+    locals: BTreeMap<String, Value>,
     // The images of the parent's elements and the scope's own elements.
     // Elements of older scopes are found through the parent chain.
     types: BTreeMap<Ty, Ty>,
@@ -51,15 +87,15 @@ struct Scope {
 struct Parameter {
     scope: usize,
     name: String,
-    ty: Ty,
+    ty: ParameterType,
     syntax: Expr,
 }
 
 #[derive(Clone)]
 enum Form {
-    Term,
+    Term(Ty, Tm),
     Family(Data, Ty),
-    Constructor(Constructor),
+    Constructor(Constructor, Ty, Tm),
 }
 
 #[derive(Clone)]
@@ -68,8 +104,6 @@ struct Construction {
     parameters: Vec<Parameter>,
     end: usize,
     result: Expr,
-    ty: Ty,
-    term: Tm,
     application_base: Option<ContextMor>,
     call: Option<Call>,
     form: Form,
@@ -104,6 +138,7 @@ struct Checker {
     goals: Vec<(String, Definition)>,
     names: Vec<String>,
     type_goals: Vec<(String, usize, Ty, Ty)>,
+    formation_goals: Vec<(String, usize, Ty)>,
     weakenings: BTreeMap<(usize, usize), ContextMor>,
 }
 
@@ -129,6 +164,7 @@ impl Checker {
             goals: Vec::new(),
             names: Vec::new(),
             type_goals: Vec::new(),
+            formation_goals: Vec::new(),
             weakenings: BTreeMap::new(),
         }
     }
@@ -137,12 +173,19 @@ impl Checker {
         self.scopes[scope].context
     }
 
-    fn environment(&self, source: usize, target: usize) -> BTreeMap<String, Tm> {
+    fn environment(&self, source: usize, target: usize) -> BTreeMap<String, Value> {
         self.scopes[source]
             .locals
             .iter()
-            .map(|(name, &term)| (name.clone(), self.term_image(target, term)))
+            .map(|(name, &term)| (name.clone(), self.value_image(target, term)))
             .collect()
+    }
+
+    fn value_image(&self, scope: usize, value: Value) -> Value {
+        match value {
+            Value::Type(ty) => Value::Type(self.type_image(scope, ty)),
+            Value::Term(term) => Value::Term(self.term_image(scope, term)),
+        }
     }
 
     fn type_image(&self, scope: usize, ty: Ty) -> Ty {
@@ -189,12 +232,17 @@ impl Checker {
         self.model.insert_literal(site, call);
     }
 
-    fn child(&mut self, parent: usize, extension: Option<Ty>) -> usize {
+    fn child(&mut self, parent: usize, extension: Option<ParameterType>) -> usize {
         let context = self.model.new_context();
         let source = self.context(parent);
-        let morphism = self.model.define_projection(context);
+        let morphism = self.model.new_context_mor();
         if let Some(ty) = extension {
-            self.model.insert_extension(context, source, ty);
+            match ty {
+                ParameterType::Type => self.model.insert_type_extension(context, source, morphism),
+                ParameterType::Term(ty) => {
+                    self.model.insert_extension(context, source, ty, morphism)
+                }
+            }
         } else {
             self.model.insert_advance(source, context, morphism);
         }
@@ -231,7 +279,13 @@ impl Checker {
         let locals = self.scopes[parent]
             .locals
             .iter()
-            .map(|(name, term)| (name.clone(), terms[term]))
+            .map(|(name, value)| {
+                let image = match value {
+                    Value::Type(ty) => Value::Type(types[ty]),
+                    Value::Term(term) => Value::Term(terms[term]),
+                };
+                (name.clone(), image)
+            })
             .collect();
         let mut application_bases = BTreeMap::new();
         for (term, base) in &self.scopes[parent].application_bases {
@@ -256,11 +310,19 @@ impl Checker {
         id
     }
 
-    fn bind(&mut self, parent: usize, name: &str, ty: Ty) -> usize {
+    fn bind(&mut self, parent: usize, name: &str, ty: ParameterType) -> usize {
         let scope = self.child(parent, Some(ty));
-        let variable = self.model.define_variable(self.context(scope));
-        self.remember_term(scope, variable);
-        self.scopes[scope].locals.insert(name.to_owned(), variable);
+        let value = match ty {
+            ParameterType::Type => {
+                let variable = self.model.define_type_variable(self.context(scope));
+                Value::Type(self.remember_type(scope, variable))
+            }
+            ParameterType::Term(_) => {
+                let variable = self.model.define_variable(self.context(scope));
+                Value::Term(self.remember_term(scope, variable))
+            }
+        };
+        self.scopes[scope].locals.insert(name.to_owned(), value);
         scope
     }
 
@@ -271,7 +333,7 @@ impl Checker {
             return Ok(weakening);
         }
         let weakening = if source == target {
-            self.model.define_identity_sub(self.context(source))
+            self.model.define_context_mor_id(self.context(source))
         } else {
             let (parent, projection) = self.scopes[target]
                 .parent
@@ -311,13 +373,31 @@ impl Checker {
         self.remember_term(scope, exported)
     }
 
-    fn args(&mut self, scope: usize, values: &[Tm]) -> Args {
+    fn args(&mut self, scope: usize, values: &[Value]) -> Args {
         let context = self.context(scope);
         let mut args = self.model.define_nil_args(context);
         for value in values.iter().rev() {
-            args = self.model.define_cons_args(context, *value, args);
+            args = match value {
+                Value::Type(ty) => self.model.define_cons_type_args(context, *ty, args),
+                Value::Term(term) => self.model.define_cons_args(context, *term, args),
+            };
         }
         args
+    }
+
+    fn parameter_type(&mut self, scope: usize, syntax: &Expr) -> Result<ParameterType, Error> {
+        if *syntax == named("Type") {
+            Ok(ParameterType::Type)
+        } else {
+            Ok(ParameterType::Term(self.ty(scope, syntax)?))
+        }
+    }
+
+    fn argument(&mut self, scope: usize, expr: &Expr, ty: ParameterType) -> Result<Value, Error> {
+        match ty {
+            ParameterType::Type => Ok(Value::Type(self.ty(scope, expr)?)),
+            ParameterType::Term(ty) => Ok(Value::Term(self.term(scope, expr, Some(ty))?)),
+        }
     }
 
     fn parameters(
@@ -334,7 +414,7 @@ impl Checker {
             if parameters.iter().any(|p: &Parameter| p.name == *name) {
                 return Err(Error(format!("repeated parameter {name}")));
             }
-            let ty = self.ty(scope, syntax)?;
+            let ty = self.parameter_type(scope, syntax)?;
             scope = self.bind(scope, name, ty);
             parameters.push(Parameter {
                 scope,
@@ -375,11 +455,9 @@ impl Checker {
                         parameters,
                         end,
                         result,
-                        ty,
-                        term,
                         application_base,
                         call: self.scopes[end].calls.get(&term).copied(),
-                        form: Form::Term,
+                        form: Form::Term(ty, term),
                     },
                 );
                 self.names.push(name);
@@ -406,6 +484,13 @@ impl Checker {
                 "{name}: binders cannot shadow the family being declared"
             )));
         }
+        if indices
+            .iter()
+            .chain(constructors.iter().flat_map(|c| &c.fields))
+            .any(|(_, annotation)| *annotation == named("Type"))
+        {
+            return Err(Error("Type is only allowed for uniform type parameters, not indices or constructor fields".to_owned()));
+        }
         let base = self.child(self.global, None);
         self.global = base;
         let data = self.model.new_data();
@@ -419,17 +504,12 @@ impl Checker {
         let family = self.model.define_data_type(self.context(end), data, args);
         self.remember_type(end, family);
         self.model.insert_family_schema(self.context(end), family);
-        let ty = self.model.define_universe(self.context(end));
-        self.remember_type(end, ty);
-        let term = self.model.define_quote(self.context(end), family);
-        let term = self.goal(name.clone(), end, term, ty);
+        self.formation_goals.push((name.clone(), end, family));
         let signature = Construction {
             base,
             parameters: telescope,
             end,
             result: named("Type"),
-            ty,
-            term,
             application_base: None,
             call: None,
             form: Form::Family(data, family),
@@ -468,13 +548,6 @@ impl Checker {
                 .cloned()
                 .collect();
             let (end, telescope) = self.parameters(base, &all_fields)?;
-            for field in telescope.iter().skip(parameters.len()) {
-                let parent = self.scopes[field.scope].parent.unwrap().0;
-                let code = self.model.define_quote(self.context(parent), field.ty);
-                let universe = self.model.define_universe(self.context(parent));
-                self.remember_type(parent, universe);
-                self.goal(format!("{full}.{}", field.name), parent, code, universe);
-            }
             let ty = self.ty(end, &result)?;
             let c = self.model.new_constructor();
             let values: Vec<_> = all_fields
@@ -491,11 +564,9 @@ impl Checker {
                 parameters: telescope,
                 end,
                 result,
-                ty,
-                term,
                 application_base: None,
                 call: None,
-                form: Form::Constructor(c),
+                form: Form::Constructor(c, ty, term),
             };
             let info = ConstructorInfo {
                 name: constructor.name,
@@ -537,19 +608,25 @@ impl Checker {
         let context = self.context(scope);
         let ty = match expr {
             Expr::Name(name, args) => {
-                if name == "Type" && args.is_empty() {
-                    self.model.define_universe(context)
+                if let Some(&local) = self.scopes[scope].locals.get(name) {
+                    if !args.is_empty() {
+                        return Err(Error(format!("local type {name} cannot be applied")));
+                    }
+                    local.ty()?
+                } else if let Some(data) = self.data.get(name).cloned() {
+                    self.apply(scope, name, &data.signature, args)?.ty()?
+                } else if name == "Type" {
+                    return Err(Error(
+                        "Type is only a marker for fresh type parameters".to_owned(),
+                    ));
                 } else {
-                    let code = self.term(scope, expr, None)?;
-                    self.model.define_decode(context, code)
+                    return Err(Error(format!("unknown type {name}")));
                 }
             }
             Expr::Equal(lhs, rhs) => {
                 let lhs = self.term(scope, lhs, None)?;
                 let rhs = self.term(scope, rhs, None)?;
-                let ty = self.model.define_type_of(context, lhs);
-                self.remember_type(scope, ty);
-                self.model.define_identity(context, ty, lhs, rhs)
+                self.model.define_equality(context, lhs, rhs)
             }
             Expr::Refl | Expr::Rec { .. } | Expr::Let(_, _, _, _) => {
                 return Err(Error("expected a type".to_owned()));
@@ -566,24 +643,24 @@ impl Checker {
                     if !args.is_empty() {
                         return Err(Error(format!("local variable {name} cannot be applied")));
                     }
-                    local
-                } else if name == "Type" && args.is_empty() {
-                    let ty = self.ty(scope, expr)?;
-                    self.model.define_quote(context, ty)
-                } else if let Some(data) = self.data.get(name).cloned() {
-                    self.apply(scope, name, &data.signature, args)?
+                    local.term()?
+                } else if name == "Type" || self.data.contains_key(name) {
+                    return Err(Error("types cannot be used as terms".to_owned()));
                 } else if let Some(constructor) = self.constructors.get(name).cloned() {
                     self.apply(scope, name, &constructor.signature, args)?
+                        .term()?
                 } else if let Some(definition) = self.definitions.get(name).cloned() {
-                    self.apply(scope, name, &definition, args)?
+                    self.apply(scope, name, &definition, args)?.term()?
                 } else {
                     return Err(Error(format!("unknown term {name}")));
                 }
             }
             Expr::Refl => {
                 let ty = expected
-                    .ok_or_else(|| Error("rfl needs an expected identity type".to_owned()))?;
-                self.model.define_refl(context, ty)
+                    .ok_or_else(|| Error("rfl needs an expected equality type".to_owned()))?;
+                let term = self.model.new_tm(context);
+                self.model.insert_reflexivity_goal(context, ty, term);
+                term
             }
             Expr::Rec {
                 arguments,
@@ -592,8 +669,7 @@ impl Checker {
                 cases,
             } => self.rec(scope, arguments, binders, motive, cases)?,
             Expr::Equal(_, _) => {
-                let ty = self.ty(scope, expr)?;
-                self.model.define_quote(context, ty)
+                return Err(Error("types cannot be used as terms".to_owned()));
             }
             Expr::Let(_, _, _, _) => {
                 return Err(Error(
@@ -612,7 +688,7 @@ impl Checker {
         name: &str,
         definition: &Construction,
         args: &[Expr],
-    ) -> Result<Tm, Error> {
+    ) -> Result<Value, Error> {
         if args.len() != definition.parameters.len() {
             return Err(Error(format!("wrong number of arguments to {name}")));
         }
@@ -622,57 +698,20 @@ impl Checker {
         let mut source = definition.base;
         let mut values = Vec::new();
         for (parameter, argument) in definition.parameters.iter().zip(args) {
-            let ty = self.ty(scope, &parameter.syntax)?;
+            let ty = self.parameter_type(scope, &parameter.syntax)?;
             let signature = self.scopes[scope].locals.clone();
             self.scopes[scope].locals = saved.clone();
-            let argument = self.term(scope, argument, Some(ty))?;
+            let argument = self.argument(scope, argument, ty)?;
             self.scopes[scope].locals = signature;
-            self.model.insert_type_image(
-                morphism,
-                self.context(source),
-                parameter.ty,
-                self.context(scope),
-                ty,
-            );
-            morphism = self.model.define_pair(
-                self.context(parameter.scope),
-                self.context(scope),
-                morphism,
-                argument,
-            );
+            morphism = self.pair_parameter(scope, source, parameter, morphism, ty, argument)?;
             source = parameter.scope;
             self.scopes[scope]
                 .locals
                 .insert(parameter.name.clone(), argument);
             values.push(argument);
         }
-        let ty = self.ty(scope, &definition.result)?;
-        self.scopes[scope].locals = saved;
-        self.stage_path(source, definition.end);
-        morphism = self.model.define_through(
-            self.context(source),
-            self.context(definition.end),
-            self.context(scope),
-            morphism,
-        );
-        self.model.insert_type_image(
-            morphism,
-            self.context(definition.end),
-            definition.ty,
-            self.context(scope),
-            ty,
-        );
         let context = self.context(scope);
-        let term = match definition.form {
-            Form::Term => {
-                let args = self.args(scope, &values);
-                self.model.define_instance(
-                    self.context(definition.end),
-                    definition.term,
-                    context,
-                    args,
-                )
-            }
+        let value = match definition.form {
             Form::Family(data, source_ty) => {
                 let args = self.args(scope, &values);
                 let target_ty = self.model.define_data_type(context, data, args);
@@ -684,60 +723,107 @@ impl Checker {
                     context,
                     target_ty,
                 );
-                self.model.define_quote(context, target_ty)
+                Value::Type(target_ty)
             }
-            Form::Constructor(constructor) => {
+            Form::Term(source_ty, source_term) | Form::Constructor(_, source_ty, source_term) => {
+                let ty = self.ty(scope, &definition.result)?;
+                self.stage_path(source, definition.end);
+                morphism = self.model.define_through(
+                    self.context(source),
+                    self.context(definition.end),
+                    context,
+                    morphism,
+                );
+                self.model.insert_type_image(
+                    morphism,
+                    self.context(definition.end),
+                    source_ty,
+                    context,
+                    ty,
+                );
                 let args = self.args(scope, &values);
-                self.model.define_construct(context, constructor, args)
+                let term = match definition.form {
+                    Form::Term(_, _) => self.model.define_instance(
+                        self.context(definition.end),
+                        source_term,
+                        context,
+                        args,
+                    ),
+                    Form::Constructor(constructor, _, _) => {
+                        self.model.define_construct(context, constructor, args)
+                    }
+                    Form::Family(_, _) => unreachable!(),
+                };
+                self.model.insert_term_image(
+                    morphism,
+                    self.context(definition.end),
+                    source_term,
+                    context,
+                    term,
+                );
+                if let Some(base) = definition.application_base {
+                    let base = self.model.define_compose(base, morphism);
+                    self.scopes[scope].application_bases.insert(term, base);
+                }
+                self.remember_term(scope, term);
+                if let Some(call) = definition.call {
+                    let call = self.model.define_image_call(call, morphism);
+                    self.scopes[scope].calls.insert(term, call);
+                }
+                Value::Term(term)
             }
         };
-        self.model.insert_term_image(
-            morphism,
-            self.context(definition.end),
-            definition.term,
-            context,
-            term,
-        );
         for base in self.scopes[definition.end].application_bases.values() {
             self.model.define_compose(*base, morphism);
         }
-        if let Some(base) = definition.application_base {
-            let base = self.model.define_compose(base, morphism);
-            self.scopes[scope].application_bases.insert(term, base);
+        self.scopes[scope].locals = saved;
+        Ok(value)
+    }
+
+    fn pair_parameter(
+        &mut self,
+        scope: usize,
+        source: usize,
+        parameter: &Parameter,
+        morphism: ContextMor,
+        ty: ParameterType,
+        value: Value,
+    ) -> Result<ContextMor, Error> {
+        let target = self.context(scope);
+        let extension = self.context(parameter.scope);
+        match parameter.ty {
+            ParameterType::Type => {
+                Ok(self
+                    .model
+                    .define_pair_type(extension, target, morphism, value.ty()?))
+            }
+            ParameterType::Term(source_ty) => {
+                let ty = match ty {
+                    ParameterType::Term(ty) => ty,
+                    ParameterType::Type => unreachable!(),
+                };
+                self.model
+                    .insert_type_image(morphism, self.context(source), source_ty, target, ty);
+                Ok(self
+                    .model
+                    .define_pair(extension, target, morphism, value.term()?))
+            }
         }
-        self.remember_term(scope, term);
-        if let Some(call) = definition.call {
-            let call = self.model.define_image_call(call, morphism);
-            self.scopes[scope].calls.insert(term, call);
-        }
-        Ok(term)
     }
 
     fn motive_instance(
         &mut self,
         scope: usize,
         motive: &Construction,
-        values: &[Tm],
+        values: &[Value],
     ) -> Result<(ContextMor, Ty), Error> {
         let saved = self.scopes[scope].locals.clone();
         self.scopes[scope].locals = self.environment(motive.base, scope);
         let mut morphism = self.weakening(motive.base, scope)?;
         let mut source = motive.base;
         for (parameter, value) in motive.parameters.iter().zip(values) {
-            let ty = self.ty(scope, &parameter.syntax)?;
-            self.model.insert_type_image(
-                morphism,
-                self.context(source),
-                parameter.ty,
-                self.context(scope),
-                ty,
-            );
-            morphism = self.model.define_pair(
-                self.context(parameter.scope),
-                self.context(scope),
-                morphism,
-                *value,
-            );
+            let ty = self.parameter_type(scope, &parameter.syntax)?;
+            morphism = self.pair_parameter(scope, source, parameter, morphism, ty, *value)?;
             self.scopes[scope]
                 .locals
                 .insert(parameter.name.clone(), *value);
@@ -747,7 +833,10 @@ impl Checker {
         self.model.insert_type_image(
             morphism,
             self.context(motive.end),
-            motive.ty,
+            match motive.form {
+                Form::Term(ty, _) => ty,
+                Form::Family(_, _) | Form::Constructor(_, _, _) => unreachable!(),
+            },
             self.context(scope),
             ty,
         );
@@ -776,7 +865,9 @@ impl Checker {
                 let ty = self.ty(scope, annotation)?;
                 let (scope, term, ty) = self.body(scope, value, ty)?;
                 let term = self.goal(format!("let {name}"), scope, term, ty);
-                self.scopes[scope].locals.insert(name.clone(), term);
+                self.scopes[scope]
+                    .locals
+                    .insert(name.clone(), Value::Term(term));
                 let scope = self.child(scope, None);
                 let expected = self.type_image(scope, expected);
                 self.body(scope, rest, expected)
@@ -898,7 +989,7 @@ impl Checker {
                         self.scopes[parent]
                             .locals
                             .get(name)
-                            .map(|&old| self.term_image(base_scope, old) == *term)
+                            .map(|&old| self.value_image(base_scope, old) == *term)
                             .unwrap_or(false)
                     })
                     .unwrap_or(true)
@@ -909,16 +1000,16 @@ impl Checker {
             base_scope = parent;
         }
         let mut uniforms = Vec::new();
-        for expr in uniform_exprs {
-            uniforms.push(self.term(base_scope, expr, None)?);
+        let saved = self.scopes[base_scope].locals.clone();
+        let mut formal = self.environment(inductive.signature.base, base_scope);
+        for (expr, parameter) in uniform_exprs.iter().zip(&inductive.signature.parameters) {
+            self.scopes[base_scope].locals = formal.clone();
+            let ty = self.parameter_type(base_scope, &parameter.syntax)?;
+            self.scopes[base_scope].locals = saved.clone();
+            let value = self.argument(base_scope, expr, ty)?;
+            formal.insert(parameter.name.clone(), value);
+            uniforms.push(value);
         }
-        let mut formal: BTreeMap<_, _> = inductive
-            .signature
-            .parameters
-            .iter()
-            .zip(&uniforms)
-            .map(|(p, value)| (p.name.clone(), *value))
-            .collect();
         let mut current = base_scope;
         let mut parameters = Vec::new();
         for (i, (name, annotation)) in binders.iter().enumerate() {
@@ -931,7 +1022,7 @@ impl Checker {
                 self.type_goals
                     .push((format!("rec {data_name}"), current, ty, canonical));
             }
-            current = self.bind(current, name, ty);
+            current = self.bind(current, name, ParameterType::Term(ty));
             formal = self.transport_environment(&formal, current);
             if i < inductive.indices.len() {
                 formal.insert(
@@ -942,7 +1033,7 @@ impl Checker {
             parameters.push(Parameter {
                 scope: current,
                 name: name.clone(),
-                ty,
+                ty: ParameterType::Term(ty),
                 syntax: annotation.clone(),
             });
         }
@@ -954,11 +1045,9 @@ impl Checker {
             parameters,
             end: current,
             result: motive.clone(),
-            ty: motive_ty,
-            term: result,
             application_base: None,
             call: None,
-            form: Form::Term,
+            form: Form::Term(motive_ty, result),
         };
         let eliminator = self.model.new_eliminator();
         let telescope = self.telescope(&motive.parameters);
@@ -1013,7 +1102,7 @@ impl Checker {
                 let ty = self.ty(start, syntax)?;
                 self.scopes[start].locals = saved;
                 let alias = variables.next().unwrap();
-                start = self.bind(start, alias, ty);
+                start = self.bind(start, alias, ParameterType::Term(ty));
                 steps.push(Plan::Field(self.context(start)));
                 field_env = self.transport_environment(&field_env, start);
                 body_env = self.transport_environment(&body_env, start);
@@ -1027,7 +1116,7 @@ impl Checker {
                     let args = self.args(start, &values);
                     let source = self.context(start);
                     let alias = variables.next().unwrap();
-                    start = self.bind(start, alias, ih_ty);
+                    start = self.bind(start, alias, ParameterType::Term(ih_ty));
                     steps.push(Plan::Hypothesis(
                         source,
                         args,
@@ -1047,12 +1136,13 @@ impl Checker {
                 .iter()
                 .map(|p| named(&p.name))
                 .collect();
-            let pattern =
-                self.apply(start, &constructor.name, &constructor.signature, &ctor_args)?;
+            let pattern = self
+                .apply(start, &constructor.name, &constructor.signature, &ctor_args)?
+                .term()?;
             self.remember_term(start, pattern);
             self.scopes[start].locals = saved;
             let mut indices = self.evaluate_in(start, &field_env, &constructor.result_indices)?;
-            indices.push(pattern);
+            indices.push(Value::Term(pattern));
             let (_, expected) = self.motive_instance(start, &motive, &indices)?;
             let expected_args = self.args(start, &indices);
             let branch_scope = self.child(start, None);
@@ -1082,9 +1172,14 @@ impl Checker {
             for step in steps.into_iter().rev() {
                 let next = self.model.new_branch_steps();
                 match step {
-                    Plan::Parameter(context, value) => {
-                        self.model.insert_parameter_step(next, context, value, plan)
-                    }
+                    Plan::Parameter(context, value) => match value {
+                        Value::Type(ty) => self
+                            .model
+                            .insert_type_parameter_step(next, context, ty, plan),
+                        Value::Term(term) => {
+                            self.model.insert_parameter_step(next, context, term, plan)
+                        }
+                    },
                     Plan::Field(context) => self.model.insert_field_step(next, context, plan),
                     Plan::Hypothesis(context, args, target, instance) => {
                         self.model
@@ -1104,7 +1199,7 @@ impl Checker {
             let expected = self.ty(scope, &parameter.syntax)?;
             signature_env = self.scopes[scope].locals.clone();
             self.scopes[scope].locals = saved.clone();
-            let value = self.term(scope, argument, Some(expected))?;
+            let value = Value::Term(self.term(scope, argument, Some(expected))?);
             signature_env.insert(parameter.name.clone(), value);
             values.push(value);
         }
@@ -1127,26 +1222,26 @@ impl Checker {
 
     fn transport_environment(
         &self,
-        environment: &BTreeMap<String, Tm>,
+        environment: &BTreeMap<String, Value>,
         scope: usize,
-    ) -> BTreeMap<String, Tm> {
+    ) -> BTreeMap<String, Value> {
         environment
             .iter()
-            .map(|(name, &term)| (name.clone(), self.term_image(scope, term)))
+            .map(|(name, &value)| (name.clone(), self.value_image(scope, value)))
             .collect()
     }
 
     fn evaluate_in(
         &mut self,
         scope: usize,
-        environment: &BTreeMap<String, Tm>,
+        environment: &BTreeMap<String, Value>,
         expressions: &[Expr],
-    ) -> Result<Vec<Tm>, Error> {
+    ) -> Result<Vec<Value>, Error> {
         let saved = self.scopes[scope].locals.clone();
         self.scopes[scope].locals = environment.clone();
         let values = expressions
             .iter()
-            .map(|e| self.term(scope, e, None))
+            .map(|e| self.term(scope, e, None).map(Value::Term))
             .collect();
         self.scopes[scope].locals = saved;
         values
@@ -1154,7 +1249,7 @@ impl Checker {
 }
 
 enum Plan {
-    Parameter(Context, Tm),
+    Parameter(Context, Value),
     Field(Context),
     Hypothesis(Context, Args, Context, ContextMor),
 }

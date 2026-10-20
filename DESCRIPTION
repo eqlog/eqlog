@@ -1,0 +1,16 @@
+Represent type parameters without a universe
+
+Extend contexts by fresh types so polymorphic declarations do not need
+type codes, decoding, or a universe. Keep type arguments separate from
+term arguments throughout elaboration, substitution, and constructor
+computation. Restrict Type to parameter binders, excluding type-valued
+definitions and equality between types.
+
+Infer equality formation from its endpoints and give reflexivity a term
+argument. Record weakening maps in extension requests and use native
+identity morphisms. Retain checked formation and substitution requests
+because allocated syntax must not establish its own typing judgments.
+
+Exercise polymorphic definitions, indexed families, fresh type contexts,
+deferred checking, and invalid arguments in the evaluator integration
+suite, and document the reasons for the remaining kernel machinery.

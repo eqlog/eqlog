@@ -27,7 +27,7 @@ an explicit length equality to reindex its result. Both files are elaborated
 together and checked by one `close()` call.
 
 The input language has `inductive`, `def`, `theorem`, explicitly typed
-parameters, identity types, `rfl`, and typed `let` statements. `by rfl` and
+parameters, equality types, `rfl`, and typed `let` statements. `by rfl` and
 `by exact term` are also accepted. Inductive declarations have explicit uniform
 parameters, index telescopes, and dependent constructor fields. Recursion must
 be directly through the declared family with unchanged parameters; nested and
@@ -68,10 +68,13 @@ binds these indices and then an element of that fiber. Beta requires the
 constructor's parameters and return indices to match: equality of two family
 fibers does not imply equality of their indices.
 
-`Type` is a universe of codes for small types. A parameter `A : Type` can be
-used as a type by decoding its code. The universe itself is formed but is not
-small, so `Type : Type` and small constructors with fields of type `Type`
-are rejected. Uniform parameters such as Vec's `A` are external to its fields.
+`Type` marks a fresh type parameter: `(A : Type)` extends the context by an
+abstract type, and `(x : A)` then extends it by a term of that type. Passing
+`Nat` for `A` substitutes a type directly. There are no universes, type codes,
+or decoding operations. `Type` is not itself a type or a term; definitions
+cannot return it, and types cannot occur as endpoints of a term equality.
+Only uniform parameters and definition/theorem parameters may bind fresh
+types. Inductive indices and constructor fields must have ordinary types.
 
 `let` statements can begin declaration and branch bodies; their annotations
 are checked before their values become available. Numeric literals and
@@ -88,22 +91,45 @@ to the earlier scope.
 
 Morphisms have the direction of substitution: the projection for a variable
 extension is `Gamma -> Gamma.x:A`. Pairing substitutes an argument for the
-last variable after its type has been established. A definition with parameters
-is a term in an extended context. Applying it requests its image along a
-sequence of such pairings, without constructing a function type.
+last variable after its type has been established. Type-variable extensions
+have the same direction and pair a formed type with the fresh type variable.
+A definition with parameters is a term in an extended context. Applying it
+requests its image along a sequence of such pairings, without constructing
+a function type.
 
-An inhabitant of an identity type identifies its endpoints in its context.
+An inhabitant of an equality type identifies its endpoints in its context.
 Consequently, induction hypotheses are used by equality reflection, and many
-branches are simply `rfl`. Identity proofs are proof irrelevant.
+branches are simply `rfl`. Equality proofs are proof irrelevant.
 
 The frontend elaborates the entire module into one Eqlog model. It allocates
 syntax and substitution requests, but does not evaluate terms or assert that
 unchecked annotations hold. It calls `close()` exactly once and then checks
-the declaration, constructor-field, index-binder, and definition obligations.
+the type-formation, index-binder, and definition obligations.
 A declaration's exported term is identified with its body only after the body
 has the declared type. The frontend is part of
 the trusted checker: in particular, it constructs the motives and branch
 obligations and resolves names hygienically.
+
+Types, contexts, and morphisms are allocated before checking. Consequently,
+`is_type`, `valid`, and `substitution` are checked judgments, not membership
+tests. Removing them would let malformed unused binders or unchecked arguments
+participate in proofs. The equality constructor takes just its two terms;
+formation requires them to have a common type. `refl(x)` proves `x = x`.
+The frontend's bare `rfl` waits for its expected equality to become reflexive.
+
+`extension` and `type_extension` record their weakening morphisms explicitly;
+contexts remain fresh even when their parent and binder types agree.
+`advance` adds a statement scope without a variable. `context_parent`
+collects the ancestry of all three forms of scope. `closed_context` marks
+scopes with no local variables, whose substitutions to a fixed target are
+unique; `variable_context` marks scopes requiring restriction through their
+local binders. `pair` and `pair_type` substitute for the last term or type
+variable after the argument checks.
+
+Identities use Eqlog's native `id`. `compose` remains a checked request for
+native composition: publishing `f >> g` too early can propagate endpoints
+and images back into an unchecked operand. Requested images are similarly
+published only after their substitution checks.
 
 ## Open definitions and finite computation
 
