@@ -841,3 +841,37 @@ fn deep_mapping_chains_propagate_an_empty_inner_view() {
     assert_eq!(source.len(), 1);
     assert!(snapshot.is_empty());
 }
+
+#[test]
+fn lookups_keep_value_coordinates_across_key_only_layers() {
+    let mut source = WBTreeMap::new();
+    let mut first = PrefixTree2::new();
+    let mut middle = PrefixTree2::new();
+    let mut last = PrefixTree2::new();
+    for key in 0..32 {
+        source.insert(key, key);
+        first.insert([key, key + 100]);
+        if key % 3 != 0 {
+            middle.insert([key + 100, key + 1000]);
+        }
+        last.insert([key + 1000, key + 2000]);
+    }
+    let mapped = source
+        .mapped_entries(MonotoneMap::new(&first), |value| Some(value + 10))
+        .mapped_keys(MonotoneMap::new(&middle).unwrap())
+        .mapped_entries(None, |value| (value % 5 != 0).then_some(value * 2))
+        .mapped_keys(MonotoneMap::new(&last).unwrap());
+    for key in 0..32 {
+        let expected = (key % 3 != 0 && (key + 10) % 5 != 0).then_some((key + 10) * 2);
+        assert_eq!(mapped.get(&(key + 2000)), expected.as_ref());
+        assert_eq!(mapped.get(&key), None);
+    }
+    let mut edited = mapped.clone();
+    *edited.get_mut(&2001).unwrap() = 777;
+    edited.remove(&2002);
+    drop(mapped);
+    assert_eq!(edited.get(&2001), Some(&777));
+    assert_eq!(edited.get(&2002), None);
+    assert_eq!(edited.get(&2004), Some(&28));
+    assert_eq!(source.get(&1), Some(&1));
+}

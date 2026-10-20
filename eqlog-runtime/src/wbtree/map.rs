@@ -120,6 +120,37 @@ struct ValueMapping<V: Clone> {
 }
 
 impl<V: Clone> ValueMapping<V> {
+    fn map_value<'a>(&'a self, mut raw_key: u32, value: &'a V) -> Option<&'a V> {
+        let mut current = Some(self.source.as_ref());
+        let mut cache = &self.cache;
+        // A snapshot's raw topology gives cache entries stable addresses without
+        // allocating slots for values that a lookup never visits.
+        while let Some(node) = current {
+            match node {
+                Node::Data(data) => match raw_key.cmp(&data.key) {
+                    Ordering::Less => {
+                        current = data.left.as_deref();
+                        cache = cache.left.get_or_init(|| Box::new(ValueCache::new()));
+                    }
+                    Ordering::Greater => {
+                        current = data.right.as_deref();
+                        cache = cache.right.get_or_init(|| Box::new(ValueCache::new()));
+                    }
+                    Ordering::Equal => {
+                        return cache.value.get_or_init(|| (self.apply)(value)).as_ref()
+                    }
+                },
+                Node::Mapping(mapping) => {
+                    if let Some(keys) = &mapping.transform.keys {
+                        raw_key = keys.preimage(raw_key)?;
+                    }
+                    current = mapping.child.as_deref();
+                }
+            }
+        }
+        unreachable!("a mapped value belongs to the source snapshot")
+    }
+
     fn lookup_work(&self, fuel: &mut Fuel) -> Result<u64, Error> {
         if let Some(work) = self.lookup_work.get() {
             return Ok(*work);
@@ -175,38 +206,11 @@ impl<V> ValueCache<V> {
 }
 
 impl<V: Clone> MappingNode<V> {
-    fn map_value<'a>(&'a self, mut raw_key: u32, value: &'a V) -> Option<&'a V> {
-        let Some(values) = &self.transform.values else {
-            return Some(value);
-        };
-        let mut current = Some(values.source.as_ref());
-        let mut cache = &values.cache;
-        // A snapshot's raw topology gives cache entries stable addresses without
-        // allocating slots for values that a lookup never visits.
-        while let Some(node) = current {
-            match node {
-                Node::Data(data) => match raw_key.cmp(&data.key) {
-                    Ordering::Less => {
-                        current = data.left.as_deref();
-                        cache = cache.left.get_or_init(|| Box::new(ValueCache::new()));
-                    }
-                    Ordering::Greater => {
-                        current = data.right.as_deref();
-                        cache = cache.right.get_or_init(|| Box::new(ValueCache::new()));
-                    }
-                    Ordering::Equal => {
-                        return cache.value.get_or_init(|| (values.apply)(value)).as_ref()
-                    }
-                },
-                Node::Mapping(mapping) => {
-                    if let Some(keys) = &mapping.transform.keys {
-                        raw_key = keys.preimage(raw_key)?;
-                    }
-                    current = mapping.child.as_deref();
-                }
-            }
+    fn map_value<'a>(&'a self, raw_key: u32, value: &'a V) -> Option<&'a V> {
+        match &self.transform.values {
+            None => Some(value),
+            Some(values) => values.map_value(raw_key, value),
         }
-        unreachable!("a mapped value belongs to the source snapshot")
     }
 
     fn wrap(&self, child: Option<Rc<Node<V>>>) -> Option<Rc<Node<V>>> {
@@ -1090,23 +1094,36 @@ impl<V: Clone> WBTreeMap<V> {
     pub fn get(&self, key: &u32) -> Option<&V> {
         let mut key = *key;
         let mut current = self.root.as_deref();
-        let mut values = Vec::new();
+        let mut first_value: Option<(&ValueMapping<V>, u32)> = None;
+        let mut inner_values: Vec<(&ValueMapping<V>, u32)> = Vec::new();
         while let Some(node) = current {
             match node {
-                Node::Data(data_node) => match key.cmp(&data_node.key) {
-                    Ordering::Less => current = data_node.left.as_deref(),
-                    Ordering::Greater => current = data_node.right.as_deref(),
+                Node::Data(data) => match key.cmp(&data.key) {
+                    Ordering::Less => current = data.left.as_deref(),
+                    Ordering::Greater => current = data.right.as_deref(),
                     Ordering::Equal => {
-                        return apply_value_mappings(&values, data_node.key, &data_node.value)
+                        let Some((outer, source_key)) = first_value else {
+                            return Some(&data.value);
+                        };
+                        let mut value = &data.value;
+                        for (mapping, key) in inner_values.into_iter().rev() {
+                            value = mapping.map_value(key, value)?;
+                        }
+                        return outer.map_value(source_key, value);
                     }
                 },
                 Node::Mapping(mapping) => {
-                    // Inverting the query avoids scanning when a search pivot is filtered out.
                     if let Some(keys) = &mapping.transform.keys {
                         key = keys.preimage(key)?;
                     }
-                    if mapping.transform.values.is_some() || !values.is_empty() {
-                        values.push(mapping);
+                    if let Some(values) = &mapping.transform.values {
+                        // The query already identifies this transform's source key.
+                        // A single value transform needs no allocated stack.
+                        if first_value.is_none() {
+                            first_value = Some((values, key));
+                        } else {
+                            inner_values.push((values, key));
+                        }
                     }
                     current = mapping.child.as_deref();
                 }
