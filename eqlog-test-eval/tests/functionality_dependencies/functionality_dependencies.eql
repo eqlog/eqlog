@@ -1,0 +1,18 @@
+type El;
+
+func f(El) -> El;
+pred p(El);
+pred q(El);
+pred hit();
+pred seed(El, El);
+
+rule producer {
+    if seed(x, y);
+    then f(x) = y;
+}
+
+rule consumer {
+    if p(x);
+    if q(x);
+    then hit();
+}

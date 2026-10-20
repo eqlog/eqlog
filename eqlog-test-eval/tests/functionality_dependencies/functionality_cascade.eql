@@ -1,0 +1,21 @@
+type Source;
+type Middle;
+type Target;
+
+func to_middle(Source) -> Middle;
+func to_target(Middle) -> Target;
+pred merge(Source, Source);
+pred left(Target);
+pred right(Target);
+pred hit();
+
+rule merge_sources {
+    if merge(x, y);
+    then x = y;
+}
+
+rule consumer {
+    if left(x);
+    if right(x);
+    then hit();
+}

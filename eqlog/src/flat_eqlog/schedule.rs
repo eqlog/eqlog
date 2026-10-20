@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::algebra::signature::{Signature, TypeId};
 use crate::flat_eqlog::{
     functionality_anchor, infer_rule_scopes, iter_flat_rels, morphism_preservation_rules,
-    FlatInRel, FlatOutRel, FlatRuleGroup, RuleScope,
+    FlatInRel, FlatOutRel, FlatRel, FlatRuleGroup, RuleScope,
 };
 use crate::options::ModelMode;
 
@@ -72,7 +72,21 @@ pub fn schedule_rule_groups(
         .collect();
     let mut propagation: BTreeMap<FlatInRel, BTreeSet<FlatInRel>> = BTreeMap::new();
     match model_mode {
-        ModelMode::Desugared => {}
+        ModelMode::Desugared => {
+            // Table insertions enforce functionality without an explicit rule.
+            for func in signature.iter_funcs() {
+                let codomain = signature.func(func).codomain;
+                propagation.insert(
+                    FlatInRel::Rel(FlatRel::Func(func)),
+                    resources
+                        .iter()
+                        .filter(|rel| rel.arity(signature).contains(&codomain))
+                        .cloned()
+                        .chain([FlatInRel::Equality(codomain)])
+                        .collect(),
+                );
+            }
+        }
         ModelMode::Native => {
             // Native transport has the same dependencies as its materialized
             // preservation rules, even though it does not appear in the RAM.

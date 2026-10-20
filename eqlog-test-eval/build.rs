@@ -2,7 +2,57 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
+use eqlog::{EvaluationMode, ModelMode};
 use indoc::formatdoc;
+
+fn build_functionality_dependencies() -> eqlog::Result<()> {
+    let out = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo sets OUT_DIR"))
+        .join("functionality_dependencies");
+    let sources = [
+        (
+            "direct",
+            fs::read_to_string("tests/functionality_dependencies/functionality_dependencies.eql")?,
+        ),
+        (
+            "cascade",
+            fs::read_to_string("tests/functionality_dependencies/functionality_cascade.eql")?,
+        ),
+    ];
+    for (name, evaluation_mode, model_mode) in [
+        ("native_naive", EvaluationMode::Naive, ModelMode::Native),
+        (
+            "native_seminaive",
+            EvaluationMode::SemiNaive,
+            ModelMode::Native,
+        ),
+        (
+            "desugared_naive",
+            EvaluationMode::Naive,
+            ModelMode::Desugared,
+        ),
+        (
+            "desugared_seminaive",
+            EvaluationMode::SemiNaive,
+            ModelMode::Desugared,
+        ),
+    ] {
+        let input = out.join("input").join(name);
+        fs::create_dir_all(&input)?;
+        for (fixture, source) in &sources {
+            fs::write(input.join(format!("{fixture}_{name}.eql")), source)?;
+        }
+        eqlog::process(&eqlog::Config {
+            in_dir: input,
+            out_dir: out.join(name),
+            component_build: None,
+            options: eqlog::CompileOptions {
+                evaluation_mode,
+                model_mode,
+            },
+        })?;
+    }
+    Ok(())
+}
 
 fn build_long_pipeline(options: eqlog::CompileOptions) -> eqlog::Result<()> {
     let out = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo sets OUT_DIR"));
@@ -46,5 +96,6 @@ fn main() -> eqlog::Result<()> {
     }
     eqlog::process_root_with_options(&options)?;
     build_long_pipeline(options)?;
+    build_functionality_dependencies()?;
     Ok(())
 }
