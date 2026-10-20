@@ -409,14 +409,9 @@ impl PrefixTree2 {
             return;
         }
 
-        match self.map.entry(el0) {
-            map::Entry::Occupied(mut occupied_entry) => {
-                *occupied_entry.get_mut() = occupied_entry.get_mut().union(&restriction);
-            }
-            map::Entry::Vacant(vacant_entry) => {
-                vacant_entry.insert(restriction);
-            }
-        }
+        self.map.update_entry(el0, PrefixTree1::new, |suffix| {
+            suffix.union_assign(&restriction);
+        });
     }
 }
 impl PrefixTree3 {
@@ -425,14 +420,9 @@ impl PrefixTree3 {
             return;
         }
 
-        match self.map.entry(el0) {
-            map::Entry::Occupied(mut occupied_entry) => {
-                *occupied_entry.get_mut() = occupied_entry.get_mut().union(&restriction);
-            }
-            map::Entry::Vacant(vacant_entry) => {
-                vacant_entry.insert(restriction);
-            }
-        }
+        self.map.update_entry(el0, PrefixTree2::new, |suffix| {
+            suffix.union_assign(&restriction);
+        });
     }
 }
 impl PrefixTree4 {
@@ -441,14 +431,9 @@ impl PrefixTree4 {
             return;
         }
 
-        match self.map.entry(el0) {
-            map::Entry::Occupied(mut occupied_entry) => {
-                *occupied_entry.get_mut() = occupied_entry.get_mut().union(&restriction);
-            }
-            map::Entry::Vacant(vacant_entry) => {
-                vacant_entry.insert(restriction);
-            }
-        }
+        self.map.update_entry(el0, PrefixTree3::new, |suffix| {
+            suffix.union_assign(&restriction);
+        });
     }
 }
 impl PrefixTree5 {
@@ -457,14 +442,9 @@ impl PrefixTree5 {
             return;
         }
 
-        match self.map.entry(el0) {
-            map::Entry::Occupied(mut occupied_entry) => {
-                *occupied_entry.get_mut() = occupied_entry.get_mut().union(&restriction);
-            }
-            map::Entry::Vacant(vacant_entry) => {
-                vacant_entry.insert(restriction);
-            }
-        }
+        self.map.update_entry(el0, PrefixTree4::new, |suffix| {
+            suffix.union_assign(&restriction);
+        });
     }
 }
 impl PrefixTree6 {
@@ -473,14 +453,9 @@ impl PrefixTree6 {
             return;
         }
 
-        match self.map.entry(el0) {
-            map::Entry::Occupied(mut occupied_entry) => {
-                *occupied_entry.get_mut() = occupied_entry.get_mut().union(&restriction);
-            }
-            map::Entry::Vacant(vacant_entry) => {
-                vacant_entry.insert(restriction);
-            }
-        }
+        self.map.update_entry(el0, PrefixTree5::new, |suffix| {
+            suffix.union_assign(&restriction);
+        });
     }
 }
 impl PrefixTree7 {
@@ -489,14 +464,9 @@ impl PrefixTree7 {
             return;
         }
 
-        match self.map.entry(el0) {
-            map::Entry::Occupied(mut occupied_entry) => {
-                *occupied_entry.get_mut() = occupied_entry.get_mut().union(&restriction);
-            }
-            map::Entry::Vacant(vacant_entry) => {
-                vacant_entry.insert(restriction);
-            }
-        }
+        self.map.update_entry(el0, PrefixTree6::new, |suffix| {
+            suffix.union_assign(&restriction);
+        });
     }
 }
 impl PrefixTree8 {
@@ -505,14 +475,9 @@ impl PrefixTree8 {
             return;
         }
 
-        match self.map.entry(el0) {
-            map::Entry::Occupied(mut occupied_entry) => {
-                *occupied_entry.get_mut() = occupied_entry.get_mut().union(&restriction);
-            }
-            map::Entry::Vacant(vacant_entry) => {
-                vacant_entry.insert(restriction);
-            }
-        }
+        self.map.update_entry(el0, PrefixTree7::new, |suffix| {
+            suffix.union_assign(&restriction);
+        });
     }
 }
 impl PrefixTree9 {
@@ -521,14 +486,9 @@ impl PrefixTree9 {
             return;
         }
 
-        match self.map.entry(el0) {
-            map::Entry::Occupied(mut occupied_entry) => {
-                *occupied_entry.get_mut() = occupied_entry.get_mut().union(&restriction);
-            }
-            map::Entry::Vacant(vacant_entry) => {
-                vacant_entry.insert(restriction);
-            }
-        }
+        self.map.update_entry(el0, PrefixTree8::new, |suffix| {
+            suffix.union_assign(&restriction);
+        });
     }
 }
 
@@ -1254,12 +1214,50 @@ impl PrefixTree0 {
 }
 
 impl PrefixTree1 {
+    fn union_assign(&mut self, other: &Self) {
+        self.set.union_assign(&other.set);
+    }
+
     pub fn union(&self, other: &Self) -> Self {
         Self {
             set: self.set.union(&other.set),
         }
     }
 }
+
+macro_rules! union_assign {
+    ($tree:ident, $child:ident) => {
+        impl $tree {
+            fn union_assign(&mut self, other: &Self) {
+                if self.map.shares_root(&other.map) || other.map.len_upper_bound() == 0 {
+                    return;
+                }
+                if self.map.len_upper_bound() == 0 {
+                    *self = other.clone();
+                    return;
+                }
+                // A singleton suffix can reuse the existing path through every remaining column.
+                if other.map.len_upper_bound() == 1 {
+                    if let Some((key, value)) = other.map.iter().next() {
+                        self.map.update_entry(key, $child::new, |suffix| {
+                            suffix.union_assign(value);
+                        });
+                    }
+                    return;
+                }
+                *self = self.union(other);
+            }
+        }
+    };
+}
+
+union_assign!(PrefixTree2, PrefixTree1);
+union_assign!(PrefixTree3, PrefixTree2);
+union_assign!(PrefixTree4, PrefixTree3);
+union_assign!(PrefixTree5, PrefixTree4);
+union_assign!(PrefixTree6, PrefixTree5);
+union_assign!(PrefixTree7, PrefixTree6);
+union_assign!(PrefixTree8, PrefixTree7);
 
 impl PrefixTree2 {
     pub fn union(&self, other: &Self) -> Self {

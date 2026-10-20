@@ -271,6 +271,16 @@ impl WBTreeSet {
         WBTreeSetIter { storage }
     }
 
+    pub(crate) fn union_assign(&mut self, other: &Self) {
+        match &other.storage {
+            Storage::Empty => {}
+            Storage::Singleton(value) => {
+                self.insert(*value);
+            }
+            Storage::Ranges(_) | Storage::Tree(_) => *self = self.union(other),
+        }
+    }
+
     pub fn union(&self, other: &Self) -> Self {
         if self.shares_root(other) {
             return self.clone();

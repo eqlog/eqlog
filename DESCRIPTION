@@ -10,6 +10,8 @@ Keep sparse updates and comparisons driven by the few changed keys.
 Normalize small mapped sets without scanning their entire cardinality.
 Build general image sets in place, preserving empty-result sharing,
 and use sorted keys for any full-level rebuild that is still needed.
+Merge singleton suffixes through mutable entries so late images reuse
+destination paths while empty destinations retain subtree sharing.
 
 Represent contiguous leaf elements as shared intervals while keeping
 scattered sets in trees. Preserve canonical current rows, historical

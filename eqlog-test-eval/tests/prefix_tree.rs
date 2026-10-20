@@ -531,6 +531,65 @@ fn singleton_suffix_snapshots_survive_edits_and_key_replacement() {
 }
 
 #[test]
+fn repeated_restriction_inserts_preserve_mapped_and_sibling_snapshots() {
+    let mut source = PrefixTree3::new();
+    let mut first = PrefixTree2::new();
+    let mut last = PrefixTree2::new();
+    for key in 0..32 {
+        first.insert([key, key + 100]);
+        last.insert([key, key + 200]);
+        for suffix in 0..32 {
+            source.insert([key, key % 3, suffix]);
+        }
+    }
+    let mapped = source.mapped(Some(first), None, Some(last));
+    let mut tree = PrefixTree4::new();
+    tree.insert_restriction(7, mapped.clone());
+    tree.insert_restriction(8, mapped.clone());
+    let before = tree.clone();
+    let before_rows: BTreeSet<_> = [7, 8]
+        .into_iter()
+        .flat_map(|owner| {
+            source
+                .iter()
+                .map(move |[first, label, last]| [owner, first + 100, label, last + 200])
+        })
+        .collect();
+    let mut expected = before_rows.clone();
+    for key in 0..32 {
+        for label in [key % 3, 9] {
+            let row = [key + 100, label, key + 232];
+            let mut incoming = PrefixTree3::new();
+            incoming.insert(row);
+            tree.insert_restriction(7, incoming.clone());
+            tree.insert_restriction(7, incoming);
+            expected.insert([7, row[0], row[1], row[2]]);
+        }
+    }
+    let mut bulk = PrefixTree3::new();
+    for key in 0..16 {
+        bulk.insert([100, 10, key + 300]);
+        bulk.insert([101, 10, key + 300]);
+        expected.insert([7, 100, 10, key + 300]);
+        expected.insert([7, 101, 10, key + 300]);
+    }
+    tree.insert_restriction(7, bulk);
+    tree.insert_restriction(9, PrefixTree3::new());
+
+    assert_eq!(
+        tree.iter().collect::<Vec<_>>(),
+        expected.into_iter().collect::<Vec<_>>()
+    );
+    assert_eq!(before.iter().collect::<BTreeSet<_>>(), before_rows);
+    assert_eq!(
+        tree.get(8).unwrap().iter().collect::<Vec<_>>(),
+        mapped.iter().collect::<Vec<_>>()
+    );
+    assert!(tree.get(9).is_none());
+    assert_eq!(source.iter().count(), 32 * 32);
+}
+
+#[test]
 fn difference_visitors_stop_early_and_skip_shared_subtrees() {
     let mut original = WBTreeMap::new();
     for key in 0..4096 {
