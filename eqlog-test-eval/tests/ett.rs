@@ -400,6 +400,90 @@ fn type_extensions_and_substitutions_are_structural() {
 }
 
 #[test]
+fn checker_records_obligations_in_eqlog() {
+    let checked = check(&formatdoc! {"
+        {NAT}
+        theorem zero : Nat.zero = Nat.zero := rfl
+    "})
+    .unwrap();
+    let model = checked.model;
+    assert!(model.iter_types_should_be_equal().next().is_some());
+    assert!(model.iter_terms_should_be_equal().next().is_some());
+    assert!(model
+        .iter_types_should_be_equal()
+        .all(|(_, _, a, b)| model.are_equal_ty(a, b)));
+    assert!(model
+        .iter_terms_should_be_equal()
+        .all(|(_, _, x, y)| model.are_equal_tm(x, y)));
+}
+
+#[test]
+fn obligations_observe_equality_in_their_original_context() {
+    let mut model = Kernel::new();
+    let context = model.define_empty();
+    let ty = model.new_ty(context);
+    let x = model.new_tm(context);
+    let y = model.new_tm(context);
+    model.insert_has_type(context, x, ty);
+    model.insert_has_type(context, y, ty);
+    let equality = model.define_equality(context, x, y);
+    let proof = model.new_tm(context);
+    let term_obligation = model.new_obligation();
+    model.insert_reflexivity_goal(term_obligation, context, equality, proof);
+
+    let family = model.new_data();
+    let nil = model.define_nil_args(context);
+    let xs = model.define_cons_args(context, x, nil);
+    let ys = model.define_cons_args(context, y, nil);
+    let a = model.define_data_type(context, family, xs);
+    let b = model.define_data_type(context, family, ys);
+    let type_obligation = model.new_obligation();
+    model.insert_types_should_be_equal(type_obligation, context, a, b);
+
+    let continuation = model.new_context();
+    let weakening = model.new_context_mor();
+    model.insert_extension(continuation, context, equality, weakening);
+    let local_x = model.new_tm(continuation);
+    let local_y = model.new_tm(continuation);
+    model.insert_term_image(weakening, context, x, continuation, local_x);
+    model.insert_term_image(weakening, context, y, continuation, local_y);
+    let local_nil = model.define_nil_args(continuation);
+    let local_xs = model.define_cons_args(continuation, local_x, local_nil);
+    let local_ys = model.define_cons_args(continuation, local_y, local_nil);
+    let local_a = model.define_data_type(continuation, family, local_xs);
+    let local_b = model.define_data_type(continuation, family, local_ys);
+    model.insert_type_image(weakening, context, a, continuation, local_a);
+    model.insert_type_image(weakening, context, b, continuation, local_b);
+    model.close();
+
+    assert!(model.are_equal_tm(local_x, local_y));
+    assert!(model.are_equal_ty(local_a, local_b));
+    let terms: Vec<_> = model.iter_terms_should_be_equal().collect();
+    assert_eq!(terms.len(), 1);
+    let (origin, scope, lhs, rhs) = terms[0];
+    assert_eq!(origin, term_obligation);
+    assert!(model.are_equal_context(scope, context));
+    assert!(!model.are_equal_tm(lhs, rhs));
+    let types: Vec<_> = model.iter_types_should_be_equal().collect();
+    assert_eq!(types.len(), 1);
+    let (origin, scope, lhs, rhs) = types[0];
+    assert_eq!(origin, type_obligation);
+    assert!(model.are_equal_context(scope, context));
+    assert!(!model.are_equal_ty(lhs, rhs));
+
+    let witness = model.new_tm(context);
+    model.insert_has_type(context, witness, equality);
+    model.close();
+    assert!(model
+        .iter_terms_should_be_equal()
+        .all(|(_, _, lhs, rhs)| model.are_equal_tm(lhs, rhs)));
+    assert!(model
+        .iter_types_should_be_equal()
+        .all(|(_, _, lhs, rhs)| model.are_equal_ty(lhs, rhs)));
+    assert!(model.are_equal_tm(proof, model.refl(context, x).unwrap()));
+}
+
+#[test]
 fn speculative_arguments_cannot_discharge_their_own_obligations() {
     let prefix = formatdoc! {"
         {NAT}
@@ -424,12 +508,14 @@ fn errors_follow_source_order_instead_of_checking_phases() {
     for later in [
         "def later : Nat := missing",
         "def later : Nat := rfl",
+        "def later : Nat := Bit.off",
         "def later : Nat := @",
         "def add : Nat := Nat.zero",
         "def later (n n : Nat) : Nat := n",
     ] {
         let source = formatdoc! {"
             {NAT}
+            inductive Bit where | off
             def earlier : Nat := rfl
             {later}
         "};

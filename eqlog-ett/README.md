@@ -90,13 +90,20 @@ Weakening maps material into later scopes; equality cannot flow back into
 the earlier scope.
 
 The frontend constructs contexts, types and substitutions without waiting for
-positive well-formedness judgments. It records obligations in Rust: an
-argument's inferred type must equal its parameter type, a body's inferred
-type must equal its annotation, equality endpoints must have the same type,
-and `rfl` requires equal endpoints. The frontend continues under the declared
-typing assumptions and calls `close()` once. It then checks the obligations
-and reports the first failure in source order. Source positions also let an
-earlier deferred failure take precedence over a later elaboration error.
+positive well-formedness judgments. Obligations are facts in the Eqlog model:
+`types_should_be_equal` records required type equalities, and
+`terms_should_be_equal` records required term equalities. The frontend records
+type obligations for arguments, bodies, equality endpoints, and index binders.
+Eqlog derives term equality obligations from `reflexivity_goal` facts during
+closure. These predicates do not assert the equalities they require.
+
+The frontend continues under the declared typing assumptions and calls
+`close()` once. Rust then queries the obligation relations, checks their
+equalities, and checks that each reflexivity goal has an equality type.
+Rust retains only source positions and messages for these obligations. It
+reports the first failure in source order, including deferred failures before
+later elaboration errors. Obligation relations live outside `Context` so
+substitution does not transport them into scopes with additional assumptions.
 
 Inferred types are recorded separately from assumed typings. The kernel's
 `has_type` relation is not functional: adding an expected typing cannot
@@ -118,7 +125,7 @@ its own branch obligations.
 
 Morphisms have the direction of substitution: a variable extension has a
 weakening `Gamma -> Gamma.x:A`. `pair` and `pair_type` instantiate the last
-term or type variable after Rust has recorded the relevant obligations.
+term or type variable after the relevant obligations have been recorded.
 `advance` adds a scope without a variable, and `context_parent` records
 ancestry. `closed_context` and `variable_context` describe that ancestry,
 rather than certifying well-formedness; a context without local variables has

@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::kernel::{
-    Args, Call, Constructor, Context, ContextMor, Data, Kernel, Telescope, Tm, Ty,
+    Args, Call, Constructor, Context, ContextMor, Data, Kernel, Obligation, Telescope, Tm, Ty,
 };
 use crate::syntax::{self, Case, ConstructorDecl, Declaration, Error, Expr, ExprKind, Location};
 
@@ -24,18 +24,32 @@ pub fn check(source: &str) -> Result<Checked, Error> {
         }
     }
     checker.model.close();
-    for obligation in &checker.obligations {
-        let satisfied = match obligation.requirement {
-            Requirement::EqualTypes(a, b) => checker.model.are_equal_ty(a, b),
-            Requirement::Reflexive(ty) => checker.model.iter_equality().any(|(_, x, y, a)| {
-                checker.model.are_equal_ty(a, ty) && checker.model.are_equal_tm(x, y)
-            }),
-            Requirement::Failure => false,
-        };
-        if !satisfied {
-            errors.push(obligation.error.clone());
+    let mut failed = BTreeSet::new();
+    for (obligation, _, a, b) in checker.model.iter_types_should_be_equal() {
+        if !checker.model.are_equal_ty(a, b) {
+            failed.insert(obligation);
         }
     }
+    for (obligation, _, x, y) in checker.model.iter_terms_should_be_equal() {
+        if !checker.model.are_equal_tm(x, y) {
+            failed.insert(obligation);
+        }
+    }
+    for (obligation, _, ty, _) in checker.model.iter_reflexivity_goal() {
+        let equality_type = checker
+            .model
+            .iter_equality()
+            .any(|(_, _, _, a)| checker.model.are_equal_ty(a, ty));
+        if !equality_type {
+            failed.insert(obligation);
+        }
+    }
+    errors.extend(checker.errors);
+    errors.extend(
+        failed
+            .into_iter()
+            .map(|obligation| checker.diagnostics[&obligation].clone()),
+    );
     errors.sort_by_key(|error| error.location.unwrap_or_default());
     if let Some(error) = errors.into_iter().next() {
         return Err(error);
@@ -44,17 +58,6 @@ pub fn check(source: &str) -> Result<Checked, Error> {
         model: checker.model,
         declarations: checker.names,
     })
-}
-
-enum Requirement {
-    EqualTypes(Ty, Ty),
-    Reflexive(Ty),
-    Failure,
-}
-
-struct Obligation {
-    requirement: Requirement,
-    error: Error,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -160,7 +163,8 @@ struct Checker {
     data: BTreeMap<String, Inductive>,
     constructors: BTreeMap<String, ConstructorInfo>,
     definitions: BTreeMap<String, Construction>,
-    obligations: Vec<Obligation>,
+    diagnostics: BTreeMap<Obligation, Error>,
+    errors: Vec<Error>,
     declaration_name: String,
     declaration_location: Location,
     names: Vec<String>,
@@ -196,7 +200,8 @@ impl Checker {
             data: BTreeMap::new(),
             constructors: BTreeMap::new(),
             definitions: BTreeMap::new(),
-            obligations: Vec::new(),
+            diagnostics: BTreeMap::new(),
+            errors: Vec::new(),
             declaration_name: String::new(),
             declaration_location: Location::default(),
             names: Vec::new(),
@@ -492,17 +497,20 @@ impl Checker {
         }
     }
 
-    fn obligation(&mut self, requirement: Requirement, location: Location, message: &str) {
+    fn diagnostic(&mut self, error: Error) -> Obligation {
+        let obligation = self.model.new_obligation();
+        self.diagnostics.insert(obligation, error);
+        obligation
+    }
+
+    fn obligation(&mut self, location: Location, message: &str) -> Obligation {
         let name = &self.declaration_name;
         let location = if location.line == 0 {
             self.declaration_location
         } else {
             location
         };
-        self.obligations.push(Obligation {
-            requirement,
-            error: Error::new(format!("{name}: {message}")).at(location),
-        });
+        self.diagnostic(Error::new(format!("{name}: {message}")).at(location))
     }
 
     fn lift_morphism(
@@ -527,13 +535,14 @@ impl Checker {
         location: Location,
     ) -> Tm {
         let actual = self.inferred_type(*scope, term);
-        self.obligations.push(Obligation {
-            requirement: Requirement::EqualTypes(actual, ty),
-            error: Error::new(format!(
+        let obligation = self.diagnostic(
+            Error::new(format!(
                 "{name}: type checking did not establish the declared type (beta budget: 3)"
             ))
             .at(location),
-        });
+        );
+        self.model
+            .insert_types_should_be_equal(obligation, self.context(*scope), actual, ty);
         if self.may_reflect(ty) {
             self.assume(scope);
         }
@@ -724,10 +733,7 @@ impl Checker {
             let result_args = match family_arguments(&result, &name, &uniform, indices.len()) {
                 Ok(args) => args,
                 Err(error) => {
-                    self.obligations.push(Obligation {
-                        requirement: Requirement::Failure,
-                        error: error.at(result.location),
-                    });
+                    self.errors.push(error.at(result.location));
                     Vec::new()
                 }
             };
@@ -737,10 +743,7 @@ impl Checker {
                     match family_arguments(field, &name, &uniform, indices.len()) {
                         Ok(args) => recursive.push(Some(args)),
                         Err(error) => {
-                            self.obligations.push(Obligation {
-                                requirement: Requirement::Failure,
-                                error: error.at(field.location),
-                            });
+                            self.errors.push(error.at(field.location));
                             recursive.push(None);
                         }
                     }
@@ -836,11 +839,10 @@ impl Checker {
                 let lhs = self.term_image(*scope, lhs);
                 let a = self.inferred_type(*scope, lhs);
                 let b = self.inferred_type(*scope, rhs);
-                self.obligation(
-                    Requirement::EqualTypes(a, b),
-                    expr.location,
-                    "equality endpoints have incompatible types",
-                );
+                let obligation =
+                    self.obligation(expr.location, "equality endpoints have incompatible types");
+                self.model
+                    .insert_types_should_be_equal(obligation, self.context(*scope), a, b);
                 let ty = self.model.define_equality(self.context(*scope), lhs, rhs);
                 self.type_syntax(*scope, ty, &[Value::Term(lhs), Value::Term(rhs)]);
                 self.type_forms.insert(ty, TypeForm::Equality);
@@ -893,12 +895,12 @@ impl Checker {
                 let term = self.model.new_tm(context);
                 self.remember_term(*scope, term);
                 self.term_types.insert(term, ty);
-                self.model.insert_reflexivity_goal(context, ty, term);
-                self.obligation(
-                    Requirement::Reflexive(ty),
+                let obligation = self.obligation(
                     expr.location,
                     "reflexivity requires equal endpoints (beta budget: 3)",
                 );
+                self.model
+                    .insert_reflexivity_goal(obligation, context, ty, term);
                 if self.may_reflect(ty) {
                     self.assume(scope);
                 }
@@ -1091,10 +1093,13 @@ impl Checker {
                 let ty = self.type_image(*scope, ty);
                 let term = self.value_image(*scope, value).term()?;
                 let actual = self.inferred_type(*scope, term);
-                self.obligation(
-                    Requirement::EqualTypes(actual, ty),
-                    location,
-                    "argument does not have the parameter type",
+                let obligation =
+                    self.obligation(location, "argument does not have the parameter type");
+                self.model.insert_types_should_be_equal(
+                    obligation,
+                    self.context(*scope),
+                    actual,
+                    ty,
                 );
             }
         }
@@ -1408,10 +1413,13 @@ impl Checker {
                 let canonical = self.ty(&mut current, &inductive.indices[i].1)?;
                 self.restore_environment(previous, current, &saved);
                 let ty = self.type_image(current, ty);
-                self.obligation(
-                    Requirement::EqualTypes(ty, canonical),
-                    annotation.location,
-                    "incompatible index binder type",
+                let obligation =
+                    self.obligation(annotation.location, "incompatible index binder type");
+                self.model.insert_types_should_be_equal(
+                    obligation,
+                    self.context(current),
+                    ty,
+                    canonical,
                 );
             }
             let ty = self.type_image(current, ty);
@@ -1468,10 +1476,7 @@ impl Checker {
         self.restore_environment(entry, *scope, &saved);
         let (_, result_ty) = self.motive_instance(scope, &motive, &values, location)?;
         if let Some(error) = case_error {
-            self.obligations.push(Obligation {
-                requirement: Requirement::Failure,
-                error,
-            });
+            self.errors.push(error);
         }
 
         let mut visited = BTreeSet::new();

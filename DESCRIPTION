@@ -3,11 +3,11 @@ Check universe-free types through obligations
 Use fresh type parameters instead of universe codes, and represent
 equality by its endpoints with term-based reflexivity.
 
-Continue elaboration under typing assumptions while retaining
-independent Rust obligations for argument and body types, equality
-formation, and reflexivity. Check them after one closure and report the
-first failure in source order, including failures preceding later
-elaboration errors.
+Continue elaboration under typing assumptions while recording
+independent obligations in Eqlog for argument and body types, equality
+formation, and reflexivity. Rust queries these relations after one
+closure and reports the first failure in source order, including
+failures preceding later elaboration errors.
 
 Keep inferred types separate from assumed typings so constraints cannot
 prove themselves. Isolate reflected equalities in continuation contexts

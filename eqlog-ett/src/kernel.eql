@@ -1,5 +1,6 @@
 type Data;
 type Constructor;
+type Obligation;
 
 model Context {
     type Ty;
@@ -54,6 +55,10 @@ model Context {
     }
 }
 
+// Obligations stay outside Context so substitutions cannot move them past assumptions.
+pred types_should_be_equal(o: Obligation, g: Context, a: g.Ty, b: g.Ty);
+pred terms_should_be_equal(o: Obligation, g: Context, x: g.Tm, y: g.Tm);
+
 func empty() -> Context;
 pred extension(e: Context, g: Context, a: g.Ty, p: Mor(Context));
 pred type_extension(e: Context, g: Context, p: Mor(Context));
@@ -69,7 +74,7 @@ pred closed_context(Context);
 pred variable_context(Context);
 // A scope without local variables has at most one substitution to a given target.
 func closed_substitution(Context, Context) -> Mor(Context);
-// Argument typing is a Rust obligation in the context before this substitution.
+// Argument typing is an obligation in the context before this substitution.
 func pair(e: Context, d: Context, f: Mor(Context), t: d.Tm) -> Mor(Context);
 func pair_type(e: Context, d: Context, f: Mor(Context), a: d.Ty) -> Mor(Context);
 
@@ -176,12 +181,19 @@ rule type_pairing_eta {
     then g = g;
 }
 
-// An rfl obligation observes this request before any continuation assumes its type.
-pred reflexivity_goal(g: Context, a: g.Ty, r: g.Tm);
+// The goal's original context prevents its continuation from proving it by reflection.
+pred reflexivity_goal(o: Obligation, g: Context, a: g.Ty, r: g.Tm);
+rule reflexivity_endpoints {
+    if reflexivity_goal(o, g, a, r);
+    if a = g.equality(x, y);
+    then terms_should_be_equal(o, g, x, y);
+    then r = r;
+}
 rule check_reflexivity {
-    if reflexivity_goal(g, a, r);
+    if reflexivity_goal(o, g, a, r);
     if a = g.equality(x, x);
     then r = g.refl(x);
+    then o = o;
 }
 
 // Images remain partial: requesting a result does not copy its hidden subterms.
