@@ -1,0 +1,10 @@
+Preserve joins after function equalities
+
+Include the equality effects of function conflicts in dependency
+propagation so closure cannot skip joins enabled by those equalities.
+Follow cascading conflicts across function domains and keep affected
+inputs out of the stable-input cache.
+
+Exercise generated evaluators with direct conflicts, cascading
+equalities, incremental closure, and interrupted closure. Run all four
+evaluator configurations in the default integration test command.
