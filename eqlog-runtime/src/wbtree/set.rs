@@ -1,5 +1,6 @@
 use super::map::*;
 use super::mapping::MonotoneMap;
+use crate::{Error, Fuel};
 use std::fmt;
 use std::mem;
 
@@ -135,6 +136,20 @@ impl WBTreeSet {
             Storage::Empty => 0,
             Storage::Singleton(_) => 1,
             Storage::Tree(map) => map.len_upper_bound(),
+        }
+    }
+
+    pub(crate) fn iteration_work(&self, fuel: &mut Fuel) -> Result<u64, Error> {
+        match &self.storage {
+            Storage::Empty => {
+                fuel.consume(1)?;
+                Ok(1)
+            }
+            Storage::Singleton(_) => {
+                fuel.consume(1)?;
+                Ok(2)
+            }
+            Storage::Tree(map) => map.iteration_work(fuel, |(), _fuel| Ok(0)),
         }
     }
 

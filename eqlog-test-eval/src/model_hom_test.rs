@@ -761,6 +761,86 @@ fn isomorphism_fuel_accounts_for_physical_relation_storage() {
 }
 
 #[test]
+fn isomorphism_fuel_accounts_for_mapped_suffix_storage() {
+    let signature = TransRefl::dynamic_signature();
+    let mut model = Model::new(signature);
+    elements(&mut model, 1);
+    let type_data = type_data(&model, TypeId(0)).unwrap().clone();
+    let relation = relation_data(&model, RelationId(0)).unwrap().clone();
+    let mut identity = PrefixTree2::new();
+    identity.insert([0, 0]);
+
+    let mut nested = PrefixTree1::new();
+    nested.insert([0]);
+    nested.insert([1]);
+    for _ in 0..256 {
+        nested = nested.mapped(Some(identity.clone()));
+    }
+    let mut filtered = PrefixTree1::new();
+    for i in 0..2_048 {
+        filtered.insert([i]);
+    }
+    filtered = filtered.mapped(Some(identity));
+
+    // Both suffixes expose one valid element, so logical cardinality hides the work.
+    for suffix in [nested, filtered] {
+        let mut stored = PrefixTree2::new();
+        stored.insert_restriction(0, suffix);
+        let mut relation = relation.clone();
+        relation.rows.table = Table::from(stored);
+        let model = from_parts(signature, vec![type_data.clone()], vec![relation]).unwrap();
+        assert_eq!(model.tuples(RelationId(0)).unwrap().count(), 1);
+        assert_eq!(
+            find_isomorphism(&model, &model, Fuel::Finite(1_000)).err(),
+            Some(Error::FuelExhausted)
+        );
+        check_witness(
+            &find_isomorphism(&model, &model, Fuel::Finite(1_000_000))
+                .unwrap()
+                .unwrap(),
+        );
+    }
+}
+
+#[test]
+fn isomorphism_fuel_accounts_for_deferred_column_mappings() {
+    let signature = TransRefl::dynamic_signature();
+    let mut model = Model::new(signature);
+    elements(&mut model, 1);
+    let type_data = type_data(&model, TypeId(0)).unwrap().clone();
+    let relation = relation_data(&model, RelationId(0)).unwrap().clone();
+    let mut identity = PrefixTree2::new();
+    identity.insert([0, 0]);
+
+    let mut composed = identity.clone();
+    for _ in 0..8 {
+        composed = composed.mapped(Some(identity.clone()), Some(identity.clone()));
+    }
+    let mut filtered = PrefixTree2::new();
+    for i in 0..2_048 {
+        filtered.insert([0, i]);
+    }
+    filtered = filtered.mapped(Some(identity.clone()), Some(identity));
+
+    // Chaining maps must stay affordable, while hidden suffix rows still cost fuel.
+    for stored in [composed, filtered] {
+        let mut relation = relation.clone();
+        relation.rows.table = Table::from(stored);
+        let model = from_parts(signature, vec![type_data.clone()], vec![relation]).unwrap();
+        assert_eq!(model.tuples(RelationId(0)).unwrap().count(), 1);
+        assert_eq!(
+            find_isomorphism(&model, &model, Fuel::Finite(1_000)).err(),
+            Some(Error::FuelExhausted)
+        );
+        check_witness(
+            &find_isomorphism(&model, &model, Fuel::Finite(1_000_000))
+                .unwrap()
+                .unwrap(),
+        );
+    }
+}
+
+#[test]
 fn canonical_search_does_not_traverse_unused_alias_chains() {
     let signature = TransRefl::dynamic_signature();
     let mut model = Model::new(signature);

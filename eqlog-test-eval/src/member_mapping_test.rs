@@ -90,3 +90,177 @@ fn member_transport_handles_chunks_late_images_and_quotients() {
         );
     }
 }
+
+#[test]
+fn multi_column_member_transport_composes_and_canonicalizes() {
+    let mut model = MemberMapping::new();
+    let source = model.new_world();
+    let target = model.new_world();
+    let destination = model.new_world();
+    let members: Vec<_> = (0..24).map(|_| model.new_el(source)).collect();
+    let images: Vec<_> = (0..24).map(|_| model.new_el(target)).collect();
+    let final_images: Vec<_> = (0..24).map(|_| model.new_el(destination)).collect();
+    let labels: Vec<_> = (0..3).map(|_| model.new_label()).collect();
+    let first = model.new_world_mor();
+    model.insert_world_mor_dom(first, source);
+    model.insert_world_mor_cod(first, target);
+    let second = model.new_world_mor();
+    model.insert_world_mor_dom(second, target);
+    model.insert_world_mor_cod(second, destination);
+    for i in 0..24 {
+        model.insert_el_mor_app(first, members[i], images[i]);
+        model.insert_el_mor_app(second, images[i], final_images[i]);
+    }
+    let mut source_rows = Vec::new();
+    for i in 0..24 {
+        for &label in &labels {
+            for j in 0..24 {
+                source_rows.push((i, label, j));
+                model.insert_labelled_edge(source, members[i], label, members[j]);
+            }
+        }
+    }
+    model.close();
+
+    // Leave inherited rows unread until equality repair has visited the mapped roots.
+    model.equate_el(source, members[2], members[1]);
+    model.equate_el(target, images[22], images[21]);
+    model.equate_el(destination, final_images[14], final_images[13]);
+    model.equate_label(labels[2], labels[0]);
+    let late_label = model.new_label();
+    source_rows.push((23, late_label, 0));
+    model.insert_labelled_edge(source, members[23], late_label, members[0]);
+    model.insert_labelled_edge(target, images[20], late_label, images[1]);
+    model.insert_labelled_edge(destination, final_images[19], late_label, final_images[2]);
+    for world in [target, destination] {
+        for label in [labels[0], labels[1], late_label] {
+            model.insert_request_label(world, label);
+        }
+    }
+    model.close();
+
+    assert!(model.are_equal_el(images[2], images[1]));
+    assert!(model.are_equal_el(final_images[2], final_images[1]));
+    assert!(model.are_equal_el(final_images[22], final_images[21]));
+    let mut inherited_rows = source_rows;
+    inherited_rows.push((20, late_label, 1));
+    for (world, elements) in [(target, &images), (destination, &final_images)] {
+        let mut expected: BTreeSet<_> = inherited_rows
+            .iter()
+            .map(|&(i, label, j)| {
+                (
+                    model.root_el(elements[i]),
+                    model.root_label(label),
+                    model.root_el(elements[j]),
+                )
+            })
+            .collect();
+        if world == destination {
+            expected.insert((
+                model.root_el(final_images[19]),
+                late_label,
+                model.root_el(final_images[2]),
+            ));
+        }
+        let transported: BTreeSet<_> = model
+            .iter_labelled_edge()
+            .filter_map(|(w, x, label, y)| (w == world).then_some((x, label, y)))
+            .collect();
+        let matched: BTreeSet<_> = model
+            .iter_matched_labelled_edge()
+            .filter_map(|(w, x, label, y)| (w == world).then_some((x, label, y)))
+            .collect();
+        assert_eq!(transported, expected);
+        assert_eq!(matched, expected);
+    }
+    assert!(model.iter_labelled_edge().all(|(_, x, label, y)| {
+        model.root_el(x) == x && model.root_label(label) == label && model.root_el(y) == y
+    }));
+    let count = model.iter_labelled_edge().count();
+    model.close();
+    assert_eq!(model.iter_labelled_edge().count(), count);
+}
+
+#[test]
+fn multi_column_member_transport_filters_partial_maps_and_merges_images() {
+    for reverse in [false, true] {
+        let mut model = MemberMapping::new();
+        let source = model.new_world();
+        let target = model.new_world();
+        let members: Vec<_> = (0..24).map(|_| model.new_el(source)).collect();
+        let mut images: Vec<_> = (0..24).map(|_| model.new_el(target)).collect();
+        if reverse {
+            images.reverse();
+        }
+        let labels: Vec<_> = (0..3).map(|_| model.new_label()).collect();
+        let morphism = model.new_world_mor();
+        model.insert_world_mor_dom(morphism, source);
+        model.insert_world_mor_cod(morphism, target);
+        for i in 0..12 {
+            model.insert_el_mor_app(morphism, members[i], images[i]);
+        }
+        let mut source_rows = Vec::new();
+        for i in 0..24 {
+            let successors = if i < 8 { 12..24 } else { 0..12 };
+            for j in successors {
+                let label = labels[i % labels.len()];
+                source_rows.push((i, label, j));
+                model.insert_labelled_edge(source, members[i], label, members[j]);
+            }
+        }
+        for &label in &labels {
+            model.insert_request_label(target, label);
+        }
+        model.close();
+
+        let expected: BTreeSet<_> = source_rows
+            .iter()
+            .filter_map(|&(i, label, j)| {
+                (i < 12 && j < 12).then_some((images[i], label, images[j]))
+            })
+            .collect();
+        let transported: BTreeSet<_> = model
+            .iter_labelled_edge()
+            .filter_map(|(w, x, label, y)| (w == target).then_some((x, label, y)))
+            .collect();
+        let matched: BTreeSet<_> = model
+            .iter_matched_labelled_edge()
+            .filter_map(|(w, x, label, y)| (w == target).then_some((x, label, y)))
+            .collect();
+        assert_eq!(transported, expected);
+        assert_eq!(matched, expected);
+
+        for i in 12..24 {
+            model.insert_el_mor_app(morphism, members[i], images[i]);
+        }
+        model.insert_el_mor_app(morphism, members[0], images[1]);
+        source_rows.push((23, labels[0], 23));
+        model.insert_labelled_edge(source, members[23], labels[0], members[23]);
+        model.canonicalize();
+        model.close();
+
+        assert!(model.are_equal_el(images[0], images[1]));
+        let expected: BTreeSet<_> = source_rows
+            .iter()
+            .map(|&(i, label, j)| (model.root_el(images[i]), label, model.root_el(images[j])))
+            .collect();
+        let transported: BTreeSet<_> = model
+            .iter_labelled_edge()
+            .filter_map(|(w, x, label, y)| (w == target).then_some((x, label, y)))
+            .collect();
+        let matched: BTreeSet<_> = model
+            .iter_matched_labelled_edge()
+            .filter_map(|(w, x, label, y)| (w == target).then_some((x, label, y)))
+            .collect();
+        assert_eq!(transported, expected);
+        assert_eq!(matched, expected);
+        model.close();
+        assert_eq!(
+            model
+                .iter_labelled_edge()
+                .filter(|(w, _, _, _)| *w == target)
+                .count(),
+            expected.len()
+        );
+    }
+}

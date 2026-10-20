@@ -81,6 +81,281 @@ fn offset_mapping_and_lookup_share_values_until_mutation() {
 }
 
 #[test]
+fn entry_mappings_defer_values_and_cache_them_across_snapshots() {
+    let clones = Rc::new(Cell::new(0));
+    let calls = Rc::new(Cell::new(0));
+    let mut base = WBTreeMap::new();
+    let mut relation = PrefixTree2::new();
+    for key in 0..1024 {
+        base.insert(key, CountClones(clones.clone()));
+        relation.insert([key, key + 2048]);
+    }
+    clones.set(0);
+    let transform_calls = calls.clone();
+    let mapped = base.mapped_entries(Some(MonotoneMap::new(&relation).unwrap()), move |value| {
+        transform_calls.set(transform_calls.get() + 1);
+        Some(value.clone())
+    });
+    let snapshot = mapped.clone();
+    assert_eq!(clones.get(), 0);
+    assert_eq!(calls.get(), 0);
+    assert!(mapped.get(&0).is_none());
+    assert_eq!(calls.get(), 0);
+
+    let value = mapped.get(&2700).unwrap();
+    assert_eq!(calls.get(), 1);
+    assert_eq!(clones.get(), 1);
+    assert!(std::ptr::eq(value, mapped.get(&2700).unwrap()));
+    assert!(std::ptr::eq(value, snapshot.get(&2700).unwrap()));
+    assert_eq!(calls.get(), 1);
+
+    let mut iter = mapped.iter();
+    assert_eq!(calls.get(), 1);
+    assert_eq!(iter.next().unwrap().0, 2048);
+    assert_eq!(calls.get(), 2);
+    assert_eq!(mapped.iter().count(), 1024);
+    assert_eq!(snapshot.iter().count(), 1024);
+    assert_eq!(calls.get(), 1024);
+    assert_eq!(clones.get(), 1024);
+}
+
+#[test]
+fn layered_entry_mappings_compose_keys_values_and_filters() {
+    let mut base = WBTreeMap::new();
+    let mut first = PrefixTree2::new();
+    let mut second = PrefixTree2::new();
+    let mut expected = BTreeMap::new();
+    for key in 0..128 {
+        base.insert(key, key);
+        first.insert([key, key + 100]);
+        if key % 4 != 0 {
+            second.insert([key + 100, key * 2 + 1000]);
+            if key % 3 != 0 && (key + 10) % 5 != 0 {
+                expected.insert(key * 2 + 1000, (key + 10) * 10 + 1);
+            }
+        }
+    }
+    let mapped = base
+        .mapped_entries(Some(MonotoneMap::new(&first).unwrap()), |value| {
+            (value % 3 != 0).then_some(value + 10)
+        })
+        .mapped_entries(Some(MonotoneMap::new(&second).unwrap()), |value| {
+            (value % 5 != 0).then_some(value * 10)
+        })
+        .mapped_entries(None, |value| Some(value + 1));
+    assert_eq!(mapped.len(), expected.len());
+    assert_eq!(
+        mapped
+            .iter()
+            .map(|(key, &value)| (key, value))
+            .collect::<BTreeMap<_, _>>(),
+        expected,
+    );
+    for key in 1000..1256 {
+        assert_eq!(mapped.get(&key), expected.get(&key));
+    }
+
+    let calls = Rc::new(Cell::new(0));
+    let transform_calls = calls.clone();
+    let empty = base.mapped_entries(None, move |_| {
+        transform_calls.set(transform_calls.get() + 1);
+        None
+    });
+    assert_eq!(calls.get(), 0);
+    assert!(empty.get(&64).is_none());
+    assert!(empty.get(&64).is_none());
+    assert_eq!(calls.get(), 1);
+    assert!(empty.is_empty());
+    assert_eq!(empty.len(), 0);
+    assert_eq!(empty.iter().count(), 0);
+    assert_eq!(calls.get(), 128);
+}
+
+#[test]
+fn entry_mapping_set_operations_distinguish_value_transformations() {
+    let mut base = WBTreeMap::new();
+    let mut relation = PrefixTree2::new();
+    for key in 0..128 {
+        base.insert(key, key);
+        relation.insert([key, key + 256]);
+    }
+    let mapping = MonotoneMap::new(&relation).unwrap();
+    let left = base.mapped_entries(Some(mapping.clone()), |value| Some(value + 1));
+    let right = base.mapped_entries(Some(mapping), |value| Some(value + 2));
+    assert_eq!(
+        left.difference_entries(&right)
+            .map(|(key, &left, right)| (key, left, right.copied()))
+            .collect::<Vec<_>>(),
+        (0..128)
+            .map(|key| (key + 256, key + 1, Some(key + 2)))
+            .collect::<Vec<_>>(),
+    );
+    let union = left.union(&right, |_, left, right| left + right);
+    let difference = left.difference(&right, |_, left, right| Some(right - left));
+    assert_eq!(
+        union
+            .iter()
+            .map(|(key, &value)| (key, value))
+            .collect::<Vec<_>>(),
+        (0..128)
+            .map(|key| (key + 256, key * 2 + 3))
+            .collect::<Vec<_>>(),
+    );
+    assert_eq!(
+        difference
+            .iter()
+            .map(|(key, &value)| (key, value))
+            .collect::<Vec<_>>(),
+        (0..128).map(|key| (key + 256, 1)).collect::<Vec<_>>(),
+    );
+    assert_eq!(left.difference_entries(&left.clone()).count(), 0);
+}
+
+#[test]
+fn entry_mapping_mutations_preserve_transformed_snapshots() {
+    let mut base = WBTreeMap::new();
+    let mut relation = PrefixTree2::new();
+    for key in 0..128 {
+        base.insert(key, key);
+        relation.insert([key, key + 256]);
+    }
+    let mut mapped = base.mapped_entries(Some(MonotoneMap::new(&relation).unwrap()), |value| {
+        (value % 2 == 0).then_some(value + 100)
+    });
+    let snapshot = mapped.clone();
+    let mut expected: BTreeMap<_, _> = (0..128)
+        .filter(|key| key % 2 == 0)
+        .map(|key| (key + 256, key + 100))
+        .collect();
+    for (key, value) in mapped.iter_mut() {
+        *value *= 2;
+        *expected.get_mut(&key).unwrap() *= 2;
+    }
+    assert_eq!(mapped.insert(257, 9), expected.insert(257, 9));
+    assert_eq!(mapped.insert(258, 7), expected.insert(258, 7));
+    assert_eq!(mapped.remove(&256), expected.remove(&256));
+    assert_eq!(mapped.remove(&259), expected.remove(&259));
+    *mapped.get_mut(&260).unwrap() = 11;
+    *expected.get_mut(&260).unwrap() = 11;
+    assert_eq!(
+        mapped
+            .iter()
+            .map(|(key, &value)| (key, value))
+            .collect::<BTreeMap<_, _>>(),
+        expected,
+    );
+    assert_eq!(
+        snapshot
+            .iter()
+            .map(|(key, &value)| (key, value))
+            .collect::<Vec<_>>(),
+        (0..128)
+            .filter(|key| key % 2 == 0)
+            .map(|key| (key + 256, key + 100))
+            .collect::<Vec<_>>(),
+    );
+    assert_eq!(base.get(&0), Some(&0));
+    assert_eq!(base.get(&2), Some(&2));
+}
+
+#[test]
+fn entry_mapping_edits_and_set_operations_agree_with_btree_maps() {
+    for seed in 0..16u64 {
+        let mut state = seed;
+        let mut actual = WBTreeMap::new();
+        let mut expected = BTreeMap::new();
+        for step in 0..96 {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let key = (state >> 32) as u32 % 64;
+            let snapshot = actual.clone();
+            let previous = expected.clone();
+            match step % 6 {
+                0 => assert_eq!(actual.insert(key, step), expected.insert(key, step)),
+                1 => {
+                    let mut relation = PrefixTree2::new();
+                    for source in 0..64 {
+                        if (state >> source) & 1 == 0 {
+                            relation.insert([source, source + 1]);
+                        }
+                    }
+                    actual = actual
+                        .mapped_entries(Some(MonotoneMap::new(&relation).unwrap()), |value| {
+                            (value % 5 != 0).then_some(value + 2)
+                        });
+                    expected = expected
+                        .into_iter()
+                        .filter_map(|(key, value)| {
+                            (value % 5 != 0 && relation.get(key).is_some())
+                                .then_some((key + 1, value + 2))
+                        })
+                        .collect();
+                }
+                2 | 3 => {
+                    let mut other = WBTreeMap::new();
+                    let mut other_rows = BTreeMap::new();
+                    for offset in 0..8 {
+                        other.insert(key + offset, offset);
+                        other_rows.insert(key + offset, offset + 10);
+                    }
+                    let other = other.mapped_entries(None, |value| Some(value + 10));
+                    if step % 6 == 2 {
+                        actual = actual.union(&other, |_, left, right| left + right);
+                        for (key, value) in other_rows {
+                            *expected.entry(key).or_default() += value;
+                        }
+                    } else {
+                        actual = actual.difference(&other, |_, left, right| {
+                            ((left + right) % 3 != 0).then_some(left + right)
+                        });
+                        expected = expected
+                            .into_iter()
+                            .filter_map(|(key, value)| match other_rows.get(&key) {
+                                Some(other) => {
+                                    ((value + other) % 3 != 0).then_some((key, value + other))
+                                }
+                                None => Some((key, value)),
+                            })
+                            .collect();
+                    }
+                }
+                4 => assert_eq!(actual.remove(&key), expected.remove(&key)),
+                5 => {
+                    for (key, value) in actual.iter_mut() {
+                        *value += 1;
+                        *expected.get_mut(&key).unwrap() += 1;
+                    }
+                }
+                _ => unreachable!(),
+            }
+            assert_eq!(
+                actual
+                    .iter()
+                    .map(|(key, &value)| (key, value))
+                    .collect::<BTreeMap<_, _>>(),
+                expected,
+                "seed {seed}, step {step}",
+            );
+            assert_eq!(
+                snapshot
+                    .iter()
+                    .map(|(key, &value)| (key, value))
+                    .collect::<BTreeMap<_, _>>(),
+                previous,
+                "snapshot for seed {seed}, step {step}",
+            );
+            assert_eq!(actual.len(), expected.len());
+            for key in 0..72 {
+                assert_eq!(
+                    actual.get(&key),
+                    expected.get(&key),
+                    "seed {seed}, step {step}, key {key}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn fragmented_mappings_compare_by_snapshot_without_cancelling_distinct_images() {
     let mut base = WBTreeMap::new();
     let mut mapping = PrefixTree2::new();

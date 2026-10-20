@@ -1912,6 +1912,15 @@ impl ColumnMapping {
     }
 }
 
+fn suffix_mapping_work<const N: usize>(maps: &[Option<MonotoneMap>; N]) -> u64 {
+    // A first access can search for a surviving row at every suffix level.
+    let lookups = maps.iter().flatten().fold(1u64, |work, map| {
+        work.saturating_add(map.run_count() as u64)
+            .saturating_add(1)
+    });
+    lookups.saturating_mul(2 * (N as u64 + 1))
+}
+
 impl PrefixTree0 {
     pub fn mapped(&self) -> Self {
         self.clone()
@@ -1941,10 +1950,19 @@ impl PrefixTree1 {
         }
         result
     }
+
+    fn mapped_monotone(&self, [mapping]: [Option<MonotoneMap>; 1]) -> Self {
+        match mapping {
+            None => self.clone(),
+            Some(mapping) => Self {
+                set: self.set.mapped(mapping),
+            },
+        }
+    }
 }
 
 macro_rules! mapped_tree {
-    ($tree:ident, $($map:ident),+) => {
+    ($tree:ident, $arity:literal, $($map:ident),+) => {
         impl $tree {
             pub fn mapped(&self, map0: Option<PrefixTree2>, $($map: Option<PrefixTree2>),+) -> Self {
                 let map0 = map0.map(ColumnMapping::new);
@@ -1953,15 +1971,24 @@ macro_rules! mapped_tree {
             }
 
             fn mapped_prepared(&self, map0: Option<&ColumnMapping>, $($map: Option<&ColumnMapping>),+) -> Self {
-                if [$($map.is_none()),+].into_iter().all(|identity| identity) {
+                if self.map.len_upper_bound() == 0
+                    || [map0, $($map),+].into_iter().flatten()
+                        .any(|mapping| mapping.relation.map.len_upper_bound() == 0)
+                {
+                    return Self::new();
+                }
+                let prepared = (|| Some([
                     match map0 {
-                        None => return self.clone(),
-                        Some(mapping) => {
-                            if let Some(monotone) = mapping.monotone_for(self.map.len_upper_bound()) {
-                                return Self { map: self.map.mapped_keys(monotone.clone()) };
-                            }
-                        }
-                    }
+                        None => None,
+                        Some(mapping) => Some(mapping.monotone_for(self.map.len_upper_bound())?.clone()),
+                    },
+                    $(match $map {
+                        None => None,
+                        Some(mapping) => Some(mapping.monotone_for(self.map.len_upper_bound())?.clone()),
+                    }),+
+                ]))();
+                if let Some(maps) = prepared {
+                    return self.mapped_monotone(maps);
                 }
                 let mut result = Self::new();
                 for (key, value) in self.map.iter() {
@@ -1979,15 +2006,46 @@ macro_rules! mapped_tree {
                 }
                 result
             }
+
+            fn mapped_monotone(&self, [map0, $($map),+]: [Option<MonotoneMap>; $arity]) -> Self {
+                let suffix = [$($map),+];
+                if suffix.iter().flatten().any(|mapping| mapping.run_count() == 0) {
+                    return Self::new();
+                }
+                if suffix.iter().all(Option::is_none) {
+                    return match map0 {
+                        None => self.clone(),
+                        Some(mapping) => Self { map: self.map.mapped_keys(mapping) },
+                    };
+                }
+                let work = suffix_mapping_work(&suffix);
+                Self {
+                    map: self.map.mapped_entries_with_work(map0, work, move |value| {
+                        let value = value.mapped_monotone(suffix.clone());
+                        (!value.is_empty()).then_some(value)
+                    }),
+                }
+            }
         }
     };
 }
 
-mapped_tree!(PrefixTree2, map1);
-mapped_tree!(PrefixTree3, map1, map2);
-mapped_tree!(PrefixTree4, map1, map2, map3);
-mapped_tree!(PrefixTree5, map1, map2, map3, map4);
-mapped_tree!(PrefixTree6, map1, map2, map3, map4, map5);
-mapped_tree!(PrefixTree7, map1, map2, map3, map4, map5, map6);
-mapped_tree!(PrefixTree8, map1, map2, map3, map4, map5, map6, map7);
-mapped_tree!(PrefixTree9, map1, map2, map3, map4, map5, map6, map7, map8);
+mapped_tree!(PrefixTree2, 2, map1);
+mapped_tree!(PrefixTree3, 3, map1, map2);
+mapped_tree!(PrefixTree4, 4, map1, map2, map3);
+mapped_tree!(PrefixTree5, 5, map1, map2, map3, map4);
+mapped_tree!(PrefixTree6, 6, map1, map2, map3, map4, map5);
+mapped_tree!(PrefixTree7, 7, map1, map2, map3, map4, map5, map6);
+mapped_tree!(PrefixTree8, 8, map1, map2, map3, map4, map5, map6, map7);
+mapped_tree!(
+    PrefixTree9,
+    9,
+    map1,
+    map2,
+    map3,
+    map4,
+    map5,
+    map6,
+    map7,
+    map8
+);

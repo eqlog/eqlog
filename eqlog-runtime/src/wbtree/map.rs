@@ -1,3 +1,4 @@
+use std::cell::OnceCell;
 use std::cmp::Ordering;
 use std::fmt;
 use std::mem;
@@ -32,8 +33,76 @@ impl<V: Clone> DataNode<V> {
 
 #[derive(Clone)]
 struct MappingNode<V: Clone> {
-    mapping: MonotoneMap,
+    mapping: Option<MonotoneMap>,
+    values: Option<Rc<ValueMapping<V>>>,
     child: Option<Rc<Node<V>>>,
+}
+
+struct ValueMapping<V: Clone> {
+    apply: Box<dyn Fn(&V) -> Option<V>>,
+    cache: ValueCache<V>,
+    work_factor: u64,
+}
+
+struct ValueCache<V> {
+    value: OnceCell<Option<V>>,
+    left: OnceCell<Box<ValueCache<V>>>,
+    right: OnceCell<Box<ValueCache<V>>>,
+}
+
+impl<V> ValueCache<V> {
+    fn new() -> Self {
+        Self {
+            value: OnceCell::new(),
+            left: OnceCell::new(),
+            right: OnceCell::new(),
+        }
+    }
+}
+
+impl<V: Clone> MappingNode<V> {
+    fn map_value<'a>(&'a self, raw_key: u32, value: &'a V) -> Option<&'a V> {
+        let Some(values) = &self.values else {
+            return Some(value);
+        };
+        let mut current = self.child.as_deref();
+        let mut cache = &values.cache;
+        // A snapshot's raw topology gives cache entries stable addresses without
+        // allocating slots for values that a lookup never visits.
+        while let Some(node) = current {
+            match node {
+                Node::Data(data) => match raw_key.cmp(&data.key) {
+                    Ordering::Less => {
+                        current = data.left.as_deref();
+                        cache = cache.left.get_or_init(|| Box::new(ValueCache::new()));
+                    }
+                    Ordering::Greater => {
+                        current = data.right.as_deref();
+                        cache = cache.right.get_or_init(|| Box::new(ValueCache::new()));
+                    }
+                    Ordering::Equal => {
+                        return cache.value.get_or_init(|| (values.apply)(value)).as_ref()
+                    }
+                },
+                Node::Mapping(mapping) => current = mapping.child.as_deref(),
+            }
+        }
+        unreachable!("a mapped value belongs to the source snapshot")
+    }
+
+    fn same_mapping(&self, other: &Self) -> bool {
+        let keys = match (&self.mapping, &other.mapping) {
+            (None, None) => true,
+            (Some(left), Some(right)) => left.same_snapshot(right),
+            (Some(_), None) | (None, Some(_)) => false,
+        };
+        let values = match (&self.values, &other.values) {
+            (None, None) => true,
+            (Some(left), Some(right)) => Rc::ptr_eq(left, right),
+            (Some(_), None) | (None, Some(_)) => false,
+        };
+        keys && values
+    }
 }
 
 #[derive(Clone)]
@@ -44,12 +113,25 @@ enum Node<V: Clone> {
 }
 
 // Traversal accumulates outer mappings first, but keys start in the inner domain.
-fn apply_mappings(mappings: &[&MonotoneMap], val: u32) -> Option<u32> {
+fn apply_mappings<V: Clone>(mappings: &[&MappingNode<V>], val: u32) -> Option<u32> {
     let mut result = val;
     for mapping in mappings.iter().rev() {
-        result = mapping.apply(result)?;
+        if let Some(keys) = &mapping.mapping {
+            result = keys.apply(result)?;
+        }
     }
     Some(result)
+}
+
+fn apply_value_mappings<'a, V: Clone>(
+    mappings: &[&'a MappingNode<V>],
+    raw_key: u32,
+    mut value: &'a V,
+) -> Option<&'a V> {
+    for mapping in mappings.iter().rev() {
+        value = mapping.map_value(raw_key, value)?;
+    }
+    Some(value)
 }
 
 // Weight balance parameters
@@ -111,7 +193,8 @@ impl<V: Clone> Node<V> {
         let mut result = node;
         for mapping in mappings.iter().rev() {
             result = Some(Rc::new(Self::Mapping(MappingNode {
-                mapping: (*mapping).clone(),
+                mapping: Some((*mapping).clone()),
+                values: None,
                 child: result,
             })));
         }
@@ -995,16 +1078,24 @@ impl<V: Clone> WBTreeMap<V> {
     pub fn get(&self, key: &u32) -> Option<&V> {
         let mut key = *key;
         let mut current = self.root.as_deref();
+        let mut values = Vec::new();
         while let Some(node) = current {
             match node {
                 Node::Data(data_node) => match key.cmp(&data_node.key) {
                     Ordering::Less => current = data_node.left.as_deref(),
                     Ordering::Greater => current = data_node.right.as_deref(),
-                    Ordering::Equal => return Some(&data_node.value),
+                    Ordering::Equal => {
+                        return apply_value_mappings(&values, data_node.key, &data_node.value)
+                    }
                 },
                 Node::Mapping(mapping) => {
                     // Inverting the query avoids scanning when a search pivot is filtered out.
-                    key = mapping.mapping.preimage(key)?;
+                    if let Some(keys) = &mapping.mapping {
+                        key = keys.preimage(key)?;
+                    }
+                    if mapping.values.is_some() {
+                        values.push(mapping);
+                    }
                     current = mapping.child.as_deref();
                 }
             }
@@ -1074,25 +1165,41 @@ impl<V: Clone> WBTreeMap<V> {
         value_work: fn(&V, &mut Fuel) -> Result<u64, Error>,
     ) -> Result<u64, Error> {
         let mut work = 1u64;
-        let mut pending = vec![(&self.root, 0u64)];
-        while let Some((node, mapping_work)) = pending.pop() {
+        let mut pending = vec![(&self.root, 0u64, 1u64, 0u64)];
+        while let Some((node, mapping_work, value_factor, depth)) = pending.pop() {
             fuel.consume(1)?;
             if let Some(node) = node {
                 match node.as_ref() {
                     Node::Data(data) => {
-                        work = work
-                            .saturating_add(1)
-                            .saturating_add(mapping_work)
-                            .saturating_add(value_work(&data.value, fuel)?);
-                        pending.push((&data.left, mapping_work));
-                        pending.push((&data.right, mapping_work));
+                        work = work.saturating_add(
+                            (1u64
+                                .saturating_add(mapping_work)
+                                .saturating_add(if value_factor > 1 { depth } else { 0 })
+                                .saturating_add(value_work(&data.value, fuel)?))
+                            .saturating_mul(value_factor.saturating_mul(value_factor)),
+                        );
+                        pending.push((&data.left, mapping_work, value_factor, depth + 1));
+                        pending.push((&data.right, mapping_work, value_factor, depth + 1));
                     }
                     Node::Mapping(mapping) => {
-                        let lookup_work = mapping.mapping.run_count() as u64;
+                        let lookup_work = mapping
+                            .mapping
+                            .as_ref()
+                            .map_or(0, |keys| keys.run_count() as u64);
                         let mapping_work =
                             mapping_work.saturating_add(lookup_work).saturating_add(1);
+                        // Prepay against the raw source; forcing a value here could
+                        // scan a filtered suffix before its work has been charged.
+                        // Successive transforms revisit inner wrappers; a squared
+                        // additive bound avoids exponential charges for short chains.
+                        let value_factor = value_factor.saturating_add(
+                            mapping
+                                .values
+                                .as_ref()
+                                .map_or(0, |values| values.work_factor),
+                        );
                         work = work.saturating_add(1);
-                        pending.push((&mapping.child, mapping_work));
+                        pending.push((&mapping.child, mapping_work, value_factor, depth));
                     }
                 }
             }
@@ -1101,11 +1208,11 @@ impl<V: Clone> WBTreeMap<V> {
     }
 
     pub fn iter_mut<'a>(&'a mut self) -> IterMut<'a, V> {
+        self.materialize();
         let current = &mut self.root as *mut Option<Rc<Node<V>>>;
         IterMut {
             stack: Vec::new(),
             current: Some(current),
-            current_mappings: Vec::new(),
             _phantom: std::marker::PhantomData,
         }
     }
@@ -1273,7 +1380,8 @@ impl<V: Clone> WBTreeMap<V> {
         }
         let new_root = self.root.clone().map(|root| {
             Rc::new(Node::Mapping(MappingNode {
-                mapping,
+                mapping: Some(mapping),
+                values: None,
                 child: Some(root),
             }))
         });
@@ -1285,12 +1393,53 @@ impl<V: Clone> WBTreeMap<V> {
             len: self.len,
         }
     }
+
+    /// Values are cached on demand; returning `None` removes the key.
+    /// The transform must be deterministic and take constant work. Its result
+    /// must not cost more to iterate than its input, so finite-fuel traversal
+    /// can be prepaid without forcing the transform.
+    pub fn mapped_entries(
+        &self,
+        mapping: Option<MonotoneMap>,
+        values: impl Fn(&V) -> Option<V> + 'static,
+    ) -> Self {
+        self.mapped_entries_with_work(mapping, 1, values)
+    }
+
+    pub(crate) fn mapped_entries_with_work(
+        &self,
+        mapping: Option<MonotoneMap>,
+        work_factor: u64,
+        values: impl Fn(&V) -> Option<V> + 'static,
+    ) -> Self {
+        if mapping
+            .as_ref()
+            .is_some_and(|mapping| mapping.run_count() == 0)
+        {
+            return Self::new();
+        }
+        let root = self.root.clone().map(|child| {
+            Rc::new(Node::Mapping(MappingNode {
+                mapping,
+                values: Some(Rc::new(ValueMapping {
+                    apply: Box::new(values),
+                    cache: ValueCache::new(),
+                    work_factor,
+                })),
+                child: Some(child),
+            }))
+        });
+        Self {
+            root,
+            len: self.len,
+        }
+    }
 }
 
 pub struct Iter<'a, V: Clone> {
     stack: Vec<(&'a DataNode<V>, usize)>,
     current: Option<&'a Option<Rc<Node<V>>>>,
-    current_mappings: Vec<&'a MonotoneMap>,
+    current_mappings: Vec<&'a MappingNode<V>>,
 }
 
 impl<'a, V: Clone> Iter<'a, V> {
@@ -1311,7 +1460,7 @@ impl<'a, V: Clone> Iter<'a, V> {
                         self.current = Some(&data_node.left);
                     }
                     Node::Mapping(mapping_node) => {
-                        self.current_mappings.push(&mapping_node.mapping);
+                        self.current_mappings.push(mapping_node);
                         self.current = Some(&mapping_node.child);
                     }
                 },
@@ -1335,18 +1484,20 @@ impl<'a, V: Clone> Iterator for Iter<'a, V> {
                 return Some((data_node.key, &data_node.value));
             }
             if let Some(key) = apply_mappings(&self.current_mappings, data_node.key) {
-                return Some((key, &data_node.value));
+                if let Some(value) =
+                    apply_value_mappings(&self.current_mappings, data_node.key, &data_node.value)
+                {
+                    return Some((key, value));
+                }
             }
         }
     }
 }
 
-// Mutable iterator implementation
-// Each stack entry includes the data node pointer and accumulated mappings at that point
+// Mutable access resolves mappings before exposing references to stored values.
 pub struct IterMut<'a, V: Clone> {
-    stack: Vec<(*mut DataNode<V>, Vec<MonotoneMap>)>,
+    stack: Vec<*mut DataNode<V>>,
     current: Option<*mut Option<Rc<Node<V>>>>,
-    current_mappings: Vec<MonotoneMap>,
     _phantom: std::marker::PhantomData<&'a mut WBTreeMap<V>>,
 }
 
@@ -1360,22 +1511,13 @@ impl<'a, V: Clone> IterMut<'a, V> {
                         self.current = None;
                         return;
                     }
-                    Some(node) => {
-                        let node_mut = Rc::make_mut(node);
-                        match node_mut {
-                            Node::Data(data_node) => {
-                                self.stack.push((
-                                    data_node as *mut DataNode<V>,
-                                    self.current_mappings.clone(),
-                                ));
-                                self.current = Some(&mut data_node.left as *mut _);
-                            }
-                            Node::Mapping(mapping_node) => {
-                                self.current_mappings.push(mapping_node.mapping.clone());
-                                self.current = Some(&mut mapping_node.child as *mut _);
-                            }
+                    Some(node) => match Rc::make_mut(node) {
+                        Node::Data(data) => {
+                            self.stack.push(data as *mut DataNode<V>);
+                            self.current = Some(&mut data.left as *mut _);
                         }
-                    }
+                        Node::Mapping(_) => unreachable!("mutable iteration materializes mappings"),
+                    },
                 }
             }
         }
@@ -1386,35 +1528,12 @@ impl<'a, V: Clone> Iterator for IterMut<'a, V> {
     type Item = (u32, &'a mut V);
 
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            // First descend left as far as possible
-            self.descend_left();
-
-            // Pop from stack and return
-            if let Some((data_node_ptr, mappings)) = self.stack.pop() {
-                unsafe {
-                    let data_node = &mut *data_node_ptr;
-                    // Restore mapping state for going right
-                    self.current_mappings = mappings.clone();
-                    self.current = Some(&mut data_node.right as *mut _);
-
-                    // Apply accumulated mappings to the key
-                    let mapped_key = if mappings.is_empty() {
-                        Some(data_node.key)
-                    } else {
-                        let mapping_refs: Vec<&MonotoneMap> = mappings.iter().collect();
-                        apply_mappings(&mapping_refs, data_node.key)
-                    };
-
-                    // If key is in mapping domain, yield it; otherwise skip
-                    if let Some(mk) = mapped_key {
-                        return Some((mk, &mut data_node.value));
-                    }
-                    // Key not in mapping domain, continue to next
-                }
-            } else {
-                return None;
-            }
+        self.descend_left();
+        let data = self.stack.pop()?;
+        unsafe {
+            let data = &mut *data;
+            self.current = Some(&mut data.right as *mut _);
+            Some((data.key, &mut data.value))
         }
     }
 }

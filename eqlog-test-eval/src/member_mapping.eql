@@ -4,6 +4,8 @@ model World {
     type El;
     pred edge(El, El);
     pred tagged(El, Label);
+    pred labelled_edge(El, Label, El);
+    pred matched_labelled_edge(El, Label, El);
     pred reached(El);
     rule step {
         if reached(x);
@@ -19,4 +21,11 @@ rule observe {
     if w.reached(x);
     if w.tagged(x, label);
     then observed(w, label);
+}
+
+pred request_label(World, Label);
+rule match_labelled_edge {
+    if request_label(w, label);
+    if w.labelled_edge(x, label, y);
+    then w.matched_labelled_edge(x, label, y);
 }

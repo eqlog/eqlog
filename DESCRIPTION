@@ -1,25 +1,22 @@
-Share member suffixes through monotone maps
+Share mapped member relations lazily
 
-Avoid copying every transported member row when an increasing element
-map can preserve a shared tree level. Compress contiguous source and
-target IDs into offset runs, and use inverse lookup so gaps do not
-force a tree scan.
+Carry monotone element maps through keys and child prefix trees so
+member transport can share entire relation subtrees, including unchanged
+columns between members. Compress contiguous IDs into offset runs.
+Cache transformed children on demand so reads can borrow values without
+rebuilding every prefix. Drop children without surviving rows.
 
-Share the final mapped column and its unchanged suffix. Earlier mapped
-columns rebuild their prefixes because their values need transformation.
-Keep sparse image updates map-driven and avoid preparing large maps for
-small source deltas so incremental updates do not require full scans.
+Keep sparse updates map-driven and avoid preparing large image maps for
+small source slices. General and temporarily non-functional maps retain
+all images through an eager fallback. Mutations and canonicalization
+materialize affected levels while preserving existing snapshots.
 
-Transport member suffixes as relations, retaining all images for
-partial, non-monotone, and temporarily non-functional maps. Keep
-canonicalization unchanged so equality merges continue to restore
-canonical rows.
+Compare both key and value mapping identities before skipping shared
+differences. Account for deferred transformations and filtered suffixes
+in finite-fuel traversal without forcing them before charging the work.
 
-Cover offset runs, shared snapshots, conflicting images, late map
-growth, and source and target equality changes with runtime and
-evaluator tests.
-
-Validation: runtime, evaluator, and compile test suites pass. The
-member mapping and morphism preservation cases also pass in native
-and desugared models with naive and semi-naive evaluation. Formatting
-and patch checks pass.
+Validation: runtime, evaluator, and compile suites pass. Focused tests
+cover selective reads, composition, equality, partial maps, sparse
+updates, randomized set operations, and finite fuel. Generated member
+mapping cases pass in native and desugared modes under both evaluation
+strategies. Formatting and patch checks pass.

@@ -1,8 +1,7 @@
 use std::cmp::Ordering;
 use std::rc::Rc;
 
-use super::{apply_mappings, Node, WBTreeMap};
-use crate::wbtree::mapping::MonotoneMap;
+use super::{apply_mappings, apply_value_mappings, MappingNode, Node, WBTreeMap};
 
 // Bounds avoid allocating split trees while preserving the left traversal order.
 pub(super) fn all<'a, V: Clone>(
@@ -57,10 +56,10 @@ pub(super) fn all<'a, V: Clone>(
         && all(data.right.as_ref(), right, Some(data.key), upper, visit)
 }
 
-type Mappings<'a> = Option<Rc<Vec<&'a MonotoneMap>>>;
+type Mappings<'a, V> = Option<Rc<Vec<&'a MappingNode<V>>>>;
 
 enum Pending<'a, V: Clone> {
-    Tree(&'a Rc<Node<V>>, Mappings<'a>),
+    Tree(&'a Rc<Node<V>>, Mappings<'a, V>),
     Entry(u32, &'a V),
 }
 
@@ -112,7 +111,7 @@ impl<'a, V: Clone> Cursor<'a, V> {
                     Node::Mapping(mapping) => {
                         if let Some(child) = &mapping.child {
                             Rc::make_mut(mappings.get_or_insert_with(|| Rc::new(Vec::new())))
-                                .push(&mapping.mapping);
+                                .push(mapping);
                             self.push(Pending::Tree(child, mappings));
                         }
                     }
@@ -139,7 +138,11 @@ impl<'a, V: Clone> Cursor<'a, V> {
                     }
                     let mappings_slice = mappings.as_deref().map_or(&[][..], Vec::as_slice);
                     if let Some(key) = apply_mappings(mappings_slice, data.key) {
-                        self.push(Pending::Entry(key, &data.value));
+                        if let Some(value) =
+                            apply_value_mappings(mappings_slice, data.key, &data.value)
+                        {
+                            self.push(Pending::Entry(key, value));
+                        }
                     }
                     if let Some(left) = &data.left {
                         self.push(Pending::Tree(left, mappings));
@@ -155,14 +158,14 @@ impl<'a, V: Clone> Cursor<'a, V> {
     }
 }
 
-fn same_mappings(left: &Mappings<'_>, right: &Mappings<'_>) -> bool {
+fn same_mappings<V: Clone>(left: &Mappings<'_, V>, right: &Mappings<'_, V>) -> bool {
     let left = left.as_deref().map_or(&[][..], Vec::as_slice);
     let right = right.as_deref().map_or(&[][..], Vec::as_slice);
     left.len() == right.len()
         && left
             .iter()
             .zip(right)
-            .all(|(left, right)| left.same_snapshot(right))
+            .all(|(left, right)| left.same_mapping(right))
 }
 
 fn size<V: Clone>(node: &Node<V>) -> usize {

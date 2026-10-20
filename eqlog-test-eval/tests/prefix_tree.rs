@@ -4,7 +4,9 @@ use eqlog_runtime::{
     PrefixTree1, PrefixTree2, PrefixTree3, PrefixTree4, PrefixTree5, PrefixTree6, PrefixTree7,
     PrefixTree8, PrefixTree9,
 };
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
 
 macro_rules! restriction_tests {
     ($name:ident, $tree:ident, $restriction:ident, $arity:expr) => {
@@ -67,6 +69,269 @@ fn mapping_a_prefix_shares_its_unchanged_suffixes() {
     mapped.remove([150, 0, 1]);
     assert!(tree.contains([0, 0, 1]));
     assert!(!mapped.contains([150, 0, 1]));
+}
+
+#[test]
+fn mapping_early_and_late_columns_does_not_visit_unrequested_prefixes() {
+    let mut tree = PrefixTree3::new();
+    let mut first = PrefixTree2::new();
+    let mut last = PrefixTree2::new();
+    for key in 0..128 {
+        tree.insert([key, key % 5, key]);
+        first.insert([key, key + 150]);
+        last.insert([key, key + 300]);
+    }
+    let calls = Rc::new(Cell::new(0));
+    let transform_calls = calls.clone();
+    tree.map = tree.map.mapped_entries(None, move |value| {
+        transform_calls.set(transform_calls.get() + 1);
+        Some(value.clone())
+    });
+    let mapped = tree.mapped(Some(first), None, Some(last));
+    assert_eq!(calls.get(), 0);
+    assert!(mapped.contains([167, 2, 317]));
+    assert_eq!(calls.get(), 1);
+    assert!(mapped.contains([167, 2, 317]));
+    assert_eq!(calls.get(), 1);
+    assert!(mapped.get(0).is_none());
+    assert_eq!(calls.get(), 1);
+    assert_eq!(mapped.iter().count(), 128);
+    assert_eq!(calls.get(), 128);
+}
+
+#[test]
+fn mapping_through_an_unchanged_column_visits_only_needed_branches() {
+    let mut tree = PrefixTree3::new();
+    let mut first = PrefixTree2::new();
+    let mut last = PrefixTree2::new();
+    for key in 0..64 {
+        first.insert([key, key + 150]);
+        last.insert([key, key + 300]);
+        for ambient in 0..64 {
+            tree.insert([key, ambient, ambient]);
+        }
+    }
+    let calls: Vec<_> = (0..64).map(|_| Rc::new(Cell::new(0))).collect();
+    for (key, restriction) in tree.iter_restrictions_mut() {
+        let transform_calls = calls[key as usize].clone();
+        restriction.map = restriction.map.mapped_entries(None, move |value| {
+            transform_calls.set(transform_calls.get() + 1);
+            Some(value.clone())
+        });
+    }
+    let mapped = tree.mapped(Some(first), None, Some(last));
+    assert!(calls.iter().all(|count| count.get() == 0));
+    assert!(mapped.contains([167, 43, 343]));
+    assert_eq!(calls[17].get(), 2);
+    assert!(calls
+        .iter()
+        .enumerate()
+        .all(|(key, count)| key == 17 || count.get() == 0));
+    assert!(mapped.contains([167, 43, 343]));
+    assert_eq!(calls[17].get(), 2);
+    assert!(mapped.contains([167, 63, 363]));
+    assert_eq!(calls[17].get(), 3);
+}
+
+#[test]
+fn sparse_mapping_with_an_unchanged_head_does_not_scan_the_image_map() {
+    let mut tree = PrefixTree2::new();
+    tree.insert([7, 2048]);
+    let mut mapping = PrefixTree2::new();
+    for key in 0..4096 {
+        mapping.insert([key, key + 8192]);
+    }
+    let calls = Rc::new(Cell::new(0));
+    let transform_calls = calls.clone();
+    mapping.map = mapping.map.mapped_entries(None, move |value| {
+        transform_calls.set(transform_calls.get() + 1);
+        Some(value.clone())
+    });
+    let mapped = tree.mapped(None, Some(mapping));
+    assert_eq!(mapped.iter().collect::<Vec<_>>(), [[7, 10240]]);
+    assert_eq!(calls.get(), 1);
+    assert!(tree.contains([7, 2048]));
+}
+
+#[test]
+fn mapping_multiple_columns_composes_through_unchanged_columns() {
+    let mut tree = PrefixTree3::new();
+    let mut first = PrefixTree2::new();
+    let mut last = PrefixTree2::new();
+    let mut next_first = PrefixTree2::new();
+    let mut next_last = PrefixTree2::new();
+    for key in 0..128 {
+        tree.insert([key, key % 5, key]);
+        first.insert([key, key + 150]);
+        last.insert([key, key + 300]);
+        next_first.insert([key + 150, key * 2 + 1000]);
+        next_last.insert([key + 300, key * 3 + 2000]);
+    }
+    let mapped = tree.mapped(Some(first), None, Some(last));
+    let composed = mapped.mapped(Some(next_first), None, Some(next_last));
+    assert_eq!(
+        composed.iter().collect::<Vec<_>>(),
+        (0..128)
+            .map(|key| [key * 2 + 1000, key % 5, key * 3 + 2000])
+            .collect::<Vec<_>>(),
+    );
+    for key in 0..128 {
+        assert!(tree.contains([key, key % 5, key]));
+        assert!(mapped.contains([key + 150, key % 5, key + 300]));
+    }
+}
+
+#[test]
+fn mapping_later_columns_filters_every_empty_prefix() {
+    let mut tree = PrefixTree3::new();
+    let mut first = PrefixTree2::new();
+    let mut last = PrefixTree2::new();
+    let mut expected = Vec::new();
+    for key in 0..128 {
+        tree.insert([key, key % 5, key]);
+        first.insert([key, key + 150]);
+        if key % 3 == 0 {
+            last.insert([key, key + 300]);
+            expected.push([key + 150, key % 5, key + 300]);
+        }
+    }
+    let mapped = tree.mapped(Some(first), None, Some(last));
+    for key in 0..128 {
+        assert_eq!(mapped.get(key + 150).is_some(), key % 3 == 0);
+    }
+    assert_eq!(mapped.iter_restrictions().count(), expected.len());
+    assert_eq!(mapped.iter().collect::<Vec<_>>(), expected);
+    assert!(mapped
+        .iter_restrictions()
+        .all(|(_, restriction)| !restriction.is_empty()));
+    let empty = mapped.mapped(None, None, Some(PrefixTree2::new()));
+    assert!(empty.is_empty());
+    assert!(empty.get(150).is_none());
+    assert_eq!(empty.iter_restrictions().count(), 0);
+}
+
+#[test]
+fn canonical_replacements_merge_mapped_prefixes_and_preserve_snapshots() {
+    let mut tree = PrefixTree3::new();
+    let mut first = PrefixTree2::new();
+    let mut last = PrefixTree2::new();
+    for key in 0..128 {
+        tree.insert([key, key % 2, key]);
+        first.insert([key, key + 150]);
+        last.insert([key, key + 300]);
+    }
+    let mapped = tree.mapped(Some(first), None, Some(last));
+    let replacements = [
+        BTreeMap::from([(150, 151), (152, 151)]),
+        BTreeMap::from([(1, 0)]),
+        BTreeMap::from([(300, 301), (302, 301)]),
+    ];
+    let canonical = mapped.replace_keys(replacements.each_ref()).unwrap();
+    let expected: BTreeSet<_> = (0..128)
+        .map(|key| [key + 150, key % 2, key + 300])
+        .map(|row| {
+            std::array::from_fn(|column| {
+                replacements[column]
+                    .get(&row[column])
+                    .copied()
+                    .unwrap_or(row[column])
+            })
+        })
+        .collect();
+    assert_eq!(canonical.iter().collect::<BTreeSet<_>>(), expected);
+    assert_eq!(canonical.iter().count(), 126);
+    assert_eq!(
+        canonical.get(151).unwrap().iter().collect::<Vec<_>>(),
+        [[0, 301]]
+    );
+    assert!(canonical.get(150).is_none());
+    assert!(canonical.get(152).is_none());
+    assert!(mapped.contains([150, 0, 300]));
+    assert!(mapped.contains([151, 1, 301]));
+    assert!(tree.contains([0, 0, 0]));
+}
+
+#[test]
+fn mapped_columns_and_set_operations_agree_with_tuple_sets() {
+    for seed in 0..32u64 {
+        let mut state = seed;
+        let mut tree = PrefixTree4::new();
+        let mut first = PrefixTree2::new();
+        let mut last = PrefixTree2::new();
+        let mut first_images = BTreeMap::new();
+        let mut last_images = BTreeMap::new();
+        for key in 0..64 {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+            if state >> 62 != 0 {
+                first.insert([key, key * 2 + 256]);
+                first_images.insert(key, key * 2 + 256);
+            }
+            for shift in [24, 32] {
+                let suffix = (state >> shift) as u32;
+                tree.insert([key, suffix % 8, suffix % 32, suffix % 3]);
+            }
+        }
+        for key in 0..32 {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+            if state >> 62 != 0 {
+                last.insert([key, key * 3 + 512]);
+                last_images.insert(key, key * 3 + 512);
+            }
+        }
+        let mapped = tree.mapped(Some(first), None, Some(last), None);
+        let expected: BTreeSet<_> = tree
+            .iter()
+            .filter_map(|[a, b, c, d]| Some([*first_images.get(&a)?, b, *last_images.get(&c)?, d]))
+            .collect();
+        assert_eq!(
+            mapped.iter().collect::<BTreeSet<_>>(),
+            expected,
+            "seed {seed}"
+        );
+        assert_eq!(mapped.is_empty(), expected.is_empty());
+        for row in &expected {
+            assert!(mapped.contains(*row));
+        }
+        let mut edited = mapped.clone();
+        for (index, &row) in expected.iter().enumerate() {
+            if index % 3 == 0 {
+                edited.remove(row);
+                let [a, b, c, d] = row;
+                edited.insert([a, b + 8, c, d]);
+            }
+        }
+        let edited_rows: BTreeSet<_> = edited.iter().collect();
+        for (left, right, left_rows, right_rows) in [
+            (&mapped, &edited, &expected, &edited_rows),
+            (&edited, &mapped, &edited_rows, &expected),
+        ] {
+            assert_eq!(
+                left.difference(right).iter().collect::<BTreeSet<_>>(),
+                left_rows.difference(right_rows).copied().collect(),
+                "seed {seed}",
+            );
+            assert_eq!(
+                left.union(right).iter().collect::<BTreeSet<_>>(),
+                left_rows.union(right_rows).copied().collect(),
+                "seed {seed}",
+            );
+            assert_eq!(
+                left.intersection(right).iter().collect::<BTreeSet<_>>(),
+                left_rows.intersection(right_rows).copied().collect(),
+                "seed {seed}",
+            );
+            assert_eq!(left.is_subset(right), left_rows.is_subset(right_rows));
+            let mut difference = BTreeSet::new();
+            left.visit_difference(right, &mut |row| {
+                difference.insert(row);
+            });
+            assert_eq!(
+                difference,
+                left_rows.difference(right_rows).copied().collect()
+            );
+        }
+        assert_eq!(mapped.iter().collect::<BTreeSet<_>>(), expected);
+    }
 }
 
 #[test]

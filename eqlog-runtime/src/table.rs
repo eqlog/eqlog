@@ -23,8 +23,7 @@ impl IterationWork for PrefixTree0 {
 
 impl IterationWork for PrefixTree1 {
     fn iteration_work(&self, fuel: &mut Fuel) -> Result<u64, Error> {
-        fuel.consume(1)?;
-        Ok((self.set.len() as u64).saturating_add(1))
+        self.set.iteration_work(fuel)
     }
 }
 
