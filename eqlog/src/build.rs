@@ -167,8 +167,7 @@ fn digest_component_inputs(config: &ComponentConfig) -> Result<Digest> {
         let status = compiler.status;
         return Err(anyhow!("Reading rustc version failed with status {status}"));
     }
-    // Cargo can replace an rlib without changing its path. Its bytes, rather
-    // than that path or a timestamp, identify the runtime used by components.
+    // Cargo can replace an rlib without changing its path.
     Ok(Sha256::new()
         .chain_update(Sha256::digest(&runtime))
         .chain_update(Sha256::digest(&compiler.stdout))

@@ -21,7 +21,6 @@ pub struct MorphismComponent {
     pub outgoing: Vec<MorphismWithSignature>,
 }
 
-/// All relations using this topology share its sorted edge signatures.
 #[derive(Debug)]
 pub struct MorphismGraph {
     components: Vec<MorphismComponent>,
@@ -165,7 +164,6 @@ impl GraphSnapshot {
     }
 }
 
-/// Reuses graph topology across relations and strata with the same inputs.
 pub struct MorphismGraphCache<const N: usize> {
     owners: RefCell<BTreeMap<[u32; N], GraphSnapshot>>,
     ownership_known: bool,

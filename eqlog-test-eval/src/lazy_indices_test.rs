@@ -93,7 +93,7 @@ fn residual_joins_keep_both_skews_and_owner_scopes_after_equality() {
     model.insert_product(wide, functions[0], g, c);
     model.insert_unindexed_product(wide, functions[0], g, c);
     model.insert_action(narrow, functions[0], x, values[0]);
-    // Advance each consumer before querying its historical inputs.
+    // Flush the initial deltas so these queries exercise historical inputs.
     for owner in [wide, narrow] {
         model.insert_query(owner, missing_c, x);
     }

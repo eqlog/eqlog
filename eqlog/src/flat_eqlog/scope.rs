@@ -75,7 +75,7 @@ fn infer_scope(rule: &FlatRule, signature: &Signature) -> RuleScope {
 }
 
 fn ordinary_member(typ: TypeId, model: TypeId, signature: &Signature) -> bool {
-    // A traversal keeps its owner keys and graph topology until its next visit.
+    // Graph-changing equalities must not invalidate the active traversal.
     signature.type_(typ).parents.last() == Some(&model)
         && signature
             .iter_model_decls()

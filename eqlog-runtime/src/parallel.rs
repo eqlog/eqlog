@@ -1,9 +1,3 @@
-//! Concurrent evaluation of independent tasks while closing a model.
-//!
-//! Each task writes only state that it owns, such as one trie or the output
-//! buffers of one rule module, and the caller consumes outputs in a fixed
-//! order afterwards. Results thus do not depend on how tasks are scheduled.
-
 use std::any::Any;
 use std::collections::VecDeque;
 use std::io;
@@ -11,14 +5,12 @@ use std::panic::{self, AssertUnwindSafe};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::thread;
 
-/// Work that reads shared state and writes only state that it owns.
 pub type Task<'a> = Box<dyn FnOnce() + Send + 'a>;
 
 type Job = Box<dyn FnOnce() + Send + 'static>;
 
 // Below this many new rows, waking workers costs more than it saves.
 const PARALLEL_WORK: usize = 64;
-// Rule evaluation of the large developments we measured stops scaling here.
 const MAX_THREADS: usize = 8;
 
 struct Queue {
@@ -59,7 +51,6 @@ fn pool() -> &'static Pool {
             jobs: Mutex::new(VecDeque::new()),
             available: Condvar::new(),
         });
-        // The thread running the tasks takes part, too.
         let workers = threads().saturating_sub(1);
         for _ in 0..workers {
             let queue = queue.clone();
@@ -83,14 +74,11 @@ fn pool() -> &'static Pool {
     })
 }
 
-// Counts the unfinished jobs of one call and keeps the first panic.
 struct Latch {
     state: Mutex<(usize, Option<Box<dyn Any + Send>>)>,
     done: Condvar,
 }
 
-/// Runs tasks to completion, in parallel when `work` new rows justify it.
-///
 /// A panic of a task is resumed once no other task of the call runs anymore.
 pub fn run_tasks(work: usize, tasks: Vec<Task<'_>>) {
     if work < PARALLEL_WORK || tasks.len() < 2 || pool().workers == 0 {
@@ -183,7 +171,6 @@ mod tests {
             .collect();
         let result = panic::catch_unwind(AssertUnwindSafe(|| run_tasks(PARALLEL_WORK, tasks)));
         assert!(result.is_err());
-        // Only the failing task may have started without finishing.
         assert_eq!(
             started.load(Ordering::SeqCst),
             finished.load(Ordering::SeqCst) + 1

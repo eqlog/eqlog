@@ -124,8 +124,6 @@ pub fn query_spec_chains(mut specs: Vec<QuerySpec>) -> Vec<Vec<QuerySpec>> {
 pub enum IndexAge {
     New,
     Old,
-    /// Old and new rows through one index; only desugared rule inputs read
-    /// both ages at once.
     All,
 }
 

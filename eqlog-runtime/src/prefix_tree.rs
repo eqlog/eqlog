@@ -88,8 +88,7 @@ macro_rules! replace_keys {
     };
     ($tree:ident, $arity:literal, $storage:ident, $cache_field:ident) => {
         impl $tree {
-            /// Renames specified keys, leaving other keys and unchanged subtrees shared.
-            /// Returns `None` when no stored key changes. Colliding rows are united.
+            /// Returns `None` when no key changes, so callers can retain the original tree.
             pub fn replace_keys(
                 &self,
                 replacements: [&BTreeMap<u32, u32>; $arity],
@@ -186,7 +185,6 @@ replace_keys!(PrefixTree9, 9, map, tree9);
 macro_rules! replace_keys_in_prefixes {
     ($tree:ident, $suffix_arity:literal) => {
         impl $tree {
-            /// Renames suffix keys only beneath the selected first-column values.
             pub fn replace_keys_in_prefixes(
                 &self,
                 prefixes: &[&BTreeSet<u32>],

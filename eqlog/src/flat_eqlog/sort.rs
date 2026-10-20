@@ -153,11 +153,7 @@ fn if_stmt_goodness(
         | FlatInRel::TypeSet(_)
         | FlatInRel::Equality(_) => new_variables,
     };
-    // Bound domains are lookups. For remaining joins, prefer existing keys to
-    // introducing an independent range whose size is hidden by a short tuple.
     let bounded = free_inputs == 0;
-    // Prefer a computed join key to a terminal value when both queries bind
-    // the same number of variables. Terminal values cannot constrain the join.
     let consumed_result = match &stmt.rel {
         FlatInRel::Rel(FlatRel::Func(_)) => stmt.args.last().is_some_and(|result| {
             !fixed_vars.contains(result)

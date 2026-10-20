@@ -306,9 +306,7 @@ pub fn plan_index_preparation(
                 models.push(parent);
                 let support_indices = support_indices(rel, &models, signature, indices);
                 let owner_columns = signature.type_(parent).parents.len() + 1;
-                // Scoped consumers read only the owner slices already prepared
-                // by traversal. Replaying transport for each index duplicates
-                // that work. Copy-only indices retain shared payload trees.
+                // Traversal already prepared transport for this owner's slice.
                 let from_primary = (owner_columns..relation.arity(signature).len()).any(|column| {
                     models
                         .iter()

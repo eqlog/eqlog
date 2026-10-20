@@ -1,9 +1,5 @@
-//! Mutable relation storage for evaluators that materialize every fact.
-//!
-//! Each row is stamped with the position at which it was appended to its
-//! table's log. A consumer remembers the log length it last read: rows it has
-//! not seen yet are exactly the live rows stamped at or after that position,
-//! so semi-naive evaluation needs neither snapshots nor set differences.
+//! Log positions serve as row ages so consumers can find new facts without
+//! retaining snapshots or computing set differences.
 
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
@@ -13,7 +9,6 @@ use crate::parallel::Task;
 
 const SEED: u64 = 0xf135_7aea_2e62_a9c5;
 
-/// A fast, deterministic hasher for small integer keys.
 #[derive(Clone, Copy, Default)]
 pub struct FxHasher {
     hash: u64,
@@ -69,8 +64,6 @@ pub type FxHashMap<K, V> = HashMap<K, V, FxBuildHasher>;
 
 const NONE: u32 = u32::MAX;
 const MAX_ARITY: usize = 16;
-// Nodes with more entries than this are found through the level's hash table
-// instead of a linear scan.
 const SCAN_LIMIT: usize = 8;
 
 #[derive(Clone)]
@@ -114,7 +107,6 @@ impl Entries {
         }
     }
 
-    /// Removes the entry at `pos`; returns the key moved into `pos`, if any.
     #[inline]
     fn swap_remove(&mut self, pos: usize) -> Option<u32> {
         match self {
@@ -153,11 +145,8 @@ impl Node {
 
 #[derive(Clone)]
 enum Lookup {
-    // Positions and values of entries of indexed nodes, keyed by node and key.
     Hashed(FxHashMap<u64, (u32, u32)>),
-    // Positions and values of the entries of the root, the only node of its
-    // level, indexed by key. Element IDs are dense, and absent keys have
-    // `NONE` positions.
+    // Dense element IDs let the root avoid hashing. Missing positions are NONE.
     Direct(Vec<(u32, u32)>),
 }
 
@@ -193,7 +182,6 @@ impl Level {
         level
     }
 
-    /// Returns the position and value of `key` in `node`.
     #[inline(always)]
     fn find(&self, node: u32, key: u32) -> Option<(u32, u32)> {
         let entries = &self.nodes[node as usize];
@@ -265,7 +253,6 @@ impl Level {
         }
     }
 
-    /// Removes `key` from `node` and returns whether it was present.
     fn remove(&mut self, node: u32, key: u32) -> bool {
         let Some((pos, _)) = self.find(node, key) else {
             return false;
@@ -295,11 +282,9 @@ impl Level {
     }
 }
 
-/// A mutable prefix tree whose leaves record the stamp of their row.
 #[derive(Clone)]
 pub struct Trie {
     levels: Vec<Level>,
-    // Stamp of the empty row of a nullary trie.
     unit: Option<u32>,
 }
 
@@ -343,7 +328,6 @@ impl Trie {
         }
     }
 
-    /// Removes a row and returns whether it was present.
     pub fn remove(&mut self, row: &[u32]) -> bool {
         debug_assert_eq!(row.len(), self.levels.len());
         let Some(last) = row.len().checked_sub(1) else {
@@ -392,28 +376,22 @@ impl Trie {
         }
     }
 
-    /// A view of all rows.
     #[inline]
     pub fn view(&self) -> TrieView<'_, false> {
         self.root(u32::MAX)
     }
 
-    /// A view of the rows stamped before `before`.
     #[inline]
     pub fn view_before(&self, before: u32) -> TrieView<'_, true> {
         self.root(before)
     }
 }
 
-/// A read-only window onto the rows of a trie below some fixed prefix. A
-/// `BOUNDED` view only contains rows stamped before `before`.
-///
 /// Stamp bounds of inner nodes are conservative, so a bounded view's
 /// `is_empty` and `get` can report a nonempty subtree that contains no row
 /// in range. Iteration and the last column check stamps exactly.
 #[derive(Clone, Copy)]
 pub struct TrieView<'a, const BOUNDED: bool> {
-    // The levels below the fixed prefix; empty for rows of a nullary suffix.
     levels: &'a [Level],
     // `NONE` marks the empty view when `levels` is empty.
     node: u32,
@@ -463,7 +441,6 @@ impl<'a, const BOUNDED: bool> TrieView<'a, BOUNDED> {
         }
     }
 
-    /// Restricts the first remaining column to `key`.
     #[inline(always)]
     pub fn get(&self, key: u32) -> Option<TrieView<'a, BOUNDED>> {
         let (level, rest) = self.levels.split_first()?;
@@ -482,7 +459,6 @@ impl<'a, const BOUNDED: bool> TrieView<'a, BOUNDED> {
         }
     }
 
-    /// An upper bound on the number of distinct keys in the first column.
     #[inline]
     pub fn len_upper_bound(&self) -> usize {
         match self.levels.first() {
@@ -491,9 +467,7 @@ impl<'a, const BOUNDED: bool> TrieView<'a, BOUNDED> {
         }
     }
 
-    /// On the last column, the restriction holding the oldest row, which
-    /// prefers rows a consumer has already seen. On other columns, the first
-    /// restriction, which removals may have reordered.
+    // Prefer an already-seen witness in the last column to avoid redundant work.
     #[inline]
     pub fn oldest_restriction(&self) -> Option<(u32, TrieView<'a, BOUNDED>)> {
         let (level, rest) = self.levels.split_first()?;
@@ -509,8 +483,6 @@ impl<'a, const BOUNDED: bool> TrieView<'a, BOUNDED> {
             .map(|&(key, _)| (key, TrieView::unit(self.before)))
     }
 
-    /// Iterates over the distinct keys of the first column together with
-    /// their restrictions.
     #[inline(always)]
     pub fn iter_restrictions(&self) -> Restrictions<'a, BOUNDED> {
         match self.levels.split_first() {
@@ -548,7 +520,6 @@ impl<'a, const BOUNDED: bool> Iterator for Restrictions<'a, BOUNDED> {
     }
 }
 
-/// A window onto rows sorted in index order that share a fixed prefix.
 #[derive(Clone, Copy)]
 pub struct RowsView<'a, const W: usize> {
     rows: &'a [[u32; W]],
@@ -563,7 +534,6 @@ impl<const W: usize> Default for RowsView<'_, W> {
 }
 
 impl<'a, const W: usize> RowsView<'a, W> {
-    /// Views sorted rows; see [`Table::delta`].
     #[inline]
     pub fn new(rows: &'a [[u32; W]]) -> Self {
         debug_assert!(rows.windows(2).all(|pair| pair[0] < pair[1]));
@@ -578,7 +548,6 @@ impl<'a, const W: usize> RowsView<'a, W> {
         }
     }
 
-    /// Restricts the first remaining column to `key`.
     #[inline]
     pub fn get(&self, key: u32) -> Option<RowsView<'a, W>> {
         let depth = self.depth;
@@ -598,7 +567,6 @@ impl<'a, const W: usize> RowsView<'a, W> {
         self.rows.is_empty()
     }
 
-    /// An upper bound on the number of distinct keys in the first column.
     #[inline]
     pub fn len_upper_bound(&self) -> usize {
         self.rows.len()
@@ -612,7 +580,7 @@ impl<'a, const W: usize> RowsView<'a, W> {
         }
     }
 
-    /// Every row is new, so any restriction is as old as another.
+    // Delta rows are all unseen, so there is no preferred witness.
     #[inline]
     pub fn oldest_restriction(&self) -> Option<(u32, RowsView<'a, W>)> {
         self.iter_restrictions().next()
@@ -647,7 +615,6 @@ impl<'a, const W: usize> Iterator for RowsRestrictions<'a, W> {
     }
 }
 
-/// One of two iterators over the same items, chosen at run time.
 pub enum Either<L, R> {
     Left(L),
     Right(R),
@@ -666,11 +633,8 @@ impl<L: Iterator, R: Iterator<Item = L::Item>> Iterator for Either<L, R> {
 }
 
 struct Index {
-    // Source columns in the index's key order.
     columns: Box<[usize]>,
-    // Pairs of source columns that rows of the index must agree on.
     equal: Box<[(usize, usize)]>,
-    // Absent for indices that are only read through deltas.
     trie: Option<Trie>,
 }
 
@@ -705,8 +669,6 @@ impl Index {
     }
 }
 
-/// Writes the key of `row` in an index with these columns and equalities,
-/// unless the row is not in the index.
 #[inline]
 fn project<const N: usize>(
     columns: &[usize],
@@ -723,15 +685,10 @@ fn project<const N: usize>(
     true
 }
 
-/// For each element of a type, the entries of the rows it occurs in, most
-/// recent first. The lists share one arena, so recording an occurrence
-/// never allocates per element.
+// A shared arena avoids allocating a separate occurrence list for each element.
 pub struct Occurrences {
-    // The first node of each element's list.
     heads: Vec<u32>,
-    // An entry and the next node of its list.
     nodes: Vec<(u64, u32)>,
-    // Nodes of taken lists, linked through their next nodes.
     free: u32,
 }
 
@@ -769,14 +726,11 @@ impl Occurrences {
         }
     }
 
-    /// Detaches the list of an element, to be consumed by
-    /// [`Occurrences::pop`].
     #[inline]
     pub fn take(&mut self, element: u32) -> u32 {
         std::mem::replace(&mut self.heads[element as usize], NONE)
     }
 
-    /// Removes the first entry of a detached list.
     #[inline]
     pub fn pop(&mut self, list: &mut u32) -> Option<u64> {
         if *list == NONE {
@@ -802,19 +756,12 @@ impl Occurrences {
     }
 }
 
-/// The rows of one relation together with the indices that rules query.
 pub struct Table<const N: usize> {
-    // Every inserted row, in insertion order; a row's stamp is its position.
     log: Vec<[u32; N]>,
     live: FxHashMap<[u32; N], u32>,
-    // Whether the row with this stamp has been removed.
     removed: Vec<bool>,
     indices: Vec<Index>,
-    // While deferred, insertions and removals reach the tries only when they
-    // are synchronized, in one batch per trie.
     deferred: bool,
-    // The tries hold the live rows stamped before this position, except for
-    // the stale rows.
     synced: u32,
     stale: Vec<u32>,
     // For the graph of a function, the first result inserted for each
@@ -825,21 +772,15 @@ pub struct Table<const N: usize> {
     results: Option<FxHashMap<[u32; N], u32>>,
 }
 
-/// The outcome of inserting a row into the graph of a function.
 pub enum FunctionInsert {
-    /// The row was already present.
     Present,
-    /// The row was inserted, and no other result is known for its arguments.
     Inserted,
-    /// The row was inserted, but its arguments already have this result.
     Conflict(u32),
 }
 
 impl<const N: usize> Table<N> {
-    /// Creates a table maintaining one index per specification. An index
-    /// specification lists source columns in key order, pairs of columns that
-    /// must be equal for a row to appear in that index, and whether views of
-    /// the index are needed; otherwise only deltas read it.
+    /// Each specification gives the column order, required column equalities,
+    /// and whether to maintain a trie. Delta-only indices need no trie.
     pub fn new(indices: &[(&[usize], &[(usize, usize)], bool)]) -> Self {
         let indices = indices
             .iter()
@@ -864,8 +805,6 @@ impl<const N: usize> Table<N> {
         }
     }
 
-    /// Creates a table for the graph of a function, whose last column holds
-    /// results; see [`Table::new`] for index specifications.
     pub fn function(indices: &[(&[usize], &[(usize, usize)], bool)]) -> Self {
         assert!(N > 0, "a function graph has a result column");
         Table {
@@ -874,8 +813,6 @@ impl<const N: usize> Table<N> {
         }
     }
 
-    /// Inserts a row of a function graph and reports whether its arguments
-    /// had another result.
     #[inline(never)]
     pub fn insert_function(&mut self, row: [u32; N]) -> FunctionInsert {
         if !self.insert(row) {
@@ -919,7 +856,6 @@ impl<const N: usize> Table<N> {
         self.live.contains_key(&row)
     }
 
-    /// Inserts a row and returns whether it was absent.
     #[inline(never)]
     pub fn insert(&mut self, row: [u32; N]) -> bool {
         let stamp = u32::try_from(self.log.len()).expect("relation log exceeds u32 stamps");
@@ -944,7 +880,6 @@ impl<const N: usize> Table<N> {
         true
     }
 
-    /// Removes a row and returns whether it was present.
     #[inline(never)]
     pub fn remove(&mut self, row: [u32; N]) -> bool {
         let Some(stamp) = self.live.remove(&row) else {
@@ -963,13 +898,11 @@ impl<const N: usize> Table<N> {
         true
     }
 
-    /// The row stamped with `stamp`, whether or not it is still present.
     #[inline]
     pub fn row_at(&self, stamp: u32) -> [u32; N] {
         self.log[stamp as usize]
     }
 
-    /// Removes the row stamped with `stamp` unless it was removed since.
     #[inline(never)]
     pub fn remove_stamped(&mut self, stamp: u32) -> Option<[u32; N]> {
         let row = self.log[stamp as usize];
@@ -980,8 +913,6 @@ impl<const N: usize> Table<N> {
         Some(row)
     }
 
-    /// Defers updating the tries until the next synchronization, or updates
-    /// them right away again after synchronizing them.
     pub fn set_deferred(&mut self, deferred: bool) {
         if !deferred {
             let mut tasks = Vec::new();
@@ -994,9 +925,8 @@ impl<const N: usize> Table<N> {
         self.deferred = deferred;
     }
 
-    /// Adds a task per trie that applies the deferred insertions and
-    /// removals to it, and returns how many rows they apply. The tasks must
-    /// run before [`Table::finish_sync`].
+    /// Run every added task before [`Table::finish_sync`] or the tries will
+    /// miss pending insertions and removals.
     pub fn sync_tasks<'a>(&'a mut self, tasks: &mut Vec<Task<'a>>) -> usize {
         let start = self.synced as usize;
         if start == self.log.len() && self.stale.is_empty() {
@@ -1027,19 +957,16 @@ impl<const N: usize> Table<N> {
         work
     }
 
-    /// Records that the tasks of [`Table::sync_tasks`] have run.
     pub fn finish_sync(&mut self) {
         self.synced = self.log_len();
         self.stale.clear();
     }
 
-    /// The position the next inserted row will be stamped with.
     #[inline]
     pub fn log_len(&self) -> u32 {
         self.log.len() as u32
     }
 
-    /// Whether a row stamped at or after `since` is still present.
     #[inline(never)]
     pub fn changed_since(&self, since: u32) -> bool {
         self.removed[since as usize..]
@@ -1059,20 +986,16 @@ impl<const N: usize> Table<N> {
             .expect("viewed indices maintain a trie")
     }
 
-    /// All rows through the given index.
     #[inline]
     pub fn view(&self, index: usize) -> TrieView<'_, false> {
         self.trie(index).view()
     }
 
-    /// The rows stamped before `before` through the given index.
     #[inline]
     pub fn view_before(&self, index: usize, before: u32) -> TrieView<'_, true> {
         self.trie(index).view_before(before)
     }
 
-    /// The rows stamped at or after `since`, through the given index of
-    /// width `W`, sorted for reading with a [`RowsView`].
     #[inline(never)]
     pub fn delta<const W: usize>(&self, index: usize, since: u32) -> Vec<[u32; W]> {
         let index = &self.indices[index];
@@ -1089,7 +1012,6 @@ impl<const N: usize> Table<N> {
         rows
     }
 
-    /// All rows, sorted, for deterministic public iteration.
     pub fn sorted_rows(&self) -> Vec<[u32; N]> {
         let mut rows: Vec<[u32; N]> = self.rows().collect();
         rows.sort_unstable();
@@ -1104,7 +1026,6 @@ impl<const N: usize> Table<N> {
             .map(|(&row, _)| row)
     }
 
-    /// Iterates over all rows in sorted order.
     pub fn iter(&self) -> std::vec::IntoIter<[u32; N]> {
         self.sorted_rows().into_iter()
     }
@@ -1130,8 +1051,6 @@ prefix_tree_from_table! {
     PrefixTree5(5), PrefixTree6(6), PrefixTree7(7), PrefixTree8(8), PrefixTree9(9),
 }
 
-/// Sorts rows lexicographically, comparing packed integer keys when the
-/// elements are small enough for all columns to fit into one.
 fn sort_rows<const W: usize>(rows: &mut [[u32; W]]) {
     let max = rows.iter().flatten().copied().max().unwrap_or(0);
     let bits = (u32::BITS - max.leading_zeros()) as usize;
@@ -1233,10 +1152,8 @@ mod tests {
         assert!(table.insert([3, 4]));
         table.set_deferred(true);
         let seen = table.log_len();
-        // Removed while its stamp is synchronized, then inserted again.
         assert!(table.remove([1, 2]));
         assert!(table.insert([1, 2]));
-        // Inserted and removed between two synchronizations.
         assert!(table.insert([5, 6]));
         assert!(table.remove([5, 6]));
         assert!(table.insert([7, 8]));
@@ -1270,14 +1187,12 @@ mod tests {
         let mut list = occurrences.take(0);
         assert_eq!(occurrences.iter(0).count(), 0);
         assert_eq!(occurrences.pop(&mut list), Some(11));
-        // Recording while a taken list is consumed reuses its nodes.
         occurrences.push(1, 21);
         assert_eq!(occurrences.pop(&mut list), Some(10));
         assert_eq!(occurrences.pop(&mut list), None);
         occurrences.add_element();
         occurrences.push(2, 30);
         occurrences.push(2, 31);
-        // Four live entries; without reuse there would be six nodes.
         assert_eq!(occurrences.nodes.len(), 4);
         assert_eq!(occurrences.iter(1).collect::<Vec<_>>(), vec![21, 20]);
         assert_eq!(occurrences.iter(2).collect::<Vec<_>>(), vec![31, 30]);
@@ -1319,14 +1234,12 @@ mod tests {
         trie.insert(&[6], 1);
         trie.insert(&[7], 2);
         assert!(trie.remove(&[5]));
-        // Removal moved the newest key in front of the older one.
         assert_eq!(trie.view().iter_restrictions().next().unwrap().0, 7);
         assert_eq!(trie.view().oldest_restriction().unwrap().0, 6);
         assert_eq!(trie.view_before(2).oldest_restriction().unwrap().0, 6);
         assert!(trie.view_before(1).oldest_restriction().is_none());
     }
 
-    // `None` for a present row, otherwise the conflicting result, if any.
     fn outcome(insert: FunctionInsert) -> Option<Option<u32>> {
         match insert {
             FunctionInsert::Present => None,
