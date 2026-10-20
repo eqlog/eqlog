@@ -111,20 +111,19 @@ fn types_are_not_terms_in_equality() {
 }
 
 #[test]
-fn equality_can_validate_a_previously_untyped_application() {
+fn preceding_proof_obligations_enable_later_applications() {
     check(&formatdoc! {"
         {NAT}
         {VEC}
         def id (A : Type) (x : A) : A := x
         theorem same (A : Type) (x : A) : x = x := rfl
-        theorem before (n : Nat) (xs : Vec Nat (add Nat.zero n)) :
-          id (Vec Nat n) xs = xs :=
+        def after (n : Nat) (xs : Vec Nat (add Nat.zero n)) : Vec Nat n :=
           let p : add Nat.zero n = n :=
             rec n motive (k : Nat) => add Nat.zero k = k with
             | zero => rfl
             | succ k ih => rfl
             end;
-          same (Vec Nat n) (id (Vec Nat n) xs)
+          id (Vec Nat n) xs
     "})
     .unwrap();
 }
@@ -234,13 +233,8 @@ fn fresh_contexts_and_partial_images() {
     let data = m.new_data();
     let zero = m.new_constructor();
     let succ = m.new_constructor();
-    let end = m.define_no_data_constructors();
-    let cs = m.define_more_data_constructors(succ, end);
-    let cs = m.define_more_data_constructors(zero, cs);
-    m.insert_data_constructors(data, cs);
     let root_args = m.define_nil_args(root);
     let ty = m.define_data_type(root, data, root_args);
-    m.insert_family_schema(root, ty);
     let x = m.new_context();
     let y = m.new_context();
     let px = m.new_context_mor();
@@ -254,9 +248,9 @@ fn fresh_contexts_and_partial_images() {
     let hidden = m.define_construct(x, succ, hidden_args);
     let body_args = m.define_cons_args(x, hidden, x_args);
     let body = m.define_construct(x, succ, body_args);
-    m.insert_constructor_schema(x, x_zero, x_ty);
-    m.insert_constructor_schema(x, hidden, x_ty);
-    m.insert_constructor_schema(x, body, x_ty);
+    m.insert_has_type(x, x_zero, x_ty);
+    m.insert_has_type(x, hidden, x_ty);
+    m.insert_has_type(x, body, x_ty);
     let target = m.new_context();
     let f = m.new_context_mor();
     m.insert_advance(x, target, f);
@@ -277,7 +271,6 @@ fn fresh_contexts_and_partial_images() {
     m.insert_term_image(p, x, variable, assumption, local_variable);
     m.insert_term_image(p, x, x_zero, assumption, local_zero);
     m.close();
-    assert!(m.valid(x) && m.valid(y));
     assert!(!m.are_equal_context(x, y));
     assert!(!m.are_equal_tm(variable, x_zero));
     assert!(m.are_equal_tm(local_variable, local_zero));
@@ -351,9 +344,8 @@ fn reflexivity_is_a_term_constructor() {
     let mut m = Kernel::new();
     let g = m.define_empty();
     let ty = m.new_ty(g);
-    m.insert_family_schema(g, ty);
     let x = m.new_tm(g);
-    m.insert_constructor_schema(g, x, ty);
+    m.insert_has_type(g, x, ty);
     let proof = m.define_refl(g, x);
     let untyped = m.new_tm(g);
     let untyped_proof = m.define_refl(g, untyped);
@@ -363,21 +355,21 @@ fn reflexivity_is_a_term_constructor() {
     m.insert_extension(invalid, g, ill_formed, p);
     m.close();
     let equality = m.equality(g, x, x).unwrap();
-    assert!(m.is_type(g, equality));
     assert!(m.has_type(g, proof, equality));
-    assert!(m.type_of(g, untyped_proof).is_none());
-    assert!(!m.is_type(g, ill_formed));
-    assert!(!m.valid(invalid));
-    assert!(!m.substitution(p));
+    assert!(!m
+        .iter_has_type()
+        .any(|(_, term, _)| m.are_equal_tm(term, untyped_proof)));
+    assert_eq!(m.context_mor_dom(p), Some(g));
+    assert_eq!(m.context_mor_cod(p), Some(invalid));
 
     let second_proof = m.new_tm(g);
-    m.insert_constructor_schema(g, second_proof, equality);
+    m.insert_has_type(g, second_proof, equality);
     m.close();
     assert!(m.are_equal_tm(proof, second_proof));
 }
 
 #[test]
-fn type_extension_is_fresh_and_type_pairing_waits_for_formation() {
+fn type_extensions_and_substitutions_are_structural() {
     let mut m = Kernel::new();
     let root = m.define_empty();
     let e = m.new_context();
@@ -394,27 +386,134 @@ fn type_extension_is_fresh_and_type_pairing_waits_for_formation() {
     let image = m.new_ty(root);
     m.insert_type_image(pair, e, a, root, image);
     m.close();
-    assert!(m.valid(e) && m.valid(other));
-    assert!(m.is_type(e, a) && m.is_type(other, other_a));
     assert!(!m.are_equal_context(e, other));
     assert!(!m.are_equal_ty(a, other_a));
-    assert!(!m.substitution(pair));
-    assert!(m.context_mor_dom(pair).is_none());
-    assert!(m.context_mor_cod(pair).is_none());
-    assert!(!m.is_type(root, image));
-
-    m.insert_family_schema(root, ty);
-    m.close();
-    assert!(m.substitution(pair));
     assert!(m.are_equal_ty(m.ty_mor_app(pair, a).unwrap(), ty));
     assert!(m.are_equal_ty(image, ty));
     assert!(m.are_equal_context_mor(m.context_mor_comp(p, pair).unwrap(), base));
 
     let other_ty = m.new_ty(root);
-    m.insert_family_schema(root, other_ty);
     let other_pair = m.define_pair_type(e, root, base, other_ty);
     m.close();
-    assert!(m.substitution(other_pair));
     assert!(!m.are_equal_ty(ty, other_ty));
     assert!(!m.are_equal_context_mor(pair, other_pair));
+}
+
+#[test]
+fn speculative_arguments_cannot_discharge_their_own_obligations() {
+    let prefix = formatdoc! {"
+        {NAT}
+        inductive Bit where | off
+        def ignore (n : Nat) : Nat := Nat.zero
+        def take (n : Nat) (h : n = Nat.zero) : Nat := n
+    "};
+    for declaration in [
+        "def bad : Nat := ignore Bit.off",
+        "theorem bad : take (Nat.succ Nat.zero) rfl = Nat.zero := rfl",
+        "theorem bad (n : Nat) : n = Nat.zero := let h : n = Nat.zero := rfl; h",
+    ] {
+        assert!(
+            check(&format!("{prefix}\n{declaration}")).is_err(),
+            "{declaration}"
+        );
+    }
+}
+
+#[test]
+fn errors_follow_source_order_instead_of_checking_phases() {
+    for later in [
+        "def later : Nat := missing",
+        "def later : Nat := rfl",
+        "def later : Nat := @",
+        "def add : Nat := Nat.zero",
+        "def later (n n : Nat) : Nat := n",
+    ] {
+        let source = formatdoc! {"
+            {NAT}
+            def earlier : Nat := rfl
+            {later}
+        "};
+        let error = check(&source).err().unwrap().to_string();
+        assert!(error.contains("earlier:"), "{error}");
+    }
+    for branch in ["rfl", "missing"] {
+        let source = formatdoc! {"
+        {NAT}
+        inductive Bit where | off
+        def bad : Nat :=
+          rec Bit.off motive (n : Nat) => Nat with
+          | zero => {branch}
+          | succ k ih => ih
+          end
+    "};
+        let error = check(&source).err().unwrap().to_string();
+        assert!(error.contains("argument does not have"), "{error}");
+    }
+}
+
+#[test]
+fn later_assumptions_do_not_validate_earlier_header_applications() {
+    let source = formatdoc! {"
+        {NAT}
+        {VEC}
+        def id (A : Type) (x : A) : A := x
+        theorem bad (n : Nat) (xs : Vec Nat (add Nat.zero n)) :
+          id (Vec Nat n) xs = xs :=
+          let p : add Nat.zero n = n :=
+            rec n motive (k : Nat) => add Nat.zero k = k with
+            | zero => rfl
+            | succ k ih => rfl
+            end;
+          rfl
+    "};
+    assert!(check(&source).is_err());
+}
+
+#[test]
+fn internal_proofs_in_data_returning_functions_stay_after_earlier_obligations() {
+    let prefix = formatdoc! {"
+        {NAT}
+        {VEC}
+        def id (A : Type) (x : A) : A := x
+        def establish (n : Nat) : Nat :=
+          let proof : add Nat.zero n = n :=
+            rec n motive (k : Nat) => add Nat.zero k = k with
+            | zero => rfl
+            | succ k ih => rfl
+            end;
+          Nat.zero
+    "};
+    check(&formatdoc! {"
+        {prefix}
+        def good (n : Nat) (xs : Vec Nat (add Nat.zero n)) : Vec Nat n :=
+          let ignored : Nat := establish n;
+          id (Vec Nat n) xs
+    "})
+    .unwrap();
+    let bad = formatdoc! {"
+        {prefix}
+        theorem bad (n : Nat) (xs : Vec Nat (add Nat.zero n)) :
+          id (Vec Nat n) xs = xs :=
+          let ignored : Nat := establish n;
+          rfl
+    "};
+    assert!(check(&bad).is_err());
+}
+
+#[test]
+fn earlier_constraints_precede_later_structural_errors() {
+    let prefix = formatdoc! {"
+        {NAT}
+        {VEC}
+        inductive Bit where | off
+    "};
+    for (declaration, expected) in [
+        ("inductive Bad where | mk (x : Vec Nat Bit.off) : Nat", "argument does not have"),
+        ("def bad (xs : Vec Nat Bit.off) (n n : Nat) : Nat := Nat.zero", "argument does not have"),
+        ("def bad : Nat := rec Nat.zero motive (n : Nat) => Nat with | zero => rfl end", "reflexivity requires"),
+        ("def bad : Nat := rec Nat.zero motive (n : Nat) => Nat with | zero => rfl | wrong => Nat.zero end", "reflexivity requires"),
+    ] {
+        let error = check(&format!("{prefix}\n{declaration}")).err().unwrap().to_string();
+        assert!(error.contains(expected), "{error}");
+    }
 }

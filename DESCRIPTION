@@ -1,16 +1,20 @@
-Represent type parameters without a universe
+Check universe-free types through obligations
 
-Extend contexts by fresh types so polymorphic declarations do not need
-type codes, decoding, or a universe. Keep type arguments separate from
-term arguments throughout elaboration, substitution, and constructor
-computation. Restrict Type to parameter binders, excluding type-valued
-definitions and equality between types.
+Use fresh type parameters instead of universe codes, and represent
+equality by its endpoints with term-based reflexivity.
 
-Infer equality formation from its endpoints and give reflexivity a term
-argument. Record weakening maps in extension requests and use native
-identity morphisms. Retain checked formation and substitution requests
-because allocated syntax must not establish its own typing judgments.
+Continue elaboration under typing assumptions while retaining
+independent Rust obligations for argument and body types, equality
+formation, and reflexivity. Check them after one closure and report the
+first failure in source order, including failures preceding later
+elaboration errors.
 
-Exercise polymorphic definitions, indexed families, fresh type contexts,
-deferred checking, and invalid arguments in the evaluator integration
-suite, and document the reasons for the remaining kernel machinery.
+Keep inferred types separate from assumed typings so constraints cannot
+prove themselves. Isolate reflected equalities in continuation contexts
+and keep recursor results out of their branch-checking templates.
+Create weakening images only for referenced values and in-scope
+equality syntax.
+
+Cover invalid arguments, circular proof attempts, lexical bindings,
+error ordering, partial computation, and the arithmetic and vector
+developments with evaluator integration tests.

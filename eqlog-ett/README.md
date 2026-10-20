@@ -76,60 +76,59 @@ cannot return it, and types cannot occur as endpoints of a term equality.
 Only uniform parameters and definition/theorem parameters may bind fresh
 types. Inductive indices and constructor fields must have ordinary types.
 
-`let` statements can begin declaration and branch bodies; their annotations
-are checked before their values become available. Numeric literals and
-infix arithmetic are not implemented; constructors use qualified names.
+`let` statements can begin declaration and branch bodies. Each records a
+typing obligation before making its annotated value available to subsequent
+expressions. Numeric literals and infix arithmetic are not implemented;
+constructors use qualified names.
 
 ## Contexts and checking
 
-Each scope is a fresh instance of the `Context` Eqlog model in `src/kernel.eql`.
-Types, terms, typing judgments and equalities belong to that model. Extending
-a context never identifies it with another context having the same telescope.
-Declarations, branches and let statements also create fresh scopes. Weakening
-maps existing material forward into the new scope; equality cannot flow back
-to the earlier scope.
+Each scope is an instance of the `Context` Eqlog model in `src/kernel.eql`.
+Types, terms and equalities belong to that model. A context extension remains
+fresh even when its parent and binder type agree with another extension.
+Weakening maps material into later scopes; equality cannot flow back into
+the earlier scope.
 
-Morphisms have the direction of substitution: the projection for a variable
-extension is `Gamma -> Gamma.x:A`. Pairing substitutes an argument for the
-last variable after its type has been established. Type-variable extensions
-have the same direction and pair a formed type with the fresh type variable.
-A definition with parameters is a term in an extended context. Applying it
-requests its image along a sequence of such pairings, without constructing
-a function type.
+The frontend constructs contexts, types and substitutions without waiting for
+positive well-formedness judgments. It records obligations in Rust: an
+argument's inferred type must equal its parameter type, a body's inferred
+type must equal its annotation, equality endpoints must have the same type,
+and `rfl` requires equal endpoints. The frontend continues under the declared
+typing assumptions and calls `close()` once. It then checks the obligations
+and reports the first failure in source order. Source positions also let an
+earlier deferred failure take precedence over a later elaboration error.
 
-An inhabitant of an equality type identifies its endpoints in its context.
-Consequently, induction hypotheses are used by equality reflection, and many
-branches are simply `rfl`. Equality proofs are proof irrelevant.
+Inferred types are recorded separately from assumed typings. The kernel's
+`has_type` relation is not functional: adding an expected typing cannot
+identify two types and thereby satisfy the obligation that compares them.
 
-The frontend elaborates the entire module into one Eqlog model. It allocates
-syntax and substitution requests, but does not evaluate terms or assert that
-unchecked annotations hold. It calls `close()` exactly once and then checks
-the type-formation, index-binder, and definition obligations.
-A declaration's exported term is identified with its body only after the body
-has the declared type. The frontend is part of
-the trusted checker: in particular, it constructs the motives and branch
-obligations and resolves names hygienically.
+An inhabitant of an equality type identifies its endpoints in its context;
+equality proofs are proof irrelevant. An assumption that can introduce such
+equalities belongs to a fresh continuation context after its obligation.
+Abstract types are treated conservatively because a type parameter might
+later be instantiated with an equality type. Calls also isolate proof
+assumptions made inside their defining bodies. Ordinary data-typed
+applications can share a context.
 
-Types, contexts, and morphisms are allocated before checking. Consequently,
-`is_type`, `valid`, and `substitution` are checked judgments, not membership
-tests. Removing them would let malformed unused binders or unchecked arguments
-participate in proofs. The equality constructor takes just its two terms;
-formation requires them to have a common type. `refl(x)` proves `x = x`.
-The frontend's bare `rfl` waits for its expected equality to become reflexive.
+Consequently, a later `let` assumption cannot rescue an ill-typed application
+in an earlier declaration header. Put a required equality proof before the
+application it justifies. Recursor branches use a motive template without
+an assumed result; the result is introduced separately so it cannot validate
+its own branch obligations.
 
-`extension` and `type_extension` record their weakening morphisms explicitly;
-contexts remain fresh even when their parent and binder types agree.
-`advance` adds a statement scope without a variable. `context_parent`
-collects the ancestry of all three forms of scope. `closed_context` marks
-scopes with no local variables, whose substitutions to a fixed target are
-unique; `variable_context` marks scopes requiring restriction through their
-local binders. `pair` and `pair_type` substitute for the last term or type
-variable after the argument checks.
+Morphisms have the direction of substitution: a variable extension has a
+weakening `Gamma -> Gamma.x:A`. `pair` and `pair_type` instantiate the last
+term or type variable after Rust has recorded the relevant obligations.
+`advance` adds a scope without a variable, and `context_parent` records
+ancestry. `closed_context` and `variable_context` describe that ancestry,
+rather than certifying well-formedness; a context without local variables has
+a unique substitution to a fixed target. Identities use Eqlog's native `id`.
+`compose` records which composites need restrictions through source ancestry,
+keeping this allocation finite.
 
-Identities use Eqlog's native `id`. `compose` remains a checked request for
-native composition: publishing `f >> g` too early can propagate endpoints
-and images back into an unchecked operand. Requested images are similarly
-published only after their substitution checks.
+The frontend is part of the trusted checker. It resolves lexical names,
+constructs motives and branch obligations, records inferred types, and places
+assumptions after the obligations on which they depend.
 
 ## Open definitions and finite computation
 
@@ -137,8 +136,11 @@ Definitions are open. Instantiating a signature explicitly creates its types
 and terms in the destination context. Substitution on the defining body stays
 partial: requesting an image of `foo`, where `foo = bar + baz`, does not
 allocate images of `bar` or `baz`. Existing destination expressions can supply
-missing images through surjective rules. Weakening copies the finite material
-already present in the previous statement context.
+missing images through surjective rules. Weakening creates images on demand
+for referenced values and their written syntax dependencies, including their
+types. It also preserves the syntax of in-scope equality assumptions, whose
+consequences can matter even when their proof variables are unused. It does
+not copy all the material from the parent scope.
 
 Constructor computation is a separate, bounded allocation mechanism. Each
 elaborated call occurrence, including occurrences in instantiated signatures,
