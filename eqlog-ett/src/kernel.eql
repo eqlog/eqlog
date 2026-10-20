@@ -9,10 +9,16 @@ model Context {
     type Ty;
     type Tm;
     type Args;
+    // What is is_type for? If for quantification:
+    // Why not replace if is_type(x); by if x: Ty;?
     pred is_type(Ty);
     pred small(Ty);
     pred has_type(Tm, Ty);
     func type_of(Tm) -> Ty;
+    // Can we remove universes again?
+    // Replace by context extension by a type variable.
+    // I.e. not \Gamma.x: \sigma, but \Gamma.A where A is a type in context \Gamma.A.
+    // So \Gamma.A is the free extension by a fresh type of \Gamma.
     func universe() -> Ty;
     func quote(Ty) -> Tm;
     func decode(Tm) -> Ty;
@@ -21,7 +27,13 @@ model Context {
     func last_arg(Args) -> Tm;
     func data_type(Data, Args) -> Ty;
     func construct(Constructor, Args) -> Tm;
+    // Do we need Ty as argument here? Not sure in this case.
+    // Also, let's call it the equality type (-> extensional tt), not identity type (-> intensional).
     func identity(Ty, Tm, Tm) -> Ty;
+    // Does this make sense? Don't we need to provide a term here?
+    // Or is the argument supposed to be an identity type already?
+    // Would be weird imo, let's replace by refl(tm) -> Tm;
+    // which would give you refl(tm): Eq tm tm
     func refl(Ty) -> Tm;
 
     rule inferred_type {
@@ -100,19 +112,19 @@ model Context {
 }
 
 func empty() -> Context;
-pred valid(Context);
-pred substitution(Mor(Context));
+pred valid(Context); // Why is this needed? Shouldn't every context be valid?
+pred substitution(Mor(Context)); // What is this for? Every morphism should be a substitution, no?
 pred extension(e: Context, g: Context, a: g.Ty);
-pred advance(g: Context, e: Context, p: Mor(Context));
-func projection(Context) -> Mor(Context);
-func variable(g: Context) -> g.Tm;
-func identity_sub(Context) -> Mor(Context);
-func compose(Mor(Context), Mor(Context)) -> Mor(Context);
-pred context_parent(Context, Context, Mor(Context));
-pred closed_context(Context);
-pred variable_context(Context);
-func closed_substitution(Context, Context) -> Mor(Context);
-func pair(e: Context, d: Context, f: Mor(Context), t: d.Tm) -> Mor(Context);
+pred advance(g: Context, e: Context, p: Mor(Context)); // What's this doing?
+func projection(Context) -> Mor(Context); // Can we do projection(Gamma, sigma): Gamma -> Gamma.sigma?
+func variable(g: Context) -> g.Tm; // Likewise: Gamma.sigma \vdash variable(Gamma, sigma): sigma^+
+func identity_sub(Context) -> Mor(Context); // Doesn't eqlog already have identity morphisms?
+func compose(Mor(Context), Mor(Context)) -> Mor(Context); // Doesn't eqlog alreayd have compositiosn?
+pred context_parent(Context, Context, Mor(Context));  // What's this needed for, why not add morphism here as param to `extension`?
+pred closed_context(Context); // What's this doing? The global context, but potentially with more terms defined in it?
+pred variable_context(Context); // ?
+func closed_substitution(Context, Context) -> Mor(Context); // ?
+func pair(e: Context, d: Context, f: Mor(Context), t: d.Tm) -> Mor(Context); // ?
 
 rule empty_context {
     if g = empty();
