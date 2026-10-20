@@ -14,6 +14,7 @@ and use sorted keys for any full-level rebuild that is still needed.
 Represent contiguous leaf elements as shared intervals while keeping
 scattered sets in trees. Preserve canonical current rows, historical
 snapshots, and bounded work accounting through equality and updates.
+Keep balancing ratios valid even when physical size bounds are large.
 
 Validation covers mapped edits, filtered pivots, partial and conflicting
 images, composition, random set operations, source and owner equality,

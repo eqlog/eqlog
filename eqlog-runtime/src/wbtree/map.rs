@@ -276,6 +276,14 @@ fn apply_value_mappings<'a, V: Clone>(
 const DELTA: usize = 3;
 const GAMMA: usize = 2;
 
+fn too_heavy(weight: usize, other: usize) -> bool {
+    weight > other.saturating_mul(DELTA)
+}
+
+fn needs_double_rotation(inner: usize, outer: usize) -> bool {
+    inner / GAMMA >= outer
+}
+
 impl<V: Clone> Node<V> {
     fn from_sorted_iter(
         len: usize,
@@ -393,7 +401,7 @@ impl<V: Clone> Node<V> {
         }
         let left_weight = left_size + 1;
         let right_weight = right_size + 1;
-        if right_weight > DELTA * left_weight {
+        if too_heavy(right_weight, left_weight) {
             let data = Self::data_mut(&mut node);
             data.right = Self::expose(data.right.take());
             data.update_size_internal();
@@ -401,7 +409,7 @@ impl<V: Clone> Node<V> {
                 return Self::balance(node);
             }
             let right = Self::data_mut(data.right.as_mut().expect("the heavy child is nonempty"));
-            if Self::size(&right.left) + 1 >= GAMMA * (Self::size(&right.right) + 1) {
+            if needs_double_rotation(Self::size(&right.left) + 1, Self::size(&right.right) + 1) {
                 let inner_size = Self::size(&right.left);
                 right.left = Self::expose(right.left.take());
                 right.update_size_internal();
@@ -413,7 +421,7 @@ impl<V: Clone> Node<V> {
                 data.right = data.right.take().map(Self::rotate_right);
             }
             Self::rotate_left(node)
-        } else if left_weight > DELTA * right_weight {
+        } else if too_heavy(left_weight, right_weight) {
             let data = Self::data_mut(&mut node);
             data.left = Self::expose(data.left.take());
             data.update_size_internal();
@@ -421,7 +429,7 @@ impl<V: Clone> Node<V> {
                 return Self::balance(node);
             }
             let left = Self::data_mut(data.left.as_mut().expect("the heavy child is nonempty"));
-            if Self::size(&left.right) + 1 >= GAMMA * (Self::size(&left.left) + 1) {
+            if needs_double_rotation(Self::size(&left.right) + 1, Self::size(&left.left) + 1) {
                 let inner_size = Self::size(&left.right);
                 left.right = Self::expose(left.right.take());
                 left.update_size_internal();
@@ -624,7 +632,7 @@ impl<V: Clone> Node<V> {
         let left_size = Self::size(&left);
         let right_size = Self::size(&right);
 
-        if right_size > DELTA * left_size {
+        if too_heavy(right_size, left_size) {
             match Self::expose(right) {
                 None => Self::join(left, key, value, None),
                 Some(r) => {
@@ -640,7 +648,7 @@ impl<V: Clone> Node<V> {
                     Some(Node::balance(new_node))
                 }
             }
-        } else if left_size > DELTA * right_size {
+        } else if too_heavy(left_size, right_size) {
             match Self::expose(left) {
                 None => Self::join(None, key, value, right),
                 Some(l) => {
@@ -1616,6 +1624,31 @@ mod tests {
     use rand::{RngExt, SeedableRng};
 
     #[test]
+    fn balance_ratios_do_not_overflow_large_size_bounds() {
+        let bounds = [
+            0,
+            1,
+            2,
+            usize::MAX / 3,
+            usize::MAX / 2,
+            usize::MAX - 1,
+            usize::MAX,
+        ];
+        for left in bounds {
+            for right in bounds {
+                assert_eq!(
+                    too_heavy(left, right),
+                    left as u128 > DELTA as u128 * right as u128
+                );
+                assert_eq!(
+                    needs_double_rotation(left, right),
+                    left as u128 >= GAMMA as u128 * right as u128
+                );
+            }
+        }
+    }
+
+    #[test]
     fn bounded_cardinality_does_not_force_unneeded_values() {
         let mut source = WBTreeMap::new();
         for key in 0..128 {
@@ -1911,7 +1944,8 @@ mod tests {
                         let right_weight = right_size + 1;
 
                         // Balance condition: delta * left_weight >= right_weight AND delta * right_weight >= left_weight
-                        if right_weight > DELTA * left_weight || left_weight > DELTA * right_weight
+                        if too_heavy(right_weight, left_weight)
+                            || too_heavy(left_weight, right_weight)
                         {
                             return false;
                         }
