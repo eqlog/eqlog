@@ -265,8 +265,6 @@ impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
             T::empty()
         };
         if let Some(previous) = self.seen.insert(consumer, self.current.clone()) {
-            // With no checkpoint retaining this version, no future reader can
-            // need its cached difference.
             if Rc::strong_count(&previous) == 1 {
                 self.views.remove(&previous.id);
             }

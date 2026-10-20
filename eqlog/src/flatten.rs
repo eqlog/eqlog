@@ -663,8 +663,7 @@ pub fn flatten(ctx: &FlattenCtx<'_>, options: &CompileOptions) -> Vec<FlatRuleGr
                 }
             }));
         }
-        // Function tables report a second result for the same arguments on
-        // insertion, so evaluation equates the results without a rule.
+        // Desugared tables detect functionality conflicts on insertion.
         ModelMode::Desugared => {}
     }
 

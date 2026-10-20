@@ -293,12 +293,9 @@ fn schedule_scope(
                     partitions.push((functional, true));
                 }
                 match model_mode {
-                    // Commit producers before the next consumer takes its snapshot.
                     ModelMode::Native => {
                         partitions.extend(ordinary.into_iter().map(|group| (vec![group], false)))
                     }
-                    // A table's new rows are copied once per round for all
-                    // rules instead of once for each consumer.
                     ModelMode::Desugared => partitions.push((ordinary, false)),
                 }
                 partitions
@@ -331,8 +328,6 @@ fn schedule_scope(
                     stable_inputs: stable_inputs.intersection(&inputs).cloned().collect(),
                 });
                 let rules = Schedule::Rules(id);
-                // Other joins should see canonical function results. Separate
-                // checkpoints keep their pending matches across normalization.
                 rule_steps.push(if normalize {
                     normalizer = Some(id);
                     Schedule::Saturate(Box::new(rules))
@@ -349,8 +344,6 @@ fn schedule_scope(
             children.splice(0..0, rule_steps);
         }
         let body = sequence(children);
-        // An ambient cycle repeats the owner traversal after global feedback.
-        // Its rule bodies can therefore keep their owner-bound inputs.
         bodies.push(Some(if recursive {
             Schedule::Saturate(Box::new(body))
         } else {

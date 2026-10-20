@@ -1457,8 +1457,6 @@ fn emit_components(
         "self.__transport_component_{m}_{name}({baseline}parents, &component.outgoing, {retain_own}); }}"
     )?;
     if let Some(baseline) = codegen.transport_baseline(root, selection, ctx) {
-        // Save entry snapshots only after all edges were visited. Later owner
-        // equalities must remain pending, including across an early return.
         for (i, rel) in baseline.relations.iter().enumerate() {
             let field = super::transport::field(rel, model, ctx);
             writeln!(f, "self.{field}_frontier.insert(parents, frontier_{i});")?;

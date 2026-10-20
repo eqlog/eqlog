@@ -66,7 +66,6 @@ enum Pending<'a, V: Clone> {
 
 struct Cursor<'a, V: Clone> {
     pending: Vec<Pending<'a, V>>,
-    // Singleton suffixes need no allocated pending stack.
     current: Option<Pending<'a, V>>,
     #[cfg(test)]
     opened: usize,

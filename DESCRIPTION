@@ -22,3 +22,6 @@ after the branch substitution has acquired its endpoints.
 Cover invalid arguments, circular proof attempts, lexical bindings,
 error ordering, partial computation, and the arithmetic and vector
 developments with evaluator integration tests.
+
+Keep evaluator comments focused on invariants and non-obvious design
+constraints so they do not obscure the implementation.

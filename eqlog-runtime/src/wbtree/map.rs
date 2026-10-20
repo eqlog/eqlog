@@ -719,7 +719,6 @@ impl<V: Clone> Node<V> {
     }
 
     fn join_without_key(left: Rc<Node<V>>, right: Rc<Node<V>>) -> Option<Rc<Node<V>>> {
-        // Remove the minimum element from the right subtree to use as the new root
         let (min_key, min_value, new_right) = Self::remove_min(right);
         Self::join(Some(left), min_key, min_value, new_right)
     }
@@ -926,8 +925,7 @@ impl<V: Clone> WBTreeMap<V> {
         Difference::new(self, other)
     }
 
-    /// Visits entries requiring comparison in key order until a callback returns false.
-    /// Shared subtrees are skipped; true means every callback continued.
+    /// Shared subtrees need no comparison; stops at the first false callback.
     pub fn all_difference_entries<'a>(
         &'a self,
         other: &'a Self,
@@ -1100,7 +1098,6 @@ impl<V: Clone> WBTreeMap<V> {
         }
     }
 
-    /// Includes keys filtered by lazy mappings, without traversing them.
     #[doc(hidden)]
     pub fn len_upper_bound(&self) -> usize {
         self.len

@@ -1,9 +1,5 @@
-//! Rust emission for desugared models, which store every fact in mutable
-//! indexed tables.
-//!
-//! Rows are stamped with their position in their table's insertion log. A
-//! stratum remembers how far it has read each input table, so its old rows
-//! are those stamped before that position and its new rows are the rest.
+//! Each stratum needs its own insertion-log cursor so consumers cannot
+//! consume each other's pending matches.
 
 use convert_case::{Case, Casing};
 use indoc::{formatdoc, writedoc};
@@ -41,7 +37,6 @@ fn table_indices(
     indices
 }
 
-/// The position of an index within the table of its source relation.
 fn index_position(
     indices: &BTreeMap<FlatInRel, Vec<(FlatInRel, Arc<[usize]>)>>,
     rel: &FlatInRel,
@@ -53,11 +48,8 @@ fn index_position(
         .expect("every selected index belongs to a table")
 }
 
-/// Assigns every index of the selection to a table holding its source relation.
 pub(super) struct Tables {
     indices: BTreeMap<FlatInRel, Vec<(FlatInRel, Arc<[usize]>)>>,
-    // Indices that rules or function evaluation read through trie views
-    // rather than only as deltas.
     viewed: BTreeSet<(FlatInRel, Arc<[usize]>)>,
 }
 
@@ -135,7 +127,6 @@ impl Tables {
     }
 }
 
-/// Types whose elements can be equated because a function has two results.
 fn function_codomains(ctx: &RustGenCtx<'_>) -> BTreeSet<TypeId> {
     ctx.signature()
         .iter_funcs()
@@ -147,7 +138,6 @@ fn type_snake(typ: TypeId, ctx: &RustGenCtx<'_>) -> String {
     display_type(typ, ctx).to_string().to_case(Case::Snake)
 }
 
-/// The field holding the table of a relation or of the elements of a type.
 pub(super) fn table_field(source: &FlatInRel, ctx: &RustGenCtx<'_>) -> String {
     match source {
         FlatInRel::Rel(rel) => {
@@ -155,8 +145,6 @@ pub(super) fn table_field(source: &FlatInRel, ctx: &RustGenCtx<'_>) -> String {
             format!("{rel_snake}_table")
         }
         FlatInRel::TypeSet(typ) => {
-            // Element creation and merges address this field by its primary
-            // index name.
             let type_snake = display_type(*typ, ctx).to_string().to_case(Case::Snake);
             format!("{type_snake}_order_0")
         }
@@ -166,15 +154,11 @@ pub(super) fn table_field(source: &FlatInRel, ctx: &RustGenCtx<'_>) -> String {
     }
 }
 
-/// The tables and rule inputs read by one stratum.
 struct StratumInputs {
     sources: Vec<FlatInRel>,
-    // Rule input and its source position in `sources`.
     reads: Vec<((FlatInRel, IndexSpec), usize)>,
 }
 
-/// The output buffers of a stratum's rule modules: each module writes its
-/// own buffer per output relation so that modules can run concurrently.
 fn output_buffers(groups: &[usize], modules: &[RamModule]) -> Vec<(usize, FlatOutRel)> {
     groups
         .iter()
@@ -272,7 +256,6 @@ pub(super) fn display_struct<'a>(
             })
             .join("\n");
         writedoc! {f, "
-            /// A model of the `{name}` theory.
             pub struct {name} {{
                 {table_fields}
                 {element_index_fields}
@@ -356,7 +339,6 @@ pub(super) fn display_new_fn<'a>(
             })
             .join("\n");
         writedoc! {f, "
-            /// Creates an empty model.
             #[allow(dead_code)]
             pub fn new() -> Self {{
                 Self {{
@@ -399,7 +381,6 @@ pub(super) fn display_strata<'a>(
             .map(|field| format!("self.{field}.set_deferred(deferred);"))
             .join("\n");
         writedoc! {f, "
-            /// Brings the tries of all tables up to date, one task per trie.
             #[allow(unused_mut)]
             fn __sync_tables(&mut self) {{
                 {{
@@ -411,8 +392,6 @@ pub(super) fn display_strata<'a>(
                 {finish_sync}
             }}
 
-            /// Closing defers trie updates to the synchronization before
-            /// each stratum; outside, tries are updated row by row.
             #[allow(unused_variables)]
             fn __set_tables_deferred(&mut self, deferred: bool) {{
                 self.__sync_tables();
@@ -586,8 +565,6 @@ pub(super) fn display_strata<'a>(
                         let args = args.join(", ");
                         let table = table_field(&FlatInRel::Rel(*rel), ctx);
                         for i in producers(output) {
-                            // Tables only hold canonical rows, so a row found as
-                            // derived needs no canonicalization before skipping it.
                             writedoc! {f, "
                                 for [{args}] in __out_{i}_{field}.drain(..) {{
                                     if !self.{table}.contains([{args}]) {{ self.{insert}({converted}); }}
@@ -595,7 +572,6 @@ pub(super) fn display_strata<'a>(
                             "}?;
                         }
                     }
-                    // Functions are defined at the next allocation barrier.
                     FlatOutRel::FuncDomain(_) => {
                         for i in producers(output) {
                             writeln!(f, "delta.{field}.append(&mut __out_{i}_{field});")?;
@@ -680,9 +656,6 @@ pub(super) fn display_close<'a>(
             })
             .join(" ");
         writedoc! {f, "
-            /// Equates the results that a function has for the same arguments
-            /// until all function graphs are functional again. Returns whether
-            /// this merged any elements.
             #[allow(unused_mut)]
             fn __normalize_functions(&mut self) -> bool {{
                 let mut changed = false;
@@ -746,28 +719,23 @@ pub(super) fn display_close<'a>(
     })
 }
 
-/// The tag that occurrence entries carry for rows of a relation.
 fn relation_tag(rel: FlatRel, ctx: &RustGenCtx<'_>) -> usize {
     iter_flat_rels(ctx.signature())
         .position(|other| other == rel)
         .expect("relations are flat relations of the signature")
 }
 
-/// The field listing, for each element of a type, the rows it occurs in.
 pub(super) fn occurrences_field(typ: TypeId, ctx: &RustGenCtx<'_>) -> String {
     let name = type_snake(typ, ctx);
     format!("__occurrences_{name}")
 }
 
-/// Binds `occurrence` to the entry of the row just inserted into a table.
 pub(super) fn display_occurrence(rel: FlatRel, ctx: &RustGenCtx<'_>) -> String {
     let field = table_field(&FlatInRel::Rel(rel), ctx);
     let tag = relation_tag(rel, ctx);
     format!("let occurrence = u64::from(self.{field}.log_len() - 1) | ({tag} << 32);")
 }
 
-/// Rows of a relation in which `arg{position}` occurs, including rows that
-/// have since been rewritten.
 pub(super) fn display_occurrence_rows(
     rel: FlatRel,
     typ: TypeId,
@@ -810,7 +778,6 @@ pub(super) fn display_canonicalize_fn<'a>(ctx: &'a RustGenCtx<'a>) -> impl Displ
             .join("\n");
         writedoc! {f, "
             /// Rewrites facts using the current equality representatives without running rules.
-            /// Consumer checkpoints retain pending matches after equality replacement.
             /// Element handles remain valid, and repeated calls preserve pending work.
             #[allow(dead_code)]
             pub fn canonicalize(&mut self) {{
@@ -829,8 +796,6 @@ pub(super) fn display_canonicalize_fn<'a>(ctx: &'a RustGenCtx<'a>) -> impl Displ
                 }}
             }}
 
-            /// Replaces a row by its canonical form unless it was removed since
-            /// the occurrence was recorded.
             #[inline(never)]
             #[allow(unused_variables)]
             fn __rewrite_row(&mut self, entry: u64) {{
@@ -884,8 +849,6 @@ pub(super) fn display_canonicalize_fn<'a>(ctx: &'a RustGenCtx<'a>) -> impl Displ
     })
 }
 
-/// The table operations of an internal insertion: unpacked arguments must be
-/// canonical, and the statements return early if the row is present.
 pub(super) fn display_insert_rows<'a>(
     rel: FlatRel,
     args: &'a [ElVar],
@@ -917,7 +880,6 @@ pub(super) fn display_insert_rows<'a>(
     })
 }
 
-/// Statements inserting an imported `row` into its table.
 pub(super) fn display_import_row(rel: FlatRel, ctx: &RustGenCtx<'_>) -> String {
     let field = table_field(&FlatInRel::Rel(rel), ctx);
     match rel {
@@ -945,7 +907,6 @@ pub(super) fn display_holds_expr(rel: FlatRel, ctx: &RustGenCtx<'_>) -> String {
     format!("self.{field}.contains([{args}])")
 }
 
-/// Statements binding `result` to the value of a function on `arg{i}`.
 pub(super) fn display_eval_body(
     func: FuncId,
     selection: &IndexSelection,
@@ -966,14 +927,11 @@ pub(super) fn display_eval_body(
     "}
 }
 
-/// The table whose `iter` yields the rows of a relation in sorted order.
 pub(super) fn display_iter_expr(rel: FlatRel, ctx: &RustGenCtx<'_>) -> String {
     let field = table_field(&FlatInRel::Rel(rel), ctx);
     format!("self.{field}")
 }
 
-/// Rows of the membership relation of `member_type` whose member is `arg`,
-/// as tuples of their parents.
 pub(super) fn display_member_parent_rows(
     member_type: TypeId,
     arg: &ElVar,

@@ -51,7 +51,7 @@ fn main() {
         let mut results = vec![Vec::with_capacity(samples); cases.len()];
         for sample in 0..warmup + samples {
             for offset in 0..cases.len() {
-                // Reverse order on alternate samples to distribute warm-cache and drift effects.
+                // Alternate sample order to reduce cache and timing bias.
                 let i = if sample % 2 == 0 {
                     offset
                 } else {

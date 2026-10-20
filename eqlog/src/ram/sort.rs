@@ -143,8 +143,6 @@ pub fn sort_ram_stmts(stmts: &[RamStmt], parameters: &BTreeSet<Arc<str>>) -> Vec
             .expect("The dependency graph must not contain cycles");
         result_stmts.push(stmts[i].clone());
 
-        // A newly enabled guard can reject this branch before another loop
-        // expands it. Reconsider priorities after every dependency is satisfied.
         for &j in &reverse_dependencies[i] {
             dependencies[j].remove(&i);
             if dependencies[j].is_empty() {

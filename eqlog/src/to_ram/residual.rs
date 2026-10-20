@@ -51,9 +51,7 @@ fn alternative(
         .position(|stmt| stmt.args.iter().any(|var| !fixed.contains(var)))?;
     let first = &rule.premise[start];
     let free = first.args.len() - query(first, &fixed).projections.len();
-    // Inverting a function by its result can range over arbitrarily many
-    // arguments even for a single free column, such as all arrows into a
-    // context compared to the factorizations of one arrow.
+    // A bound function result need not bound the number of matching arguments.
     let inverts_function = match &first.rel {
         FlatInRel::Rel(FlatRel::Func(_)) => first
             .args

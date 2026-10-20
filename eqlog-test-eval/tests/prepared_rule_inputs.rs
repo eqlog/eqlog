@@ -49,7 +49,6 @@ fn rules_accept_prepared_secondary_inputs() {
     backward_step(env);
     assert_eq!(output, vec![[1]]);
 
-    // Rows that their table holds already are not output again.
     backward.insert([1]);
     output.clear();
     let env = BackwardStepEnv {

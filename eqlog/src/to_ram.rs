@@ -24,8 +24,6 @@ fn functionality_seed_indices(
     {
         return None;
     }
-    // Group new results by their domain so the representative lookup can be
-    // shared across all equalities for that domain.
     Some(
         indices
             .iter()
@@ -183,7 +181,6 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
             arity -= 1;
 
             if fixed_args.len() < order.len() {
-                // Reject a missing join prefix before unrelated loops expand it.
                 stmts.push(RamStmt::GuardInhabited(GuardInhabitedStmt {
                     sets: set_names
                         .iter()
@@ -307,8 +304,6 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
     }
 }
 
-/// Desugared tables answer a premise of age all through one view, so its
-/// old and new sets merge into a single set of that age.
 fn merge_all_age_sets(routine: &mut RamRoutine) {
     let mut all: BTreeSet<usize> = routine
         .flat_rule
@@ -320,8 +315,6 @@ fn merge_all_age_sets(routine: &mut RamRoutine) {
             QueryAge::New | QueryAge::Old => None,
         })
         .collect();
-    // Plan probes follow the premises; a probe of a premise of age all reads
-    // both an old and a new set.
     let mut probe_ages: BTreeMap<usize, BTreeSet<IndexAge>> = BTreeMap::new();
     for stmt in &routine.stmts {
         match stmt {
@@ -388,10 +381,6 @@ fn merge_all_age_sets(routine: &mut RamRoutine) {
     routine.stmts = stmts;
 }
 
-/// Plan probes and premises can restrict the same view by the same
-/// variables; later such sets reuse the first one instead of repeating its
-/// lookups. Earlier statements enclose all later ones, so the first
-/// definition is in scope wherever the others are used.
 fn share_equal_sets(routine: &mut RamRoutine) {
     let mut definitions: BTreeMap<InSetExpr, SetVar> = BTreeMap::new();
     let mut aliases: BTreeMap<SetVarName, SetVar> = BTreeMap::new();

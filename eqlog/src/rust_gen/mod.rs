@@ -1633,7 +1633,6 @@ fn display_canonicalize_fn<'a>(
                 let name = display_type(typ, ctx).to_string().to_case(Snake);
                 let membership =
                     display_element_index_field_name(FlatRel::ModelMember(typ), typ, ctx);
-                // Membership aliases disappear during owned canonicalization.
                 writedoc! {f, "
                     let {name}_affected_owners: BTreeSet<u32> = self.{name}_uprooted.iter()
                         .filter_map(|el| self.{membership}.get(&el.0))
@@ -3575,8 +3574,6 @@ pub fn display_module<'a>(
             .flat_map(module_env_out_rels)
             .filter(|rel| match ctx.model_mode() {
                 ModelMode::Native => true,
-                // Desugared strata consume rows and equalities from the
-                // output buffers of their modules.
                 ModelMode::Desugared => match rel {
                     FlatOutRel::FuncDomain(_) => true,
                     FlatOutRel::Rel(_) | FlatOutRel::Equality(_) => false,

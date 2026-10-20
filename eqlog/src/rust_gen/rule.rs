@@ -85,8 +85,6 @@ pub fn module_env_out_rels(ram_module: &RamModule) -> BTreeSet<FlatOutRel> {
         .collect()
 }
 
-/// The env field through which desugared rules see the rows that a table
-/// already holds before they output a row.
 pub fn display_out_rows_field_name<'a>(rel: FlatRel, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
     FmtFn(move |f| {
         let rel_snake = display_rel(rel, ctx).to_string().to_case(Snake);
@@ -151,7 +149,6 @@ pub fn display_module_env_struct<'a>(
         let name = display_module_env_struct_name(ram_module);
         let canonical_types = match ctx.model_mode() {
             ModelMode::Native => module_env_iter_types(ram_module, ctx.signature()),
-            // Tables only hold canonical rows.
             ModelMode::Desugared => BTreeSet::new(),
         };
         let canonical = canonical_types
@@ -275,7 +272,6 @@ fn display_iter_expr<'a>(stmt: &'a IterStmt, ctx: &'a RustGenCtx<'a>) -> impl 'a
         match ctx.model_mode() {
             ModelMode::Native => {}
             ModelMode::Desugared => {
-                // Desugared premises read a single set of one age.
                 let [set] = stmt.sets.as_slice() else {
                     panic!("desugared premises read one set")
                 };
@@ -322,7 +318,6 @@ fn display_stmt_pre<'a>(ram_stmt: &'a RamStmt, ctx: &'a RustGenCtx<'a>) -> impl 
     FmtFn(move |f| match ram_stmt {
         RamStmt::DefineSet(DefineSetStmt { defined_var, expr }) => {
             let expr = display_in_set_expr(expr, ctx);
-            // Restricting a desugared view is a cheap inlined probe.
             let strictness = match ctx.model_mode() {
                 ModelMode::Native => defined_var.strictness,
                 ModelMode::Desugared => Strictness::Strict,
@@ -438,8 +433,6 @@ fn display_stmt_pre<'a>(ram_stmt: &'a RamStmt, ctx: &'a RustGenCtx<'a>) -> impl 
                         ModelMode::Native => writedoc! {f, "
                             env.{rel_field}.push([{args}]);
                         "},
-                        // Skipping rows that the table holds already spares
-                        // the sequential insertion most derived rows.
                         ModelMode::Desugared => {
                             let rows = display_out_rows_field_name(*out_rel, ctx);
                             writedoc! {f, "
@@ -562,7 +555,6 @@ fn display_shared_stmts<'a>(
         for (stmt, branch) in branches {
             writeln!(f, "{{")?;
             match stmt {
-                // Preserve output multiplicity while sharing read-only matches.
                 RamStmt::Insert(_) => {
                     for suffix in branch {
                         writeln!(f, "{{ {} }}", display_shared_stmts(&[suffix], ctx))?;

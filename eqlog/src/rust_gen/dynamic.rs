@@ -286,8 +286,6 @@ impl DynamicContext<'_> {
             match self.ctx.model_mode() {
                 ModelMode::Native => {}
                 ModelMode::Desugared => {
-                    // The import functions below insert the rows of other relations
-                    // together with their occurrences.
                     for (id, rel) in iter_flat_rels(self.ctx.signature()).enumerate() {
                         if !rel.arity(self.ctx.signature()).is_empty() {
                             continue;
