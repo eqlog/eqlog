@@ -1945,7 +1945,13 @@ impl PrefixTree1 {
         let mut result = Self::new();
         for key in self.set.iter() {
             if let Some(images) = mapping.relation.get(key) {
-                result = result.union(images);
+                if result.is_empty() {
+                    result = images.clone();
+                    continue;
+                }
+                for [image] in images.iter() {
+                    result.set.insert(image);
+                }
             }
         }
         result

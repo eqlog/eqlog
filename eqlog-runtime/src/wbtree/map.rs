@@ -109,7 +109,8 @@ impl<V: Clone> MappingNode<V> {
 #[allow(dead_code)]
 enum Node<V: Clone> {
     Data(DataNode<V>),
-    Mapping(MappingNode<V>),
+    // Mapping metadata must not enlarge every ordinary leaf allocation.
+    Mapping(Box<MappingNode<V>>),
 }
 
 // Traversal accumulates outer mappings first, but keys start in the inner domain.
@@ -192,11 +193,11 @@ impl<V: Clone> Node<V> {
     fn wrapped_in_mappings(mappings: &[&MonotoneMap], node: Option<Rc<Self>>) -> Option<Rc<Self>> {
         let mut result = node;
         for mapping in mappings.iter().rev() {
-            result = Some(Rc::new(Self::Mapping(MappingNode {
+            result = Some(Rc::new(Self::Mapping(Box::new(MappingNode {
                 mapping: Some((*mapping).clone()),
                 values: None,
                 child: result,
-            })));
+            }))));
         }
         result
     }
@@ -1379,11 +1380,11 @@ impl<V: Clone> WBTreeMap<V> {
             return Self::new();
         }
         let new_root = self.root.clone().map(|root| {
-            Rc::new(Node::Mapping(MappingNode {
+            Rc::new(Node::Mapping(Box::new(MappingNode {
                 mapping: Some(mapping),
                 values: None,
                 child: Some(root),
-            }))
+            })))
         });
         // Note: len might be different if mapping filters some keys out,
         // but we can't know without iterating. We keep the original len
@@ -1419,7 +1420,7 @@ impl<V: Clone> WBTreeMap<V> {
             return Self::new();
         }
         let root = self.root.clone().map(|child| {
-            Rc::new(Node::Mapping(MappingNode {
+            Rc::new(Node::Mapping(Box::new(MappingNode {
                 mapping,
                 values: Some(Rc::new(ValueMapping {
                     apply: Box::new(values),
@@ -1427,7 +1428,7 @@ impl<V: Clone> WBTreeMap<V> {
                     work_factor,
                 })),
                 child: Some(child),
-            }))
+            })))
         });
         Self {
             root,

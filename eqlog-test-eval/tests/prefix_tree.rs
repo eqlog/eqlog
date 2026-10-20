@@ -365,6 +365,22 @@ fn column_mapping_preserves_all_images_and_merges_collisions() {
 }
 
 #[test]
+fn a_single_source_can_share_its_entire_image_set() {
+    let mut source = PrefixTree1::new();
+    source.insert([7]);
+    let mut mapping = PrefixTree2::new();
+    for image in 0..128 {
+        mapping.insert([7, image]);
+    }
+    let images = mapping.get(7).unwrap().clone();
+    let mut mapped = source.mapped(Some(mapping));
+    assert!(SnapshotSet::shares_root(&mapped, &images));
+    mapped.insert([128]);
+    assert_eq!(mapped.iter().count(), 129);
+    assert_eq!(images.iter().count(), 128);
+}
+
+#[test]
 fn set_operations_preserve_shared_prefixes() {
     let mut base = PrefixTree3::new();
     for i in 0..128 {

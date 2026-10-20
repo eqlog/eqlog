@@ -8,8 +8,10 @@ rebuilding every prefix. Drop children without surviving rows.
 
 Keep sparse updates map-driven and avoid preparing large image maps for
 small source slices. General and temporarily non-functional maps retain
-all images through an eager fallback. Mutations and canonicalization
-materialize affected levels while preserving existing snapshots.
+all images through an eager fallback that builds its result in place.
+Store mapping metadata separately to preserve ordinary node size.
+Mutations and canonicalization materialize affected levels while
+preserving existing snapshots.
 
 Compare both key and value mapping identities before skipping shared
 differences. Account for deferred transformations and filtered suffixes
