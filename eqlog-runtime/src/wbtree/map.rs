@@ -140,6 +140,20 @@ const DELTA: usize = 3;
 const GAMMA: usize = 2;
 
 impl<V: Clone> Node<V> {
+    fn from_sorted_iter(
+        len: usize,
+        entries: &mut impl Iterator<Item = (u32, V)>,
+    ) -> Option<Rc<Self>> {
+        if len == 0 {
+            return None;
+        }
+        let left_len = len / 2;
+        let left = Self::from_sorted_iter(left_len, entries);
+        let (key, value) = entries.next().expect("sorted entry count is exact");
+        let right = Self::from_sorted_iter(len - left_len - 1, entries);
+        Some(Self::new_data_node(key, value, left, right))
+    }
+
     fn new(key: u32, value: V) -> Self {
         Self::Data(DataNode {
             key,
@@ -989,6 +1003,13 @@ impl<V: Clone> Node<V> {
 }
 
 impl<V: Clone> WBTreeMap<V> {
+    pub(crate) fn from_sorted_entries(entries: Vec<(u32, V)>) -> Self {
+        debug_assert!(entries.windows(2).all(|pair| pair[0].0 < pair[1].0));
+        let len = entries.len();
+        let root = Node::from_sorted_iter(len, &mut entries.into_iter());
+        Self { root, len }
+    }
+
     /// Visits unequal structure without constructing split or result trees.
     /// Equal keys are paired so callers can compare nested values themselves.
     pub fn difference_entries<'a>(&'a self, other: &'a Self) -> Difference<'a, V> {
@@ -1047,11 +1068,9 @@ impl<V: Clone> WBTreeMap<V> {
         }
         // Tree edits compare stored keys, so resolve lazy mappings before editing.
         // Mappings only wrap the root; edits and set operations materialize inputs.
-        let mut result = Self::new();
-        for (key, value) in self.iter() {
-            result.insert(key, value.clone());
-        }
-        *self = result;
+        // The visible keys are already sorted, so rebuilding needs no searches.
+        let entries = self.iter().map(|(key, value)| (key, value.clone())).collect();
+        *self = Self::from_sorted_entries(entries);
     }
 
     pub fn insert(&mut self, key: u32, value: V) -> Option<V> {

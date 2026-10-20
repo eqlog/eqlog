@@ -12,6 +12,7 @@ all images through an eager fallback that builds its result in place.
 Store mapping metadata separately to preserve ordinary node size.
 Mutations and canonicalization materialize affected levels while
 preserving existing snapshots.
+When a full level must be rebuilt, its sorted keys allow linear work.
 
 Compare both key and value mapping identities before skipping shared
 differences. Account for deferred transformations and filtered suffixes
