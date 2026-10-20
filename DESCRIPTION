@@ -17,6 +17,8 @@ Represent contiguous leaf elements as shared intervals while keeping
 scattered sets in trees. Preserve canonical current rows, historical
 snapshots, and bounded work accounting through equality and updates.
 Keep balancing ratios valid even when physical size bounds are large.
+Resolve and release deep mapping chains iteratively so evaluator
+threads with small stacks can edit and destroy mapped snapshots.
 
 Validation covers mapped edits, filtered pivots, partial and conflicting
 images, composition, random set operations, source and owner equality,

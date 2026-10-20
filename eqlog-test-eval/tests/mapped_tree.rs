@@ -558,7 +558,7 @@ fn repeated_mapping_and_sparse_edits_keep_cache_coordinates_stable() {
             actual.insert(key, key);
             expected.insert(key, key);
         }
-        for step in 0..160 {
+        for step in 0..512 {
             state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
             let key = (state >> 32) as u32 % 768;
             let snapshot = actual.clone();
@@ -682,4 +682,162 @@ fn sparse_difference_visits_only_requested_mapped_values() {
     assert!(target.all_difference_entries(&target.clone(), |_, _, _| {
         panic!("identical snapshots need no value comparison")
     }));
+}
+
+#[test]
+fn deep_mapping_chains_remain_editable() {
+    let mut relation = PrefixTree2::new();
+    relation.insert([0, 0]);
+    relation.insert([u32::MAX, u32::MAX]);
+    let mapping = MonotoneMap::new(&relation).unwrap();
+    for operation in 0..5 {
+        let mut source = WBTreeMap::new();
+        source.insert(0, 7);
+        source.insert(u32::MAX, 11);
+        for _ in 0..10_000 {
+            source = source.mapped_keys(mapping.clone());
+        }
+        let snapshot = source.clone();
+        match operation {
+            0 => {
+                assert_eq!(source.insert(1, 13), None);
+                assert_eq!(source.get(&1), Some(&13));
+            }
+            1 => {
+                assert_eq!(source.remove(&0), Some(7));
+                assert_eq!(source.get(&0), None);
+            }
+            2 => {
+                *source.get_mut(&u32::MAX).unwrap() = 17;
+                assert_eq!(source.get(&u32::MAX), Some(&17));
+            }
+            3 => {
+                let mut other = WBTreeMap::new();
+                other.insert(u32::MAX, 1);
+                source = source.difference(&other, |_, _, _| None);
+                assert_eq!(source.get(&u32::MAX), None);
+            }
+            4 => {
+                let mut other = WBTreeMap::new();
+                other.insert(u32::MAX, 1);
+                source = source.union(&other, |_, left, right| left + right);
+                assert_eq!(source.get(&u32::MAX), Some(&12));
+            }
+            _ => unreachable!(),
+        }
+        assert_eq!(snapshot.get(&0), Some(&7));
+        assert_eq!(snapshot.get(&u32::MAX), Some(&11));
+    }
+}
+
+#[test]
+fn deep_value_mapping_chains_remain_editable() {
+    let mut source = WBTreeMap::new();
+    source.insert(0, 7);
+    source.insert(1, 9);
+    source.insert(u32::MAX, 11);
+    for _ in 0..4_000 {
+        source = source.mapped_entries(None, |value| Some(value + 1));
+    }
+    let snapshot = source.clone();
+    *source.get_mut(&0).unwrap() += 1;
+    assert_eq!(source.remove(&u32::MAX), Some(4011));
+    assert_eq!(source.get(&0), Some(&4008));
+    assert_eq!(snapshot.get(&0), Some(&4007));
+    assert_eq!(snapshot.get(&u32::MAX), Some(&4011));
+    drop(snapshot);
+    assert_eq!(source.get(&1), Some(&4009));
+}
+
+#[test]
+fn deep_prefix_views_drop_on_a_small_stack() {
+    std::thread::Builder::new()
+        .stack_size(2 * 1024 * 1024)
+        .spawn(|| {
+            let mut rows = PrefixTree2::new();
+            rows.insert([0, u32::MAX]);
+            let expected = rows.clone();
+            let mut relation = PrefixTree2::new();
+            relation.insert([0, 0]);
+            let mapping = MonotoneMap::new(&relation).unwrap();
+            for _ in 0..10_000 {
+                rows.map = rows.map.mapped_keys(mapping.clone());
+            }
+            assert_eq!(
+                rows.intersection(&expected).iter().collect::<Vec<_>>(),
+                [[0, u32::MAX]]
+            );
+            assert_eq!(
+                expected.intersection(&rows).iter().collect::<Vec<_>>(),
+                [[0, u32::MAX]]
+            );
+            let alias = rows.clone();
+            drop(rows);
+            assert!(alias.contains([0, u32::MAX]));
+            drop(alias);
+
+            let mut identity = PrefixTree2::new();
+            identity.insert([0, 0]);
+            for _ in 0..4_000 {
+                let mapping = MonotoneMap::new(&identity).unwrap();
+                identity.map = identity.map.mapped_keys(mapping);
+            }
+            assert_eq!(identity.iter().collect::<Vec<_>>(), [[0, 0]]);
+            drop(identity);
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+#[test]
+fn deeply_filtered_pivots_survive_boundary_edits() {
+    let mut source = WBTreeMap::new();
+    let mut expected = BTreeMap::new();
+    for offset in 0..2048 {
+        for key in [offset, u32::MAX - offset] {
+            source.insert(key, offset);
+            if offset % 127 == 0 {
+                expected.insert(key, offset);
+            }
+        }
+    }
+    for _ in 0..64 {
+        source = source.mapped_entries(None, |value| (value % 127 == 0).then_some(*value));
+    }
+    let snapshot = source.clone();
+    for key in [0, 1, 126, 127, u32::MAX - 127, u32::MAX - 1, u32::MAX] {
+        assert_eq!(source.remove(&key), expected.remove(&key));
+        assert_eq!(source.insert(key, 17), expected.insert(key, 17));
+        *source.get_mut(&key).unwrap() += 1;
+        *expected.get_mut(&key).unwrap() += 1;
+    }
+    assert_eq!(
+        source
+            .iter()
+            .map(|(key, &value)| (key, value))
+            .collect::<BTreeMap<_, _>>(),
+        expected
+    );
+    assert!(snapshot.iter().all(|(_, value)| value % 127 == 0));
+    assert_eq!(snapshot.len(), 34);
+}
+
+#[test]
+fn deep_mapping_chains_propagate_an_empty_inner_view() {
+    let mut source = WBTreeMap::new();
+    source.insert(0, 7);
+    source = source.mapped_entries(None, |_| None);
+    let mut relation = PrefixTree2::new();
+    relation.insert([0, 0]);
+    let mapping = MonotoneMap::new(&relation).unwrap();
+    for _ in 0..10_000 {
+        source = source.mapped_keys(mapping.clone());
+    }
+    let snapshot = source.clone();
+    assert_eq!(source.get_mut(&0), None);
+    assert_eq!(source.insert(u32::MAX, 11), None);
+    assert_eq!(source.get(&u32::MAX), Some(&11));
+    assert_eq!(source.len(), 1);
+    assert!(snapshot.is_empty());
 }

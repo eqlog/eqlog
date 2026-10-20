@@ -87,6 +87,25 @@ struct MappingNode<V: Clone> {
     exposed: OnceCell<Option<Rc<Node<V>>>>,
 }
 
+impl<V: Clone> Drop for MappingNode<V> {
+    fn drop(&mut self) {
+        let mut child = self.child.take();
+        // Retain the child while releasing cached views and their source aliases.
+        // Long morphism chains then need no recursive Rc destruction.
+        drop(self.exposed.take());
+        if let Some(transform) = Rc::get_mut(&mut self.transform) {
+            drop(transform.keys.take());
+            drop(transform.values.take());
+        }
+        while let Some(node) = child {
+            match Rc::try_unwrap(node) {
+                Ok(Node::Mapping(mut mapping)) => child = mapping.child.take(),
+                Ok(Node::Data(_)) | Err(_) => return,
+            }
+        }
+    }
+}
+
 struct MappingTransform<V: Clone> {
     keys: Option<MonotoneMap>,
     values: Option<ValueMapping<V>>,
@@ -309,18 +328,49 @@ impl<V: Clone> Node<V> {
         })
     }
 
+    fn expose_mapping_chain(mapping: &MappingNode<V>) -> &Option<Rc<Self>> {
+        if let Some(exposed) = mapping.exposed.get() {
+            return exposed;
+        }
+        let mut pending = Vec::new();
+        let mut current = mapping.child.as_deref();
+        while let Some(node) = current {
+            match node {
+                Self::Data(_) => break,
+                Self::Mapping(inner) => {
+                    if inner.exposed.get().is_some() {
+                        break;
+                    }
+                    pending.push(inner);
+                    current = inner.child.as_deref();
+                }
+            }
+        }
+        // Morphism chains may be much deeper than their balanced source trees.
+        // Resolve their dependencies before exposing pivots on the call stack.
+        for inner in pending.into_iter().rev() {
+            inner.expose();
+        }
+        mapping.expose()
+    }
+
     fn expose(node: Option<Rc<Self>>) -> Option<Rc<Self>> {
-        let node = node?;
-        match node.as_ref() {
-            Self::Data(_) => Some(node),
-            Self::Mapping(mapping) => Self::expose(mapping.expose().clone()),
+        let mut node = node?;
+        loop {
+            let next = match node.as_ref() {
+                Self::Data(_) => return Some(node),
+                Self::Mapping(mapping) => Self::expose_mapping_chain(mapping).clone()?,
+            };
+            node = next;
         }
     }
 
-    fn data(node: &Rc<Self>) -> Option<&DataNode<V>> {
-        match node.as_ref() {
-            Self::Data(data) => Some(data),
-            Self::Mapping(mapping) => mapping.expose().as_ref().and_then(Self::data),
+    fn data(mut node: &Rc<Self>) -> Option<&DataNode<V>> {
+        loop {
+            match node.as_ref() {
+                Self::Data(data) => return Some(data),
+                Self::Mapping(mapping) => node = Self::expose_mapping_chain(mapping).as_ref()?,
+            }
         }
     }
 
@@ -363,10 +413,14 @@ impl<V: Clone> Node<V> {
     }
 
     fn size(node: &Option<Rc<Node<V>>>) -> usize {
-        node.as_ref().map_or(0, |n| match n.as_ref() {
-            Node::Data(data_node) => data_node.size,
-            Node::Mapping(mapping_node) => Self::size(&mapping_node.child),
-        })
+        let mut current = node.as_deref();
+        while let Some(node) = current {
+            match node {
+                Node::Data(data) => return data.size,
+                Node::Mapping(mapping) => current = mapping.child.as_deref(),
+            }
+        }
+        0
     }
 
     fn rotate_left(mut node: Rc<Self>) -> Rc<Self> {
