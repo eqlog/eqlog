@@ -208,6 +208,7 @@ struct MemberSpace {
     snapshot: MemberSnapshot,
     local_domain: WBTreeSet,
     local_equations: Vec<(u32, u32)>,
+    local_merges: Vec<MemberMerge>,
     inherited: Option<Inheritance>,
     component: u32,
     children: Vec<u32>,
@@ -318,6 +319,7 @@ impl MemberSpaces {
                 snapshot: MemberSnapshot::new(owner),
                 local_domain: WBTreeSet::new(),
                 local_equations: Vec::new(),
+                local_merges: Vec::new(),
                 inherited: None,
                 component,
                 children: Vec::new(),
@@ -378,6 +380,12 @@ impl MemberSpaces {
 
     pub fn get_snapshot(&self, owner: u32) -> Option<&MemberSnapshot> {
         self.owners.get(&owner).map(|space| &space.snapshot)
+    }
+
+    /// A relation can need rebasing even when its source partition is unchanged.
+    /// These events are relative to the source snapshot last adopted by refresh.
+    pub fn local_merges(&self, owner: u32) -> &[MemberMerge] {
+        &self.owners.get(&owner).expect("unknown owner").local_merges
     }
 
     fn reserve(&mut self, owner: u32, extent: u64) {
@@ -493,9 +501,11 @@ impl MemberSpaces {
             canonical_domain.insert(origin);
         }
         let mut partition = source.partition.clone();
+        let mut local_merges = Vec::new();
         for &(lhs, rhs) in &space.local_equations {
             if let Some(merge) = partition.equate(lhs, rhs) {
                 canonical_domain.remove(&merge.loser);
+                local_merges.push(merge);
                 on_merge(merge);
             }
         }
@@ -508,6 +518,7 @@ impl MemberSpaces {
         space.snapshot.domain = domain;
         space.snapshot.canonical_domain = canonical_domain;
         space.snapshot.partition = partition;
+        space.local_merges = local_merges;
         space.snapshot.revision += 1;
         space.inherited.as_mut().unwrap().revision = revision;
         Some(source)
@@ -543,6 +554,7 @@ impl MemberSpaces {
         let merge = space.snapshot.partition.equate(lhs, rhs)?;
         space.snapshot.canonical_domain.remove(&merge.loser);
         space.local_equations.push((lhs, rhs));
+        space.local_merges.push(merge);
         space.snapshot.revision += 1;
         Some(merge)
     }

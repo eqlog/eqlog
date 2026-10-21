@@ -82,3 +82,6 @@ export their actual carriers and aliases through dynamic model data.
 Connect scoped native member operations to compact identity spaces.
 Convert local origin outputs back to owner handles on mutation. Preserve
 public root and allocation behavior.
+
+Retain local quotient events when only parent rows change, so inherited
+row refresh still respects equations already made in the target.

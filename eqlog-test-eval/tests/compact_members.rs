@@ -28,6 +28,7 @@ fn replay_events_normalize_local_rows_after_parent_equality() {
     spaces.equate(0, a, b);
     let refresh = spaces.refresh_with_merges(1).unwrap();
     assert_eq!(refresh.merges.len(), 2);
+    assert_eq!(spaces.local_merges(1), refresh.merges.as_slice());
     assert_eq!(refresh.source.root_origin(local_origin), None);
     let current = spaces.snapshot(1);
     for origin in [local_origin, a_origin, c_origin] {
@@ -49,6 +50,7 @@ fn replay_events_normalize_local_rows_after_parent_equality() {
     assert_eq!(spaces.source(1), Some(0));
     assert_eq!(spaces.owners().collect::<Vec<_>>(), vec![0, 1]);
     assert!(spaces.refresh_with_merges(1).is_none());
+    assert_eq!(spaces.local_merges(1), refresh.merges.as_slice());
 }
 
 #[test]
