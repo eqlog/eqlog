@@ -6,9 +6,11 @@ model Scope {
     func at(Key) -> Value;
     pred active(Value);
     pred output(Key);
+    pred simple_output(Key);
 }
 
 pred task(Scope, Key, Key, Tag);
+pred simple_task(Scope, Key, Key);
 pred request(Scope, Key);
 pred fetched(Scope, Value);
 
@@ -23,4 +25,11 @@ rule fetch {
     if request(scope, key);
     if scope.at(key) = value;
     then fetched(scope, value);
+}
+
+rule simple_fire {
+    if scope.active(value);
+    if scope.at(key) = value;
+    if simple_task(scope, key, output);
+    then scope.simple_output(output);
 }

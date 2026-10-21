@@ -159,3 +159,7 @@ a complete inherited difference for every owner.
 
 Restore owner prefixes around deferred age views without expanding
 their snapshots. Bound planner probes using stored key-count limits.
+
+Prefer owner inputs that bind independent variables. A function result
+follows from its domain and must not make a broad function scan look as
+selective as a small local job.

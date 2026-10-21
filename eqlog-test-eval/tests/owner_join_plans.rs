@@ -21,10 +21,13 @@ fn owner_prefix_plans_preserve_ages_fanout_and_equalities() {
             model.insert_at(scope, key, value);
         }
         model.insert_task(dense, key, key, tag);
+        model.insert_simple_task(dense, key, key);
         model.insert_task(fanout, keys[0], key, tag);
+        model.insert_simple_task(fanout, keys[0], key);
     }
     for i in [1, 17] {
         model.insert_task(sparse, keys[i], keys[i], tag);
+        model.insert_simple_task(sparse, keys[i], keys[i]);
     }
     model.insert_task(sparse, keys[1], keys[1], alias);
     model.close();
@@ -44,11 +47,18 @@ fn owner_prefix_plans_preserve_ages_fanout_and_equalities() {
         assert!(!model.output(empty, key));
     }
     assert_eq!(model.iter_output().count(), 131);
+    assert_eq!(
+        model
+            .iter_simple_output()
+            .collect::<std::collections::BTreeSet<_>>(),
+        model.iter_output().collect()
+    );
 
     model.equate_value(values[7], values[9]);
     model.equate_tag(tag, alias);
     model.insert_active(dense, values[23]);
     model.insert_task(sparse, keys[31], keys[31], tag);
+    model.insert_simple_task(sparse, keys[31], keys[31]);
     model.insert_request(dense, keys[9]);
     model.close();
     assert!(model.output(dense, keys[9]));
@@ -56,6 +66,18 @@ fn owner_prefix_plans_preserve_ages_fanout_and_equalities() {
     assert!(model.output(sparse, keys[31]));
     assert!(model.fetched(dense, values[7]));
     assert_eq!(model.iter_output().count(), 134);
+    assert_eq!(
+        model
+            .iter_simple_output()
+            .collect::<std::collections::BTreeSet<_>>(),
+        model.iter_output().collect()
+    );
     model.close();
     assert_eq!(model.iter_output().count(), 134);
+    assert_eq!(
+        model
+            .iter_simple_output()
+            .collect::<std::collections::BTreeSet<_>>(),
+        model.iter_output().collect()
+    );
 }

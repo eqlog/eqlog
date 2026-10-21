@@ -231,14 +231,25 @@ fn owner_alternative(rule: &FlatRule, indices: &IndexSelection) -> Option<FlatRu
                 .iter()
                 .filter(|arg| !fixed.contains(*arg))
                 .collect();
+            let arguments = match stmt.rel {
+                FlatInRel::Rel(FlatRel::Func(_)) => &stmt.args[..stmt.args.len() - 1],
+                FlatInRel::Rel(FlatRel::Pred(_) | FlatRel::ModelMember(_))
+                | FlatInRel::RelWithDiagonals { .. }
+                | FlatInRel::TypeSet(_)
+                | FlatInRel::Equality(_) => stmt.args.as_slice(),
+            };
+            let inputs: BTreeSet<_> = arguments
+                .iter()
+                .filter(|arg| !fixed.contains(*arg))
+                .collect();
             (!query.projections.is_empty()
                 && !free.is_empty()
                 && indices.existing_query(&stmt.rel, &query).is_some())
-            .then_some((Reverse(free.len()), i))
+            .then_some((Reverse(inputs.len()), Reverse(free.len()), i))
         })
         .collect();
     candidates.sort_unstable();
-    for (_, selected) in candidates {
+    for (_, _, selected) in candidates {
         let mut other = rule.clone();
         let first = other.premise.remove(selected);
         other.premise.insert(0, first);
