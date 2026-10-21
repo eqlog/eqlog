@@ -1,0 +1,27 @@
+type Tag;
+
+model World {
+    type El;
+    pred edge(El, El);
+    pred marked(El);
+    pred scanned(El);
+    pred seen(Tag);
+    func item(Tag) -> El;
+
+    rule step {
+        if edge(x, y);
+        if marked(x);
+        then marked(y);
+    }
+
+    rule scan {
+        if x: El;
+        then scanned(x);
+    }
+
+    rule reverse_lookup {
+        if marked(x);
+        if item(tag) = x;
+        then seen(tag);
+    }
+}

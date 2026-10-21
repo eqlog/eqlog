@@ -1232,7 +1232,7 @@ fn end_stable_input(
         || source.to_owned(),
         |model| scoped_tree(source, rel, model, ctx),
     );
-    writeln!(f, "let full = {current}.clone();")?;
+    writeln!(f, "let full = ({current}).clone();")?;
     for i in (0..prefix).rev() {
         let dim = arity - i;
         writeln!(f, "let full = {{ let mut tree = PrefixTree{dim}::new(); tree.insert_restriction(owners[{i}], full); tree }};")?;
@@ -1296,7 +1296,7 @@ fn scoped_tree(source: &str, rel: &FlatInRel, model: TypeId, ctx: &RustGenCtx<'_
                 && ctx.signature().type_(*typ).parents.as_slice() == [model]
             {
                 let name = display_type(*typ, ctx).to_string().to_case(Case::Snake);
-                return format!("(if self.__compact_members_{name}.is_some() {{ self.__compact_domain_{name}.get(owners[0]).unwrap_or_else(|| PrefixTree1::empty()) }} else {{ {current} }})");
+                return format!("if self.__compact_members_{name}.is_some() {{ self.__compact_domain_{name}.get(owners[0]).unwrap_or_else(|| PrefixTree1::empty()) }} else {{ {current} }}");
             }
         }
         FlatInRel::Rel(FlatRel::Pred(_) | FlatRel::Func(_))
