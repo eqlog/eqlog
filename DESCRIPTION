@@ -125,3 +125,7 @@ Preserve live totality after operations require ordinary storage. Guard
 owner and morphism quotients against cycles before mutation. Keep
 parallel morphism images independent and freeze pending scoped outputs
 before changing storage.
+
+Retain global relation roots when an owner suffix is unchanged. This
+keeps publication and rule checkpoints from comparing equal prefixes
+after an unrelated local relation update.

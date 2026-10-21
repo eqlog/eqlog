@@ -1,5 +1,6 @@
 #![cfg(not(feature = "desugared"))]
 
+use eqlog_runtime::__private::SnapshotSet;
 use eqlog_test_eval as _;
 
 include!(concat!(
@@ -26,6 +27,24 @@ fn inherit(model: &mut CompactNativeIndices, source: World, target: World) {
     model.insert_world_mor_cod(morphism, target);
     model.__compact_inherit_world(source.0, target.0);
     model.__total_members_world.insert(morphism.0);
+}
+
+#[test]
+fn unrelated_local_facts_keep_published_relation_roots() {
+    let mut model = CompactNativeIndices::new();
+    let world = model.new_world();
+    let element = model.new_el(world);
+    let tag = model.new_tag();
+    model.insert_item(world, tag, element);
+    model.insert_marked(world, element);
+    model.__enable_compact_world_indices();
+    let before = model.marked_order_0_1_all.clone();
+    let other = model.new_tag();
+    model.insert_item(world, other, element);
+    assert!(SnapshotSet::shares_root(
+        &before,
+        &model.marked_order_0_1_all
+    ));
 }
 
 #[test]

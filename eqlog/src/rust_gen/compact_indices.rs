@@ -149,7 +149,9 @@ fn publish_tree(field: &str, dim: usize) -> String {
             "if suffix.is_empty() {{ {field}.remove([owner]); }} else {{ {field}.insert([owner]); }}"
         );
     }
-    format!("if suffix.is_empty() {{ {field}.map.remove(&owner); }} else {{ {field}.map.insert(owner, suffix); }}")
+    // Rebuilding unchanged owner pivots would make global version publication
+    // repeatedly compare all owners visited earlier in the same traversal.
+    format!("if suffix.is_empty() {{ {field}.map.remove(&owner); }} else if !{field}.get(owner).is_some_and(|current| eqlog_runtime::__private::SnapshotSet::shares_root(current, &suffix)) {{ {field}.map.insert(owner, suffix); }}")
 }
 
 pub(super) fn insert_hook<'a>(rel: FlatRel, ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
