@@ -728,9 +728,26 @@ fn isomorphism_fuel_accounts_for_physical_relation_storage() {
     let mut identity = PrefixTree2::new();
     identity.insert([0, 0]);
 
+    let mut composed = identity.clone();
+    for _ in 0..256 {
+        composed.map = composed.map.mapped(identity.clone());
+    }
+    let mut compact_relation = relation.clone();
+    compact_relation.rows.table = Table::from(composed);
+    let compact = from_parts(signature, vec![type_data.clone()], vec![compact_relation]).unwrap();
+    assert_eq!(compact.tuples(RelationId(0)).unwrap().count(), 1);
+    check_witness(
+        &find_isomorphism(&compact, &compact, Fuel::Finite(1_000))
+            .unwrap()
+            .unwrap(),
+    );
+
+    // An unused second run keeps the costly layers from composing into one.
+    let mut fragmented_identity = identity.clone();
+    fragmented_identity.insert([u32::MAX, u32::MAX]);
     let mut mapped = identity.clone();
     for _ in 0..256 {
-        mapped.map = mapped.map.mapped(identity.clone());
+        mapped.map = mapped.map.mapped(fragmented_identity.clone());
     }
     let mut empty_branches = identity.clone();
     for i in 1..2_048 {
@@ -774,8 +791,26 @@ fn isomorphism_fuel_accounts_for_mapped_suffix_storage() {
     for i in 0..64 {
         nested.insert([2 * i]);
     }
+    let mut composed = nested.clone();
     for _ in 0..256 {
-        nested = nested.mapped(Some(identity.clone()));
+        composed = composed.mapped(Some(identity.clone()));
+    }
+    let mut compact_rows = PrefixTree2::new();
+    compact_rows.insert_restriction(0, composed);
+    let mut compact_relation = relation.clone();
+    compact_relation.rows.table = Table::from(compact_rows);
+    let compact = from_parts(signature, vec![type_data.clone()], vec![compact_relation]).unwrap();
+    assert_eq!(compact.tuples(RelationId(0)).unwrap().count(), 1);
+    check_witness(
+        &find_isomorphism(&compact, &compact, Fuel::Finite(1_000))
+            .unwrap()
+            .unwrap(),
+    );
+
+    let mut fragmented_identity = identity.clone();
+    fragmented_identity.insert([u32::MAX, u32::MAX]);
+    for _ in 0..256 {
+        nested = nested.mapped(Some(fragmented_identity.clone()));
     }
     let mut filtered = PrefixTree1::new();
     for i in 0..2_048 {
