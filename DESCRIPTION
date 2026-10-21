@@ -100,3 +100,7 @@ roots and replay local support without building explicit image tuples.
 Execute compact scoped rules through late source growth, local
 equations, reverse function lookups, and owner-local member
 enumeration.
+
+Reject compact activation when member coordinates can escape their owner
+scope. Validate selected indexes and scheduled rule scopes. Allow
+member-free global relations and generated morphism rules.
