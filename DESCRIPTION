@@ -1,81 +1,36 @@
-Share mapped members without broad rebuilding
+Share native members through lazy tree mappings
 
-Carry monotone element maps through keys and child prefix trees so
-native transport can share entire inherited relation subtrees. Cache
-transformed children on demand and filter empty images. Shared transform
-descriptors keep ordinary data nodes small and let edited paths retain
-untouched mapped child views and immutable snapshots.
+Native transport should preserve shared relation subtrees when member
+images follow an increasing partial map. Carry compressed offset runs
+through both prefix keys and suffix values, caching transformed children
+only when needed. Keep general non-injective maps eager and merge their
+colliding images into owned destination suffixes.
 
-Keep sparse updates and comparisons driven by the few changed keys.
-Normalize small mapped sets without scanning their entire cardinality.
-Build general image sets in place, preserving empty-result sharing,
-and use sorted keys for any full-level rebuild that is still needed.
-Merge singleton suffixes through mutable entries so late images reuse
-destination paths while empty destinations retain subtree sharing.
-Reuse target coverage across owned-support cleanup when a single model
-prefix identifies the same immutable target slice for both checks.
-Carry source keys alongside deferred value lookups so the common single
-transform needs no temporary allocation or repeated key conversions.
+Preserve canonical current rows, historical snapshots, and finite fuel
+through equality and updates. Keep cache lookups in their original key
+coordinates, seek directly through partial mapping domains, and resolve
+and release deep mapping chains without recursive stack growth.
 
-Represent contiguous leaf elements as shared intervals while keeping
-scattered sets in trees. Keep fragmented intervals in persistent trees
-so sparse holes never expand every surviving member into a node.
-Compare shared interval subtrees directly and retain covered roots in
-unions and intersections, avoiding repeated work after equality.
+Bound eager mapping by both prefix width and total materialized work so
+small and sparse relations avoid deferred caches. Reject existing lazy
+children during preflight without evaluating their callbacks. Represent
+dense leaf sets as shared intervals and retain persistent interval trees
+when equality introduces many holes.
 
-Preserve canonical current rows, historical snapshots, and bounded
-work accounting through equality and updates. Charge interval traversal
-separately from member expansion while retaining cheap dense-leaf work.
-Keep balancing ratios valid even when physical size bounds are large.
-Expose the nonempty subtree invariant to keep prefix nodes compact
-without changing the checked subtree-size arithmetic.
-Resolve and release deep mapping chains iteratively so evaluator
-threads with small stacks can edit and destroy mapped snapshots.
+Keep ordinary nodes compact, update only edited paths, and build sorted
+levels without repeated searches. Preserve subtree sharing in unions,
+intersections, and differences. Avoid copying removal pivots that are
+immediately consumed, and use consistent subtree weights for balancing
+and joining. Keep deferred traversal outside ordinary iterator and
+update paths so full tuple consumption retains a small hot loop.
 
-Validation covers mapped edits, filtered pivots, partial and conflicting
-images, composition, random set operations, source and owner equality,
-dynamic roundtrips, and finite fuel. Native and desugared generated
-models retain the same results under both evaluation strategies.
+Reuse target coverage during ownership cleanup and share transport map
+deltas only when both current and previous snapshots match. Distinct
+column histories remain independent even when their current maps agree.
 
-Retain raw cache origins through identity and uniform-offset views so
-value lookups avoid repeatedly searching the same morphism chain. Keep
-proper subtree origins small and compose validated offsets modulo the ID
-width while preserving filtered domains and historical snapshots.
-
-Seek through partial mapping domains without visiting excluded source
-rows. Preserve each child's bounds while returning to ordinary sibling
-paths, and keep exact trees on a direct iterator path. Avoid repeated
-endpoint searches when outer bounds already cover a complete map image.
-
-Map bounded materialized suffixes directly to avoid deferred caches for
-just a few entries. Preflight rejects existing lazy descendants without
-evaluating their callbacks, so a small parent cannot force a large
-suffix emptiness check. Keep point adapters outside range iterator
-storage so ordinary leaf traversal needs less stack space.
-
-Reuse owned destination suffixes during bulk unions. For colliding
-non-injective head images, extend the existing child directly instead
-of building and discarding an intermediate suffix. Multiple images
-still share a transformed child, and filtering keeps snapshots intact.
-
-Keep mapped seeking outside the ordinary iterator's inlining budget so
-full tuple consumption retains a compact range traversal loop.
-
-Use a surviving materialized pivot to answer emptiness checks without
-forcing deferred descendants after a path edit.
-
-Keep deferred pivot resolution outside ordinary update paths so inserts
-and structural merges can check materialized nodes without helper calls.
-
-Scale bounded eager mapping by the number of outer keys so wide sparse
-relations avoid deferred caches. Cap total preflight work and retain the
-small limit when only keys change, preserving shared dense suffixes.
-
-Consume terminal removal pivots before copying shared paths, avoiding
-replacement allocations while preserving snapshots. Use the same
-subtree weights for joining and balancing so small valid joins retain
-their child roots.
-
-Reuse image deltas and changed-morphism scans across columns with the
-same current and previous snapshots. Comparing both roots preserves
-distinct checkpoint histories while avoiding repeated transport work.
+Validation includes the full workspace suite, native and desugared
+member evaluators under both evaluation strategies, and randomized
+mutation sequences checked against an independent relational oracle.
+Regression cases cover filtered pivots, partial and conflicting images,
+noncanonical rows, source and owner equalities, shared snapshots, long
+mapping chains, late images, dynamic roundtrips, and finite fuel.
