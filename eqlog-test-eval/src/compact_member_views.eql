@@ -1,0 +1,15 @@
+type Label;
+
+model World {
+    type El;
+    pred tagged(El, Label);
+    pred labelled_edge(El, Label, El);
+    func class_image(El) -> El;
+    func item(Label) -> El;
+
+    rule follow {
+        if labelled_edge(x, label, y);
+        if tagged(x, label);
+        then tagged(y, label);
+    }
+}

@@ -10,6 +10,7 @@ use crate::flat_eqlog::{iter_flat_rels, FlatInRel, FlatRel, IndexSelection};
 use crate::fmt_util::FmtFn;
 use crate::options::ModelMode;
 
+use super::compact_views;
 use super::indexed::{self, table_field};
 use super::{
     display_all_index_field_name, display_current_index_field_name,
@@ -242,12 +243,27 @@ impl DynamicContext<'_> {
                         )
                     }
                 };
-                writedoc! {f, "
-                    rows: eqlog_runtime::__private::RelationIndex {{
+                let ordinary = formatdoc! {"
+                    eqlog_runtime::__private::RelationIndex {{
                         order: vec![{order}],
                         table: eqlog_runtime::__private::Table::from({tree}),
-                    }},
-                "}?;
+                    }}
+                "};
+                let rows = if compact_views::supports(rel, self.ctx) {
+                    let name = self.ctx.rel_name(rel).to_case(Case::Snake);
+                    let order = (0..rel.arity(self.ctx.signature()).len()).join(", ");
+                    formatdoc! {"
+                        match self.__compact_export_{name}() {{
+                            Some(table) => eqlog_runtime::__private::RelationIndex {{
+                                order: vec![{order}], table,
+                            }},
+                            None => {ordinary},
+                        }}
+                    "}
+                } else {
+                    ordinary
+                };
+                writeln!(f, "rows: {rows},")?;
                 writeln!(f, "}},")?;
             }
             writedoc! {f, "

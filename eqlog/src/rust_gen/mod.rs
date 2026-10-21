@@ -1,5 +1,8 @@
+mod compact_api;
+mod compact_eligibility;
 mod compact_indices;
 mod compact_members;
+mod compact_policy;
 mod compact_views;
 mod context;
 mod dynamic;
@@ -1076,6 +1079,8 @@ fn display_pub_insert_relation<'a>(
         };
         let args = rel_args.iter().format(", ").to_string();
         let compact_insert = compact_indices::insert_hook(rel, ctx);
+        let policy_guard = compact_policy::insert_guard(rel, rel_args, ctx);
+        let policy_notice = compact_policy::endpoint_notice(rel, rel_args, ctx);
         let parent_checks = FmtFn(|f| match rel {
             FlatRel::ModelMember(typ) => {
                 let (member, parents) = rel_args.split_last().unwrap();
@@ -1106,10 +1111,12 @@ fn display_pub_insert_relation<'a>(
             {supported_inline}
             fn {supported_insert}(&mut self, retain_support: bool, {rel_fn_args}) {{
                 {canonicalize}
+                {policy_guard}
                 {compact_insert}
                 {unwrap_args}
 
                 {contains_checks}
+                {policy_notice}
 
                 self.__closed = false;
                 {invalidate}
@@ -1445,6 +1452,7 @@ fn display_equate_elements<'a>(
                 }}
             "}
         });
+        let policy_equality = compact_policy::equality_guard(typ, ctx);
 
         writedoc! {f, "
             /// Enforces the equality `lhs = rhs`.
@@ -1465,6 +1473,7 @@ fn display_equate_elements<'a>(
                 if lhs == rhs {{
                     return;
                 }}
+                {policy_equality}
                 self.__closed = false;
                 {invalidate_models}
                 let lhs_weight = self.{type_snake}_weights[lhs.0 as usize];
@@ -2981,6 +2990,7 @@ fn display_new_fn<'a>(
         writeln!(f, "__pending_delta: ModelDelta::new(),")?;
         write!(f, "{}", native_indices::init(native_plans))?;
         write!(f, "{}", compact_indices::fields(ctx, true))?;
+        write!(f, "{}", compact_policy::fields(ctx, true))?;
         write!(f, "{}", transport::fields(ctx, index_selection, true))?;
         write!(f, "{}", codegen.init(index_selection, ctx))?;
         for typ in ctx.signature().iter_types() {
@@ -3399,6 +3409,7 @@ fn display_theory_struct<'a>(
             .format("\n");
 
         let scheduler_fields = FmtFn(move |f| {
+            write!(f, "{}", compact_policy::fields(ctx, false))?;
             write!(f, "{}", compact_indices::fields(ctx, false))?;
             write!(f, "{}", transport::fields(ctx, index_selection, false))?;
             write!(f, "{}", native_indices::fields(native_plans, ctx))?;
@@ -3433,6 +3444,8 @@ fn display_theory_impl<'a>(
     FmtFn(move |f| {
         let ram_modules = program.modules.as_slice();
         writeln!(f, "impl {} {{", name)?;
+        write!(f, "{}", compact_api::methods(program, index_selection, ctx))?;
+        write!(f, "{}", compact_policy::methods(ctx))?;
         write!(f, "{}", compact_views::methods(ctx))?;
         match ctx.model_mode() {
             ModelMode::Native => {

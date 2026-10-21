@@ -5,6 +5,7 @@ use std::fmt::Display;
 
 use indoc::{formatdoc, writedoc};
 
+use super::compact_policy;
 use super::indices::{projection, source_relation};
 use super::native_indices;
 use super::{
@@ -960,6 +961,9 @@ impl<'s> Codegen<'s> {
                         FlatOutRel::Equality(_) | FlatOutRel::FuncDomain(_) => {}
                     }
                 }
+                if stratum.model.is_none() && !compact_policy::models(ctx).is_empty() {
+                    writeln!(f, "self.__prepare_total_member_policies();")?;
+                }
                 writeln!(f, "true }}")?;
             }
             for (&root, &m) in &self.models {
@@ -1149,6 +1153,14 @@ impl<'s> Codegen<'s> {
         selection: &'a IndexSelection,
     ) -> impl Display + 'a {
         FmtFn(move |f| {
+            let (prepare_policy, complete_policy) = if compact_policy::models(ctx).is_empty() {
+                ("", "")
+            } else {
+                (
+                    "self.__prepare_total_member_policies();",
+                    "self.__complete_total_members();",
+                )
+            };
             writedoc! {f, "
                 /// Closes the model until the condition holds or all rules are satisfied.
                 /// Depending on the axioms, this may run indefinitely.
@@ -1161,15 +1173,18 @@ impl<'s> Codegen<'s> {
                     if self.__closed {{
                         return condition.is_some_and(|condition| condition(self));
                     }}
+                    {prepare_policy}
                     self.__canonicalize_relations();
                     if self.__check_condition(condition) {{ return true; }}
                     let mut delta = std::mem::replace(&mut self.__pending_delta, ModelDelta::new());
                     loop {{
+                        {prepare_policy}
             "}?;
             emit_schedule(f, self.body, None, 0, None, "false", self, ctx, selection)?;
             writedoc! {f, "
                         self.__allocated = false;
                         delta.apply_func_defs(self);
+                        {complete_policy}
                         if !self.__allocated {{
                             std::mem::swap(&mut self.__pending_delta, &mut delta);
                             self.canonicalize();

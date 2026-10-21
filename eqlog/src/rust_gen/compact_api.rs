@@ -1,0 +1,78 @@
+use std::fmt::Display;
+
+use convert_case::{Case, Casing};
+use indoc::writedoc;
+
+use super::{compact_eligibility, compact_indices, RustGenCtx};
+use crate::flat_eqlog::IndexSelection;
+use crate::fmt_util::FmtFn;
+use crate::ram::RamProgram;
+
+pub(super) fn methods<'a>(
+    program: &'a RamProgram,
+    selection: &'a IndexSelection,
+    ctx: &'a RustGenCtx<'a>,
+) -> impl Display + 'a {
+    FmtFn(move |f| {
+        for (_, ids) in ctx.signature().iter_model_decls() {
+            let model = ids.type_;
+            if !compact_indices::supports_model(model, ctx) {
+                continue;
+            }
+            let name = ctx.type_name(model).to_case(Case::Snake);
+            let mor_camel = ctx.type_name(ids.mor).to_case(Case::UpperCamel);
+            let member = compact_indices::members(model, ctx)[0];
+            let member_name = ctx.type_name(member).to_case(Case::Snake);
+            let eligibility =
+                match compact_eligibility::rejection_reason(model, program, selection, ctx) {
+                    Some(reason) => format!("assert!(false, {reason:?});"),
+                    None => String::new(),
+                };
+            writedoc! {f, "
+                /// Enables shared member storage for acyclic total inheritance.
+                /// Requires a graph without assigned morphism endpoints.
+                /// Existing member handles remain valid after activation.
+                /// An operation requiring ordinary storage preserves existing handles.
+                pub fn enable_compact_{name}(&mut self) {{
+                    if self.__compact_indices_{name}.is_some() {{ return; }}
+                    {eligibility}
+                    assert!(self.__total_members_{name}.is_empty(),
+                        \"compact storage cannot be reenabled after total inheritance was materialized\");
+                    self.close();
+                    assert!(self.iter_{name}_mor_dom().next().is_none()
+                        && self.iter_{name}_mor_cod().next().is_none(),
+                        \"enable compact storage before assigning morphism endpoints\");
+                    self.__enable_compact_{name}_indices();
+                }}
+
+                /// Inherits all current and future source members along this morphism.
+                /// Total inheritance must be acyclic; compact targets have one source.
+                /// Returns whether this registration or its inherited state changed.
+                pub fn inherit_total_{name}_members(&mut self, morphism: {mor_camel}) -> bool {{
+                    let morphism = self.root_{name}_mor(morphism);
+                    let source = self.{name}_mor_dom(morphism)
+                        .expect(\"total inheritance requires a morphism source\");
+                    let target = self.{name}_mor_cod(morphism)
+                        .expect(\"total inheritance requires a morphism target\");
+                    if !self.__total_members_{name}.contains(&morphism.0)
+                        && self.__compact_members_{member_name}.as_ref()
+                            .is_some_and(|spaces| spaces.source(target.0).is_some())
+                    {{
+                        self.__check_total_{name}_morphism(morphism.0);
+                        self.__materialize_compact_members();
+                    }}
+                    let refreshed = if self.__compact_indices_{name}.is_some() {{
+                        self.__compact_inherit_{name}(source.0, target.0)
+                    }} else {{
+                        self.__check_total_{name}_morphism(morphism.0);
+                        false
+                    }};
+                    let registered = self.__total_members_{name}.insert(morphism.0);
+                    if registered || refreshed {{ self.__closed = false; }}
+                    registered || refreshed
+                }}
+            "}?;
+        }
+        Ok(())
+    })
+}

@@ -119,3 +119,9 @@ repeated comparisons of equal inherited tables.
 Restrict diagonal-only rule inputs before computing differences. Prefix
 lookups skip inherited rows that cannot match. Restore cached global
 inputs before preparing secondary indexes for another rule group.
+
+Expose compact total inheritance without changing public handle meaning.
+Preserve live totality after operations require ordinary storage. Guard
+owner and morphism quotients against cycles before mutation. Keep
+parallel morphism images independent and freeze pending scoped outputs
+before changing storage.

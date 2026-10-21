@@ -73,6 +73,11 @@ eqlog_mod!(member_parents);
 eqlog_mod!(member_mapping);
 #[cfg(test)]
 mod member_mapping_test;
+eqlog_mod!(compact_member_views);
+#[cfg(all(test, not(feature = "desugared")))]
+mod compact_member_policy_test;
+#[cfg(all(test, not(feature = "desugared")))]
+mod compact_member_views_test;
 eqlog_mod!(canonicalization);
 eqlog_mod!(prefix_diagonals);
 
