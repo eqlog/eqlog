@@ -76,6 +76,19 @@ macro_rules! conversions {
             }
         }
 
+        impl<'a> TryFrom<&'a Table> for &'a $tree {
+            type Error = Error;
+
+            fn try_from(table: &'a Table) -> Result<Self, Error> {
+                match &table.0 {
+                    Rows::$variant(tree) => Ok(tree),
+                    $(Rows::$previous(_) |)* $(Rows::$next(_) |)* Rows::Long { .. } => {
+                        Err(Error::ArityMismatch { expected: $arity, actual: table.arity() })
+                    }
+                }
+            }
+        }
+
         conversions!([$($previous,)* $variant,]; $($next($next_tree, $next_arity),)*);
     };
 }

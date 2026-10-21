@@ -1,5 +1,6 @@
 mod compact_indices;
 mod compact_members;
+mod compact_views;
 mod context;
 mod dynamic;
 mod flat_eqlog;
@@ -605,6 +606,7 @@ fn display_pub_predicate_holds_fn<'a>(
             FlatRel::Pred(_) | FlatRel::Func(_) => Ok(()),
         });
 
+        let compact_lookup = compact_views::lookup(rel, false, ctx);
         let indexed_contains = indexed::display_holds_expr(rel, ctx);
         let rel = FlatInRel::Rel(rel);
         let query = QuerySpec::one(rel.clone(), ctx.signature());
@@ -635,6 +637,7 @@ fn display_pub_predicate_holds_fn<'a>(
             /// Returns `true` if `{relation_snake}({rel_args_doc})` holds.
             #[allow(dead_code)]
             pub fn {relation_snake}(&self{rel_fn_args}) -> bool {{
+            {compact_lookup}
             {canonicalize}
             {dependent_checks}
 
@@ -727,11 +730,13 @@ fn display_pub_function_eval_fn<'a>(
             "},
             ModelMode::Desugared => indexed::display_eval_body(func, index_selection, ctx),
         };
+        let compact_lookup = compact_views::lookup(rel, true, ctx);
 
         writedoc! {f, "
             /// Evaluates `{relation_snake}({doc_args})`.
             #[allow(dead_code)]
             pub fn {relation_snake}(&self, {params}) -> Option<{cod_camel}> {{
+            {compact_lookup}
             {canonicalize}
             {dependent_checks}
 
@@ -820,11 +825,17 @@ fn display_pub_iter_fn<'a>(
         } else {
             format!("({row_args})")
         };
+        let iter = compact_views::iter_expr(
+            rel,
+            format!("{index_expr}.iter().map(|[{row_unpack_args}]| {row})"),
+            &row,
+            ctx,
+        );
         writedoc! {f, "
             {docstring}
             #[allow(dead_code)]
             pub fn iter_{rel_snake}(&self) -> impl '_ + Iterator<Item={rel_type}> {{
-            {index_expr}.iter().map(|[{row_unpack_args}]| {row})
+            {iter}
             }}
         "}
     })
@@ -3422,6 +3433,7 @@ fn display_theory_impl<'a>(
     FmtFn(move |f| {
         let ram_modules = program.modules.as_slice();
         writeln!(f, "impl {} {{", name)?;
+        write!(f, "{}", compact_views::methods(ctx))?;
         match ctx.model_mode() {
             ModelMode::Native => {
                 write!(f, "{}", indices::accessors(index_selection, ctx))?;

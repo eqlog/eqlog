@@ -104,3 +104,7 @@ enumeration.
 Reject compact activation when member coordinates can escape their owner
 scope. Validate selected indexes and scheduled rule scopes. Allow
 member-free global relations and generated morphism rules.
+
+Translate compact origin rows at public query boundaries. Preserve
+owner-local handles, alias-aware membership, and lazy row iteration
+without expanding inherited tables for point lookups.
