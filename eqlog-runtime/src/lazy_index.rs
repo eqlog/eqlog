@@ -39,6 +39,7 @@ impl<P: SnapshotSet, I: SnapshotSet> IndexSeed<P, I> {
         self.index.clone()
     }
 
+    /// The projection has the same injectivity requirement as `update`.
     /// An inherited index already contains the previous seed. Replaying that
     /// entire seed would revisit every owner after each local insertion.
     pub fn update_additions(

@@ -38,8 +38,6 @@ Lazy caches and stack-safe destruction tighten the generic WBTreeMap
 lifetime behavior: previous covariance and some early-dropping borrowed
 value examples are not preserved. Generated evaluators use owned values.
 
-Extend inherited secondary indices with only the newly projected owned
-rows.
-The previous owned seed is already present, so unioning it again after
-every
+Extend inherited secondary indices with newly projected owned rows. The
+previous owned seed is already present, so unioning it again after every
 local rule firing revisited all preceding owners in an acyclic chain.
