@@ -1,9 +1,11 @@
 #![cfg(not(feature = "desugared"))]
 
+use eqlog_test_eval as _;
+
 mod generated {
     include!(concat!(
         env!("EQLOG_OUT_DIR"),
-        "/tests/compact_functionality.eql.rs"
+        "/eqlog-test-eval/src/compact_functionality.eql.rs"
     ));
 
     pub fn checked(model: &CompactFunctionality, owner: World) -> bool {

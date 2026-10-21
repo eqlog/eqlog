@@ -1,9 +1,11 @@
 #![cfg(not(feature = "desugared"))]
 
+use eqlog_test_eval as _;
+
 mod generated {
     include!(concat!(
         env!("EQLOG_OUT_DIR"),
-        "/tests/compact_member_pending.eql.rs"
+        "/eqlog-test-eval/src/compact_member_pending.eql.rs"
     ));
 
     pub fn pending_state(model: &CompactMemberPending) -> (usize, bool) {

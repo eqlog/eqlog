@@ -51,3 +51,6 @@ aliases, local and inherited functionality conflicts, late growth,
 owner/morphism equality, fallback, pending definitions, and randomized
 persistent-tree mutations. Standalone COW comparisons and their plots
 are temporary artifacts rather than repository benchmarks.
+
+Keep compact regression theories under the ordinary Cargo fixture
+directory so the generated evaluators run in the full test suite.
