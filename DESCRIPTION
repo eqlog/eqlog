@@ -46,3 +46,8 @@ Prepare arithmetic image blocks directly so compact namespaces can map
 shared trees without allocating an explicit tuple for every image.
 Preserve sparse relation sharing when these prepared maps request a
 deferred view instead of materializing small suffixes at every owner.
+
+Introduce persistent member domains and scoped equality partitions over
+stable origins. Virtual handle blocks preserve separate owner identities
+without allocating every inherited image. Refresh shares source state
+and replays local constraints while historical snapshots remain stable.

@@ -2,6 +2,7 @@
 
 pub use super::data::{RelationData, RelationIndex, TypeData};
 pub use super::lazy_index::{IndexSeed, LazyIndex};
+pub use super::member_spaces::{MemberBlock, MemberSnapshot, MemberSpaceStats, MemberSpaces};
 pub use super::table::Table;
 pub use super::toposort::{MorphismGraph, MorphismGraphCache};
 pub use super::transport::{TransportCheckpoint, TransportFrontier, TransportWork};

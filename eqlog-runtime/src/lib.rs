@@ -202,6 +202,7 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
+mod member_spaces;
 mod prefix_tree;
 mod toposort;
 mod transport;
