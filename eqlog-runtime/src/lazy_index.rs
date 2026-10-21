@@ -38,6 +38,17 @@ impl<P: SnapshotSet, I: SnapshotSet> IndexSeed<P, I> {
         }
         self.index.clone()
     }
+
+    /// An inherited index already contains the previous seed. Replaying that
+    /// entire seed would revisit every owner after each local insertion.
+    pub fn update_additions(
+        &mut self,
+        source: &P,
+        project: impl Fn(P::Row) -> Option<I::Row>,
+    ) -> I {
+        let previous = self.index.clone();
+        self.update(source, project).difference(&previous)
+    }
 }
 
 /// A stable borrow for public iterators, with a warm seed surviving invalidation.

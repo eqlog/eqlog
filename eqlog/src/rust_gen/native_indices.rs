@@ -77,7 +77,7 @@ pub(super) fn methods<'a>(
                 }}
 
                 fn __extend_native_index_{id}(&mut self) {{
-                    let index = self.__native_seed_{id}.update(&self.{owned}, {project});
+                    let index = self.__native_seed_{id}.update_additions(&self.{owned}, {project});
                     let index = self.__native_input_{id}.current().union(&index);
                     self.__native_input_{id}.publish(&index);
                 }}

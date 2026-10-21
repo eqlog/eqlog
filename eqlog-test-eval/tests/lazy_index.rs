@@ -74,6 +74,38 @@ fn off_diagonal_removals_do_not_remove_a_valid_projection() {
 }
 
 #[test]
+fn inherited_index_extensions_receive_only_new_owned_rows() {
+    let mut source = PrefixTree2::new();
+    for owner in 0..1024 {
+        source.insert([owner, owner + 1]);
+    }
+    let mut seed = IndexSeed::<PrefixTree2, PrefixTree2>::new();
+    let project = |[owner, value]: [u32; 2]| Some([value, owner]);
+    let initial = seed.update(&source, project);
+    source.remove([2, 3]);
+    source.insert([2, 4]);
+    source.insert([1024, 1025]);
+    let additions = seed.update_additions(&source, project);
+    assert_eq!(
+        additions.iter().collect::<Vec<_>>(),
+        vec![[4, 2], [1025, 1024]]
+    );
+    let extended = initial.union(&additions);
+    assert!(seed.update(&source, project).is_subset(&extended));
+    assert!(extended.contains([3, 2]));
+    assert!(seed.update_additions(&source, project).is_empty());
+    source = PrefixTree2::new();
+    assert!(seed.update_additions(&source, project).is_empty());
+    source.insert([2, 3]);
+    assert_eq!(
+        seed.update_additions(&source, project)
+            .iter()
+            .collect::<Vec<_>>(),
+        vec![[3, 2]]
+    );
+}
+
+#[test]
 fn maintenance_uses_the_latest_shared_index_while_consumers_keep_their_checkpoints() {
     let mut rows = PrefixTree2::new();
     rows.insert([1, 10]);
