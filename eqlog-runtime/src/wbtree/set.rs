@@ -257,22 +257,23 @@ impl WBTreeSet {
         self.storage = Storage::Empty;
     }
 
+    #[inline]
     pub fn iter(&self) -> WBTreeSetIter<'_> {
         let storage = match &self.storage {
             Storage::Empty => IterStorage::Ranges {
                 runs: RunsIter::Small([].iter()),
-                current: 1,
-                last: 0,
+                current: 0,
+                remaining: 0,
             },
             Storage::Singleton(value) => IterStorage::Ranges {
                 runs: RunsIter::Small([].iter()),
-                current: u64::from(*value),
-                last: *value,
+                current: *value,
+                remaining: 1,
             },
             Storage::Ranges(ranges) => IterStorage::Ranges {
                 runs: ranges.runs.iter(),
-                current: 1,
-                last: 0,
+                current: 0,
+                remaining: 0,
             },
             Storage::Tree(map) => IterStorage::Tree(map.iter()),
         };
@@ -564,8 +565,8 @@ pub struct WBTreeSetIter<'a> {
 enum IterStorage<'a> {
     Ranges {
         runs: RunsIter<'a>,
-        current: u64,
-        last: u32,
+        current: u32,
+        remaining: u32,
     },
     Tree(Iter<'a, ()>),
 }
@@ -578,16 +579,18 @@ impl Iterator for WBTreeSetIter<'_> {
             IterStorage::Ranges {
                 runs,
                 current,
-                last,
+                remaining,
             } => {
-                if *current <= u64::from(*last) {
-                    let value = *current as u32;
-                    *current += 1;
+                if *remaining != 0 {
+                    let value = *current;
+                    *current = current.wrapping_add(1);
+                    *remaining -= 1;
                     return Some(value);
                 }
-                let (first, end) = runs.next()?;
-                *current = u64::from(first) + 1;
-                *last = end;
+                let (first, last) = runs.next()?;
+                *current = first.wrapping_add(1);
+                // Yielding the first value keeps even a full u32 range count representable.
+                *remaining = last - first;
                 Some(first)
             }
             IterStorage::Tree(iter) => iter.next().map(|(key, ())| key),
@@ -602,10 +605,11 @@ impl Iterator for WBTreeSetIter<'_> {
             IterStorage::Ranges {
                 runs,
                 current,
-                last,
+                remaining,
             } => {
-                if current <= u64::from(last) {
-                    result = (current as u32..=last).fold(result, &mut visit);
+                if remaining != 0 {
+                    let last = current + (remaining - 1);
+                    result = (current..=last).fold(result, &mut visit);
                 }
                 runs.fold(result, |result, (first, last)| {
                     (first..=last).fold(result, &mut visit)

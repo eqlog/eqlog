@@ -39,3 +39,8 @@ Compose key-only offset views over their intersecting domains so long
 morphism chains need one coordinate translation. Compare the bounded
 composed runs exactly to retain cheap equivalent-view comparisons.
 Value transforms and fragmented maps preserve their existing paths.
+
+Keep leaf iterator cursors within the element width and expose their
+construction to callers so short restrictions avoid unused state.
+Preserve the count tag in place during edits and avoid metadata work
+when replacing an existing value.

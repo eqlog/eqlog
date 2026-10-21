@@ -288,3 +288,35 @@ fn shared_interval_differences_skip_covered_spans_without_losing_rows() {
         assert_eq!(visited, difference.into_iter().collect::<Vec<_>>());
     }
 }
+
+#[test]
+fn partially_consumed_ranges_fold_through_the_largest_element() {
+    let mut fragmented: Vec<u32> = (0..40).flat_map(|run| [run * 8, run * 8 + 1]).collect();
+    fragmented.extend(u32::MAX - 3..=u32::MAX);
+    for keys in [
+        vec![],
+        vec![u32::MAX],
+        (u32::MAX - 63..=u32::MAX).collect(),
+        fragmented,
+    ] {
+        let mut set = WBTreeSet::new();
+        for &key in &keys {
+            set.insert(key);
+        }
+        for consumed in 0..=keys.len() {
+            let mut iter = set.iter();
+            for &key in &keys[..consumed] {
+                assert_eq!(iter.next(), Some(key));
+            }
+            let rest = iter.fold(Vec::new(), |mut values, key| {
+                values.push(key);
+                values
+            });
+            assert_eq!(rest, keys[consumed..]);
+        }
+        let mut iter = set.iter();
+        assert_eq!(iter.by_ref().collect::<Vec<_>>(), keys);
+        assert_eq!(iter.next(), None);
+        assert_eq!(iter.next(), None);
+    }
+}

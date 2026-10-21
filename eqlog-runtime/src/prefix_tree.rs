@@ -911,6 +911,7 @@ impl PrefixTree9 {
 
 // iter_restrictions methods
 impl PrefixTree1 {
+    #[inline]
     pub fn iter_restrictions(&self) -> impl Iterator<Item = (u32, PrefixTree0)> + '_ {
         self.set.iter().map(|x| (x, PrefixTree0(Some(()))))
     }

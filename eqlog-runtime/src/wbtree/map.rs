@@ -50,19 +50,22 @@ impl SizeBound {
     }
 
     fn inserted(&mut self, inserted: bool) {
-        let count = self
-            .upper_bound()
-            .checked_add(usize::from(inserted))
-            .expect("tree size overflow");
-        *self = Self::combined(count, *self, *self);
+        if !inserted {
+            return;
+        }
+        assert!(
+            self.upper_bound() < Self::INEXACT - 1,
+            "tree size exceeds the supported bound"
+        );
+        self.0 += 1;
     }
 
     fn removed(&mut self) {
-        let count = self
-            .upper_bound()
-            .checked_sub(1)
-            .expect("a removed key contributes to the size bound");
-        *self = Self::combined(count, *self, *self);
+        assert!(
+            self.upper_bound() > 0,
+            "a removed key contributes to the size bound"
+        );
+        self.0 -= 1;
     }
 }
 
@@ -2070,6 +2073,57 @@ mod tests {
 
     use rand::rngs::StdRng;
     use rand::{RngExt, SeedableRng};
+
+    #[test]
+    fn size_bound_edits_preserve_count_and_exactness_at_boundaries() {
+        for exact in [false, true] {
+            for count in [0, 1, 2, SizeBound::INEXACT - 2, SizeBound::INEXACT - 1] {
+                let initial = SizeBound::exact(count);
+                let initial = if exact { initial } else { initial.inexact() };
+                for inserted in [false, true] {
+                    let expected = count as u128 + u128::from(inserted);
+                    if expected < SizeBound::INEXACT as u128 {
+                        let mut actual = initial;
+                        actual.inserted(inserted);
+                        assert_eq!(actual.upper_bound() as u128, expected);
+                        assert_eq!(actual.is_exact(), exact);
+                    }
+                }
+                if count > 0 {
+                    let mut actual = initial;
+                    actual.removed();
+                    assert_eq!(actual.upper_bound() as u128, count as u128 - 1);
+                    assert_eq!(actual.is_exact(), exact);
+                }
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "tree size exceeds the supported bound")]
+    fn exact_size_bound_rejects_increment_at_capacity() {
+        SizeBound::exact(SizeBound::INEXACT - 1).inserted(true);
+    }
+
+    #[test]
+    #[should_panic(expected = "tree size exceeds the supported bound")]
+    fn inexact_size_bound_rejects_increment_at_capacity() {
+        SizeBound::exact(SizeBound::INEXACT - 1)
+            .inexact()
+            .inserted(true);
+    }
+
+    #[test]
+    #[should_panic(expected = "a removed key contributes to the size bound")]
+    fn exact_size_bound_rejects_decrement_at_zero() {
+        SizeBound::exact(0).removed();
+    }
+
+    #[test]
+    #[should_panic(expected = "a removed key contributes to the size bound")]
+    fn inexact_size_bound_rejects_decrement_at_zero() {
+        SizeBound::exact(0).inexact().removed();
+    }
 
     #[test]
     fn boundary_entries_preserve_mapped_coordinates_and_filters() {
