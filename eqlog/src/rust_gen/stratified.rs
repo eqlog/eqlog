@@ -3,7 +3,7 @@ use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Display;
 
-use indoc::writedoc;
+use indoc::{formatdoc, writedoc};
 
 use super::indices::{projection, source_relation};
 use super::native_indices;
@@ -14,7 +14,8 @@ use super::{
 };
 use crate::algebra::signature::TypeId;
 use crate::flat_eqlog::{
-    FlatInRel, FlatOutRel, IndexAge, IndexSelection, IndexSpec, RuleSchedule, Schedule, Stratum,
+    FlatInRel, FlatOutRel, FlatRel, IndexAge, IndexSelection, IndexSpec, RuleSchedule, Schedule,
+    Stratum,
 };
 use crate::fmt_util::FmtFn;
 use crate::ram::{
@@ -429,6 +430,11 @@ impl<'s> Codegen<'s> {
         FmtFn(move |f| {
             for (s, stratum) in self.strata.iter().enumerate() {
                 let inputs = self.stratum_inputs(s);
+                let outputs: BTreeSet<_> = stratum
+                    .groups
+                    .iter()
+                    .flat_map(|&m| module_env_out_rels(&modules[m]))
+                    .collect();
                 let stable = if self.has_stable_inputs(s) {
                     format!("stable: &mut __StableInputs{s}, ")
                 } else {
@@ -451,6 +457,27 @@ impl<'s> Codegen<'s> {
                             #[allow(unused_mut)]
                             let mut dirty = !self.__stratum_initialized[{s}];
                     "}?;
+                }
+                if let Some(model) = stratum.model {
+                    for output in &outputs {
+                        match output {
+                            FlatOutRel::FuncDomain(func) => {
+                                let rel = FlatRel::Func(*func);
+                                let arity = output.arity(ctx.signature());
+                                if arity.iter().enumerate().any(|(column, &typ)| {
+                                    ctx.supports_compact_members(typ)
+                                        && rel.column_maps_under(ctx.signature(), column, model)
+                                }) {
+                                    let field = display_out_set_field_name(output, ctx);
+                                    writeln!(
+                                        f,
+                                        "let __compact_start_{field} = delta.{field}.len();"
+                                    )?;
+                                }
+                            }
+                            FlatOutRel::Rel(_) | FlatOutRel::Equality(_) => {}
+                        }
+                    }
                 }
                 if let Some(plan) = &self.preparations[s].stable {
                     writeln!(f, "if !stable.propagated {{")?;
@@ -723,7 +750,24 @@ impl<'s> Codegen<'s> {
                         let name = display_type(typ, ctx).to_string().to_case(Case::Snake);
                         let roots = format!("self.{name}_equalities.canonical_roots()");
                         let roots = if ctx.supports_compact_members(typ) {
-                            format!("eqlog_runtime::__private::CanonicalMask::Dense({roots})")
+                            if stratum.model == ctx.signature().type_(typ).parents.first().copied()
+                            {
+                                formatdoc! {"
+                                    match &self.__compact_members_{name} {{
+                                        Some(spaces) => spaces.get_snapshot(owners[0])
+                                            .map_or(eqlog_runtime::__private::CanonicalMask::Dense(&[]),
+                                                eqlog_runtime::__private::CanonicalMask::Origins),
+                                        None => eqlog_runtime::__private::CanonicalMask::Dense({roots}),
+                                    }}
+                                "}
+                            } else {
+                                formatdoc! {"
+                                    match &self.__compact_members_{name} {{
+                                        Some(spaces) => eqlog_runtime::__private::CanonicalMask::Members(spaces),
+                                        None => eqlog_runtime::__private::CanonicalMask::Dense({roots}),
+                                    }}
+                                "}
+                            }
                         } else {
                             roots
                         };
@@ -758,19 +802,49 @@ impl<'s> Codegen<'s> {
                     writeln!(f, "}}; {name}(env);")?;
                 }
                 writeln!(f, "}}")?;
-                let outputs: BTreeSet<_> = stratum
-                    .groups
-                    .iter()
-                    .flat_map(|&m| module_env_out_rels(&modules[m]))
-                    .collect();
+                if let Some(model) = stratum.model {
+                    for output in &outputs {
+                        match output {
+                            FlatOutRel::FuncDomain(func) => {
+                                let rel = FlatRel::Func(*func);
+                                let field = display_out_set_field_name(output, ctx);
+                                let conversions = output.arity(ctx.signature()).into_iter()
+                                    .enumerate().filter_map(|(column, typ)| {
+                                        if !ctx.supports_compact_members(typ)
+                                            || !rel.column_maps_under(ctx.signature(), column, model) {
+                                            return None;
+                                        }
+                                        let name = display_type(typ, ctx).to_string().to_case(Case::Snake);
+                                        Some(format!("args[{column}] = self.__compact_{name}_uid(owners[0], args[{column}]).0;"))
+                                    }).join("\n");
+                                if !conversions.is_empty() {
+                                    writedoc! {f, "
+                                        for args in &mut delta.{field}[__compact_start_{field}..] {{
+                                            {conversions}
+                                        }}
+                                    "}?;
+                                }
+                            }
+                            FlatOutRel::Rel(_) | FlatOutRel::Equality(_) => {}
+                        }
+                    }
+                }
                 let mut equalities = Vec::new();
                 for output in &outputs {
                     match output {
                         FlatOutRel::Equality(typ) => {
                             let name = display_type(*typ, ctx).to_string().to_case(Case::Snake);
+                            let conversion = if ctx.supports_compact_members(*typ)
+                                && stratum.model
+                                    == ctx.signature().type_(*typ).parents.first().copied()
+                            {
+                                format!("self.__compact_{name}_uid(owners[0], lhs), self.__compact_{name}_uid(owners[0], rhs)")
+                            } else {
+                                "lhs.into(), rhs.into()".to_owned()
+                            };
                             writedoc! {f, "
                                 for [lhs, rhs] in delta.new_{name}_equalities.drain(..) {{
-                                    self.__equate_{name}(lhs.into(), rhs.into());
+                                    self.__equate_{name}({conversion});
                                 }}
                             "}?;
                             equalities.push(format!("!self.{name}_uprooted.is_empty()"));
@@ -790,8 +864,27 @@ impl<'s> Codegen<'s> {
                             let args = (0..rel.arity(ctx.signature()).len())
                                 .map(|i| format!("arg{i}"))
                                 .collect::<Vec<_>>();
-                            let converted =
-                                args.iter().map(|arg| format!("{arg}.into()")).join(", ");
+                            let arity = rel.arity(ctx.signature());
+                            let converted = args
+                                .iter()
+                                .enumerate()
+                                .map(|(column, arg)| {
+                                    let typ = arity[column];
+                                    if let Some(model) = stratum.model {
+                                        if ctx.supports_compact_members(typ)
+                                            && rel.column_maps_under(ctx.signature(), column, model)
+                                        {
+                                            let name = display_type(typ, ctx)
+                                                .to_string()
+                                                .to_case(Case::Snake);
+                                            return format!(
+                                                "self.__compact_{name}_uid(owners[0], {arg})"
+                                            );
+                                        }
+                                    }
+                                    format!("{arg}.into()")
+                                })
+                                .join(", ");
                             let args = args.join(", ");
                             writedoc! {f, "
                                 delta.{field}.sort_unstable();

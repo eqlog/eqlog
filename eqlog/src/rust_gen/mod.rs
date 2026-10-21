@@ -1,3 +1,4 @@
+mod compact_members;
 mod context;
 mod dynamic;
 mod flat_eqlog;
@@ -165,11 +166,23 @@ fn display_func_args_struct<'a>(func: FuncId, ctx: &'a RustGenCtx<'a>) -> impl '
 
 fn display_type_fields<'a>(typ: TypeId, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
     FmtFn(move |f| {
+        let compact = ctx.supports_compact_members(typ);
         let typ = display_type(typ, ctx).to_string();
         let type_snake = typ.to_case(Snake);
+        let weights = if compact {
+            "eqlog_runtime::__private::ElementWeights"
+        } else {
+            "Vec<usize>"
+        };
+        if compact {
+            writeln!(
+                f,
+                "__compact_members_{type_snake}: Option<eqlog_runtime::__private::MemberSpaces>,"
+            )?;
+        }
         writedoc! {f, "
             {type_snake}_equalities: Unification<{typ}>,
-            {type_snake}_weights: Vec<usize>,
+            {type_snake}_weights: {weights},
             {type_snake}_uprooted: Vec<{typ}>,
         "}
     })
@@ -565,10 +578,20 @@ fn display_pub_predicate_holds_fn<'a>(
                     })
                     .format(" && ");
                 match ctx.model_mode() {
-                    ModelMode::Native => writedoc! {f, "
-                        self.{element_index}.get(&arg{member_pos}.0)
-                            .is_some_and(|rows| rows.iter().any(|row| {checks}))
-                    "},
+                    ModelMode::Native => {
+                        if ctx.supports_compact_members(typ) {
+                            let name = display_type(typ, ctx).to_string().to_case(Snake);
+                            writedoc! {f, "
+                                if let Some(spaces) = &self.__compact_members_{name} {{
+                                    return spaces.contains(arg0.0, arg{member_pos}.0);
+                                }}
+                            "}?;
+                        }
+                        writedoc! {f, "
+                            self.{element_index}.get(&arg{member_pos}.0)
+                                .is_some_and(|rows| rows.iter().any(|row| {checks}))
+                        "}
+                    }
                     ModelMode::Desugared => {
                         let contains = indexed::display_holds_expr(rel, ctx);
                         let rows = indexed::display_occurrence_rows(rel, typ, member_pos, ctx);
@@ -1150,11 +1173,37 @@ fn display_new_element_fn_internal<'a>(
             }
         };
 
+        let compact_allocation = FmtFn(|f| {
+            if !ctx.supports_compact_members(typ) {
+                return Ok(());
+            }
+            let parent = ctx.signature().type_(typ).parents[0];
+            let parent_name = display_type(parent, ctx).to_string().to_case(Snake);
+            writedoc! {f, "
+                if self.__compact_members_{type_snake}.is_some() {{
+                    let owner = self.root_{parent_name}(parent0).0;
+                    let (handle, origin) = {{
+                        let spaces = self.__compact_members_{type_snake}.as_mut().unwrap();
+                        if !spaces.has_owner(owner) {{ spaces.create_owner(owner); }}
+                        let handle = spaces.allocate(owner);
+                        let origin = spaces.get_snapshot(owner).unwrap().origin(handle).unwrap();
+                        (handle, origin)
+                    }};
+                    self.__sync_compact_{type_snake}_weights();
+                    self.__allocated = true;
+                    self.__closed = false;
+                    self.__compact_allocated_{type_snake}(owner, origin);
+                    return {type_camel}(handle);
+                }}
+            "}
+        });
+
         writedoc! {f, "
             /// Adjoins a new element of type [{type_camel}].
             #[allow(dead_code)]
             fn new_{type_snake}_internal(&mut self, {parent_param}) -> {type_camel} {{
                 {parent_checks}
+                {compact_allocation}
                 let old_len = self.{type_snake}_equalities.len();
                 self.{type_snake}_equalities.increase_size_to(old_len + 1);
                 let el = u32::try_from(old_len).unwrap();
@@ -1366,6 +1415,23 @@ fn display_equate_elements<'a>(
             TypeKind::Model | TypeKind::Plain | TypeKind::Enum | TypeKind::Mor(_) => String::new(),
         };
 
+        let compact_equality = FmtFn(|f| {
+            if !ctx.supports_compact_members(typ) {
+                return Ok(());
+            }
+            writedoc! {f, "
+                if let Some(spaces) = &mut self.__compact_members_{type_snake} {{
+                    let owner = spaces.owner(lhs.0).expect(\"left member has an enclosing compact model\");
+                    assert!(spaces.owner(rhs.0) == Some(owner), \"member equality requires one enclosing model\");
+                    if let Some(merge) = spaces.equate_with_merge(owner, lhs.0, rhs.0) {{
+                        self.__closed = false;
+                        self.__compact_equate_{type_snake}(owner, merge);
+                    }}
+                    return;
+                }}
+            "}
+        });
+
         writedoc! {f, "
             /// Enforces the equality `lhs = rhs`.
             {parent_doc}
@@ -1379,6 +1445,7 @@ fn display_equate_elements<'a>(
             }}
 
             fn __equate_{type_snake}(&mut self, mut lhs: {type_camel}, mut rhs: {type_camel}) {{
+                {compact_equality}
                 lhs = self.{type_snake}_equalities.root(lhs);
                 rhs = self.{type_snake}_equalities.root(rhs);
                 if lhs == rhs {{
@@ -1407,10 +1474,21 @@ fn display_root_fn<'a>(typ: TypeId, ctx: &'a RustGenCtx<'a>) -> impl 'a + Displa
     FmtFn(move |f| {
         let type_name = display_type(typ, ctx).to_string().to_case(UpperCamel);
         let type_snake = type_name.to_case(Snake);
+        let compact_root = FmtFn(|f| {
+            if ctx.supports_compact_members(typ) {
+                writedoc! {f, "
+                    if let Some(spaces) = &self.__compact_members_{type_snake} {{
+                        return spaces.root(el.0).map({type_name}).unwrap_or(el);
+                    }}
+                "}?;
+            }
+            Ok(())
+        });
         writedoc! {f, "
             /// Returns the canonical representative of the equivalence class of `el`.
             #[allow(dead_code)]
             pub fn root_{type_snake}(&self, el: {type_name}) -> {type_name} {{
+                {compact_root}
                 if el.0 as usize >= self.{type_snake}_equalities.len() {{
                     el
                 }} else {{
@@ -1447,6 +1525,19 @@ fn display_iter_type_fn<'a>(
         let query = QuerySpec::all();
         let index = index_selection.current_query(&rel, query);
         let index_field = display_current_index_field_name(&rel, index, ctx);
+
+        if ctx.supports_compact_members(typ) {
+            return writedoc! {f, "
+                /// Yields canonical member handles across all enclosing models.
+                #[allow(dead_code)]
+                pub fn iter_{type_snake}(&self) -> impl '_ + Iterator<Item={type_camel}> {{
+                    let compact = self.__compact_members_{type_snake}.as_ref();
+                    compact.into_iter().flat_map(|spaces| spaces.canonical_handles()).map({type_camel})
+                        .chain(self.{index_field}.iter().filter(move |_| compact.is_none())
+                            .map(|[el]| {type_camel}(el)))
+                }}
+            "};
+        }
 
         writedoc! {f, "
             /// Returns an iterator over elements of type `{type_camel}`.
@@ -2876,7 +2967,15 @@ fn display_new_fn<'a>(
         for typ in ctx.signature().iter_types() {
             let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
             writeln!(f, "{type_snake}_equalities: Unification::new(),").unwrap();
-            writeln!(f, "{type_snake}_weights: Vec::new(),").unwrap();
+            if ctx.supports_compact_members(typ) {
+                writeln!(
+                    f,
+                    "{type_snake}_weights: eqlog_runtime::__private::ElementWeights::new(),"
+                )?;
+                writeln!(f, "__compact_members_{type_snake}: None,")?;
+            } else {
+                writeln!(f, "{type_snake}_weights: Vec::new(),")?;
+            }
             writeln!(f, "{type_snake}_uprooted: Vec::new(),").unwrap();
         }
         for (flat_rel, index) in index_selection.current_indices() {
@@ -3343,6 +3442,8 @@ fn display_theory_impl<'a>(
         }
 
         for typ in ctx.signature().iter_types() {
+            write!(f, "{}", compact_members::methods(typ, ctx, index_selection))?;
+            write!(f, "{}", compact_members::pending_index_hooks(typ, ctx))?;
             let iter_type_fn = display_iter_type_fn(typ, ctx, index_selection);
             write!(f, "{}", iter_type_fn)?;
 

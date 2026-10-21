@@ -78,3 +78,7 @@ rows and then apply only their local equations.
 Preserve member handles through materialization without making reserved
 namespace holes into elements. Maintain compact canonical domains and
 export their actual carriers and aliases through dynamic model data.
+
+Connect scoped native member operations to compact identity spaces.
+Convert local origin outputs back to owner handles on mutation. Preserve
+public root and allocation behavior.

@@ -175,11 +175,42 @@ impl DynamicContext<'_> {
                         format!("PrefixTree1::from(&self.{field})")
                     }
                 };
+                let mut equalities = format!("self.{snake}_equalities.retype()");
+                let mut weights = format!("self.{snake}_weights.clone()");
+                let elements = if self.ctx.supports_compact_members(typ) {
+                    equalities = formatdoc! {"
+                        match &self.__compact_members_{snake} {{
+                            Some(spaces) => spaces.export_equalities(),
+                            None => self.{snake}_equalities.retype(),
+                        }}
+                    "};
+                    weights = formatdoc! {"
+                        {{
+                            let mut weights = self.{snake}_weights.clone();
+                            if let Some(spaces) = &self.__compact_members_{snake} {{
+                                weights.increase_size_to(usize::try_from(spaces.handle_bound()).unwrap());
+                            }}
+                            weights.into_dense()
+                        }}
+                    "};
+                    formatdoc! {"
+                        match &self.__compact_members_{snake} {{
+                            Some(spaces) => {{
+                                let mut elements = PrefixTree1::new();
+                                for member in spaces.canonical_handles() {{ elements.insert([member]); }}
+                                elements
+                            }},
+                            None => {elements},
+                        }}
+                    "}
+                } else {
+                    elements
+                };
                 writedoc! {f, "
                     eqlog_runtime::__private::TypeData {{
-                        equalities: self.{snake}_equalities.retype(),
+                        equalities: {equalities},
                         elements: {elements},
-                        weights: self.{snake}_weights.clone(),
+                        weights: {weights},
                         uprooted: self.{snake}_uprooted.iter().map(|el| el.0).collect(),
                     }},
                 "}?;
@@ -271,7 +302,7 @@ impl DynamicContext<'_> {
                 writedoc! {f, "
                     let data = eqlog_runtime::__private::type_data(source, {type_})?;
                     model.{snake}_equalities = data.equalities.retype();
-                    model.{snake}_weights = vec![0; data.equalities.len()];
+                    model.{snake}_weights = vec![0; data.equalities.len()].into();
                     {elements}
                     model.{snake}_uprooted = (0..data.equalities.len() as u32)
                         .filter(|&index| data.equalities.root_const(index) != index)
