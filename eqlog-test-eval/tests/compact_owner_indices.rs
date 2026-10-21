@@ -1,0 +1,341 @@
+use std::collections::BTreeSet;
+
+use eqlog_runtime::__private::{
+    CompactIndexSpec, CompactOwnerIndices, CompactRebaseStats, CompactRecordResult,
+};
+
+fn item_specs() -> Vec<CompactIndexSpec> {
+    [vec![0, 1], vec![1, 0]]
+        .into_iter()
+        .map(|order| CompactIndexSpec {
+            relation: 10,
+            order,
+            member_types: vec![None, Some(0)],
+        })
+        .collect()
+}
+
+#[test]
+fn inherited_duplicates_retain_only_requested_local_support() {
+    let mut indices = CompactOwnerIndices::new(item_specs());
+    assert!(!indices.has_owner(0));
+    indices.create_owner(0);
+    assert!(indices.has_owner(0));
+    indices.create_owner(1);
+    assert_eq!(
+        indices.record(0, 10, &[4, 9], false),
+        CompactRecordResult {
+            inserted: true,
+            retained_support: true
+        }
+    );
+    let stats = indices.rebase(1, 0, false, |_, _| panic!("no local support"), &[]);
+    assert!(stats.refreshed);
+    assert_eq!(stats.local_rows_replayed, 0);
+    assert!(indices.rows(1, 0).shares_storage_with(indices.rows(0, 0)));
+    assert!(indices.rows(1, 1).shares_storage_with(indices.rows(0, 1)));
+    let revision = indices.revision(1);
+    assert_eq!(
+        indices.record(1, 10, &[4, 9], false),
+        CompactRecordResult::default()
+    );
+    assert!(indices.local_rows(1, 10).is_empty());
+    assert_eq!(
+        indices.record(1, 10, &[4, 9], true),
+        CompactRecordResult {
+            inserted: false,
+            retained_support: true
+        }
+    );
+    assert_eq!(
+        indices.record(1, 10, &[4, 9], true),
+        CompactRecordResult::default()
+    );
+    assert_eq!(indices.revision(1), revision);
+    assert!(indices.rows(1, 0).shares_storage_with(indices.rows(0, 0)));
+    let before = indices.snapshot(1);
+    assert_eq!(indices.rewrite(1, 0, 9, 8).visited_rows, 2);
+    assert!(indices.rows(1, 0).contains(&[4, 8]));
+    assert!(indices.rows(1, 1).contains(&[8, 4]));
+    assert!(indices.local_rows(1, 10).contains(&[4, 9]));
+    assert!(before.rows(0).contains(&[4, 9]));
+    assert!(before.local_rows(10).contains(&[4, 9]));
+    let stats = indices.rebase(1, 0, true, |_, origin| origin, &[(0, 9, 8)]);
+    assert_eq!(stats.local_rows_replayed, 1);
+    assert_eq!(stats.rewrite.visited_rows, 2);
+    assert!(indices.rows(1, 0).contains(&[4, 8]));
+}
+
+#[test]
+fn parent_replacement_replays_local_support_before_local_equations() {
+    let mut indices = CompactOwnerIndices::new(item_specs());
+    indices.create_owner(0);
+    indices.create_owner(1);
+    for tuple in [[10, 1], [20, 2], [30, 3]] {
+        indices.record(0, 10, &tuple, false);
+    }
+    indices.record(1, 10, &[40, 4], false);
+    let first = indices.rebase(1, 0, false, |_, origin| origin, &[(0, 3, 4)]);
+    assert_eq!(first.local_rows_replayed, 1);
+    assert_eq!(first.rewrite.visited_rows, 2);
+    let before = indices.snapshot(1);
+    indices.rewrite(0, 0, 1, 2);
+    indices.rewrite(0, 0, 3, 2);
+    let refreshed = indices.rebase(
+        1,
+        0,
+        false,
+        |typ, origin| {
+            assert_eq!(typ, 0);
+            if origin == 1 || origin == 3 {
+                2
+            } else {
+                origin
+            }
+        },
+        &[(0, 2, 4)],
+    );
+    assert_eq!(refreshed.local_rows_replayed, 1);
+    assert_eq!(refreshed.rewrite.visited_rows, 6);
+    assert_eq!(indices.source(1), Some(0));
+    assert_eq!(indices.source_revision(1), Some(indices.revision(0)));
+    assert_eq!(
+        indices.rows(1, 0).iter().collect::<BTreeSet<_>>(),
+        BTreeSet::from([vec![10, 4], vec![20, 4], vec![30, 4], vec![40, 4]])
+    );
+    assert_eq!(
+        before.rows(0).iter().collect::<BTreeSet<_>>(),
+        BTreeSet::from([vec![10, 1], vec![20, 2], vec![30, 4], vec![40, 4]])
+    );
+    assert!(indices.rows(0, 0).contains(&[10, 2]));
+    assert!(!indices.rows(0, 0).contains(&[40, 4]));
+    let current = indices.snapshot(1);
+    assert_eq!(
+        indices.rebase(1, 0, false, |_, _| panic!("unchanged parent"), &[(0, 4, 8)]),
+        CompactRebaseStats::default()
+    );
+    assert_eq!(current.revision(), indices.revision(1));
+    assert!(current.rows(0).shares_storage_with(indices.rows(1, 0)));
+}
+
+#[test]
+fn partition_changes_can_force_refresh_without_parent_row_changes() {
+    let mut indices = CompactOwnerIndices::new(item_specs());
+    indices.create_owner(0);
+    indices.create_owner(1);
+    indices.record(0, 10, &[10, 1], false);
+    indices.record(1, 10, &[5, 5], false);
+    indices.rebase(1, 0, false, |_, origin| origin, &[]);
+    let parent_revision = indices.revision(0);
+    let before = indices.snapshot(1);
+    assert_eq!(
+        indices.rebase(1, 0, false, |_, _| panic!("unchanged parent"), &[]),
+        CompactRebaseStats::default()
+    );
+    let mut normalized = 0;
+    let stats = indices.rebase(
+        1,
+        0,
+        true,
+        |typ, origin| {
+            normalized += 1;
+            assert_eq!((typ, origin), (0, 5));
+            6
+        },
+        &[],
+    );
+    assert!(stats.refreshed);
+    assert_eq!(stats.local_rows_replayed, 1);
+    assert_eq!(stats.rewrite.visited_rows, 0);
+    assert_eq!(normalized, 1);
+    assert_eq!(indices.revision(0), parent_revision);
+    assert!(indices.rows(1, 0).contains(&[5, 6]));
+    assert!(indices.rows(1, 1).contains(&[6, 5]));
+    assert!(indices.local_rows(1, 10).contains(&[5, 5]));
+    assert!(before.rows(0).contains(&[5, 5]));
+    assert!(before.revision() < indices.revision(1));
+}
+
+#[test]
+fn chain_rebases_visit_only_local_support_and_local_losing_buckets() {
+    let specs = vec![
+        CompactIndexSpec {
+            relation: 10,
+            order: vec![0, 1, 2],
+            member_types: vec![Some(0), None, Some(1)],
+        },
+        CompactIndexSpec {
+            relation: 10,
+            order: vec![2, 0, 1],
+            member_types: vec![Some(0), None, Some(1)],
+        },
+        CompactIndexSpec {
+            relation: 20,
+            order: vec![0, 1],
+            member_types: vec![None, Some(0)],
+        },
+        CompactIndexSpec {
+            relation: 20,
+            order: vec![1, 0],
+            member_types: vec![None, Some(0)],
+        },
+    ];
+    let mut indices = CompactOwnerIndices::new(specs);
+    for owner in 0..=200 {
+        indices.create_owner(owner);
+    }
+    indices.record(0, 10, &[0, 0, 0], false);
+    indices.record(0, 20, &[0, 0], false);
+    let mut before = vec![indices.snapshot(0)];
+    let mut first_visits = 0;
+    for owner in 1..=200 {
+        let stats = indices.rebase(owner, owner - 1, false, |_, _| panic!("no local rows"), &[]);
+        assert_eq!(stats.local_rows_replayed, 0);
+        for index in 0..4 {
+            assert!(indices
+                .rows(owner, index)
+                .shares_storage_with(indices.rows(owner - 1, index)));
+        }
+        indices.record(owner, 10, &[owner, owner, owner], false);
+        indices.record(owner, 20, &[owner, owner], false);
+        first_visits += indices.rewrite(owner, 0, owner, 0).visited_rows;
+        first_visits += indices.rewrite(owner, 1, owner, 0).visited_rows;
+        before.push(indices.snapshot(owner));
+    }
+    assert_eq!(first_visits, 200 * 6);
+    indices.record(0, 10, &[0, 1000, 0], false);
+    let mut replayed = 0;
+    let mut revisited = 0;
+    let mut normalized = 0;
+    for owner in 1..=200 {
+        let stats = indices.rebase(
+            owner,
+            owner - 1,
+            false,
+            |_, origin| {
+                normalized += 1;
+                if origin < owner {
+                    0
+                } else {
+                    origin
+                }
+            },
+            &[(0, owner, 0), (1, owner, 0)],
+        );
+        assert!(stats.refreshed);
+        assert_eq!(stats.local_rows_replayed, 2);
+        assert_eq!(stats.rewrite.visited_rows, 6);
+        replayed += stats.local_rows_replayed;
+        revisited += stats.rewrite.visited_rows;
+        assert!(indices.rows(owner, 0).contains(&[0, 1000, 0]));
+        assert!(indices.rows(owner, 1).contains(&[0, 0, 1000]));
+        assert!(indices.rows(owner, 2).contains(&[owner, 0]));
+        assert!(indices.rows(owner, 3).contains(&[0, owner]));
+        assert_eq!(indices.rows(owner, 0).iter().count(), owner as usize + 2);
+        assert_eq!(indices.local_rows(owner, 10).iter().count(), 1);
+        assert_eq!(indices.local_rows(owner, 20).iter().count(), 1);
+        assert!(!before[owner as usize].rows(0).contains(&[0, 1000, 0]));
+        assert_eq!(
+            before[owner as usize].rows(0).iter().count(),
+            owner as usize + 1
+        );
+    }
+    assert_eq!(replayed, 200 * 2);
+    assert_eq!(revisited, 200 * 6);
+    assert_eq!(normalized, 200 * 3);
+    assert!(indices.owners().eq(0..=200));
+    for owner in 1..=200 {
+        assert_eq!(
+            indices.rebase(
+                owner,
+                owner - 1,
+                false,
+                |_, _| panic!("unchanged parent"),
+                &[]
+            ),
+            CompactRebaseStats::default()
+        );
+    }
+}
+
+#[test]
+fn nullary_and_long_indexes_follow_the_same_snapshot_contract() {
+    for arity in [0, 11] {
+        let member_types: Vec<_> = (0..arity)
+            .map(|column| (column % 2 == 0).then_some(0))
+            .collect();
+        let order: Vec<_> = (0..arity).rev().collect();
+        let mut indices = CompactOwnerIndices::new(vec![CompactIndexSpec {
+            relation: 10,
+            order,
+            member_types,
+        }]);
+        indices.create_owner(0);
+        indices.create_owner(1);
+        let tuple = vec![1; arity];
+        indices.record(0, 10, &tuple, false);
+        indices.rebase(1, 0, false, |_, _| panic!("no local rows"), &[]);
+        assert!(indices.rows(1, 0).shares_storage_with(indices.rows(0, 0)));
+        assert_eq!(
+            indices.record(1, 10, &tuple, false),
+            CompactRecordResult::default()
+        );
+        let snapshot = indices.snapshot(1);
+        indices.rewrite(1, 0, 1, 2);
+        let expected: Vec<_> = (0..arity)
+            .rev()
+            .map(|column| if column % 2 == 0 { 2 } else { 1 })
+            .collect();
+        assert!(indices.rows(1, 0).contains(&expected));
+        assert!(snapshot.rows(0).contains(&tuple));
+        assert_eq!(snapshot.source(), Some(0));
+        assert_eq!(snapshot.source_revision(), Some(indices.revision(0)));
+    }
+}
+
+#[test]
+#[should_panic(expected = "full signature permutation")]
+fn diagonal_indexes_are_rejected() {
+    CompactOwnerIndices::new(vec![CompactIndexSpec {
+        relation: 10,
+        order: vec![0, 0],
+        member_types: vec![None, Some(0)],
+    }]);
+}
+
+#[test]
+#[should_panic(expected = "inconsistent relation signature")]
+fn index_schemas_must_agree() {
+    let mut specs = item_specs();
+    specs[1].member_types[1] = Some(1);
+    CompactOwnerIndices::new(specs);
+}
+
+#[test]
+#[should_panic(expected = "cyclic compact inheritance")]
+fn inherited_indexes_reject_cycles_without_walking_ancestor_rows() {
+    let mut indices = CompactOwnerIndices::new(Vec::new());
+    indices.create_owner(0);
+    indices.create_owner(1);
+    indices.rebase(1, 0, false, |_, origin| origin, &[]);
+    indices.rebase(0, 1, false, |_, origin| origin, &[]);
+}
+
+#[test]
+#[should_panic(expected = "already has another source")]
+fn inherited_indexes_reject_multiple_sources() {
+    let mut indices = CompactOwnerIndices::new(Vec::new());
+    for owner in 0..3 {
+        indices.create_owner(owner);
+    }
+    indices.rebase(2, 0, false, |_, origin| origin, &[]);
+    indices.rebase(2, 1, false, |_, origin| origin, &[]);
+}
+
+#[test]
+#[should_panic(expected = "unknown compact index")]
+fn snapshot_index_access_checks_its_boundary() {
+    let mut indices = CompactOwnerIndices::new(Vec::new());
+    indices.create_owner(0);
+    indices.rows(0, 0);
+}

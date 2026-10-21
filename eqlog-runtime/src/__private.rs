@@ -1,6 +1,10 @@
 //! Generated models need cross-crate access to the runtime's storage.
 
 pub use super::canonical_mask::CanonicalMask;
+pub use super::compact_owner_indices::{
+    CompactIndexSpec, CompactOwnerIndices, CompactOwnerSnapshot, CompactRebaseStats,
+    CompactRecordResult,
+};
 pub use super::data::{RelationData, RelationIndex, TypeData};
 pub use super::element_weights::ElementWeights;
 pub use super::lazy_index::{IndexSeed, LazyIndex};

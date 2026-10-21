@@ -1,0 +1,345 @@
+use std::collections::BTreeMap;
+
+use crate::origin_relations::{OriginRelation, OriginRewriteStats};
+use crate::table::Table;
+use crate::Unification;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CompactIndexSpec {
+    pub relation: u32,
+    /// A full permutation of the owner-free relation signature.
+    pub order: Vec<usize>,
+    /// Signature-order partition labels; global columns have no label.
+    pub member_types: Vec<Option<u32>>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct CompactRecordResult {
+    pub inserted: bool,
+    pub retained_support: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct CompactRebaseStats {
+    pub refreshed: bool,
+    /// Signature-order support rows, counted once per relation.
+    pub local_rows_replayed: usize,
+    /// Incidence work is counted separately in each selected index.
+    pub rewrite: OriginRewriteStats,
+}
+
+#[derive(Clone, Debug)]
+pub struct CompactOwnerSnapshot {
+    current: Vec<OriginRelation>,
+    local: BTreeMap<u32, Table>,
+    source: Option<u32>,
+    source_revision: Option<u64>,
+    revision: u64,
+}
+
+impl CompactOwnerSnapshot {
+    pub fn rows(&self, index: usize) -> &Table {
+        self.current
+            .get(index)
+            .expect("unknown compact index")
+            .rows()
+    }
+
+    pub fn local_rows(&self, relation: u32) -> &Table {
+        self.local.get(&relation).expect("unknown compact relation")
+    }
+
+    pub fn source(&self) -> Option<u32> {
+        self.source
+    }
+
+    pub fn source_revision(&self) -> Option<u64> {
+        self.source_revision
+    }
+
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    fn changed(&mut self) {
+        self.revision = self
+            .revision
+            .checked_add(1)
+            .expect("index revision overflow");
+    }
+}
+
+struct RelationLayout {
+    member_types: Vec<Option<u32>>,
+    indices: Vec<usize>,
+}
+
+struct Owner {
+    snapshot: CompactOwnerSnapshot,
+    component: u32,
+}
+
+/// Separate local support lets a new parent snapshot replace inherited history.
+///
+/// The caller owns member partitions, canonicalizes incoming rows, and supplies
+/// ordered local merge events when rebasing. All selected indexes are full
+/// permutations, so their row-presence checks agree without enumerating rows.
+pub struct CompactOwnerIndices {
+    specs: Vec<CompactIndexSpec>,
+    relations: BTreeMap<u32, RelationLayout>,
+    owners: BTreeMap<u32, Owner>,
+    components: Unification<u32>,
+}
+
+fn add_rewrite(total: &mut OriginRewriteStats, next: OriginRewriteStats) {
+    total.visited_rows += next.visited_rows;
+    total.rewritten_rows += next.rewritten_rows;
+    total.merged_rows += next.merged_rows;
+}
+
+fn project(tuple: &[u32], order: &[usize]) -> Vec<u32> {
+    order.iter().map(|&column| tuple[column]).collect()
+}
+
+impl CompactOwnerIndices {
+    pub fn new(specs: Vec<CompactIndexSpec>) -> Self {
+        let mut relations = BTreeMap::<u32, RelationLayout>::new();
+        for (index, spec) in specs.iter().enumerate() {
+            let mut order = spec.order.clone();
+            order.sort_unstable();
+            assert!(
+                order.iter().copied().eq(0..spec.member_types.len()),
+                "compact indexes require a full signature permutation"
+            );
+            let relation = relations
+                .entry(spec.relation)
+                .or_insert_with(|| RelationLayout {
+                    member_types: spec.member_types.clone(),
+                    indices: Vec::new(),
+                });
+            assert_eq!(
+                relation.member_types, spec.member_types,
+                "inconsistent relation signature"
+            );
+            relation.indices.push(index);
+        }
+        Self {
+            specs,
+            relations,
+            owners: BTreeMap::new(),
+            components: Unification::new(),
+        }
+    }
+
+    pub fn create_owner(&mut self, owner: u32) {
+        assert!(
+            !self.owners.contains_key(&owner),
+            "compact owner already exists"
+        );
+        let component = u32::try_from(self.components.len()).expect("too many compact owners");
+        self.components.increase_size_to(self.components.len() + 1);
+        let current = self
+            .specs
+            .iter()
+            .map(|spec| {
+                let columns: Vec<_> = spec
+                    .order
+                    .iter()
+                    .map(|&column| spec.member_types[column])
+                    .collect();
+                OriginRelation::new(&columns)
+            })
+            .collect();
+        let local = self
+            .relations
+            .iter()
+            .map(|(&relation, layout)| (relation, Table::new(layout.member_types.len())))
+            .collect();
+        self.owners.insert(
+            owner,
+            Owner {
+                snapshot: CompactOwnerSnapshot {
+                    current,
+                    local,
+                    source: None,
+                    source_revision: None,
+                    revision: 0,
+                },
+                component,
+            },
+        );
+    }
+
+    fn owner(&self, owner: u32) -> &Owner {
+        self.owners.get(&owner).expect("unknown compact owner")
+    }
+
+    pub fn has_owner(&self, owner: u32) -> bool {
+        self.owners.contains_key(&owner)
+    }
+
+    pub fn owners(&self) -> impl Iterator<Item = u32> + '_ {
+        self.owners.keys().copied()
+    }
+
+    pub fn rows(&self, owner: u32, index: usize) -> &Table {
+        self.owner(owner).snapshot.rows(index)
+    }
+
+    pub fn local_rows(&self, owner: u32, relation: u32) -> &Table {
+        self.owner(owner).snapshot.local_rows(relation)
+    }
+
+    pub fn revision(&self, owner: u32) -> u64 {
+        self.owner(owner).snapshot.revision()
+    }
+
+    pub fn source(&self, owner: u32) -> Option<u32> {
+        self.owner(owner).snapshot.source()
+    }
+
+    pub fn source_revision(&self, owner: u32) -> Option<u64> {
+        self.owner(owner).snapshot.source_revision()
+    }
+
+    pub fn snapshot(&self, owner: u32) -> CompactOwnerSnapshot {
+        self.owner(owner).snapshot.clone()
+    }
+
+    /// Redundant derived facts need no local support; explicit facts can retain it.
+    pub fn record(
+        &mut self,
+        owner: u32,
+        relation: u32,
+        origin_row: &[u32],
+        retain_support: bool,
+    ) -> CompactRecordResult {
+        let layout = self
+            .relations
+            .get(&relation)
+            .expect("unknown compact relation");
+        assert_eq!(origin_row.len(), layout.member_types.len(), "tuple arity");
+        let snapshot = &mut self
+            .owners
+            .get_mut(&owner)
+            .expect("unknown compact owner")
+            .snapshot;
+        let mut inserted = None;
+        for &index in &layout.indices {
+            let tuple = project(origin_row, &self.specs[index].order);
+            let current_inserted = snapshot.current[index].insert(&tuple);
+            if let Some(previous) = inserted {
+                assert_eq!(previous, current_inserted, "compact indexes disagree");
+            }
+            inserted = Some(current_inserted);
+        }
+        let inserted = inserted.expect("relations have selected indexes");
+        let retained_support = (inserted || retain_support)
+            && snapshot
+                .local
+                .get_mut(&relation)
+                .expect("relation support exists")
+                .insert(origin_row);
+        if inserted {
+            snapshot.changed();
+        }
+        CompactRecordResult {
+            inserted,
+            retained_support,
+        }
+    }
+
+    /// Local support keeps its original coordinates for future parent replacement.
+    pub fn rewrite(
+        &mut self,
+        owner: u32,
+        member_type: u32,
+        loser: u32,
+        winner: u32,
+    ) -> OriginRewriteStats {
+        let snapshot = &mut self
+            .owners
+            .get_mut(&owner)
+            .expect("unknown compact owner")
+            .snapshot;
+        let mut stats = OriginRewriteStats::default();
+        for index in &mut snapshot.current {
+            add_rewrite(
+                &mut stats,
+                index.replace_representative(member_type, loser, winner),
+            );
+        }
+        if stats.visited_rows > 0 {
+            snapshot.changed();
+        }
+        stats
+    }
+
+    /// Partition changes without parent row changes require `force`.
+    ///
+    /// Normalize local support in the parent's partition before replaying the
+    /// target's local merges. Neither old nor new inherited rows are enumerated.
+    pub fn rebase(
+        &mut self,
+        target: u32,
+        source: u32,
+        force: bool,
+        mut normalize_parent: impl FnMut(u32, u32) -> u32,
+        merges: &[(u32, u32, u32)],
+    ) -> CompactRebaseStats {
+        let source_revision = self.owner(source).snapshot.revision;
+        let target_owner = self.owner(target);
+        if let Some(previous) = target_owner.snapshot.source {
+            assert_eq!(previous, source, "compact owner already has another source");
+            if !force && target_owner.snapshot.source_revision == Some(source_revision) {
+                return CompactRebaseStats::default();
+            }
+        }
+        let source_component = self.owner(source).component;
+        let target_component = target_owner.component;
+        let connection = if target_owner.snapshot.source.is_none() {
+            let source_root = self.components.root(source_component);
+            let target_root = self.components.root(target_component);
+            assert_ne!(source_root, target_root, "cyclic compact inheritance");
+            Some((target_root, source_root))
+        } else {
+            None
+        };
+        let mut current = self.owner(source).snapshot.current.clone();
+        let mut stats = CompactRebaseStats {
+            refreshed: true,
+            ..CompactRebaseStats::default()
+        };
+        for (&relation, local) in &self.owner(target).snapshot.local {
+            let layout = &self.relations[&relation];
+            for mut tuple in local.iter() {
+                stats.local_rows_replayed += 1;
+                for (&member_type, origin) in layout.member_types.iter().zip(&mut tuple) {
+                    if let Some(member_type) = member_type {
+                        *origin = normalize_parent(member_type, *origin);
+                    }
+                }
+                for &index in &layout.indices {
+                    current[index].insert(&project(&tuple, &self.specs[index].order));
+                }
+            }
+        }
+        for &(member_type, loser, winner) in merges {
+            for index in &mut current {
+                add_rewrite(
+                    &mut stats.rewrite,
+                    index.replace_representative(member_type, loser, winner),
+                );
+            }
+        }
+        if let Some((target_root, source_root)) = connection {
+            self.components.union_roots_into(target_root, source_root);
+        }
+        let snapshot = &mut self.owners.get_mut(&target).unwrap().snapshot;
+        snapshot.current = current;
+        snapshot.source = Some(source);
+        snapshot.source_revision = Some(source_revision);
+        snapshot.changed();
+        stats
+    }
+}

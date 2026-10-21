@@ -67,3 +67,7 @@ unrelated rows.
 Track origin-row incidence so equality rewrites visit only the losing
 representative's rows. Parent relation snapshots
 and historical owner states keep sharing unaffected structure.
+
+Rebase selected owner indexes by sharing current parent roots. Replay
+only local support and local equality merges. Revision checkpoints avoid
+repeating unchanged rebases while persistent snapshots preserve history.
