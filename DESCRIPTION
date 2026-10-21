@@ -27,6 +27,8 @@ Preserve canonical current rows, historical snapshots, and bounded
 work accounting through equality and updates. Charge interval traversal
 separately from member expansion while retaining cheap dense-leaf work.
 Keep balancing ratios valid even when physical size bounds are large.
+Expose the nonempty subtree invariant to keep prefix nodes compact
+without changing the checked subtree-size arithmetic.
 Resolve and release deep mapping chains iteratively so evaluator
 threads with small stacks can edit and destroy mapped snapshots.
 

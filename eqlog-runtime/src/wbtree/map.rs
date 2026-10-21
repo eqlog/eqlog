@@ -2,6 +2,7 @@ use std::cell::OnceCell;
 use std::cmp::Ordering;
 use std::fmt;
 use std::mem;
+use std::num::NonZeroUsize;
 use std::rc::Rc;
 
 use super::mapping::MonotoneMap;
@@ -71,7 +72,8 @@ struct DataNode<V: Clone> {
     value: V,
     left: Option<Rc<Node<V>>>,
     right: Option<Rc<Node<V>>>,
-    size: usize,
+    // Zero can distinguish mapped storage because a data node always contributes one entry.
+    size: NonZeroUsize,
 }
 
 impl<V: Clone> DataNode<V> {
@@ -405,7 +407,7 @@ impl<V: Clone> Node<V> {
             value,
             left: None,
             right: None,
-            size: 1,
+            size: NonZeroUsize::MIN,
         })
     }
 
@@ -486,18 +488,19 @@ impl<V: Clone> Node<V> {
         }))
     }
 
-    fn joined_size(left: &Option<Rc<Self>>, right: &Option<Rc<Self>>) -> usize {
-        Self::size(left)
+    fn joined_size(left: &Option<Rc<Self>>, right: &Option<Rc<Self>>) -> NonZeroUsize {
+        let size = Self::size(left)
             .checked_add(Self::size(right))
             .and_then(|size| size.checked_add(1))
-            .expect("tree size overflow")
+            .expect("tree size overflow");
+        NonZeroUsize::new(size).expect("a data node contributes to its subtree size")
     }
 
     fn size(node: &Option<Rc<Node<V>>>) -> usize {
         let mut current = node.as_deref();
         while let Some(node) = current {
             match node {
-                Node::Data(data) => return data.size,
+                Node::Data(data) => return data.size.get(),
                 Node::Mapping(mapping) => current = mapping.child.as_deref(),
             }
         }
@@ -2461,7 +2464,7 @@ mod tests {
                     }
 
                     // Check size is correct
-                    if data_node.size != 1 + left_size + right_size {
+                    if data_node.size.get() != 1 + left_size + right_size {
                         return false;
                     }
 

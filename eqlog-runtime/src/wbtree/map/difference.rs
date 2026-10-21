@@ -172,7 +172,7 @@ fn same_mappings<V: Clone>(left: &Mappings<'_, V>, right: &Mappings<'_, V>) -> b
 
 fn size<V: Clone>(node: &Node<V>) -> usize {
     match node {
-        Node::Data(data) => data.size,
+        Node::Data(data) => data.size.get(),
         Node::Mapping(_) => unreachable!("normalize before comparing sizes"),
     }
 }
