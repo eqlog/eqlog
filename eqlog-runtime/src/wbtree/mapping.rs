@@ -1,3 +1,4 @@
+use std::ops::RangeInclusive;
 use std::rc::Rc;
 
 use crate::PrefixTree2;
@@ -18,6 +19,45 @@ pub struct MonotoneMap {
 }
 
 impl MonotoneMap {
+    /// Prepares arithmetic image blocks without allocating their individual rows.
+    /// Each pair gives an inclusive source range and the image of its first key.
+    /// Source and image ranges must be nonempty, disjoint, and increasing.
+    pub fn from_offsets(
+        offsets: impl IntoIterator<Item = (RangeInclusive<u32>, u32)>,
+    ) -> Option<Self> {
+        let mut runs: Vec<Run> = Vec::new();
+        for (source, target) in offsets {
+            if source.is_empty() {
+                return None;
+            }
+            let first = *source.start();
+            let last = *source.end();
+            let length = last.checked_sub(first)?;
+            target.checked_add(length)?;
+            if let Some(previous) = runs.last_mut() {
+                let last_target = previous.target + (previous.last - previous.source);
+                if first <= previous.last || target <= last_target {
+                    return None;
+                }
+                if previous.last.checked_add(1) == Some(first)
+                    && last_target.checked_add(1) == Some(target)
+                {
+                    previous.last = last;
+                    continue;
+                }
+            }
+            runs.push(Run {
+                source: first,
+                target,
+                last,
+            });
+        }
+        Some(Self {
+            runs: runs.into(),
+            relation: PrefixTree2::new(),
+        })
+    }
+
     pub fn new(relation: &PrefixTree2) -> Option<Self> {
         let mut runs: Vec<Run> = Vec::new();
         for [source, target] in relation.iter() {

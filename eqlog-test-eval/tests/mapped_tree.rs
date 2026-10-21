@@ -6,6 +6,64 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
 #[test]
+fn arithmetic_image_blocks_do_not_need_an_explicit_relation() {
+    let mapping = MonotoneMap::from_offsets([
+        (0..=9, 150),
+        (10..=19, 160),
+        (100..=109, 300),
+        (u32::MAX - 2..=u32::MAX, u32::MAX - 2),
+    ])
+    .unwrap();
+    assert_eq!(mapping.run_count(), 3);
+    for (source, image) in [
+        (0, 150),
+        (19, 169),
+        (100, 300),
+        (109, 309),
+        (u32::MAX, u32::MAX),
+    ] {
+        assert_eq!(mapping.apply(source), Some(image));
+        assert_eq!(mapping.preimage(image), Some(source));
+    }
+    assert_eq!(mapping.apply(20), None);
+    assert_eq!(mapping.preimage(299), None);
+
+    let mut original = WBTreeMap::new();
+    original.insert(5, 1);
+    original.insert(50, 2);
+    original.insert(105, 3);
+    let mut mapped = original.mapped_keys(mapping);
+    assert_eq!(
+        mapped.iter().collect::<Vec<_>>(),
+        vec![(155, &1), (305, &3)]
+    );
+    mapped.insert(155, 4);
+    assert_eq!(original.get(&5), Some(&1));
+    assert_eq!(mapped.get(&155), Some(&4));
+
+    let whole = MonotoneMap::from_offsets([(0..=u32::MAX, 0)]).unwrap();
+    assert_eq!(whole.run_count(), 1);
+    assert_eq!(whole.apply(u32::MAX), Some(u32::MAX));
+    assert!(original
+        .mapped_keys(whole)
+        .all_difference_entries(&original, |_, value, other| other == Some(value)));
+}
+
+#[test]
+fn arithmetic_image_blocks_reject_ambiguous_or_overflowing_images() {
+    let mut exhausted = 3..=3;
+    assert_eq!(exhausted.next(), Some(3));
+    assert!(MonotoneMap::from_offsets([(exhausted, 7)]).is_none());
+    assert!(MonotoneMap::from_offsets([(2..=1, 0)]).is_none());
+    assert!(MonotoneMap::from_offsets([(0..=u32::MAX, 1)]).is_none());
+    assert!(MonotoneMap::from_offsets([(0..=5, 10), (5..=7, 20)]).is_none());
+    assert!(MonotoneMap::from_offsets([(0..=5, 10), (6..=7, 15)]).is_none());
+    assert!(MonotoneMap::from_offsets([(10..=15, 10), (0..=5, 20)]).is_none());
+    assert!(MonotoneMap::from_offsets([(0..=5, 10), (10..=15, 0)]).is_none());
+    assert_eq!(MonotoneMap::from_offsets([]).unwrap().run_count(), 0);
+}
+
+#[test]
 fn monotone_maps_compress_offsets_without_filling_gaps() {
     let mut relation = PrefixTree2::new();
     for key in 0..128 {
