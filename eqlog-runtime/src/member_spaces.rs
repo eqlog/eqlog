@@ -15,6 +15,17 @@ struct Partition {
     parents: WBTreeMap<Parent>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MemberMerge {
+    pub loser: u32,
+    pub winner: u32,
+}
+
+pub struct MemberRefresh {
+    pub source: MemberSnapshot,
+    pub merges: Vec<MemberMerge>,
+}
+
 impl Partition {
     fn new() -> Self {
         Self {
@@ -32,11 +43,11 @@ impl Partition {
         origin
     }
 
-    fn equate(&mut self, lhs: u32, rhs: u32) -> bool {
+    fn equate(&mut self, lhs: u32, rhs: u32) -> Option<MemberMerge> {
         let mut lhs = self.root(lhs);
         let mut rhs = self.root(rhs);
         if lhs == rhs {
-            return false;
+            return None;
         }
         let mut left_rank = self.parents.get(&lhs).map_or(0, |parent| parent.rank);
         let mut right_rank = self.parents.get(&rhs).map_or(0, |parent| parent.rank);
@@ -60,7 +71,10 @@ impl Partition {
                 },
             );
         }
-        true
+        Some(MemberMerge {
+            loser: rhs,
+            winner: lhs,
+        })
     }
 }
 
@@ -309,6 +323,22 @@ impl MemberSpaces {
         self.owners.contains_key(&owner)
     }
 
+    pub fn owners(&self) -> impl Iterator<Item = u32> + '_ {
+        self.owners.keys().copied()
+    }
+
+    pub fn source(&self, owner: u32) -> Option<u32> {
+        self.owners
+            .get(&owner)?
+            .inherited
+            .as_ref()
+            .map(|inherited| inherited.source)
+    }
+
+    pub fn get_snapshot(&self, owner: u32) -> Option<&MemberSnapshot> {
+        self.owners.get(&owner).map(|space| &space.snapshot)
+    }
+
     fn reserve(&mut self, owner: u32, extent: u64) {
         let previous = self.owners[&owner].snapshot.extent;
         if extent <= previous {
@@ -352,6 +382,20 @@ impl MemberSpaces {
     /// The target can already contain local members and equations. Existing
     /// handles remain stable, including after later source allocation.
     pub fn inherit_total_members(&mut self, source: u32, target: u32) -> bool {
+        self.install_inheritance(source, target);
+        self.refresh(target)
+    }
+
+    pub fn inherit_total_members_with_merges(
+        &mut self,
+        source: u32,
+        target: u32,
+    ) -> Option<MemberRefresh> {
+        self.install_inheritance(source, target);
+        self.refresh_with_merges(target)
+    }
+
+    fn install_inheritance(&mut self, source: u32, target: u32) {
         assert!(self.has_owner(source), "unknown source owner");
         assert!(self.has_owner(target), "unknown target owner");
         if let Some(inherited) = &self.owners[&target].inherited {
@@ -359,7 +403,7 @@ impl MemberSpaces {
                 inherited.source == source,
                 "owner already has another source"
             );
-            return self.refresh(target);
+            return;
         }
         let source_component = self.components.root(self.owners[&source].component);
         let target_component = self.components.root(self.owners[&target].component);
@@ -374,18 +418,31 @@ impl MemberSpaces {
             source,
             revision: u64::MAX,
         });
-        self.refresh(target)
     }
 
     /// The source must already be current; descendants can be visited in order.
     pub fn refresh(&mut self, owner: u32) -> bool {
+        self.refresh_with(owner, |_| {}).is_some()
+    }
+
+    pub fn refresh_with_merges(&mut self, owner: u32) -> Option<MemberRefresh> {
+        let mut merges = Vec::new();
+        let source = self.refresh_with(owner, |merge| merges.push(merge))?;
+        Some(MemberRefresh { source, merges })
+    }
+
+    fn refresh_with(
+        &mut self,
+        owner: u32,
+        mut on_merge: impl FnMut(MemberMerge),
+    ) -> Option<MemberSnapshot> {
         let space = self.owners.get(&owner).expect("unknown owner");
         let Some(inherited) = &space.inherited else {
-            return false;
+            return None;
         };
         let source = &self.owners[&inherited.source].snapshot;
         if inherited.revision == source.revision {
-            return false;
+            return None;
         }
         let mut domain = source.domain.clone();
         for origin in space.local_domain.iter() {
@@ -393,18 +450,21 @@ impl MemberSpaces {
         }
         let mut partition = source.partition.clone();
         for &(lhs, rhs) in &space.local_equations {
-            partition.equate(lhs, rhs);
+            if let Some(merge) = partition.equate(lhs, rhs) {
+                on_merge(merge);
+            }
         }
         self.replayed_equations += u64::try_from(space.local_equations.len()).unwrap();
         let revision = source.revision;
         let extent = source.extent;
+        let source = source.clone();
         self.reserve(owner, extent);
         let space = self.owners.get_mut(&owner).unwrap();
         space.snapshot.domain = domain;
         space.snapshot.partition = partition;
         space.snapshot.revision += 1;
         space.inherited.as_mut().unwrap().revision = revision;
-        true
+        Some(source)
     }
 
     pub fn refresh_descendants(&mut self, owner: u32) -> usize {
@@ -421,6 +481,10 @@ impl MemberSpaces {
     }
 
     pub fn equate(&mut self, owner: u32, lhs: u32, rhs: u32) -> bool {
+        self.equate_with_merge(owner, lhs, rhs).is_some()
+    }
+
+    pub fn equate_with_merge(&mut self, owner: u32, lhs: u32, rhs: u32) -> Option<MemberMerge> {
         let space = self.owners.get_mut(&owner).expect("unknown owner");
         let lhs = space
             .snapshot
@@ -430,12 +494,10 @@ impl MemberSpaces {
             .snapshot
             .origin(rhs)
             .expect("right member has another owner");
-        if !space.snapshot.partition.equate(lhs, rhs) {
-            return false;
-        }
+        let merge = space.snapshot.partition.equate(lhs, rhs)?;
         space.local_equations.push((lhs, rhs));
         space.snapshot.revision += 1;
-        true
+        Some(merge)
     }
 
     pub fn snapshot(&self, owner: u32) -> MemberSnapshot {

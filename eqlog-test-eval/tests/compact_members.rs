@@ -1,6 +1,50 @@
 use std::collections::BTreeSet;
 
-use eqlog_runtime::__private::MemberSpaces;
+use eqlog_runtime::__private::{CanonicalMask, MemberSpaces};
+
+#[test]
+fn replay_events_normalize_local_rows_after_parent_equality() {
+    let mut spaces = MemberSpaces::new();
+    spaces.create_owner(0);
+    spaces.create_owner(1);
+    let a = spaces.allocate(0);
+    let b = spaces.allocate(0);
+    let c = spaces.allocate(0);
+    let local = spaces.allocate(1);
+    let initial = spaces.inherit_total_members_with_merges(0, 1).unwrap();
+    assert!(initial.merges.is_empty());
+    assert_eq!(initial.source.owner(), 0);
+    let image_a = spaces.image(a, 1).unwrap();
+    let image_b = spaces.image(b, 1).unwrap();
+    let image_c = spaces.image(c, 1).unwrap();
+    let original = spaces.snapshot(1);
+    let local_origin = original.origin(local).unwrap();
+    let a_origin = original.origin(image_a).unwrap();
+    let c_origin = original.origin(image_c).unwrap();
+    let merged = spaces.equate_with_merge(1, local, image_a).unwrap();
+    assert_eq!(merged.loser, a_origin);
+    assert_eq!(merged.winner, local_origin);
+    spaces.equate(1, image_c, image_b);
+    spaces.equate(0, a, b);
+    let refresh = spaces.refresh_with_merges(1).unwrap();
+    assert_eq!(refresh.merges.len(), 2);
+    assert_eq!(refresh.source.root_origin(local_origin), None);
+    let current = spaces.snapshot(1);
+    for origin in [local_origin, a_origin, c_origin] {
+        let mut canonical = refresh.source.root_origin(origin).unwrap_or(origin);
+        for merge in &refresh.merges {
+            if canonical == merge.loser {
+                canonical = merge.winner;
+            }
+        }
+        assert_eq!(current.root_origin(origin), Some(canonical));
+    }
+    assert!(CanonicalMask::Origins(&current).contains(a_origin));
+    assert!(!CanonicalMask::Origins(&current).contains(local_origin));
+    assert_eq!(spaces.source(1), Some(0));
+    assert_eq!(spaces.owners().collect::<Vec<_>>(), vec![0, 1]);
+    assert!(spaces.refresh_with_merges(1).is_none());
+}
 
 #[test]
 fn inherited_members_share_storage_and_keep_owner_local_equality() {
