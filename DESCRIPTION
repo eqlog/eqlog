@@ -69,3 +69,6 @@ late parent changes, and pending existential consequences across
 partial closure.
 Keep functionality coverage independent of internal validation hooks
 by checking public lookups and equality after inheritance changes.
+Distinguish transported owner-valued data from the current owner in
+rule premises and conclusions so target-specific consequences remain
+observable after closed source facts are inherited.

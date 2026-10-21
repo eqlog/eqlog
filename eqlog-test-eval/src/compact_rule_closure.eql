@@ -9,6 +9,10 @@ model World {
     pred ready(El);
     pred witnessed(El, El);
     pred active(El);
+    pred peer(World);
+    pred owner_seen();
+    pred tick();
+    pred backref(World);
     func next(El) -> El;
     func witness(El) -> El;
 
@@ -48,4 +52,16 @@ rule activate {
     if enabled(w);
     if w.p(x);
     then w.active(x);
+}
+
+rule detect_owner {
+    if w: World;
+    if w.peer(w);
+    then w.owner_seen();
+}
+
+rule make_backref {
+    if w: World;
+    if w.tick();
+    then w.backref(w);
 }

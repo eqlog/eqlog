@@ -299,3 +299,49 @@ fn global_owner_premises_can_enable_only_a_target_rule() {
     assert!(!model.active(source, member));
     assert!(!model.active(sibling, sibling_member));
 }
+
+#[test]
+fn inherited_owner_values_can_enable_a_target_diagonal() {
+    let mut model = CompactRuleClosure::new();
+    model.enable_compact_world();
+    let source = model.new_world();
+    let target = model.new_world();
+    let sibling = model.new_world();
+    model.new_el(source);
+    model.insert_peer(source, target);
+    model.close();
+    assert!(!model.owner_seen(source));
+    inherit(&mut model, source, target);
+    inherit(&mut model, source, sibling);
+    model.close();
+
+    assert!(model.peer(target, target));
+    assert!(model.owner_seen(target));
+    assert!(model.peer(sibling, target));
+    assert!(!model.owner_seen(sibling));
+    assert!(!model.owner_seen(source));
+}
+
+#[test]
+fn inherited_premises_emit_the_target_owner_as_data() {
+    let mut model = CompactRuleClosure::new();
+    model.enable_compact_world();
+    let source = model.new_world();
+    let target = model.new_world();
+    let sibling = model.new_world();
+    model.new_el(source);
+    model.insert_tick(source);
+    model.close();
+    assert!(model.backref(source, source));
+    inherit(&mut model, source, target);
+    inherit(&mut model, source, sibling);
+    model.close();
+
+    assert!(model.backref(target, source));
+    assert!(model.backref(target, target));
+    assert!(model.backref(sibling, source));
+    assert!(model.backref(sibling, sibling));
+    assert!(!model.backref(source, target));
+    assert!(!model.backref(target, sibling));
+    assert!(!model.backref(sibling, target));
+}
