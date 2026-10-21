@@ -1,3 +1,4 @@
+mod compact_indices;
 mod compact_members;
 mod context;
 mod dynamic;
@@ -1063,6 +1064,7 @@ fn display_pub_insert_relation<'a>(
             ModelMode::Desugared => "#[inline(never)]",
         };
         let args = rel_args.iter().format(", ").to_string();
+        let compact_insert = compact_indices::insert_hook(rel, ctx);
         let parent_checks = FmtFn(|f| match rel {
             FlatRel::ModelMember(typ) => {
                 let (member, parents) = rel_args.split_last().unwrap();
@@ -1093,6 +1095,7 @@ fn display_pub_insert_relation<'a>(
             {supported_inline}
             fn {supported_insert}(&mut self, retain_support: bool, {rel_fn_args}) {{
                 {canonicalize}
+                {compact_insert}
                 {unwrap_args}
 
                 {contains_checks}
@@ -2744,6 +2747,8 @@ fn display_propagate_model_morphisms_fn<'a>(
         let relation_count = relations.len();
         let frontier = transport::prepare_frontier(typ, &relations, plan, ctx, index_selection);
         let finish_frontier = transport::finish_frontier(typ, &relations, ctx, index_selection);
+        let compact_graph = compact_indices::graph_guard(typ, ctx);
+        let compact_selected = compact_indices::selected_guard(typ, ctx);
         let remaps = relations
             .iter()
             .enumerate()
@@ -2793,6 +2798,7 @@ fn display_propagate_model_morphisms_fn<'a>(
             ) -> bool {{
                 {prepare_graph}
                 {components}
+                {compact_graph}
                 {frontier}
                 if !transport_all && transport_work.iter().all(|work| work.is_empty()) {{
                     return false;
@@ -2867,6 +2873,7 @@ fn display_propagate_model_morphisms_fn<'a>(
                 active: &[bool; {relation_count}],
                 inserted: &mut [bool; {relation_count}],
             ) -> bool {{
+                {compact_selected}
                 let mut changed = false;
                 {remaps}
                 changed
@@ -2962,6 +2969,7 @@ fn display_new_fn<'a>(
         writeln!(f, "Self {{").unwrap();
         writeln!(f, "__pending_delta: ModelDelta::new(),")?;
         write!(f, "{}", native_indices::init(native_plans))?;
+        write!(f, "{}", compact_indices::fields(ctx, true))?;
         write!(f, "{}", transport::fields(ctx, index_selection, true))?;
         write!(f, "{}", codegen.init(index_selection, ctx))?;
         for typ in ctx.signature().iter_types() {
@@ -3380,6 +3388,7 @@ fn display_theory_struct<'a>(
             .format("\n");
 
         let scheduler_fields = FmtFn(move |f| {
+            write!(f, "{}", compact_indices::fields(ctx, false))?;
             write!(f, "{}", transport::fields(ctx, index_selection, false))?;
             write!(f, "{}", native_indices::fields(native_plans, ctx))?;
             write!(f, "{}", codegen.fields(ctx, index_selection))?;
@@ -3431,6 +3440,11 @@ fn display_theory_impl<'a>(
 
         match ctx.model_mode() {
             ModelMode::Native => {
+                write!(
+                    f,
+                    "{}",
+                    compact_indices::methods(ctx, index_selection, &program.native_indices)
+                )?;
                 write!(f, "{}", codegen.methods(ram_modules, ctx, index_selection))?;
                 write!(f, "{}", codegen.close(ctx, index_selection))?;
             }
@@ -3443,7 +3457,6 @@ fn display_theory_impl<'a>(
 
         for typ in ctx.signature().iter_types() {
             write!(f, "{}", compact_members::methods(typ, ctx, index_selection))?;
-            write!(f, "{}", compact_members::pending_index_hooks(typ, ctx))?;
             let iter_type_fn = display_iter_type_fn(typ, ctx, index_selection);
             write!(f, "{}", iter_type_fn)?;
 

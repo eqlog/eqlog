@@ -908,9 +908,11 @@ impl<'s> Codegen<'s> {
                     } else {
                         String::new()
                     };
+                    let compact_guard = super::compact_indices::component_guard(model, ctx);
                     writedoc! {f, "
                     fn __transport_component_{m}_{name}(&mut self, {baseline_arg}parents: [u32; {count}], morphisms: &[MorphismWithSignature], retain_own: bool) -> bool {{
                         if morphisms.is_empty() {{ return false; }}
+                        {compact_guard}
                         let mut changed = false;
                 "}?;
                     if let Some(baseline) = &baseline {
@@ -1287,6 +1289,20 @@ fn scoped_tree(source: &str, rel: &FlatInRel, model: TypeId, ctx: &RustGenCtx<'_
     for i in 0..scope_prefix(rel, model, ctx) {
         let dim = arity - i - 1;
         current = format!("{current}.get(owners[{i}]).unwrap_or_else(|| PrefixTree{dim}::empty())");
+    }
+    match rel {
+        FlatInRel::Rel(FlatRel::ModelMember(typ)) => {
+            if ctx.supports_compact_members(*typ)
+                && ctx.signature().type_(*typ).parents.as_slice() == [model]
+            {
+                let name = display_type(*typ, ctx).to_string().to_case(Case::Snake);
+                return format!("(if self.__compact_members_{name}.is_some() {{ self.__compact_domain_{name}.get(owners[0]).unwrap_or_else(|| PrefixTree1::empty()) }} else {{ {current} }})");
+            }
+        }
+        FlatInRel::Rel(FlatRel::Pred(_) | FlatRel::Func(_))
+        | FlatInRel::RelWithDiagonals { .. }
+        | FlatInRel::TypeSet(_)
+        | FlatInRel::Equality(_) => {}
     }
     current
 }

@@ -85,3 +85,6 @@ public root and allocation behavior.
 
 Retain local quotient events when only parent rows change, so inherited
 row refresh still respects equations already made in the target.
+
+Feed native owner scopes from shared origin indexes. Rebase inherited
+roots and replay local support without building explicit image tuples.

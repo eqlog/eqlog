@@ -64,19 +64,23 @@ pub(super) fn methods<'a>(
             let owned = display_own_index_field_name(&plan.rel, primary, ctx);
             let all = display_all_index_field_name(&plan.rel, primary, ctx);
             let project = projection(&plan.rel, &plan.index, primary);
+            let compact_guard = super::compact_indices::native_guard(&plan.rel, ctx);
             writedoc! {f, "
                 fn __prepare_native_index_from_primary_{id}(&mut self) {{
+                    {compact_guard}
                     let index = self.__native_seed_{id}.update(&self.{all}, {project});
                     self.__native_input_{id}.publish(&index);
                 }}
 
                 fn __prepare_native_index_{id}(&mut self) {{
+                    {compact_guard}
                     let mut index = self.__native_seed_{id}.update(&self.{owned}, {project});
                     self.__native_{id}_model_0([], &mut index, false);
                     self.__native_input_{id}.publish(&index);
                 }}
 
                 fn __extend_native_index_{id}(&mut self) {{
+                    {compact_guard}
                     let index = self.__native_seed_{id}.update_additions(&self.{owned}, {project});
                     let index = self.__native_input_{id}.current().union(&index);
                     self.__native_input_{id}.publish(&index);

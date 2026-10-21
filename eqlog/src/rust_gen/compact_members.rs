@@ -89,21 +89,3 @@ pub(super) fn methods<'a>(
         "}
     })
 }
-
-pub(super) fn pending_index_hooks<'a>(typ: TypeId, ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
-    FmtFn(move |f| {
-        if !ctx.supports_compact_members(typ) {
-            return Ok(());
-        }
-        let name = display_type(typ, ctx).to_string().to_case(Case::Snake);
-        writedoc! {f, "
-            fn __compact_allocated_{name}(&mut self, _owner: u32, _origin: u32) {{
-                panic!(\"compact member index hooks are not installed\");
-            }}
-
-            fn __compact_equate_{name}(&mut self, _owner: u32, _merge: eqlog_runtime::__private::MemberMerge) {{
-                panic!(\"compact member index hooks are not installed\");
-            }}
-        "}
-    })
-}
