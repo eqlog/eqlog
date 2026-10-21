@@ -30,6 +30,10 @@ evaluation strategies, randomized mutation sequences, filtered pivots,
 partial and conflicting images, noncanonical rows, source and owner
 equalities, shared snapshots, deep chains, late images, and finite fuel.
 
+Record native CGU16 measurements against f29c6e6. Dense consumption
+improves substantially; sparse incremental and equality controls still
+have measurable overhead. Preserve the exact methodology and hashes.
+
 Lazy caches and stack-safe destruction tighten the generic WBTreeMap
 lifetime behavior: previous covariance and some early-dropping borrowed
 value examples are not preserved. Generated evaluators use owned values.
