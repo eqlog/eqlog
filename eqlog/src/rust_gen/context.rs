@@ -24,6 +24,16 @@ impl<'a> RustGenCtx<'a> {
         self.model_mode
     }
 
+    pub(crate) fn supports_compact_members(&self, typ: TypeId) -> bool {
+        match self.model_mode {
+            ModelMode::Native => match self.signature.type_(typ).kind {
+                TypeKind::Plain => self.signature.type_(typ).parents.len() == 1,
+                TypeKind::Enum | TypeKind::Model | TypeKind::Mor(_) => false,
+            },
+            ModelMode::Desugared => false,
+        }
+    }
+
     pub(crate) fn has_shared_indices(&self, rel: &FlatInRel) -> bool {
         match self.model_mode {
             ModelMode::Native => match rel {

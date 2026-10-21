@@ -721,10 +721,13 @@ impl<'s> Codegen<'s> {
                     }
                     for typ in module_env_iter_types(module, ctx.signature()) {
                         let name = display_type(typ, ctx).to_string().to_case(Case::Snake);
-                        writeln!(
-                            f,
-                            "__canonical_{name}: self.{name}_equalities.canonical_roots(),"
-                        )?;
+                        let roots = format!("self.{name}_equalities.canonical_roots()");
+                        let roots = if ctx.supports_compact_members(typ) {
+                            format!("eqlog_runtime::__private::CanonicalMask::Dense({roots})")
+                        } else {
+                            roots
+                        };
+                        writeln!(f, "__canonical_{name}: {roots},")?;
                     }
                     for (rel, index) in module_env_in_rels(module) {
                         let field = display_index_field_name(&rel, &index, ctx);

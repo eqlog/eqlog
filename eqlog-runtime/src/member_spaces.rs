@@ -220,6 +220,8 @@ pub struct MemberSpaces {
     components: Unification<u32>,
     next_origin: u64,
     next_handle: u64,
+    adoption_bound: u64,
+    owned_origins: u64,
     replayed_equations: u64,
 }
 
@@ -231,14 +233,59 @@ impl Default for MemberSpaces {
 
 impl MemberSpaces {
     pub fn new() -> Self {
+        Self::with_handle_bound(0)
+    }
+
+    /// Existing handles below `bound` can be adopted before enabling inheritance.
+    /// They remain valid aliases, while canonical handles use fresh namespaces.
+    pub fn with_handle_bound(bound: u64) -> Self {
+        assert!(
+            bound <= u64::from(u32::MAX) + 1,
+            "invalid member handle bound"
+        );
         Self {
             owners: BTreeMap::new(),
             blocks: BTreeMap::new(),
             components: Unification::new(),
-            next_origin: 0,
-            next_handle: 0,
+            next_origin: bound,
+            next_handle: bound,
+            adoption_bound: bound,
+            owned_origins: 0,
             replayed_equations: 0,
         }
+    }
+
+    /// Adopting retains callers' handles without disrupting arithmetic maps.
+    /// Canonical representatives can change when the compact path is enabled.
+    pub fn adopt(&mut self, owner: u32, handle: u32) -> u32 {
+        assert!(
+            u64::from(handle) < self.adoption_bound,
+            "handle is not reserved for adoption"
+        );
+        assert!(self.has_owner(owner), "unknown owner");
+        assert!(
+            !self.blocks.contains_key(&handle),
+            "handle was already adopted"
+        );
+        assert!(
+            self.owners[&owner].inherited.is_none(),
+            "adopt before installing inheritance"
+        );
+        let alias = MemberBlock {
+            owner,
+            first_origin: handle,
+            first_handle: handle,
+            len: 1,
+        };
+        self.reserve(owner, u64::from(handle) + 1);
+        self.blocks.insert(handle, alias);
+        let space = self.owners.get_mut(&owner).unwrap();
+        space.snapshot.by_handle.insert(handle, alias);
+        space.snapshot.domain.insert(handle);
+        space.local_domain.insert(handle);
+        space.snapshot.revision += 1;
+        self.owned_origins += 1;
+        space.snapshot.handle(handle).unwrap()
     }
 
     pub fn create_owner(&mut self, owner: u32) {
@@ -292,6 +339,7 @@ impl MemberSpaces {
         let origin = u32::try_from(self.next_origin).expect("member origin space exhausted");
         self.reserve(owner, self.next_origin + 1);
         self.next_origin += 1;
+        self.owned_origins += 1;
         let space = self.owners.get_mut(&owner).unwrap();
         space.local_domain.insert(origin);
         space.snapshot.domain.insert(origin);
@@ -438,7 +486,7 @@ impl MemberSpaces {
     pub fn stats(&self) -> MemberSpaceStats {
         MemberSpaceStats {
             owners: self.owners.len(),
-            owned_origins: self.next_origin,
+            owned_origins: self.owned_origins,
             handle_blocks: self.blocks.len(),
             reserved_handles: self.next_handle,
             local_equations: self

@@ -51,3 +51,5 @@ Introduce persistent member domains and scoped equality partitions over
 stable origins. Virtual handle blocks preserve separate owner identities
 without allocating every inherited image. Refresh shares source state
 and replays local constraints while historical snapshots remain stable.
+Keep old handles valid on explicit adoption, reserve sparse weights
+without filling virtual slots, and provide native member root masks.

@@ -202,6 +202,8 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
+mod canonical_mask;
+mod element_weights;
 mod member_spaces;
 mod prefix_tree;
 mod toposort;

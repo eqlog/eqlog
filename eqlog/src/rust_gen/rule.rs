@@ -155,7 +155,11 @@ pub fn display_module_env_struct<'a>(
             .iter()
             .map(|&typ| {
                 let name = display_type(typ, ctx).to_string().to_case(Snake);
-                format!("__canonical_{name}: &'a [bool],")
+                if ctx.supports_compact_members(typ) {
+                    format!("__canonical_{name}: eqlog_runtime::__private::CanonicalMask<'a>,")
+                } else {
+                    format!("__canonical_{name}: &'a [bool],")
+                }
             })
             .join("\n");
         let owners = if ram_module.owner_count() > 0 {
@@ -357,8 +361,12 @@ fn display_stmt_pre<'a>(ram_stmt: &'a RamStmt, ctx: &'a RustGenCtx<'a>) -> impl 
             };
             let filter = if canonical_filter {
                 let typ = iteration_type(iter, ctx.signature());
-                let typ = display_type(typ, ctx).to_string().to_case(Snake);
-                format!(".filter(|(key, _)| env.__canonical_{typ}[*key as usize])")
+                let name = display_type(typ, ctx).to_string().to_case(Snake);
+                if ctx.supports_compact_members(typ) {
+                    format!(".filter(|(key, _)| env.__canonical_{name}.contains(*key))")
+                } else {
+                    format!(".filter(|(key, _)| env.__canonical_{name}[*key as usize])")
+                }
             } else {
                 String::new()
             };
