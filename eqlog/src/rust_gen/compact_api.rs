@@ -40,6 +40,7 @@ pub(super) fn methods<'a>(
                 /// Requires a graph without assigned morphism endpoints.
                 /// Existing member handles remain valid after activation.
                 /// An operation requiring ordinary storage preserves existing handles.
+                #[allow(dead_code)]
                 pub fn enable_compact_{name}(&mut self) {{
                     if self.__compact_indices_{name}.is_some() {{ return; }}
                     {eligibility}
@@ -56,6 +57,7 @@ pub(super) fn methods<'a>(
                 /// Total inheritance must be acyclic; compact targets have one source.
                 /// Registration is evaluator state and is not included in dynamic snapshots.
                 /// Returns whether this registration or its inherited state changed.
+                #[allow(dead_code)]
                 pub fn inherit_total_{name}_members(&mut self, morphism: {mor_camel}) -> bool {{
                     let morphism = self.root_{name}_mor(morphism);
                     if self.__compact_indices_{name}.is_some() && ({endpoint_ambiguity}) {{
