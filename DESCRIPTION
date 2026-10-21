@@ -61,3 +61,9 @@ facts can join with newly inherited facts. Keep quotient replacements
 new and advance histories even when no requested view contains rows.
 Track adopted member revisions so pure domain growth also invalidates
 inherited matching baselines.
+
+Exercise inherited rule closure through public evaluator operations.
+Cover recursive joins between local and inherited rows, joins enabled
+by target equality, global owner guards, member-input functionality,
+late parent changes, and pending existential consequences across
+partial closure.

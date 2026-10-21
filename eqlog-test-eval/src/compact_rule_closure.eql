@@ -1,0 +1,51 @@
+model World {
+    type El;
+    pred p(El);
+    pred q(El);
+    pred r(El);
+    pred link(El, El);
+    pred visited(El);
+    pred requested(El);
+    pred ready(El);
+    pred witnessed(El, El);
+    pred active(El);
+    func next(El) -> El;
+    func witness(El) -> El;
+
+    rule intersect {
+        if p(x);
+        if q(x);
+        then r(x);
+    }
+
+    rule seed {
+        if p(x);
+        then visited(x);
+    }
+
+    rule follow {
+        if visited(x);
+        if link(x, y);
+        then visited(y);
+    }
+
+    rule request {
+        if requested(x);
+        if visited(x);
+        then ready(x);
+        then witness(x)!;
+    }
+
+    rule observe_witness {
+        if witness(x) = y;
+        then witnessed(x, y);
+    }
+}
+
+pred enabled(World);
+
+rule activate {
+    if enabled(w);
+    if w.p(x);
+    then w.active(x);
+}
