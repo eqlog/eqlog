@@ -63,3 +63,6 @@ full tuple consumption retains a compact range traversal loop.
 
 Use a surviving materialized pivot to answer emptiness checks without
 forcing deferred descendants after a path edit.
+
+Keep deferred pivot resolution outside ordinary update paths so inserts
+and structural merges can check materialized nodes without helper calls.

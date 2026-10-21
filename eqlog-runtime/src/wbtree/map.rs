@@ -437,8 +437,18 @@ impl<V: Clone> Node<V> {
         mapping.expose()
     }
 
+    #[inline]
     fn expose(node: Option<Rc<Self>>) -> Option<Rc<Self>> {
-        let mut node = node?;
+        let node = node?;
+        match node.as_ref() {
+            Self::Data(_) => Some(node),
+            Self::Mapping(_) => Self::expose_mapped(node),
+        }
+    }
+
+    // Keep deferred resolution out of ordinary updates' inlining budget.
+    #[inline(never)]
+    fn expose_mapped(mut node: Rc<Self>) -> Option<Rc<Self>> {
         loop {
             let next = match node.as_ref() {
                 Self::Data(_) => return Some(node),
