@@ -280,7 +280,11 @@ impl Model {
     /// Returns the canonical representative of the equivalence class of `element`.
     /// Returns [`Error::UnknownElement`] if its index has not been allocated.
     pub fn root(&self, element: Element) -> Result<Element, Error> {
-        if element.index as usize >= self.type_data(element.type_)?.equalities.len() {
+        if !self
+            .type_data(element.type_)?
+            .equalities
+            .is_allocated(element.index)
+        {
             return Err(Error::UnknownElement(element));
         }
         Ok(self.root_unchecked(element))
@@ -734,7 +738,9 @@ impl Model {
 
     fn elements_from_equalities(&self, type_: TypeId) -> impl Iterator<Item = u32> + '_ {
         let equalities = &self.types[type_.0].equalities;
-        (0..equalities.len() as u32).filter(|&index| equalities.root_const(index) == index)
+        (0..equalities.len() as u32).filter(|&index| {
+            equalities.is_allocated(index) && equalities.root_const(index) == index
+        })
     }
 
     fn root_unchecked(&self, element: Element) -> Element {

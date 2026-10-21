@@ -107,6 +107,7 @@ impl MemberBlock {
 pub struct MemberSnapshot {
     owner: u32,
     domain: WBTreeSet,
+    canonical_domain: WBTreeSet,
     partition: Partition,
     by_origin: WBTreeMap<MemberBlock>,
     by_handle: WBTreeMap<MemberBlock>,
@@ -119,6 +120,7 @@ impl MemberSnapshot {
         Self {
             owner,
             domain: WBTreeSet::new(),
+            canonical_domain: WBTreeSet::new(),
             partition: Partition::new(),
             by_origin: WBTreeMap::new(),
             by_handle: WBTreeMap::new(),
@@ -137,6 +139,10 @@ impl MemberSnapshot {
 
     pub fn domain(&self) -> &WBTreeSet {
         &self.domain
+    }
+
+    pub fn canonical_domain(&self) -> &WBTreeSet {
+        &self.canonical_domain
     }
 
     pub fn root_origin(&self, origin: u32) -> Option<u32> {
@@ -175,9 +181,8 @@ impl MemberSnapshot {
 
     /// Enumerating the semantic domain is proportional to its expanded size.
     pub fn iter(&self) -> impl Iterator<Item = u32> + '_ {
-        self.domain
+        self.canonical_domain
             .iter()
-            .filter(|&origin| self.partition.root(origin) == origin)
             .map(|origin| self.handle(origin).expect("roots have reserved handles"))
     }
 
@@ -296,6 +301,7 @@ impl MemberSpaces {
         let space = self.owners.get_mut(&owner).unwrap();
         space.snapshot.by_handle.insert(handle, alias);
         space.snapshot.domain.insert(handle);
+        space.snapshot.canonical_domain.insert(handle);
         space.local_domain.insert(handle);
         space.snapshot.revision += 1;
         self.owned_origins += 1;
@@ -325,6 +331,41 @@ impl MemberSpaces {
 
     pub fn owners(&self) -> impl Iterator<Item = u32> + '_ {
         self.owners.keys().copied()
+    }
+
+    pub fn handle_bound(&self) -> u64 {
+        self.next_handle
+    }
+
+    pub fn canonical_handles(&self) -> impl Iterator<Item = u32> + '_ {
+        self.owners.values().flat_map(|space| space.snapshot.iter())
+    }
+
+    /// Dynamic export explicitly pays for the complete numeric handle space.
+    pub fn export_equalities(&self) -> Unification<u32> {
+        let mut equalities = Unification::new();
+        equalities.increase_size_to(usize::try_from(self.next_handle).unwrap());
+        for space in self.owners.values() {
+            for member in space.snapshot.members() {
+                let root = space.snapshot.root(member).unwrap();
+                equalities.union_roots_into(member, root);
+            }
+        }
+        for alias in 0..self.adoption_bound {
+            let alias = u32::try_from(alias).unwrap();
+            if let Some(root) = self.root(alias) {
+                equalities.union_roots_into(alias, root);
+            }
+        }
+        let members = self
+            .owners
+            .values()
+            .flat_map(|space| space.snapshot.members());
+        let aliases = (0..self.adoption_bound)
+            .map(|alias| u32::try_from(alias).unwrap())
+            .filter(|&alias| self.owner(alias).is_some());
+        equalities.restrict_to(members.chain(aliases));
+        equalities
     }
 
     pub fn source(&self, owner: u32) -> Option<u32> {
@@ -373,6 +414,7 @@ impl MemberSpaces {
         let space = self.owners.get_mut(&owner).unwrap();
         space.local_domain.insert(origin);
         space.snapshot.domain.insert(origin);
+        space.snapshot.canonical_domain.insert(origin);
         space.snapshot.revision += 1;
         space.snapshot.handle(origin).unwrap()
     }
@@ -445,12 +487,15 @@ impl MemberSpaces {
             return None;
         }
         let mut domain = source.domain.clone();
+        let mut canonical_domain = source.canonical_domain.clone();
         for origin in space.local_domain.iter() {
             domain.insert(origin);
+            canonical_domain.insert(origin);
         }
         let mut partition = source.partition.clone();
         for &(lhs, rhs) in &space.local_equations {
             if let Some(merge) = partition.equate(lhs, rhs) {
+                canonical_domain.remove(&merge.loser);
                 on_merge(merge);
             }
         }
@@ -461,6 +506,7 @@ impl MemberSpaces {
         self.reserve(owner, extent);
         let space = self.owners.get_mut(&owner).unwrap();
         space.snapshot.domain = domain;
+        space.snapshot.canonical_domain = canonical_domain;
         space.snapshot.partition = partition;
         space.snapshot.revision += 1;
         space.inherited.as_mut().unwrap().revision = revision;
@@ -495,6 +541,7 @@ impl MemberSpaces {
             .origin(rhs)
             .expect("right member has another owner");
         let merge = space.snapshot.partition.equate(lhs, rhs)?;
+        space.snapshot.canonical_domain.remove(&merge.loser);
         space.local_equations.push((lhs, rhs));
         space.snapshot.revision += 1;
         Some(merge)

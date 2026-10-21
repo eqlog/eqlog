@@ -41,6 +41,11 @@ fn replay_events_normalize_local_rows_after_parent_equality() {
     }
     assert!(CanonicalMask::Origins(&current).contains(a_origin));
     assert!(!CanonicalMask::Origins(&current).contains(local_origin));
+    assert_eq!(
+        current.canonical_domain().iter().collect::<Vec<_>>(),
+        vec![a_origin]
+    );
+    assert_eq!(original.canonical_domain().len(), 4);
     assert_eq!(spaces.source(1), Some(0));
     assert_eq!(spaces.owners().collect::<Vec<_>>(), vec![0, 1]);
     assert!(spaces.refresh_with_merges(1).is_none());

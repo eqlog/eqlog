@@ -1,4 +1,71 @@
-use eqlog_runtime::__private::{CanonicalMask, ElementWeights, MemberSpaces};
+use eqlog_runtime::__private::{from_parts, CanonicalMask, ElementWeights, MemberSpaces, TypeData};
+use eqlog_runtime::{Element, Error, PrefixTree1, Signature, Type, TypeId, TypeKind};
+
+#[test]
+fn dynamic_export_preserves_aliases_and_rejects_reserved_holes() {
+    let mut spaces = MemberSpaces::with_handle_bound(4);
+    spaces.create_owner(0);
+    spaces.create_owner(1);
+    let canonical = spaces.adopt(0, 0);
+    spaces.adopt(0, 1);
+    spaces.equate(0, 0, 1);
+    let local = spaces.allocate(1);
+    spaces.inherit_total_members(0, 1);
+    let image = spaces.image(0, 1).unwrap();
+    let equalities = spaces.export_equalities();
+    let imported = equalities.retype::<u32>();
+    assert!(!imported.is_allocated(2));
+    assert_eq!(imported.root_const(1), canonical);
+    let mut elements = PrefixTree1::new();
+    for handle in spaces.canonical_handles() {
+        elements.insert([handle]);
+    }
+    let signature = Box::leak(Box::new(
+        Signature::new(
+            vec![Type {
+                name: "El".into(),
+                kind: TypeKind::Plain,
+                parents: vec![],
+            }],
+            vec![],
+        )
+        .unwrap(),
+    ));
+    let mut model = from_parts(
+        signature,
+        vec![TypeData {
+            weights: vec![0; equalities.len()],
+            equalities,
+            elements,
+            uprooted: vec![],
+        }],
+        vec![],
+    )
+    .unwrap();
+    let element = |index| Element {
+        type_: TypeId(0),
+        index,
+    };
+    for alias in [0, 1, canonical] {
+        assert_eq!(model.root(element(alias)), Ok(element(canonical)));
+    }
+    assert_eq!(model.root(element(image)), Ok(element(image)));
+    assert_eq!(model.root(element(local)), Ok(element(local)));
+    for hole in [2, 3, 8, 9] {
+        assert_eq!(
+            model.root(element(hole)),
+            Err(Error::UnknownElement(element(hole)))
+        );
+    }
+    assert_eq!(model.elements(TypeId(0)).unwrap().count(), 3);
+    let new = model.new_element(TypeId(0), &[]).unwrap();
+    assert_eq!(u64::from(new.index), spaces.handle_bound());
+    assert_eq!(model.root(new), Ok(new));
+    assert_eq!(
+        model.root(element(2)),
+        Err(Error::UnknownElement(element(2)))
+    );
+}
 
 #[test]
 fn adoption_keeps_old_handles_as_aliases_of_monotone_namespaces() {

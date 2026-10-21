@@ -74,3 +74,7 @@ repeating unchanged rebases while persistent snapshots preserve history.
 
 Expose ordered local quotient changes so owner rebases can share source
 rows and then apply only their local equations.
+
+Preserve member handles through materialization without making reserved
+namespace holes into elements. Maintain compact canonical domains and
+export their actual carriers and aliases through dynamic model data.
