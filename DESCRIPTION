@@ -38,3 +38,8 @@ filtered mapped views.
 
 Charge persistent interval traversal separately from member expansion,
 without increasing the budget for a single large dense interval.
+
+Reuse shared intervals when comparing snapshots, and compare mixed
+leaf representations as sorted runs. Retain covered roots in unions
+and intersections so equality avoids rebuilding equivalent leaves.
+Reuse containing-run lookups during edits to avoid duplicate searches.

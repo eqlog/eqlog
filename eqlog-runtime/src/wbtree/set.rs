@@ -107,11 +107,12 @@ impl WBTreeSet {
                 true
             }
             Storage::Ranges(ranges) => {
-                if ranges.contains(value) {
+                let previous = ranges.floor_run(value);
+                if previous.is_some_and(|(_, last)| value <= last) {
                     return false;
                 }
                 let ranges = Rc::make_mut(ranges);
-                ranges.insert(value);
+                ranges.insert(value, previous);
                 ranges.promote();
                 true
             }
@@ -140,9 +141,10 @@ impl WBTreeSet {
                 true
             }
             Storage::Ranges(ranges) => {
-                if !ranges.contains(*value) {
+                let Some(containing) = ranges.floor_run(*value).filter(|(_, last)| value <= last)
+                else {
                     return false;
-                }
+                };
                 if ranges.len == 2 {
                     let remaining = ranges
                         .runs
@@ -154,7 +156,7 @@ impl WBTreeSet {
                     return true;
                 }
                 let ranges = Rc::make_mut(ranges);
-                ranges.remove(*value);
+                ranges.remove(*value, containing);
                 ranges.promote();
                 true
             }
@@ -285,7 +287,15 @@ impl WBTreeSet {
                 result
             }
             Storage::Ranges(left) => match &other.storage {
-                Storage::Ranges(right) => Self::from_ranges(left.union(right)),
+                Storage::Ranges(right) => {
+                    if right.all_difference_runs(left, |_, _| false) {
+                        return self.clone();
+                    }
+                    if left.all_difference_runs(right, |_, _| false) {
+                        return other.clone();
+                    }
+                    Self::from_ranges(left.union(right))
+                }
                 Storage::Empty => self.clone(),
                 Storage::Singleton(value) => {
                     let mut result = self.clone();
@@ -301,6 +311,12 @@ impl WBTreeSet {
                         return result;
                     }
                     let right = Ranges::from_sorted(other.iter());
+                    if right.all_difference_runs(left, |_, _| false) {
+                        return self.clone();
+                    }
+                    if left.all_difference_runs(&right, |_, _| false) {
+                        return other.clone();
+                    }
                     Self::from_ranges(left.union(&right))
                 }
             },
@@ -333,7 +349,15 @@ impl WBTreeSet {
                 }
             }
             Storage::Ranges(left) => match &other.storage {
-                Storage::Ranges(right) => Self::from_ranges(left.intersection(right)),
+                Storage::Ranges(right) => {
+                    if left.all_difference_runs(right, |_, _| false) {
+                        return self.clone();
+                    }
+                    if right.all_difference_runs(left, |_, _| false) {
+                        return other.clone();
+                    }
+                    Self::from_ranges(left.intersection(right))
+                }
                 Storage::Empty => Self::new(),
                 Storage::Singleton(_) => other.intersection(self),
                 Storage::Tree(_) => {
@@ -429,9 +453,36 @@ impl WBTreeSet {
         match &self.storage {
             Storage::Empty => true,
             Storage::Singleton(value) => other.contains(value) || visit(*value),
-            Storage::Ranges(_) => self.iter().all(|key| other.contains(&key) || visit(key)),
+            Storage::Ranges(left) => match &other.storage {
+                Storage::Ranges(right) => {
+                    left.all_difference_runs(right, |first, last| (first..=last).all(&mut visit))
+                }
+                Storage::Tree(right) => {
+                    if left.len <= right.len_upper_bound() / 8 {
+                        return self.iter().all(|key| other.contains(&key) || visit(key));
+                    }
+                    Ranges::merge_difference_runs(
+                        left.runs.iter(),
+                        RunsIter::Points(right.iter()),
+                        |first, last| (first..=last).all(&mut visit),
+                    )
+                }
+                Storage::Empty => self.iter().all(visit),
+                Storage::Singleton(excluded) => {
+                    self.iter().all(|key| key == *excluded || visit(key))
+                }
+            },
             Storage::Tree(left) => match &other.storage {
-                Storage::Ranges(_) => self.iter().all(|key| other.contains(&key) || visit(key)),
+                Storage::Ranges(right) => {
+                    if left.len_upper_bound() <= right.len / 8 {
+                        return self.iter().all(|key| other.contains(&key) || visit(key));
+                    }
+                    Ranges::merge_difference_runs(
+                        RunsIter::Points(left.iter()),
+                        right.runs.iter(),
+                        |first, last| (first..=last).all(&mut visit),
+                    )
+                }
                 Storage::Empty => {
                     left.all_difference_entries(&WBTreeMap::new(), |key, (), _| visit(key))
                 }
@@ -596,6 +647,16 @@ impl Ranges {
         }
     }
 
+    fn floor_run(&self, value: u32) -> Option<(u32, u32)> {
+        match &self.runs {
+            Runs::Small(runs) => {
+                let index = runs.partition_point(|&(first, _)| first <= value);
+                index.checked_sub(1).map(|index| runs[index])
+            }
+            Runs::Tree(runs) => runs.floor_entry(value).map(|(first, &last)| (first, last)),
+        }
+    }
+
     fn contains(&self, value: u32) -> bool {
         match &self.runs {
             Runs::Small(runs) => {
@@ -642,7 +703,7 @@ impl Ranges {
         }
     }
 
-    fn insert(&mut self, value: u32) {
+    fn insert(&mut self, value: u32, previous: Option<(u32, u32)>) {
         self.len = self
             .len
             .checked_add(1)
@@ -662,8 +723,7 @@ impl Ranges {
                 }
             }
             Runs::Tree(runs) => {
-                let left = runs
-                    .floor_entry(value)
+                let left = previous
                     .filter(|(_, last)| last.checked_add(1) == Some(value))
                     .map(|(first, _)| first);
                 let right = value
@@ -689,7 +749,7 @@ impl Ranges {
         }
     }
 
-    fn remove(&mut self, value: u32) {
+    fn remove(&mut self, value: u32, containing: (u32, u32)) {
         self.len -= 1;
         match &mut self.runs {
             Runs::Small(runs) => {
@@ -708,7 +768,7 @@ impl Ranges {
                 }
             }
             Runs::Tree(runs) => {
-                let (first, &last) = runs.floor_entry(value).expect("the containing run exists");
+                let (first, last) = containing;
                 if value == first {
                     runs.remove(&first);
                 } else {
@@ -766,8 +826,79 @@ impl Ranges {
 
     fn difference(&self, other: &Self) -> Self {
         let mut result = Self::default();
-        let mut right = other.runs.iter().peekable();
-        for (first, last) in self.runs.iter() {
+        self.all_difference_runs(other, |first, last| {
+            result.push(first, last);
+            true
+        });
+        result
+    }
+
+    fn all_difference_runs(&self, other: &Self, mut visit: impl FnMut(u32, u32) -> bool) -> bool {
+        if self.len <= other.len / 8 {
+            match &other.runs {
+                Runs::Tree(right) => {
+                    return self
+                        .runs
+                        .iter()
+                        .all(|(first, last)| Self::visit_uncovered(first, last, right, &mut visit))
+                }
+                Runs::Small(_) => {}
+            }
+        }
+        match (&self.runs, &other.runs) {
+            (Runs::Tree(left), Runs::Tree(right)) => {
+                left.all_difference_entries(right, |first, &last, other_last| {
+                    let first = match other_last {
+                        Some(&other_last) => {
+                            if other_last >= last {
+                                return true;
+                            }
+                            other_last + 1
+                        }
+                        None => first,
+                    };
+                    Self::visit_uncovered(first, last, right, &mut visit)
+                })
+            }
+            (Runs::Small(_), Runs::Small(_) | Runs::Tree(_)) | (Runs::Tree(_), Runs::Small(_)) => {
+                Self::merge_difference_runs(self.runs.iter(), other.runs.iter(), visit)
+            }
+        }
+    }
+
+    fn visit_uncovered(
+        first: u32,
+        last: u32,
+        other: &WBTreeMap<u32>,
+        visit: &mut impl FnMut(u32, u32) -> bool,
+    ) -> bool {
+        let mut first = u64::from(first);
+        let last = u64::from(last);
+        while first <= last {
+            if let Some((_, &covered_last)) = other.floor_entry(first as u32) {
+                if first <= u64::from(covered_last) {
+                    first = u64::from(covered_last) + 1;
+                    continue;
+                }
+            }
+            let gap_last = other
+                .ceiling_entry(first as u32)
+                .map_or(last, |(next, _)| last.min(u64::from(next) - 1));
+            if !visit(first as u32, gap_last as u32) {
+                return false;
+            }
+            first = gap_last + 1;
+        }
+        true
+    }
+
+    fn merge_difference_runs(
+        left: RunsIter<'_>,
+        right: RunsIter<'_>,
+        mut visit: impl FnMut(u32, u32) -> bool,
+    ) -> bool {
+        let mut right = right.peekable();
+        for (first, last) in left {
             let mut first = u64::from(first);
             let last = u64::from(last);
             while let Some(&(right_first, right_last)) = right.peek() {
@@ -776,8 +907,8 @@ impl Ranges {
                 if right_first > last {
                     break;
                 }
-                if right_first > first {
-                    result.push(first as u32, (right_first - 1) as u32);
+                if right_first > first && !visit(first as u32, (right_first - 1) as u32) {
+                    return false;
                 }
                 first = first.max(right_last + 1);
                 if first > last {
@@ -785,11 +916,11 @@ impl Ranges {
                 }
                 right.next();
             }
-            if first <= last {
-                result.push(first as u32, last as u32);
+            if first <= last && !visit(first as u32, last as u32) {
+                return false;
             }
         }
-        result
+        true
     }
 }
 
@@ -826,6 +957,7 @@ impl Runs {
 enum RunsIter<'a> {
     Small(std::slice::Iter<'a, (u32, u32)>),
     Tree(Iter<'a, u32>),
+    Points(Iter<'a, ()>),
 }
 
 impl Iterator for RunsIter<'_> {
@@ -835,6 +967,7 @@ impl Iterator for RunsIter<'_> {
         match self {
             Self::Small(runs) => runs.next().copied(),
             Self::Tree(runs) => runs.next().map(|(first, &last)| (first, last)),
+            Self::Points(runs) => runs.next().map(|(key, ())| (key, key)),
         }
     }
 
@@ -847,6 +980,46 @@ impl Iterator for RunsIter<'_> {
             Self::Tree(runs) => runs.fold(initial, |result, (first, &last)| {
                 visit(result, (first, last))
             }),
+            Self::Points(runs) => runs.fold(initial, |result, (key, ())| visit(result, (key, key))),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::WBTreeSet;
+
+    #[test]
+    fn interval_difference_visitors_stop_at_the_first_gap() {
+        let mut dense = WBTreeSet::new();
+        let mut holes = WBTreeSet::new();
+        for key in 0..1024 {
+            dense.insert(key);
+            if key % 8 == 0 {
+                holes.insert(key);
+            }
+        }
+        let left = dense.difference(&holes);
+        let mut right = left.clone();
+        assert!(right.remove(&1));
+        assert!(right.remove(&1001));
+        let values: Vec<_> = right.iter().collect();
+        let mut points = WBTreeSet::new();
+        for value in values
+            .iter()
+            .step_by(2)
+            .chain(values.iter().skip(1).step_by(2))
+        {
+            points.insert(*value);
+        }
+        for right in [&right, &points] {
+            let mut calls = 0;
+            assert!(!left.all_difference(right, |key| {
+                calls += 1;
+                assert_eq!(key, 1);
+                false
+            }));
+            assert_eq!(calls, 1);
         }
     }
 }

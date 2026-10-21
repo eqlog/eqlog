@@ -1134,6 +1134,25 @@ impl<V: Clone> WBTreeMap<V> {
         result
     }
 
+    pub(crate) fn ceiling_entry(&self, key: u32) -> Option<(u32, &V)> {
+        let mut current = self.root.as_deref();
+        let mut result = None;
+        while let Some(node) = current {
+            match node {
+                Node::Data(data) => match key.cmp(&data.key) {
+                    Ordering::Less => {
+                        result = Some((data.key, &data.value));
+                        current = data.left.as_deref();
+                    }
+                    Ordering::Equal => return Some((data.key, &data.value)),
+                    Ordering::Greater => current = data.right.as_deref(),
+                },
+                Node::Mapping(_) => return self.iter().find(|(next, _)| *next >= key),
+            }
+        }
+        result
+    }
+
     pub fn get_mut(&mut self, key: &u32) -> Option<&mut V> {
         let mut current = &mut self.root;
         loop {
@@ -1697,7 +1716,7 @@ mod tests {
     use rand::{RngExt, SeedableRng};
 
     #[test]
-    fn floor_entries_preserve_mapped_coordinates_and_filters() {
+    fn boundary_entries_preserve_mapped_coordinates_and_filters() {
         let mut plain = WBTreeMap::new();
         let mut relation = PrefixTree2::new();
         let mut expected = BTreeMap::new();
@@ -1713,6 +1732,10 @@ mod tests {
                 plain.floor_entry(key),
                 plain.iter().take_while(|(next, _)| *next <= key).last()
             );
+            assert_eq!(
+                plain.ceiling_entry(key),
+                plain.iter().find(|(next, _)| *next >= key)
+            );
         }
         let mut mapped = plain
             .mapped_entries(Some(MonotoneMap::new(&relation).unwrap()), |value| {
@@ -1726,6 +1749,13 @@ mod tests {
                     .next_back()
                     .map(|(&key, value)| (key, value))
             );
+            assert_eq!(
+                mapped.ceiling_entry(key),
+                expected
+                    .range(key..)
+                    .next()
+                    .map(|(&key, value)| (key, value))
+            );
         }
         mapped.insert(57, 999);
         expected.insert(57, 999);
@@ -1735,6 +1765,13 @@ mod tests {
                 expected
                     .range(..=key)
                     .next_back()
+                    .map(|(&key, value)| (key, value))
+            );
+            assert_eq!(
+                mapped.ceiling_entry(key),
+                expected
+                    .range(key..)
+                    .next()
                     .map(|(&key, value)| (key, value))
             );
         }

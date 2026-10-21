@@ -235,3 +235,56 @@ fn fragmented_algebra_results_remain_editable_and_mappable() {
     changed_expected.insert(0);
     check(&changed.set, &changed_expected);
 }
+
+#[test]
+fn shared_interval_differences_skip_covered_spans_without_losing_rows() {
+    let dense = set(0..4096);
+    let left = dense.difference(&set((0..4096).step_by(8)));
+    let mut right = left.clone();
+    for value in [1, 14, 127, 511, 2049, 4095] {
+        assert!(right.remove(&value));
+    }
+    for value in [0, 8, 16, 128, 512, 2048, 4095, u32::MAX] {
+        assert!(right.insert(value));
+    }
+    let right_values: Vec<_> = right.iter().collect();
+    let points = set(right_values
+        .iter()
+        .step_by(2)
+        .chain(right_values.iter().skip(1).step_by(2))
+        .copied());
+    for (left, right) in [
+        (&left, &right),
+        (&right, &left),
+        (&left, &left),
+        (&right, &points),
+        (&points, &right),
+        (&left, &points),
+        (&points, &left),
+    ] {
+        let expected_left: BTreeSet<_> = left.iter().collect();
+        let expected_right: BTreeSet<_> = right.iter().collect();
+        let difference: BTreeSet<_> = expected_left.difference(&expected_right).copied().collect();
+        check(&left.difference(right), &difference);
+        check(
+            &left.union(right),
+            &expected_left.union(&expected_right).copied().collect(),
+        );
+        check(
+            &left.intersection(right),
+            &expected_left
+                .intersection(&expected_right)
+                .copied()
+                .collect(),
+        );
+        let left = PrefixTree1 { set: left.clone() };
+        let right = PrefixTree1 { set: right.clone() };
+        assert_eq!(
+            left.is_subset(&right),
+            expected_left.is_subset(&expected_right)
+        );
+        let mut visited = Vec::new();
+        left.visit_difference(&right, &mut |[value]| visited.push(value));
+        assert_eq!(visited, difference.into_iter().collect::<Vec<_>>());
+    }
+}
