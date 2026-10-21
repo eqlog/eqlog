@@ -197,6 +197,55 @@ fn each_inherited_snapshot_rewrites_only_its_local_row() {
 }
 
 #[test]
+fn unary_member_rewrites_preserve_snapshots_and_collision_counts() {
+    for column_type in [None, Some(0), Some(1)] {
+        let mut relation = OriginRelation::new(&[column_type]);
+        let mut expected = BTreeSet::new();
+        for step in 0..96 {
+            let value = (step * 7) % 19;
+            assert_eq!(relation.insert(&[value]), expected.insert(value));
+            let before = relation.clone();
+            let old_expected = expected.clone();
+            assert!(relation.shares_storage_with(&before));
+            let member_type = step % 2;
+            let loser = (step * 3) % 23;
+            let winner = (step * 5) % 23;
+            let affected = usize::from(
+                column_type == Some(member_type) && loser != winner && expected.contains(&loser),
+            );
+            expected = expected
+                .into_iter()
+                .map(|origin| {
+                    if column_type == Some(member_type) && origin == loser {
+                        winner
+                    } else {
+                        origin
+                    }
+                })
+                .collect();
+            let merged = old_expected.len() - expected.len();
+            assert_eq!(
+                relation.replace_representative(member_type, loser, winner),
+                OriginRewriteStats {
+                    visited_rows: affected,
+                    rewritten_rows: affected - merged,
+                    merged_rows: merged,
+                }
+            );
+            assert_eq!(rows(&relation), expected.iter().map(|&x| vec![x]).collect());
+            assert_eq!(relation.len(), expected.len());
+            assert_eq!(
+                rows(&before),
+                old_expected.iter().map(|&x| vec![x]).collect()
+            );
+            if affected == 0 {
+                assert!(relation.shares_storage_with(&before));
+            }
+        }
+    }
+}
+
+#[test]
 fn snapshot_replacement_preserves_local_rows_and_ordered_merges() {
     let mut parent = OriginRelation::new(&[None, Some(0)]);
     for tuple in [[10, 1], [20, 2], [30, 3]] {

@@ -1,158 +1,53 @@
-Share native members through lazy tree mappings
+Share native members through persistent indexes
 
-Native transport should preserve shared relation suffixes when member
-images follow an increasing partial map. Carry compressed offset runs
-through prefix keys and suffix values, compose compatible offsets, and
-cache transformed children only when they are visited.
+Avoid copying complete inherited member relations at every morphism.
+Keep monotone mappings as compressed offset runs through prefix keys
+and suffix values, compose compatible transforms, and preserve shared
+subtrees during transport, comparisons, and incremental index updates.
+Retain eager paths for small relations and non-injective images.
 
-Keep small materialized relations eager and merge non-injective images
-into owned destination suffixes. Represent dense leaves as intervals
-and retain persistent interval trees when equality introduces holes.
-Consume incoming suffixes during insertion so fresh pivots stay unique
-through recursive unions instead of being copied again.
+For declared acyclic total inheritance, share materialized owner-local
+indexes in stable origin coordinates. Persistent member domains and
+partitions retain local additions and equations without allocating
+individual inherited images. Virtual handle blocks preserve distinct
+public identities for each owner. Rebase from parent snapshots and
+replay only local support and quotient changes.
 
-Preserve canonical current rows, historical snapshots, and finite fuel
-through equality and updates. Keep cache coordinates tied to their raw
-source and release deep mapping chains without recursive stack growth.
-Use partial domains only to choose comparison lookups; leave stored
-bounds and eager-mapping thresholds unchanged. Equivalent partial
-views still skip their shared source without visiting individual keys.
+Index equality work by the losing representative's incidence bucket.
+Unary relations already provide that index through their row set.
+Preserve unchanged relation roots so publication and consumer histories
+can skip unrelated updates. Extend secondary indexes with new owned
+rows instead of repeatedly unioning their entire previous seed.
 
-Keep ordinary nodes compact, update only edited paths, and build
-sorted levels without repeated searches. Specialize exact-tree updates
-to skip deferred-node checks and adjust known counts directly. Keep
-the small balance check inline while resolving rotations in a separate
-helper. Reuse target coverage during ownership cleanup and share
-transport map deltas only when both current and previous snapshots
-match.
+Reuse inherited functionality only when the source and inherited
+snapshot carry the same validated proof. Check local argument keys
+for collisions; keep full checks when member argument quotients can
+introduce conflicts. Prefer selective owner-bound joins before large
+inherited delta scans while preserving premise ages, canonical binding
+checks, and private noncanonical witnesses.
 
-Regression coverage includes native and desugared evaluators under
-both evaluation strategies, randomized mutation sequences, filtered
-pivots, partial and conflicting images, noncanonical rows, source and
-owner equalities, shared snapshots, deep chains, late images, and
-finite fuel.
+Keep public lookups, iteration, equality, and handles consistent across
+compact and ordinary storage. Materialize unsupported operations before
+mutation, retaining pending outputs, allocated elements, and live total
+inheritance policies. Check cumulative owner and morphism quotients
+before accepting endpoints that could introduce cycles. Parallel
+morphisms keep independent images. Dynamic exports remain snapshots of
+current state and do not serialize live total inheritance policies.
 
-Record native CGU16 measurements against f29c6e6. Dense consumption
-improves substantially; sparse incremental and equality controls still
-have measurable overhead. Preserve the exact methodology and hashes.
+Keep compact activation conservative for nested, cross-owner, and
+unsupported relation layouts. Ordinary partial mappings retain their
+existing path. Preserve historical snapshots and finite evaluation
+fuel through source growth, equality, and storage transitions.
 
-Lazy caches and stack-safe destruction tighten the generic WBTreeMap
-lifetime behavior: previous covariance and some early-dropping
-borrowed value examples are not preserved. Generated evaluators use
-owned values.
+Reduce ordinary tree overhead with compact leaves, persistent interval
+sets, path-only updates, shared cursors, and stack-safe destruction.
+The generic WBTreeMap lazy caches and destruction changes tighten some
+borrowed-value lifetime behavior: previous covariance and some early
+dropping examples are not preserved. Generated evaluators own values.
 
-Extend inherited secondary indices with newly projected owned rows.
-The previous owned seed is already present, so unioning it again after
-every local rule firing revisited all preceding owners in an acyclic
-chain.
-
-Prepare arithmetic image blocks directly so compact namespaces can map
-shared trees without allocating an explicit tuple for every image.
-Preserve sparse relation sharing when these prepared maps request a
-deferred view instead of materializing small suffixes at every owner.
-
-Introduce persistent member domains and scoped equality partitions
-over stable origins. Virtual handle blocks preserve separate owner
-identities without allocating every inherited image. Refresh shares
-source state and replays local constraints while historical snapshots
-remain stable. Keep old handles valid on explicit adoption, reserve
-sparse weights without filling virtual slots, and provide native
-member root masks.
-
-Identify equivalent prepared column transforms independently of their
-value caches. Shared source subtrees can then cancel during
-comparisons and set operations without forcing every inherited suffix.
-
-Keep late image changes in whole transported suffixes. Merge
-destination paths once per changed member column, while earlier stable
-column maps retain the existing attribution of simultaneous changes.
-Sparse nonmonotone head maps use direct source lookups instead of
-scanning unrelated rows.
-
-Track origin-row incidence so equality rewrites visit only the losing
-representative's rows. Parent relation snapshots and historical owner
-states keep sharing unaffected structure.
-
-Rebase selected owner indexes by sharing current parent roots. Replay
-only local support and local equality merges. Revision checkpoints
-avoid repeating unchanged rebases while persistent snapshots preserve
-history.
-
-Expose ordered local quotient changes so owner rebases can share
-source rows and then apply only their local equations.
-
-Preserve member handles through materialization without making
-reserved namespace holes into elements. Maintain compact canonical
-domains and export their actual carriers and aliases through dynamic
-model data.
-
-Connect scoped native member operations to compact identity spaces.
-Convert local origin outputs back to owner handles on mutation.
-Preserve public root and allocation behavior.
-
-Retain local quotient events when only parent rows change, so
-inherited row refresh still respects equations already made in the
-target.
-
-Feed native owner scopes from shared origin indexes. Rebase inherited
-roots and replay local support without building explicit image tuples.
-
-Execute compact scoped rules through late source growth, local
-equations, reverse function lookups, and owner-local member
-enumeration.
-
-Reject compact activation when member coordinates can escape their owner
-scope. Validate selected indexes and scheduled rule scopes. Allow
-member-free global relations and generated morphism rules.
-
-Translate compact origin rows at public query boundaries. Preserve
-owner-local handles, alias-aware membership, and lazy row iteration
-without expanding inherited tables for point lookups.
-
-Freeze scoped output handles before applying mutations. A change of
-storage during equality must not reinterpret pending origin values.
-
-Keep unrelated child index roots stable when a parent relation changes.
-Replaying unchanged local rows breaks sharing and turns publication into
-repeated comparisons of equal inherited tables.
-
-Restrict diagonal-only rule inputs before computing differences. Prefix
-lookups skip inherited rows that cannot match. Restore cached global
-inputs before preparing secondary indexes for another rule group.
-
-Expose compact total inheritance without changing public handle meaning.
-Preserve live totality after operations require ordinary storage. Guard
-owner and morphism quotients against cycles before mutation. Keep
-parallel morphism images independent and freeze pending scoped outputs
-before changing storage.
-
-Retain global relation roots when an owner suffix is unchanged. This
-keeps publication and rule checkpoints from comparing equal prefixes
-after an unrelated local relation update.
-
-Preserve suspended definitions when compact storage is materialized.
-Check cumulative endpoint quotients before accepting owner changes,
-including functionality equations not yet applied.
-
-Check ambiguous morphism endpoints before registering compact lineage.
-Existing endpoint equations must not hide a cycle or discard a source.
-
-Avoid rescanning function rows already checked in an ancestor. Reuse
-proved functionality of compact parent snapshots when only the result
-column maps between owners. Check local support keys against
-the current graph during the normalizer stratum, while uncertified
-sources and member argument quotients keep the existing rule path.
-Advance a valid certificate through result-only equality rewrites;
-issue new certificates only after normalizer equations are applied.
-Keep ordinary user-rule histories and insertion behavior unchanged.
-
-Choose a selective owner-bound input before scanning inherited deltas.
-Keep premise ages and selected indexes intact, and bound candidate row
-probes before selecting the alternative join order.
-
-Check reordered joins with private noncanonical witnesses and
-simultaneous new inputs.
-
-Prefer owner inputs that bind independent variables. A function result
-follows from its domain and must not make a broad function scan look as
-selective as a small local job.
+Regression coverage executes native and desugared evaluators with both
+evaluation strategies. It includes partial/conflicting images, private
+aliases, local and inherited functionality conflicts, late growth,
+owner/morphism equality, fallback, pending definitions, and randomized
+persistent-tree mutations. Standalone COW comparisons and their plots
+are temporary artifacts rather than repository benchmarks.

@@ -82,6 +82,10 @@ impl OriginRelation {
         assert!(self.rows.insert(tuple));
         self.len += 1;
         let arity = self.member_types.len();
+        // Unary rows already provide the complete member incidence index.
+        if arity == 1 {
+            return true;
+        }
         for (member_type, origin) in references(&self.member_types, tuple) {
             let rows = self
                 .incidence
@@ -130,6 +134,18 @@ impl OriginRelation {
     ) -> OriginRewriteStats {
         if loser == winner {
             return OriginRewriteStats::default();
+        }
+        if self.member_types.len() == 1 {
+            if self.member_types[0] != Some(member_type) || !self.rows.remove(&[loser]) {
+                return OriginRewriteStats::default();
+            }
+            self.len -= 1;
+            let inserted = self.insert(&[winner]);
+            return OriginRewriteStats {
+                visited_rows: 1,
+                rewritten_rows: usize::from(inserted),
+                merged_rows: usize::from(!inserted),
+            };
         }
         let affected = self
             .incidence
