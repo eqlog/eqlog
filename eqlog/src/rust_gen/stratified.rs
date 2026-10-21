@@ -7,7 +7,7 @@ use indoc::{formatdoc, writedoc};
 
 use super::indices::{projection, source_relation};
 use super::native_indices;
-use super::{compact_functionality, compact_policy};
+use super::{compact_indices, compact_policy};
 use super::{
     display_all_index_field_name, display_index_field_name, display_index_type,
     display_module_env_struct_name, display_morphism_components, display_out_set_field_name,
@@ -24,6 +24,7 @@ use crate::ram::{
 };
 
 pub struct Codegen<'s> {
+    modules: &'s [RamModule],
     strata: &'s [Stratum],
     body: &'s Schedule,
     models: BTreeMap<TypeId, usize>,
@@ -198,6 +199,118 @@ impl<'s> Codegen<'s> {
         }
     }
 
+    fn inherited_rows(
+        &self,
+        rel: &FlatInRel,
+        index: &IndexSpec,
+        model: TypeId,
+        selection: &IndexSelection,
+        ctx: &RustGenCtx<'_>,
+    ) -> Option<String> {
+        match rel {
+            FlatInRel::Rel(FlatRel::ModelMember(typ)) => {
+                if !ctx.supports_compact_members(*typ)
+                    || ctx.signature().type_(*typ).parents.as_slice() != [model]
+                    || index.order.as_ref() != [0, 1]
+                {
+                    return None;
+                }
+                let name = display_type(*typ, ctx).to_string().to_case(Case::Snake);
+                Some(format!("PrefixTree1 {{ set: self.__compact_members_{name}.as_ref()?.get_snapshot(source)?.canonical_domain().clone() }}"))
+            }
+            FlatInRel::Rel(FlatRel::Pred(_) | FlatRel::Func(_)) => {
+                let slot = compact_indices::inherited_slot(rel, index, model, ctx, selection)?;
+                let name = display_type(model, ctx).to_string().to_case(Case::Snake);
+                let arity = rel.arity(ctx.signature()).len() - scope_prefix(&rel, model, ctx);
+                Some(format!("<&PrefixTree{arity}>::try_from(self.__compact_indices_{name}.as_ref()?.inherited_rows(owners[0], {slot})?).expect(\"inherited index arity\").clone()"))
+            }
+            FlatInRel::TypeSet(typ) => {
+                if *typ != model || index.order.as_ref() != [0] {
+                    return None;
+                }
+                let field = display_all_index_field_name(rel, index, ctx);
+                Some(format!("self.{field}.clone()"))
+            }
+            FlatInRel::RelWithDiagonals { .. } | FlatInRel::Equality(_) => None,
+        }
+    }
+
+    fn inherited_plan(
+        &self,
+        s: usize,
+        selection: &IndexSelection,
+        ctx: &RustGenCtx<'_>,
+    ) -> Option<BTreeMap<String, (FlatInRel, IndexSpec)>> {
+        let model = self.strata[s].model?;
+        if !compact_indices::supports_model(model, ctx) {
+            return None;
+        }
+        for &module in &self.strata[s].groups {
+            for routine in &self.modules[module].routines {
+                let owner = routine.flat_rule.scope.owners().first()?;
+                for stmt in &routine.flat_rule.premise {
+                    match &stmt.rel {
+                        FlatInRel::TypeSet(typ) => {
+                            if *typ != model || stmt.args.len() != 1 || &stmt.args[0] != owner {
+                                return None;
+                            }
+                        }
+                        FlatInRel::RelWithDiagonals { .. } => return None,
+                        FlatInRel::Rel(_) | FlatInRel::Equality(_) => {}
+                    }
+                }
+                // The owner prefix changes during transport, while an owner
+                // stored as ordinary data does not change with it.
+                if routine
+                    .flat_rule
+                    .premise
+                    .iter()
+                    .any(|stmt| stmt.args.iter().skip(1).any(|arg| arg == owner))
+                    || routine
+                        .flat_rule
+                        .conclusion
+                        .iter()
+                        .any(|stmt| stmt.args.iter().skip(1).any(|arg| arg == owner))
+                {
+                    return None;
+                }
+            }
+        }
+        let mut fields = BTreeMap::new();
+        for rel in self.stratum_inputs(s) {
+            let i = self.inputs[&rel];
+            fields.insert(
+                format!("input_{i}"),
+                (rel.clone(), selection.current_primary(&rel).clone()),
+            );
+        }
+        if fields.is_empty() {
+            return None;
+        }
+        for (rel, index) in &self.preparations[s].indices {
+            self.inherited_rows(rel, index, model, selection, ctx)?;
+            let name = if let Some(id) = native_indices::find(self.native_indices, rel, index) {
+                Some(format!("native_input_{id}"))
+            } else if !selection.is_primary(rel, index) {
+                let key = input_key(rel.clone(), index.clone());
+                self.old_indices.contains(&key).then(|| {
+                    let j = self.indices[&key];
+                    format!("index_{j}")
+                })
+            } else {
+                None
+            };
+            if let Some(name) = name {
+                fields.insert(name, (rel.clone(), index.clone()));
+            }
+        }
+        for (rel, index) in fields.values() {
+            // An owner-dependent global premise need not hold in the source.
+            self.inherited_rows(rel, index, model, selection, ctx)?;
+        }
+        Some(fields)
+    }
+
     pub fn loop_input_types<'a>(
         &'a self,
         selection: &'a IndexSelection,
@@ -225,8 +338,13 @@ impl<'s> Codegen<'s> {
                 writeln!(f, "}}")?;
             }
             for (s, stratum) in self.strata.iter().enumerate() {
+                let inherited = self.inherited_plan(s, selection, ctx);
                 if let Some(model) = stratum.model {
                     writeln!(f, "struct __OwnerInputs{s} {{")?;
+                    if inherited.is_some() {
+                        let members = compact_indices::members(model, ctx).len();
+                        writeln!(f, "inherited: Option<(u32, u64, [u64; {members}])>,")?;
+                    }
                     for rel in self.stratum_inputs(s) {
                         let i = self.inputs[&rel];
                         let arity =
@@ -234,6 +352,16 @@ impl<'s> Codegen<'s> {
                         writeln!(f, "input_{i}: PrefixTree{arity},")?;
                     }
                     writeln!(f, "}}")?;
+                    if let Some(fields) = inherited {
+                        let members = compact_indices::members(model, ctx).len();
+                        writeln!(f, "struct __InheritedInputs{s} {{ revision: (u32, u64, [u64; {members}]),")?;
+                        for (name, (rel, _)) in fields {
+                            let arity =
+                                rel.arity(ctx.signature()).len() - scope_prefix(&rel, model, ctx);
+                            writeln!(f, "{name}: PrefixTree{arity},")?;
+                        }
+                        writeln!(f, "}}")?;
+                    }
                 }
                 let mut fields = BTreeMap::new();
                 for (rel, index) in &self.preparations[s].indices {
@@ -338,6 +466,7 @@ impl<'s> Codegen<'s> {
             .map(|(rel, _)| source_relation(rel))
             .collect();
         Self {
+            modules: &program.modules,
             strata: &plan.strata,
             body: &plan.body,
             models: program
@@ -487,7 +616,60 @@ impl<'s> Codegen<'s> {
         FmtFn(move |f| {
             for (s, stratum) in self.strata.iter().enumerate() {
                 let inputs = self.stratum_inputs(s);
-                let functionality = compact_functionality::stratum_function(stratum, modules, ctx);
+                let inherited_plan = self.inherited_plan(s, selection, ctx);
+                if let Some(fields) = &inherited_plan {
+                    // A matching checkpoint proves only its exact input roots.
+                    // The source revision also covers transported conclusions.
+                    let model = stratum.model.unwrap();
+                    let name = display_type(model, ctx).to_string().to_case(Case::Snake);
+                    writedoc! {f, "
+                        fn __inherited_inputs_{s}(&self, owners: [u32; 1]) -> Option<__InheritedInputs{s}> {{
+                            let indices = self.__compact_indices_{name}.as_ref()?;
+                            if !indices.has_owner(owners[0]) {{ return None; }}
+                            let source = indices.source(owners[0])?;
+                            let revision = indices.revision(source);
+                            if indices.source_revision(owners[0]) != Some(revision) {{ return None; }}
+                    "}?;
+                    let mut revisions = Vec::new();
+                    for typ in compact_indices::members(model, ctx) {
+                        let name = display_type(typ, ctx).to_string().to_case(Case::Snake);
+                        writedoc! {f, "
+                            let spaces = self.__compact_members_{name}.as_ref()?;
+                            let revision_{name} = spaces.get_snapshot(source)?.revision();
+                            if spaces.source_revision(owners[0]) != Some(revision_{name}) {{ return None; }}
+                        "}?;
+                        revisions.push(format!("revision_{name}"));
+                    }
+                    let revisions = revisions.join(", ");
+                    writedoc! {f, "
+                        let revision = (source, revision, [{revisions}]);
+                        if self.__owner_inputs_{s}.get(&owners).is_some_and(|previous| previous.inherited == Some(revision)) {{ return None; }}
+                        let proved = self.__owner_inputs_{s}.get(&[source])?;
+                    "}?;
+                    for (name, (rel, index)) in fields {
+                        let arity =
+                            rel.arity(ctx.signature()).len() - scope_prefix(&rel, model, ctx);
+                        let rows = self
+                            .inherited_rows(rel, index, model, selection, ctx)
+                            .unwrap();
+                        writeln!(f, "let {name}: PrefixTree{arity} = {rows};")?;
+                    }
+                    for rel in &inputs {
+                        let i = self.inputs[rel];
+                        match rel {
+                            FlatInRel::TypeSet(_) => {
+                                writeln!(f, "if !input_{i}.contains([source]) || !input_{i}.contains([owners[0]]) {{ return None; }}")?;
+                            }
+                            FlatInRel::Rel(_)
+                            | FlatInRel::RelWithDiagonals { .. }
+                            | FlatInRel::Equality(_) => {
+                                writeln!(f, "if !eqlog_runtime::__private::SnapshotSet::shares_root(&input_{i}, &proved.input_{i}) {{ return None; }}")?;
+                            }
+                        }
+                    }
+                    let names = fields.keys().join(", ");
+                    writeln!(f, "Some(__InheritedInputs{s} {{ revision, {names} }}) }}")?;
+                }
                 let outputs: BTreeSet<_> = stratum
                     .groups
                     .iter()
@@ -561,10 +743,6 @@ impl<'s> Codegen<'s> {
                 if stratum.model.is_none() && !native.propagation.relations.is_empty() {
                     writeln!(f, "self.recompute_model_indices_stratum_{s}();")?;
                 }
-                if let Some(func) = functionality {
-                    let name = ctx.func_name(func).to_case(Case::Snake);
-                    writeln!(f, "if let Some(changed) = self.__compact_normalize_{name}(owners[0]) {{ return changed; }}")?;
-                }
                 if let Some(model) = stratum.model {
                     // Most owners have no new input on an incremental visit.
                     // Comparing roots avoids constructing their consumer views.
@@ -580,6 +758,12 @@ impl<'s> Codegen<'s> {
                         snapshots.push(format!("input_{i}: input_{i}.clone()"));
                     }
                     let unchanged = unchanged.join(" && ");
+                    if inherited_plan.is_some() {
+                        snapshots.push(
+                            "inherited: previous.and_then(|previous| previous.inherited)"
+                                .to_owned(),
+                        );
+                    }
                     let snapshots = snapshots.join(", ");
                     writedoc! {f, "
                         let previous = self.__owner_inputs_{s}.get(&owners);
@@ -619,6 +803,20 @@ impl<'s> Codegen<'s> {
                         };
                         writeln!(f, "if !({possible}) {{ return false; }}")?;
                     }
+                }
+                if inherited_plan.is_some() {
+                    // New inherited facts can join local facts matched earlier.
+                    // Reset every index together, then resume temporal deltas.
+                    writedoc! {f, "
+                        let inherited_baseline = if delta.has_pending_func_defs() {{ None }} else {{ self.__inherited_inputs_{s}(owners) }};
+                        if let Some(baseline) = &inherited_baseline {{
+                            self.__owner_inputs_{s}.get_mut(&owners).unwrap().inherited = Some(baseline.revision);
+                            dirty = true;
+                    "}?;
+                    if self.has_stable_inputs(s) {
+                        writeln!(f, "*stable = __StableInputs{s}::default();")?;
+                    }
+                    writeln!(f, "}}")?;
                 }
                 for rel in inputs {
                     let i = self.inputs[&rel];
@@ -667,6 +865,7 @@ impl<'s> Codegen<'s> {
                             old,
                             true,
                             consume,
+                            inherited_plan.as_ref().map(|_| format!("inherited_baseline.as_ref().map(|baseline| &baseline.input_{i})")).as_deref(),
                             ctx,
                         )?;
                     } else {
@@ -724,6 +923,7 @@ impl<'s> Codegen<'s> {
                             true,
                             true,
                             consume,
+                            inherited_plan.as_ref().map(|_| format!("inherited_baseline.as_ref().map(|baseline| &baseline.native_input_{id})")).as_deref(),
                             ctx,
                         )?;
                     } else {
@@ -794,6 +994,7 @@ impl<'s> Codegen<'s> {
                                 old,
                                 new,
                                 consume,
+                                inherited_plan.as_ref().map(|_| format!("inherited_baseline.as_ref().map(|baseline| &baseline.index_{j})")).as_deref(),
                                 ctx,
                             )?;
                         } else {
@@ -968,10 +1169,6 @@ impl<'s> Codegen<'s> {
                 }
                 if stratum.model.is_none() && !compact_policy::models(ctx).is_empty() {
                     writeln!(f, "self.__prepare_total_member_policies();")?;
-                }
-                if let Some(func) = functionality {
-                    let name = ctx.func_name(func).to_case(Case::Snake);
-                    writeln!(f, "self.__compact_certify_{name}(owners[0]);")?;
                 }
                 writeln!(f, "true }}")?;
             }
@@ -1408,11 +1605,22 @@ fn consume_scoped(
     old: bool,
     new: bool,
     consume: &str,
+    inherited: Option<&str>,
     ctx: &RustGenCtx<'_>,
 ) -> std::fmt::Result {
     let arity = rel.arity(ctx.signature()).len();
     let prefix = scope_prefix(rel, model, ctx);
     if prefix == 0 {
+        if let Some(inherited) = inherited {
+            let suffix = consume.strip_prefix("consume_").unwrap();
+            return writedoc! {f, "
+                let {name} = if let Some(baseline) = {inherited} {{
+                    self.{global}.consume_inherited_{suffix}::<{old}, {new}>(({stratum}, owners.to_vec()), baseline)
+                }} else {{
+                    self.{global}.{consume}::<{old}, {new}>(({stratum}, owners.to_vec()))
+                }};
+            "};
+        }
         return writeln!(
             f,
             "let {name} = self.{global}.{consume}::<{old}, {new}>(({stratum}, owners.to_vec()));"
@@ -1426,8 +1634,22 @@ fn consume_scoped(
             let current = {current};
             let history = self.{field}.entry([{key}]).or_insert_with(eqlog_runtime::__private::RelationVersions::new);
             history.publish(current);
-            let view = history.{consume}::<{old}, {new}>(({stratum}, owners.to_vec()));
     "}?;
+    if let Some(inherited) = inherited {
+        let suffix = consume.strip_prefix("consume_").unwrap();
+        writedoc! {f, "
+            let view = if let Some(baseline) = {inherited} {{
+                history.consume_inherited_{suffix}::<{old}, {new}>(({stratum}, owners.to_vec()), baseline)
+            }} else {{
+                history.{consume}::<{old}, {new}>(({stratum}, owners.to_vec()))
+            }};
+        "}?;
+    } else {
+        writeln!(
+            f,
+            "let view = history.{consume}::<{old}, {new}>(({stratum}, owners.to_vec()));"
+        )?;
+    }
     for age in ["old", "new"] {
         writeln!(f, "let {age} = view.{age};")?;
         for i in (0..prefix).rev() {

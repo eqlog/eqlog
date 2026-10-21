@@ -19,12 +19,20 @@ Preserve unchanged relation roots so publication and consumer histories
 can skip unrelated updates. Extend secondary indexes with new owned
 rows instead of repeatedly unioning their entire previous seed.
 
-Reuse inherited functionality only when the source and inherited
-snapshot carry the same validated proof. Check local argument keys
-for collisions; keep full checks when member argument quotients can
-introduce conflicts. Prefer selective owner-bound joins before large
-inherited delta scans while preserving premise ages, canonical binding
-checks, and private noncanonical witnesses.
+Reuse inherited closure through ordinary rule input histories. Require
+exact processed source snapshots and completed transport, and retain
+normal matching while existential definitions are pending. Compare
+current rows with the unmodified inherited roots so target equality
+makes rewritten rows new matching work. When parent facts advance,
+replay local rows to preserve joins with facts processed earlier; then
+resume ordinary temporal deltas. Track member revisions as well as
+relation revisions so pure domain growth follows the same contract.
+
+Use the same mechanism for predicates and functionality. Keep
+owner-dependent global premises and owner-valued data on the ordinary
+path when their matches do not transport. Prefer selective owner-bound
+joins while preserving premise ages, canonical binding checks, and
+private noncanonical witnesses.
 
 Keep public lookups, iteration, equality, and handles consistent across
 compact and ordinary storage. Materialize unsupported operations before
@@ -55,20 +63,8 @@ are temporary artifacts rather than repository benchmarks.
 Keep compact regression theories under the ordinary Cargo fixture
 directory so the generated evaluators run in the full test suite.
 
-Let certified inherited baselines reset relation consumer histories.
-Replay local matching rows when parent facts advance so old local
-facts can join with newly inherited facts. Keep quotient replacements
-new and advance histories even when no requested view contains rows.
-Track adopted member revisions so pure domain growth also invalidates
-inherited matching baselines.
-
-Exercise inherited rule closure through public evaluator operations.
-Cover recursive joins between local and inherited rows, joins enabled
-by target equality, global owner guards, member-input functionality,
-late parent changes, and pending existential consequences across
-partial closure.
-Keep functionality coverage independent of internal validation hooks
-by checking public lookups and equality after inheritance changes.
-Distinguish transported owner-valued data from the current owner in
-rule premises and conclusions so target-specific consequences remain
-observable after closed source facts are inherited.
+Exercise inherited closure through public evaluator operations,
+including recursive local/inherited joins, target equality, late parent
+changes, owner-valued data, and pending existential consequences across
+partial closure. Keep functionality coverage independent of internal
+validation hooks by checking public lookups and equality.
