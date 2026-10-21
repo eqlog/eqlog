@@ -108,3 +108,6 @@ member-free global relations and generated morphism rules.
 Translate compact origin rows at public query boundaries. Preserve
 owner-local handles, alias-aware membership, and lazy row iteration
 without expanding inherited tables for point lookups.
+
+Freeze scoped output handles before applying mutations. A change of
+storage during equality must not reinterpret pending origin values.

@@ -804,28 +804,45 @@ impl<'s> Codegen<'s> {
                 writeln!(f, "}}")?;
                 if let Some(model) = stratum.model {
                     for output in &outputs {
-                        match output {
+                        let field = display_out_set_field_name(output, ctx);
+                        let relation = match output {
                             FlatOutRel::FuncDomain(func) => {
-                                let rel = FlatRel::Func(*func);
-                                let field = display_out_set_field_name(output, ctx);
-                                let conversions = output.arity(ctx.signature()).into_iter()
-                                    .enumerate().filter_map(|(column, typ)| {
-                                        if !ctx.supports_compact_members(typ)
-                                            || !rel.column_maps_under(ctx.signature(), column, model) {
-                                            return None;
-                                        }
-                                        let name = display_type(typ, ctx).to_string().to_case(Case::Snake);
-                                        Some(format!("args[{column}] = self.__compact_{name}_uid(owners[0], args[{column}]).0;"))
-                                    }).join("\n");
-                                if !conversions.is_empty() {
+                                Some((FlatRel::Func(*func), format!("[__compact_start_{field}..]")))
+                            }
+                            FlatOutRel::Rel(rel) => Some((*rel, String::new())),
+                            FlatOutRel::Equality(typ) => {
+                                if ctx.supports_compact_members(*typ)
+                                    && ctx.signature().type_(*typ).parents.first() == Some(&model)
+                                {
+                                    let name =
+                                        display_type(*typ, ctx).to_string().to_case(Case::Snake);
                                     writedoc! {f, "
-                                        for args in &mut delta.{field}[__compact_start_{field}..] {{
-                                            {conversions}
+                                        for args in &mut delta.{field} {{
+                                            args[0] = self.__compact_{name}_uid(owners[0], args[0]).0;
+                                            args[1] = self.__compact_{name}_uid(owners[0], args[1]).0;
                                         }}
                                     "}?;
                                 }
+                                None
                             }
-                            FlatOutRel::Rel(_) | FlatOutRel::Equality(_) => {}
+                        };
+                        if let Some((rel, suffix)) = relation {
+                            let conversions = output.arity(ctx.signature()).into_iter()
+                                .enumerate().filter_map(|(column, typ)| {
+                                    if !ctx.supports_compact_members(typ)
+                                        || !rel.column_maps_under(ctx.signature(), column, model) {
+                                        return None;
+                                    }
+                                    let name = display_type(typ, ctx).to_string().to_case(Case::Snake);
+                                    Some(format!("args[{column}] = self.__compact_{name}_uid(owners[0], args[{column}]).0;"))
+                                }).join("\n");
+                            if !conversions.is_empty() {
+                                writedoc! {f, "
+                                    for args in &mut delta.{field}{suffix} {{
+                                        {conversions}
+                                    }}
+                                "}?;
+                            }
                         }
                     }
                 }
@@ -834,17 +851,9 @@ impl<'s> Codegen<'s> {
                     match output {
                         FlatOutRel::Equality(typ) => {
                             let name = display_type(*typ, ctx).to_string().to_case(Case::Snake);
-                            let conversion = if ctx.supports_compact_members(*typ)
-                                && stratum.model
-                                    == ctx.signature().type_(*typ).parents.first().copied()
-                            {
-                                format!("self.__compact_{name}_uid(owners[0], lhs), self.__compact_{name}_uid(owners[0], rhs)")
-                            } else {
-                                "lhs.into(), rhs.into()".to_owned()
-                            };
                             writedoc! {f, "
                                 for [lhs, rhs] in delta.new_{name}_equalities.drain(..) {{
-                                    self.__equate_{name}({conversion});
+                                    self.__equate_{name}(lhs.into(), rhs.into());
                                 }}
                             "}?;
                             equalities.push(format!("!self.{name}_uprooted.is_empty()"));
@@ -864,27 +873,8 @@ impl<'s> Codegen<'s> {
                             let args = (0..rel.arity(ctx.signature()).len())
                                 .map(|i| format!("arg{i}"))
                                 .collect::<Vec<_>>();
-                            let arity = rel.arity(ctx.signature());
-                            let converted = args
-                                .iter()
-                                .enumerate()
-                                .map(|(column, arg)| {
-                                    let typ = arity[column];
-                                    if let Some(model) = stratum.model {
-                                        if ctx.supports_compact_members(typ)
-                                            && rel.column_maps_under(ctx.signature(), column, model)
-                                        {
-                                            let name = display_type(typ, ctx)
-                                                .to_string()
-                                                .to_case(Case::Snake);
-                                            return format!(
-                                                "self.__compact_{name}_uid(owners[0], {arg})"
-                                            );
-                                        }
-                                    }
-                                    format!("{arg}.into()")
-                                })
-                                .join(", ");
+                            let converted =
+                                args.iter().map(|arg| format!("{arg}.into()")).join(", ");
                             let args = args.join(", ");
                             writedoc! {f, "
                                 delta.{field}.sort_unstable();
