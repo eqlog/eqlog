@@ -67,3 +67,5 @@ Cover recursive joins between local and inherited rows, joins enabled
 by target equality, global owner guards, member-input functionality,
 late parent changes, and pending existential consequences across
 partial closure.
+Keep functionality coverage independent of internal validation hooks
+by checking public lookups and equality after inheritance changes.

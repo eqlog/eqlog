@@ -7,17 +7,9 @@ mod generated {
         env!("EQLOG_OUT_DIR"),
         "/eqlog-test-eval/src/compact_functionality.eql.rs"
     ));
-
-    pub fn checked(model: &CompactFunctionality, owner: World) -> bool {
-        model.__compact_is_checked_item(owner.0)
-    }
-
-    pub fn try_normalize(model: &mut CompactFunctionality, owner: World) -> Option<bool> {
-        model.__compact_normalize_item(owner.0)
-    }
 }
 
-use generated::{checked, try_normalize, CompactFunctionality, World, WorldMor};
+use generated::{CompactFunctionality, World, WorldMor};
 
 fn inherit(model: &mut CompactFunctionality, source: World, target: World) -> WorldMor {
     let morphism = model.new_world_mor();
@@ -40,7 +32,6 @@ fn conflicting_local_keys_wait_for_close_and_keep_siblings_distinct() {
     model.insert_item(source, key, source_value);
     model.insert_marked(source, source_value);
     model.close();
-    assert!(checked(&model, source));
     let to_target = inherit(&mut model, source, target);
     let to_sibling = inherit(&mut model, source, sibling);
     let target_image = model.el_mor_app(to_target, source_value).unwrap();
@@ -55,8 +46,6 @@ fn conflicting_local_keys_wait_for_close_and_keep_siblings_distinct() {
     model.close();
     assert!(model.are_equal_el(target_image, local));
     assert!(model.are_equal_el(child_image, child_local));
-    assert!(checked(&model, target));
-    assert!(checked(&model, child));
     assert_eq!(model.item(sibling, key), Some(sibling_image));
     assert!(model.observed(target, local));
     assert!(model.observed(child, child_local));
@@ -75,18 +64,16 @@ fn late_parent_key_collision_rechecks_local_support() {
     model.insert_item(target, key, local);
     let morphism = inherit(&mut model, source, target);
     model.close();
-    assert!(checked(&model, target));
     let source_value = model.new_el(source);
     model.insert_item(source, key, source_value);
-    assert!(!checked(&model, source));
     model.close();
     let image = model.el_mor_app(morphism, source_value).unwrap();
     assert!(model.are_equal_el(local, image));
-    assert!(checked(&model, target));
+    assert_eq!(model.item(target, key), Some(model.root_el(local)));
 }
 
 #[test]
-fn range_equality_preserves_valid_certificates_only() {
+fn parent_range_equality_and_late_conflicts_reach_targets() {
     let mut model = CompactFunctionality::new();
     model.enable_compact_world();
     let source = model.new_world();
@@ -103,22 +90,30 @@ fn range_equality_preserves_valid_certificates_only() {
     let left_image = model.el_mor_app(morphism, left).unwrap();
     let right_image = model.el_mor_app(morphism, right).unwrap();
     model.equate_el(source, left, right);
-    assert!(checked(&model, source));
     model.close();
     assert!(model.are_equal_el(left_image, right_image));
-    assert!(checked(&model, target));
     let conflict = model.new_el(source);
     model.insert_item(source, first_key, conflict);
-    assert!(!checked(&model, source));
     let other = model.new_el(source);
     model.equate_el(source, conflict, other);
-    assert!(!checked(&model, source));
     model.close();
     assert!(model.are_equal_el(left, conflict));
+    let conflict_image = model.el_mor_app(morphism, conflict).unwrap();
+    let other_image = model.el_mor_app(morphism, other).unwrap();
+    assert!(model.are_equal_el(left_image, conflict_image));
+    assert!(model.are_equal_el(conflict_image, other_image));
+    assert_eq!(
+        model.item(target, first_key),
+        Some(model.root_el(left_image))
+    );
+    assert_eq!(
+        model.item(target, second_key),
+        Some(model.root_el(left_image))
+    );
 }
 
 #[test]
-fn missing_source_certificate_falls_back_and_partial_close_resumes() {
+fn unclosed_parent_functionality_resumes_after_partial_close() {
     let mut model = CompactFunctionality::new();
     model.enable_compact_world();
     let source = model.new_world();
@@ -131,18 +126,16 @@ fn missing_source_certificate_falls_back_and_partial_close_resumes() {
     let morphism = inherit(&mut model, source, target);
     let left_image = model.el_mor_app(morphism, left).unwrap();
     let right_image = model.el_mor_app(morphism, right).unwrap();
-    assert_eq!(try_normalize(&mut model, target), None);
     assert!(!model.are_equal_el(left, right));
     assert!(!model.are_equal_el(left_image, right_image));
     assert!(model.close_until(|model| model.are_equal_el(left, right)));
-    assert!(checked(&model, source));
     model.close();
     assert!(model.are_equal_el(left_image, right_image));
-    assert!(checked(&model, target));
+    assert_eq!(model.item(target, key), Some(model.root_el(left_image)));
 }
 
 #[test]
-fn member_argument_quotients_keep_full_collision_checks() {
+fn member_argument_equality_merges_conflicting_results() {
     let mut model = CompactFunctionality::new();
     model.enable_compact_argument_world();
     let source = model.new_argument_world();
@@ -170,7 +163,7 @@ fn member_argument_quotients_keep_full_collision_checks() {
 }
 
 #[test]
-fn stale_source_certificates_do_not_authorize_inherited_checks() {
+fn source_conflicts_added_after_inheritance_are_closed() {
     let mut model = CompactFunctionality::new();
     model.enable_compact_world();
     let source = model.new_world();
@@ -180,19 +173,20 @@ fn stale_source_certificates_do_not_authorize_inherited_checks() {
     let right = model.new_el(source);
     model.insert_item(source, key, left);
     model.close();
-    inherit(&mut model, source, target);
+    let morphism = inherit(&mut model, source, target);
+    let left_image = model.el_mor_app(morphism, left).unwrap();
+    let right_image = model.el_mor_app(morphism, right).unwrap();
     model.insert_item(source, key, right);
-    assert!(!checked(&model, source));
-    assert_eq!(try_normalize(&mut model, target), None);
     assert!(!model.are_equal_el(left, right));
+    assert!(!model.are_equal_el(left_image, right_image));
     model.close();
     assert!(model.are_equal_el(left, right));
-    assert!(checked(&model, source));
-    assert!(checked(&model, target));
+    assert!(model.are_equal_el(left_image, right_image));
+    assert_eq!(model.item(target, key), Some(model.root_el(left_image)));
 }
 
 #[test]
-fn nullary_function_checks_the_single_local_domain() {
+fn nullary_function_merges_local_and_inherited_results() {
     let mut model = CompactFunctionality::new();
     model.enable_compact_nullary_world();
     let source = model.new_nullary_world();
