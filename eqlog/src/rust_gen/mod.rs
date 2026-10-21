@@ -2276,11 +2276,28 @@ fn display_apply_morphism_index_propagated<'a>(
             .fold(format!("Some(&*{index_field_name}_own)"), |tree, i| {
                 format!("{tree}.and_then(|tree| tree.get(el{i}))")
             });
+        let target_contains =
+            format!("{target_slice}.is_some_and(|existing| mapped_dom_set.is_subset(existing))");
+        // With one prefix column, both checks inspect the same immutable target slice.
+        let (cache_subset, initial_subset, final_subset) = if prefix_len == 1 {
+            (
+                format!("let already_present = {target_contains};"),
+                "already_present".to_owned(),
+                "already_present".to_owned(),
+            )
+        } else {
+            (
+                String::new(),
+                target_contains,
+                format!("{index_field_name}_all.get(el0).is_some_and(|existing| mapped_dom_set.is_subset(existing))"),
+            )
+        };
         writedoc! {f, "
             for ([{prefix_vars}], mapped_dom_set) in propagated {{
                 let mapped_dom_set: {suffix_type} = mapped_dom_set;
+                {cache_subset}
                 if (retain_own || {own_slice}.is_none())
-                    && {target_slice}.is_some_and(|existing| mapped_dom_set.is_subset(existing))
+                    && {initial_subset}
                 {{
                     continue;
                 }}
@@ -2288,7 +2305,7 @@ fn display_apply_morphism_index_propagated<'a>(
                 if !retain_own {{
                     {index_field_name}_own.remove_restriction(el0, &mapped_dom_set);
                 }}
-                if {index_field_name}_all.get(el0).is_some_and(|existing| mapped_dom_set.is_subset(existing)) {{
+                if {final_subset} {{
                     continue;
                 }}
                 changed |= retain_own && !mapped_dom_set.is_empty();

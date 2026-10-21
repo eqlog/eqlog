@@ -346,3 +346,60 @@ fn member_transport_can_move_inherited_rows_outside_the_original_image() {
         model.iter_labelled_edge().collect()
     );
 }
+
+#[test]
+fn overlapping_owned_and_inherited_rows_survive_partial_images_and_cycles() {
+    let mut model = MemberMapping::new();
+    let source = model.new_world();
+    let target = model.new_world();
+    let x0 = model.new_el(source);
+    let x1 = model.new_el(source);
+    let y0 = model.new_el(target);
+    let y1 = model.new_el(target);
+    let common = model.new_label();
+    let owned = model.new_label();
+    for world in [source, target] {
+        for label in [common, owned] {
+            model.insert_request_label(world, label);
+        }
+    }
+    model.insert_labelled_edge(source, x0, common, x1);
+    model.insert_labelled_edge(target, y0, common, y1);
+    model.insert_labelled_edge(target, y1, owned, y0);
+    let forward = model.new_world_mor();
+    model.insert_world_mor_dom(forward, source);
+    model.insert_world_mor_cod(forward, target);
+    model.insert_el_mor_app(forward, x0, y0);
+    model.close();
+    assert_eq!(model.iter_labelled_edge().count(), 3);
+    assert_eq!(model.iter_matched_labelled_edge().count(), 3);
+
+    model.insert_el_mor_app(forward, x1, y1);
+    model.close();
+    assert_eq!(model.iter_labelled_edge().count(), 3);
+    assert_eq!(model.iter_matched_labelled_edge().count(), 3);
+
+    model.insert_labelled_edge(source, x1, common, x0);
+    model.close();
+    assert!(model.labelled_edge(target, y1, common, y0));
+    assert!(model.labelled_edge(target, y1, owned, y0));
+    assert_eq!(model.iter_labelled_edge().count(), 5);
+    assert_eq!(model.iter_matched_labelled_edge().count(), 5);
+
+    let reverse = model.new_world_mor();
+    model.insert_world_mor_dom(reverse, target);
+    model.insert_world_mor_cod(reverse, source);
+    model.insert_el_mor_app(reverse, y0, x0);
+    model.insert_el_mor_app(reverse, y1, x1);
+    for _ in 0..3 {
+        model.canonicalize();
+        model.close();
+        assert!(model.labelled_edge(source, x1, owned, x0));
+        assert_eq!(model.iter_labelled_edge().count(), 6);
+        assert_eq!(model.iter_matched_labelled_edge().count(), 6);
+    }
+    model.equate_el(source, x0, x1);
+    model.close();
+    assert_eq!(model.iter_labelled_edge().count(), 4);
+    assert_eq!(model.iter_matched_labelled_edge().count(), 4);
+}

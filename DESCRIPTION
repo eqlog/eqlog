@@ -12,6 +12,8 @@ Build general image sets in place, preserving empty-result sharing,
 and use sorted keys for any full-level rebuild that is still needed.
 Merge singleton suffixes through mutable entries so late images reuse
 destination paths while empty destinations retain subtree sharing.
+Reuse target coverage across owned-support cleanup when a single model
+prefix identifies the same immutable target slice for both checks.
 Carry source keys alongside deferred value lookups so the common single
 transform needs no temporary allocation or repeated key conversions.
 
