@@ -120,7 +120,14 @@ impl<T: TransportPartitions, const M: usize> TransportFrontier<T, M> {
                     graph_additions(previous, graph, &mut work.morphisms);
                 }
                 source.changed_partitions(&self.source, &mut work.owners);
-                for (current, previous) in maps.iter().zip(&self.maps) {
+                for (index, (current, previous)) in maps.iter().zip(&self.maps).enumerate() {
+                    let repeated = (0..index).any(|earlier| {
+                        current.shares_root(&maps[earlier])
+                            && previous.shares_root(&self.maps[earlier])
+                    });
+                    if repeated {
+                        continue;
+                    }
                     current.changed_partitions(previous, &mut work.morphisms);
                 }
             }
@@ -163,10 +170,20 @@ impl<T: SnapshotSet, const M: usize> TransportCheckpoint<T, M> {
         let delta = if source.is_empty() || maps.iter().any(PrefixTree2::is_empty) {
             (T::empty(), std::array::from_fn(|_| PrefixTree2::new()))
         } else if self.retain_own == retain_own {
-            (
-                source.difference(&self.source),
-                std::array::from_fn(|i| maps[i].difference(&self.maps[i])),
-            )
+            let source_delta = source.difference(&self.source);
+            let mut map_deltas: [PrefixTree2; M] = std::array::from_fn(|_| PrefixTree2::new());
+            for index in 0..M {
+                // Equal current maps can still have different checkpoint histories.
+                let repeated = (0..index).find(|&earlier| {
+                    maps[index].shares_root(&maps[earlier])
+                        && self.maps[index].shares_root(&self.maps[earlier])
+                });
+                map_deltas[index] = match repeated {
+                    Some(earlier) => map_deltas[earlier].clone(),
+                    None => maps[index].difference(&self.maps[index]),
+                };
+            }
+            (source_delta, map_deltas)
         } else {
             (source.clone(), std::array::from_fn(|_| PrefixTree2::new()))
         };

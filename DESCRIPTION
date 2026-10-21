@@ -75,3 +75,7 @@ Consume terminal removal pivots before copying shared paths, avoiding
 replacement allocations while preserving snapshots. Use the same
 subtree weights for joining and balancing so small valid joins retain
 their child roots.
+
+Reuse image deltas and changed-morphism scans across columns with the
+same current and previous snapshots. Comparing both roots preserves
+distinct checkpoint histories while avoiding repeated transport work.
