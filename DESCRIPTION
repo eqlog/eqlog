@@ -1,59 +1,35 @@
 Share native members through lazy tree mappings
 
-Native transport should preserve shared relation subtrees when member
+Native transport should preserve shared relation suffixes when member
 images follow an increasing partial map. Carry compressed offset runs
-through both prefix keys and suffix values, caching transformed children
-only when needed. Keep general non-injective maps eager and merge their
-colliding images into owned destination suffixes.
+through prefix keys and suffix values, compose compatible offsets, and
+cache transformed children only when they are visited.
+
+Keep small materialized relations eager and merge non-injective images
+into owned destination suffixes. Represent dense leaves as intervals
+and retain persistent interval trees when equality introduces holes.
+Consume incoming suffixes during insertion so fresh pivots stay unique
+through recursive unions instead of being copied again.
 
 Preserve canonical current rows, historical snapshots, and finite fuel
-through equality and updates. Keep cache lookups in their original key
-coordinates, seek directly through partial mapping domains, and resolve
-and release deep mapping chains without recursive stack growth.
-
-Bound eager mapping by both prefix width and total materialized work so
-small and sparse relations avoid deferred caches. Reject existing lazy
-children during preflight without evaluating their callbacks. Represent
-dense leaf sets as shared intervals and retain persistent interval trees
-when equality introduces many holes.
+through equality and updates. Keep cache coordinates tied to their raw
+source and release deep mapping chains without recursive stack growth.
+Use partial domains only to choose comparison lookups; leave stored
+bounds and eager-mapping thresholds unchanged. Equivalent partial views
+still skip their shared source without visiting individual keys.
 
 Keep ordinary nodes compact, update only edited paths, and build sorted
-levels without repeated searches. Preserve subtree sharing in unions,
-intersections, and differences. Avoid copying removal pivots that are
-immediately consumed, and use consistent subtree weights for balancing
-and joining. Keep deferred traversal outside ordinary iterator and
-update paths so full tuple consumption retains a small hot loop.
-
+levels without repeated searches. Specialize exact-tree updates to skip
+deferred-node checks and adjust known counts directly. Keep the small
+balance check inline while resolving rotations in a separate helper.
 Reuse target coverage during ownership cleanup and share transport map
-deltas only when both current and previous snapshots match. Distinct
-column histories remain independent even when their current maps agree.
+deltas only when both current and previous snapshots match.
 
-Validation includes the full workspace suite, native and desugared
-member evaluators under both evaluation strategies, and randomized
-mutation sequences checked against an independent relational oracle.
-Regression cases cover filtered pivots, partial and conflicting images,
-noncanonical rows, source and owner equalities, shared snapshots, long
-mapping chains, late images, dynamic roundtrips, and finite fuel.
+Regression coverage includes native and desugared evaluators under both
+evaluation strategies, randomized mutation sequences, filtered pivots,
+partial and conflicting images, noncanonical rows, source and owner
+equalities, shared snapshots, deep chains, late images, and finite fuel.
 
-Compose key-only offset views over their intersecting domains so long
-morphism chains need one coordinate translation. Compare the bounded
-composed runs exactly to retain cheap equivalent-view comparisons.
-Value transforms and fragmented maps preserve their existing paths.
-
-Keep leaf iterator cursors within the element width and expose their
-construction to callers so short restrictions avoid unused state.
-Preserve the count tag in place during edits and avoid metadata work
-when replacing an existing value.
-
-Use exact tree metadata to specialize ordinary insertion and entry
-updates. Avoid deferred-node checks and increment unchanged subtree
-counts directly; conservative views retain exposure and size repair.
-
-Keep the overflow-safe balance check inline so ordinary updates avoid
-rotation state and reuse subtree sizes already known by their callers.
-Resolve heavy pivots and conservative sizes in a separate helper.
-
-Consume incoming suffix trees during restriction insertion so fresh
-propagated pivots remain uniquely owned through recursive merges.
-Preserve borrowed merge callers and the singleton update path while
-moving whole incoming roots into empty destinations.
+Lazy caches and stack-safe destruction tighten the generic WBTreeMap
+lifetime behavior: previous covariance and some early-dropping borrowed
+value examples are not preserved. Generated evaluators use owned values.

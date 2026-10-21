@@ -89,6 +89,46 @@ fn offset_relation(first: u32, count: u32, target: u32) -> PrefixTree2 {
 }
 
 #[test]
+fn partial_domain_comparisons_leave_unrelated_values_lazy() {
+    let mut base = WBTreeMap::new();
+    for key in 0..4096 {
+        base.insert(key, key);
+    }
+    let left = base.mapped(offset_relation(4080, 16, 4080));
+    let calls = Rc::new(Cell::new(0));
+    let counter = calls.clone();
+    let right = base.mapped_entries(None, move |&value| {
+        counter.set(counter.get() + 1);
+        Some(value)
+    });
+    assert_eq!(left.len_upper_bound(), 4096);
+    for _ in 0..2 {
+        assert!(left.all_difference_entries(&right, |_, value, other| other == Some(value)));
+        assert_eq!(calls.get(), 16);
+    }
+    let absent = base.mapped(offset_relation(5000, 1, 0));
+    assert!(absent.all_difference_entries(&right, |_, _, _| false));
+    assert_eq!(calls.get(), 16);
+}
+
+#[test]
+fn equivalent_partial_views_skip_their_shared_source() {
+    let mut base = WBTreeMap::new();
+    for key in 0..4096 {
+        base.insert(key, key);
+    }
+    let relation = offset_relation(4080, 16, 4080);
+    let left = base.mapped(relation.clone());
+    let right = base.mapped(relation);
+    let mut compared = 0;
+    assert!(left.all_difference_entries(&right, |_, _, _| {
+        compared += 1;
+        true
+    }));
+    assert_eq!(compared, 0);
+}
+
+#[test]
 fn consecutive_offset_domains_match_relational_composition_at_integer_limits() {
     for (source, count, middle, outer_source, target, outer_count) in [
         (0, 16, 100, 104, 200, 8),

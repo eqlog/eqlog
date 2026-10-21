@@ -111,6 +111,18 @@ impl MonotoneMap {
         self.runs.len()
     }
 
+    pub(super) fn bound_domain_len(&self, limit: usize) -> usize {
+        if self.relation.map.root_identity() != 0 {
+            return limit.min(self.relation.map.len_upper_bound());
+        }
+        // Composed offsets retain at most one run instead of their source relation.
+        // Count in u64 because the full u32 domain contains 2^32 keys.
+        let count = self.runs.iter().fold(0u64, |count, run| {
+            count + u64::from(run.last - run.source) + 1
+        });
+        limit.min(usize::try_from(count).unwrap_or(usize::MAX))
+    }
+
     pub(super) fn single_offset(&self) -> Option<u32> {
         if self.runs.len() != 1 {
             return None;
@@ -150,5 +162,28 @@ impl MonotoneMap {
             runs,
             relation: PrefixTree2::new(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MonotoneMap, Run};
+    use crate::PrefixTree2;
+    use std::rc::Rc;
+
+    #[test]
+    fn full_domain_cardinality_is_capped_without_overflow() {
+        let mapping = MonotoneMap {
+            runs: Rc::from([Run {
+                source: 0,
+                target: 0,
+                last: u32::MAX,
+            }]),
+            relation: PrefixTree2::new(),
+        };
+        for limit in [0, 1, 1024, usize::MAX] {
+            let expected = (limit as u128).min(u128::from(u32::MAX) + 1);
+            assert_eq!(mapping.bound_domain_len(limit) as u128, expected);
+        }
     }
 }

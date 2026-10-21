@@ -1178,6 +1178,19 @@ impl<V: Clone> WBTreeMap<V> {
         Difference::new(self, other)
     }
 
+    fn comparison_len_upper_bound(&self) -> usize {
+        match self.root.as_deref() {
+            Some(Node::Mapping(mapping)) => mapping
+                .transform
+                .keys
+                .as_ref()
+                .map_or(self.len_upper_bound(), |keys| {
+                    keys.bound_domain_len(self.len_upper_bound())
+                }),
+            Some(Node::Data(_)) | None => self.len_upper_bound(),
+        }
+    }
+
     /// Shared subtrees need no comparison; stops at the first false callback.
     pub fn all_difference_entries<'a>(
         &'a self,
@@ -1190,7 +1203,7 @@ impl<V: Clone> WBTreeMap<V> {
             }
             // Sparse transports should search for their few keys instead of
             // advancing a mapped cursor through an unrelated dense prefix.
-            if self.len_upper_bound() <= other.len_upper_bound() / 8 {
+            if self.comparison_len_upper_bound() <= other.comparison_len_upper_bound() / 8 {
                 return self
                     .iter()
                     .all(|(key, left)| visit(key, left, other.get(&key)));
