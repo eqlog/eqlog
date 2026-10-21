@@ -218,6 +218,49 @@ impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
         self.consume_view::<OLD, NEW, false>(consumer)
     }
 
+    /// A newly transported source can join with previously consumed local rows,
+    /// so its certified baseline replaces this consumer's temporal checkpoint.
+    /// The caller must have transported the source's matching conclusions and
+    /// must commit the resulting work before allowing an early exit.
+    pub fn consume_inherited_required<const OLD: bool, const NEW: bool>(
+        &mut self,
+        consumer: Consumer,
+        baseline: &T,
+    ) -> RelationView<T> {
+        self.consume_inherited_view::<OLD, NEW, true>(consumer, baseline)
+    }
+
+    /// Obsolete baseline suffixes are allowed only as private existence
+    /// witnesses, under the same contract as `consume_membership`.
+    pub fn consume_inherited_membership<const OLD: bool, const NEW: bool>(
+        &mut self,
+        consumer: Consumer,
+        baseline: &T,
+    ) -> RelationView<T> {
+        self.consume_inherited_view::<OLD, NEW, false>(consumer, baseline)
+    }
+
+    fn consume_inherited_view<const OLD: bool, const NEW: bool, const FILTER_OLD: bool>(
+        &mut self,
+        consumer: Consumer,
+        baseline: &T,
+    ) -> RelationView<T> {
+        let old = if !OLD {
+            T::empty()
+        } else if !FILTER_OLD {
+            baseline.clone()
+        } else {
+            baseline.intersection(&self.current.rows)
+        };
+        let new = if NEW {
+            self.current.rows.difference(baseline)
+        } else {
+            T::empty()
+        };
+        self.advance(consumer);
+        RelationView { old, new }
+    }
+
     fn consume_view<const OLD: bool, const NEW: bool, const FILTER_OLD: bool>(
         &mut self,
         consumer: Consumer,
@@ -264,11 +307,15 @@ impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
         } else {
             T::empty()
         };
+        self.advance(consumer);
+        RelationView { old, new }
+    }
+
+    fn advance(&mut self, consumer: Consumer) {
         if let Some(previous) = self.seen.insert(consumer, self.current.clone()) {
             if Rc::strong_count(&previous) == 1 {
                 self.views.remove(&previous.id);
             }
         }
-        RelationView { old, new }
     }
 }

@@ -54,3 +54,10 @@ are temporary artifacts rather than repository benchmarks.
 
 Keep compact regression theories under the ordinary Cargo fixture
 directory so the generated evaluators run in the full test suite.
+
+Let certified inherited baselines reset relation consumer histories.
+Replay local matching rows when parent facts advance so old local
+facts can join with newly inherited facts. Keep quotient replacements
+new and advance histories even when no requested view contains rows.
+Track adopted member revisions so pure domain growth also invalidates
+inherited matching baselines.

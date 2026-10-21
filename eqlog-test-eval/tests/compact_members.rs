@@ -179,9 +179,11 @@ fn installing_inheritance_retains_existing_target_equations() {
 #[test]
 fn fragmented_domains_remain_shared_across_late_growth() {
     let mut spaces = MemberSpaces::new();
+    assert_eq!(spaces.source_revision(0), None);
     for owner in 0..3 {
         spaces.create_owner(owner);
     }
+    assert_eq!(spaces.source_revision(0), None);
     let mut source = Vec::new();
     for _ in 0..128 {
         spaces.allocate(2);
@@ -189,10 +191,18 @@ fn fragmented_domains_remain_shared_across_late_growth() {
     }
     spaces.inherit_total_members(0, 1);
     let before = spaces.snapshot(1);
+    let inherited_revision = spaces.snapshot(0).revision();
+    assert_eq!(spaces.source_revision(1), Some(inherited_revision));
     assert!(before.shares_domain_with(&spaces.snapshot(0)));
     let local = spaces.allocate(1);
     let late = spaces.allocate(0);
+    assert_eq!(spaces.source_revision(1), Some(inherited_revision));
+    assert_ne!(inherited_revision, spaces.snapshot(0).revision());
     spaces.refresh(1);
+    assert_eq!(
+        spaces.source_revision(1),
+        Some(spaces.snapshot(0).revision())
+    );
     let current = spaces.snapshot(1);
     assert!(current.contains(local));
     assert!(!before.contains(local));

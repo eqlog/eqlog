@@ -378,6 +378,16 @@ impl MemberSpaces {
             .map(|inherited| inherited.source)
     }
 
+    /// A source can grow without changing relation rows, so matching baselines
+    /// also need the member snapshot revision last adopted by this owner.
+    pub fn source_revision(&self, owner: u32) -> Option<u64> {
+        self.owners
+            .get(&owner)?
+            .inherited
+            .as_ref()
+            .map(|inherited| inherited.revision)
+    }
+
     pub fn get_snapshot(&self, owner: u32) -> Option<&MemberSnapshot> {
         self.owners.get(&owner).map(|space| &space.snapshot)
     }
