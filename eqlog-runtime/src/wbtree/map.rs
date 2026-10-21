@@ -323,11 +323,11 @@ fn apply_mappings<V: Clone>(mappings: &[&MappingNode<V>], val: u32) -> Option<u3
 }
 
 fn apply_value_mappings<'a, V: Clone>(
-    mappings: &[&'a MappingNode<V>],
+    mappings: impl ExactSizeIterator<Item = &'a MappingNode<V>> + DoubleEndedIterator,
     mut raw_key: u32,
     mut value: &'a V,
 ) -> Option<&'a V> {
-    for (index, mapping) in mappings.iter().enumerate().rev() {
+    for (index, mapping) in mappings.enumerate().rev() {
         value = mapping.map_value(raw_key, value)?;
         if index > 0 {
             if let Some(keys) = &mapping.transform.keys {
@@ -351,6 +351,40 @@ fn needs_double_rotation(inner: usize, outer: usize) -> bool {
 }
 
 impl<V: Clone> Node<V> {
+    fn all_data_values(node: &Option<Rc<Self>>, visit: &mut impl FnMut(&V) -> bool) -> bool {
+        let Some(node) = node else {
+            return true;
+        };
+        let data = match node.as_ref() {
+            Self::Data(data) => data,
+            Self::Mapping(_) => unreachable!("the caller requires materialized entries"),
+        };
+        visit(&data.value)
+            && Self::all_data_values(&data.left, visit)
+            && Self::all_data_values(&data.right, visit)
+    }
+
+    fn map_data_entries(
+        node: &Option<Rc<Self>>,
+        keys: Option<&MonotoneMap>,
+        values: &impl Fn(&V) -> Option<V>,
+    ) -> Option<Rc<Self>> {
+        let node = node.as_ref()?;
+        let data = match node.as_ref() {
+            Self::Data(data) => data,
+            Self::Mapping(_) => unreachable!("the caller requires materialized entries"),
+        };
+        let left = Self::map_data_entries(&data.left, keys, values);
+        let right = Self::map_data_entries(&data.right, keys, values);
+        let entry = keys
+            .map_or(Some(data.key), |keys| keys.apply(data.key))
+            .and_then(|key| values(&data.value).map(|value| (key, value)));
+        match entry {
+            Some((key, value)) => Self::join(left, key, value, right),
+            None => Self::concat(left, right),
+        }
+    }
+
     fn from_sorted_iter(
         len: usize,
         entries: &mut impl Iterator<Item = (u32, V)>,
@@ -1030,6 +1064,35 @@ impl<V: Clone> Node<V> {
 }
 
 impl<V: Clone> WBTreeMap<V> {
+    pub(crate) fn fits_materialized_budget(
+        &self,
+        budget: &mut usize,
+        mut values: impl FnMut(&V, &mut usize) -> bool,
+    ) -> bool {
+        if self.has_mapping() {
+            return false;
+        }
+        let Some(remaining) = budget.checked_sub(self.len.upper_bound()) else {
+            return false;
+        };
+        *budget = remaining;
+        Node::all_data_values(&self.root, &mut |value| values(value, budget))
+    }
+
+    pub(crate) fn mapped_small_entries(
+        &self,
+        keys: Option<&MonotoneMap>,
+        limit: usize,
+        values: impl Fn(&V) -> Option<V>,
+    ) -> Option<Self> {
+        if self.has_mapping() || self.len.upper_bound() > limit {
+            return None;
+        }
+        let root = Node::map_data_entries(&self.root, keys, &values);
+        let len = SizeBound::exact(Node::size(&root));
+        Some(Self { root, len })
+    }
+
     pub(crate) fn from_sorted_entries(entries: Vec<(u32, V)>) -> Self {
         debug_assert!(entries.windows(2).all(|pair| pair[0].0 < pair[1].0));
         let len = entries.len();
@@ -1275,7 +1338,7 @@ impl<V: Clone> WBTreeMap<V> {
         Iter {
             stack: Vec::new(),
             current: Some(&self.root),
-            current_mappings: Vec::new(),
+            current_mappings: self.has_mapping().then(Vec::new),
         }
     }
 
@@ -1587,41 +1650,179 @@ impl<V: Clone> WBTreeMap<V> {
     }
 }
 
+#[derive(Clone, Copy)]
+struct KeyBounds {
+    first: u32,
+    last: u32,
+}
+
+impl KeyBounds {
+    const ALL: Self = Self {
+        first: 0,
+        last: u32::MAX,
+    };
+    const EMPTY: Self = Self { first: 1, last: 0 };
+
+    fn endpoints(self) -> Option<(u32, u32)> {
+        (self.first <= self.last).then_some((self.first, self.last))
+    }
+
+    fn from_endpoints(endpoints: Option<(u32, u32)>) -> Self {
+        endpoints.map_or(Self::EMPTY, |(first, last)| Self { first, last })
+    }
+}
+
+struct MappingFrame<'a, V: Clone> {
+    mapping: &'a MappingNode<V>,
+    // Each bound belongs to this mapping's immediate input coordinates.
+    bounds: KeyBounds,
+}
+
 pub struct Iter<'a, V: Clone> {
     stack: Vec<(&'a DataNode<V>, usize)>,
     current: Option<&'a Option<Rc<Node<V>>>>,
-    current_mappings: Vec<&'a MappingNode<V>>,
+    // Exact trees need no mapping state or bounds checks.
+    current_mappings: Option<Vec<MappingFrame<'a, V>>>,
 }
 
 impl<'a, V: Clone> Iter<'a, V> {
-    fn next_node(&mut self) -> Option<&'a DataNode<V>> {
+    fn next_plain(&mut self) -> Option<(u32, &'a V)> {
         while let Some(opt_node) = self.current {
             match opt_node {
-                None => {
-                    self.current = None;
-                }
+                None => self.current = None,
                 Some(node) => match node.as_ref() {
-                    Node::Data(data_node) => {
-                        // Singleton suffixes do not need an allocated ancestor stack.
-                        if data_node.left.is_none() {
-                            self.current = Some(&data_node.right);
-                            return Some(data_node);
+                    Node::Data(data) => {
+                        if data.left.is_none() {
+                            self.current = Some(&data.right);
+                            return Some((data.key, &data.value));
                         }
-                        self.stack.push((data_node, self.current_mappings.len()));
-                        self.current = Some(&data_node.left);
+                        self.stack.push((data, 0));
+                        self.current = Some(&data.left);
                     }
-                    Node::Mapping(mapping_node) => {
-                        self.current_mappings.push(mapping_node);
-                        self.current = Some(&mapping_node.child);
-                    }
+                    Node::Mapping(_) => unreachable!("exact sizes have no mapped descendants"),
                 },
             }
         }
-        let (data_node, mapping_depth) = self.stack.pop()?;
-        // Descendants only append mappings, so the ancestor's prefix stays valid.
-        self.current_mappings.truncate(mapping_depth);
-        self.current = Some(&data_node.right);
-        Some(data_node)
+        let (data, _) = self.stack.pop()?;
+        self.current = Some(&data.right);
+        Some((data.key, &data.value))
+    }
+
+    fn mappings(&self) -> &[MappingFrame<'a, V>] {
+        self.current_mappings.as_deref().unwrap()
+    }
+
+    fn mappings_mut(&mut self) -> &mut Vec<MappingFrame<'a, V>> {
+        self.current_mappings.as_mut().unwrap()
+    }
+
+    fn bounds(&self) -> Option<(u32, u32)> {
+        self.mappings()
+            .last()
+            .map_or(KeyBounds::ALL, |frame| frame.bounds)
+            .endpoints()
+    }
+
+    // Dense scans only need bounds after a mapping or a domain hole. A scan
+    // can enter seeking once; seeking never calls back into the scan path.
+    fn next_node<const SEEK: bool>(&mut self) -> Option<&'a DataNode<V>> {
+        loop {
+            while let Some(opt_node) = self.current {
+                let bounds = if SEEK {
+                    self.bounds()
+                } else {
+                    Some((0, u32::MAX))
+                };
+                let Some((first, last)) = bounds else {
+                    self.current = None;
+                    break;
+                };
+                match opt_node {
+                    None => self.current = None,
+                    Some(node) => match node.as_ref() {
+                        Node::Data(data) => {
+                            if SEEK && data.key < first {
+                                self.current = Some(&data.right);
+                            } else if SEEK && data.key > last {
+                                self.current = Some(&data.left);
+                            } else if data.left.is_none() {
+                                self.current = Some(&data.right);
+                                return Some(data);
+                            } else {
+                                self.stack.push((data, self.mappings().len()));
+                                self.current = Some(&data.left);
+                            }
+                        }
+                        Node::Mapping(mapping) => {
+                            let Some((first, last)) = self.bounds() else {
+                                self.current = None;
+                                continue;
+                            };
+                            let bounds = match &mapping.transform.keys {
+                                None => Some((first, last)),
+                                Some(keys) => keys.preimage_bounds(first, last),
+                            };
+                            self.mappings_mut().push(MappingFrame {
+                                mapping,
+                                bounds: KeyBounds::from_endpoints(bounds),
+                            });
+                            self.current = Some(&mapping.child);
+                            if !SEEK && mapping.transform.keys.is_some() {
+                                return self.next_node::<true>();
+                            }
+                        }
+                    },
+                }
+            }
+            let (data, mapping_depth) = self.stack.pop()?;
+            let same_scope = self.mappings().len() == mapping_depth;
+            self.mappings_mut().truncate(mapping_depth);
+            self.current = Some(&data.right);
+            if !SEEK && same_scope {
+                return Some(data);
+            }
+            if let Some((first, last)) = self.bounds() {
+                if data.key <= last {
+                    if data.key >= first {
+                        return Some(data);
+                    }
+                    if !SEEK {
+                        return self.next_node::<true>();
+                    }
+                    continue;
+                }
+            }
+            self.current = None;
+            if !SEEK {
+                return self.next_node::<true>();
+            }
+        }
+    }
+
+    fn mapped_key(&mut self, mut key: u32) -> Option<u32> {
+        for index in (0..self.mappings().len()).rev() {
+            let Some(keys) = &self.mappings()[index].mapping.transform.keys else {
+                continue;
+            };
+            if let Some(mapped) = keys.apply(key) {
+                key = mapped;
+                continue;
+            }
+            // The next domain key is expressed in this layer's input coordinates.
+            // Pull it through the inner maps before seeking in the source tree.
+            let mut next = keys.source_at_or_after(key);
+            for inner in &self.mappings()[index + 1..] {
+                if let Some(keys) = &inner.mapping.transform.keys {
+                    next = next.and_then(|key| keys.preimage_at_or_after(key));
+                }
+            }
+            let frame = self.mappings_mut().last_mut().unwrap();
+            frame.bounds = KeyBounds::from_endpoints(frame.bounds.endpoints().zip(next).and_then(
+                |((first, last), next)| (next <= last).then_some((first.max(next), last)),
+            ));
+            return None;
+        }
+        Some(key)
     }
 }
 
@@ -1629,17 +1830,30 @@ impl<'a, V: Clone> Iterator for Iter<'a, V> {
     type Item = (u32, &'a V);
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.current_mappings.is_none() {
+            return self.next_plain();
+        }
+        let mut seek = false;
         loop {
-            let data_node = self.next_node()?;
-            if self.current_mappings.is_empty() {
-                return Some((data_node.key, &data_node.value));
+            let data = if seek {
+                self.next_node::<true>()?
+            } else {
+                self.next_node::<false>()?
+            };
+            seek = false;
+            if self.mappings().is_empty() {
+                return Some((data.key, &data.value));
             }
-            if let Some(key) = apply_mappings(&self.current_mappings, data_node.key) {
-                if let Some(value) =
-                    apply_value_mappings(&self.current_mappings, data_node.key, &data_node.value)
-                {
+            if let Some(key) = self.mapped_key(data.key) {
+                if let Some(value) = apply_value_mappings(
+                    self.mappings().iter().map(|frame| frame.mapping),
+                    data.key,
+                    &data.value,
+                ) {
                     return Some((key, value));
                 }
+            } else {
+                seek = true;
             }
         }
     }

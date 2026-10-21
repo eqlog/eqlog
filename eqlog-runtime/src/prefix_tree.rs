@@ -1891,6 +1891,8 @@ struct ColumnMapping {
     monotone: OnceCell<Option<MonotoneMap>>,
 }
 
+const EAGER_MAPPING_BUDGET: usize = 8;
+
 impl ColumnMapping {
     fn new(relation: PrefixTree2) -> Self {
         Self {
@@ -1963,6 +1965,10 @@ impl PrefixTree1 {
             },
         }
     }
+
+    fn fits_materialized_budget(&self, budget: &mut usize) -> bool {
+        self.set.fits_materialized_budget(budget)
+    }
 }
 
 macro_rules! mapped_tree {
@@ -2011,12 +2017,33 @@ macro_rules! mapped_tree {
                 result
             }
 
+            fn fits_materialized_budget(&self, budget: &mut usize) -> bool {
+                self.map.fits_materialized_budget(budget, |value, budget| {
+                    value.fits_materialized_budget(budget)
+                })
+            }
+
             fn mapped_monotone(&self, [map0, $($map),+]: [Option<MonotoneMap>; $arity]) -> Self {
                 let suffix = [$($map),+];
                 if suffix.iter().flatten().any(|mapping| mapping.run_count() == 0) {
                     return Self::new();
                 }
-                if suffix.iter().all(Option::is_none) {
+                let suffix_unchanged = suffix.iter().all(Option::is_none);
+                if map0.is_none() && suffix_unchanged {
+                    return self.clone();
+                }
+                // Only bounded materialized suffixes have cheap emptiness checks.
+                // Preflight rejects existing lazy children without forcing them.
+                let mut budget = EAGER_MAPPING_BUDGET;
+                if suffix_unchanged || self.fits_materialized_budget(&mut budget) {
+                    if let Some(map) = self.map.mapped_small_entries(map0.as_ref(), EAGER_MAPPING_BUDGET, |value| {
+                        let value = value.mapped_monotone(suffix.clone());
+                        (suffix_unchanged || !value.is_empty()).then_some(value)
+                    }) {
+                        return Self { map };
+                    }
+                }
+                if suffix_unchanged {
                     return match map0 {
                         None => self.clone(),
                         Some(mapping) => Self { map: self.map.mapped_keys(mapping) },

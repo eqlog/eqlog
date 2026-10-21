@@ -39,3 +39,14 @@ Retain raw cache origins through identity and uniform-offset views so
 value lookups avoid repeatedly searching the same morphism chain. Keep
 proper subtree origins small and compose validated offsets modulo the ID
 width while preserving filtered domains and historical snapshots.
+
+Seek through partial mapping domains without visiting excluded source
+rows. Preserve each child's bounds while returning to ordinary sibling
+paths, and keep exact trees on a direct iterator path. Avoid repeated
+endpoint searches when outer bounds already cover a complete map image.
+
+Map bounded materialized suffixes directly to avoid deferred caches for
+just a few entries. Preflight rejects existing lazy descendants without
+evaluating their callbacks, so a small parent cannot force a large
+suffix emptiness check. Keep point adapters outside range iterator
+storage so ordinary leaf traversal needs less stack space.

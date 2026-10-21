@@ -72,6 +72,56 @@ fn mapping_a_prefix_shares_its_unchanged_suffixes() {
 }
 
 #[test]
+fn singleton_prefix_mapping_preserves_unread_and_filtered_suffixes() {
+    let mut suffix = PrefixTree2::new();
+    for key in 0..128 {
+        suffix.insert([key, key]);
+    }
+    let calls = Rc::new(Cell::new(0));
+    let counter = calls.clone();
+    suffix.map = suffix.map.mapped_entries(None, move |value| {
+        counter.set(counter.get() + 1);
+        Some(value.clone())
+    });
+    let mut source = PrefixTree3::new();
+    source.map.insert(7, suffix.clone());
+    let mut accepted = PrefixTree2::new();
+    accepted.insert([7, 70]);
+    let mut rejected = PrefixTree2::new();
+    rejected.insert([8, 80]);
+
+    let mapped = source.mapped(Some(accepted), None, None);
+    assert!(SnapshotSet::shares_root(mapped.get(70).unwrap(), &suffix));
+    assert!(source.mapped(Some(rejected.clone()), None, None).is_empty());
+    assert_eq!(calls.get(), 0);
+
+    let head_calls = Rc::new(Cell::new(0));
+    let counter = head_calls.clone();
+    let mut deferred = source.clone();
+    deferred.map = deferred.map.mapped_entries(None, move |value| {
+        counter.set(counter.get() + 1);
+        Some(value.clone())
+    });
+    assert!(deferred.mapped(Some(rejected), None, None).is_empty());
+    assert_eq!(head_calls.get(), 0);
+    assert_eq!(calls.get(), 0);
+
+    let mut last = PrefixTree2::new();
+    last.insert([0, 200]);
+    let partial = source.mapped(None, None, Some(last));
+    assert!(partial.contains([7, 0, 200]));
+    assert_eq!(calls.get(), 1);
+    assert_eq!(partial.iter().collect::<Vec<_>>(), [[7, 0, 200]]);
+    assert_eq!(source.iter().count(), 128);
+
+    let mut absent = PrefixTree2::new();
+    absent.insert([999, 1999]);
+    let empty = source.mapped(None, None, Some(absent));
+    assert!(empty.is_empty());
+    assert!(empty.get(7).is_none());
+}
+
+#[test]
 fn mapping_early_and_late_columns_does_not_visit_unrequested_prefixes() {
     let mut tree = PrefixTree3::new();
     let mut first = PrefixTree2::new();
@@ -97,6 +147,104 @@ fn mapping_early_and_late_columns_does_not_visit_unrequested_prefixes() {
     assert_eq!(calls.get(), 1);
     assert_eq!(mapped.iter().count(), 128);
     assert_eq!(calls.get(), 128);
+}
+
+#[test]
+fn small_prefix_mapping_filters_heads_before_visiting_large_suffixes() {
+    for groups in [1, 2, 3, 4, 8] {
+        let mut restriction = PrefixTree3::new();
+        let mut group_map = PrefixTree2::new();
+        let mut last_map = PrefixTree2::new();
+        let mut counters = Vec::new();
+        for group in 0..groups {
+            let mut suffix = PrefixTree2::new();
+            for key in 0..64 {
+                suffix.insert([key, key]);
+                last_map.insert([key, key + 200]);
+            }
+            let calls = Rc::new(Cell::new(0));
+            let counter = calls.clone();
+            suffix.map = suffix.map.mapped_entries(None, move |value| {
+                counter.set(counter.get() + 1);
+                Some(value.clone())
+            });
+            counters.push(calls);
+            restriction.map.insert(group, suffix);
+            if group % 2 == 0 {
+                group_map.insert([group, group + 100]);
+            }
+        }
+        let mut source = PrefixTree4::new();
+        for outer in 0..128 {
+            source.map.insert(outer, restriction.clone());
+        }
+        let mapped = source.mapped(None, Some(group_map), None, Some(last_map));
+        assert!(counters.iter().all(|counter| counter.get() == 0));
+        let expected: BTreeSet<_> = (0..groups)
+            .filter(|group| group % 2 == 0)
+            .flat_map(|group| (0..64).map(move |key| [group + 100, key, key + 200]))
+            .collect();
+        assert_eq!(
+            mapped.get(17).unwrap().iter().collect::<BTreeSet<_>>(),
+            expected
+        );
+        for (group, counter) in counters.iter().enumerate() {
+            assert_eq!(counter.get(), if group % 2 == 0 { 64 } else { 0 });
+        }
+        assert!(source.contains([17, 0, 63, 63]));
+        assert!(!source.contains([17, 100, 63, 263]));
+    }
+}
+
+#[test]
+fn small_prefix_mapping_defers_unknown_suffix_emptiness() {
+    let mut suffix = PrefixTree2::new();
+    for key in 0..4096 {
+        suffix.insert([key, key]);
+    }
+    let calls = Rc::new(Cell::new(0));
+    let counter = calls.clone();
+    suffix.map = suffix.map.mapped_entries(None, move |value| {
+        counter.set(counter.get() + 1);
+        Some(value.clone())
+    });
+    let mut source = PrefixTree3::new();
+    source.map.insert(7, suffix);
+    let mut absent = PrefixTree2::new();
+    absent.insert([8192, 16384]);
+    let mapped = source.mapped(None, None, Some(absent));
+    assert_eq!(calls.get(), 0);
+    assert!(mapped.is_empty());
+    assert_eq!(calls.get(), 4096);
+    assert!(source.contains([7, 4095, 4095]));
+}
+
+#[test]
+fn small_materialized_images_filter_pivots_and_remain_editable() {
+    for mask in 0..16 {
+        let mut source = PrefixTree2::new();
+        let mut first = PrefixTree2::new();
+        let mut last = PrefixTree2::new();
+        let mut expected = BTreeSet::new();
+        for key in 0..4 {
+            source.insert([key + 10, key + 100]);
+            first.insert([key + 10, key + 1000]);
+            if mask & (1 << key) != 0 {
+                last.insert([key + 100, key + 2000]);
+                expected.insert([key + 1000, key + 2000]);
+            }
+        }
+        let mut mapped = source.mapped(Some(first), Some(last));
+        assert_eq!(mapped.iter().collect::<BTreeSet<_>>(), expected);
+        let snapshot = mapped.clone();
+        mapped.insert([1001, 3001]);
+        mapped.insert([999, 2999]);
+        assert!(mapped.contains([1001, 3001]));
+        assert!(mapped.contains([999, 2999]));
+        assert_eq!(snapshot.iter().collect::<BTreeSet<_>>(), expected);
+        assert!(source.contains([11, 101]));
+        assert_eq!(source.iter().count(), 4);
+    }
 }
 
 #[test]

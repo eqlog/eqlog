@@ -2,7 +2,7 @@ use eqlog_runtime::wbtree::map::WBTreeMap;
 use eqlog_runtime::wbtree::mapping::MonotoneMap;
 use eqlog_runtime::PrefixTree2;
 use std::cell::Cell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
 #[test]
@@ -1034,4 +1034,138 @@ fn cache_origins_compose_alternating_offsets_at_integer_limits() {
     );
     assert_eq!(original.len(), 256);
     assert_eq!(original.get(&255), Some(&255));
+}
+
+#[test]
+fn sparse_domains_seek_across_nested_maps_and_edited_siblings() {
+    let mut source = WBTreeMap::new();
+    for key in 0..8192 {
+        source.insert(key, key);
+    }
+    for positions in [
+        vec![0, 1, 17],
+        vec![4096, 4113, 4129],
+        vec![8174, 8190, 8191],
+        vec![0, 4096, 8191],
+        vec![8192, 9000],
+    ] {
+        let mut first = PrefixTree2::new();
+        for key in 0..8192 {
+            first.insert([key, key * 2 + 1]);
+        }
+        let mut second = PrefixTree2::new();
+        let mut expected = BTreeMap::new();
+        for (index, key) in positions.iter().copied().enumerate() {
+            let target = u32::MAX - positions.len() as u32 + index as u32;
+            second.insert([key * 2 + 1, target]);
+            if key < 8192 && key % 3 != 1 {
+                expected.insert(target, key + 10);
+            }
+        }
+        let mut actual = source
+            .mapped_keys(MonotoneMap::new(&first).unwrap())
+            .mapped_entries(None, |value| (value % 3 != 1).then_some(value + 10))
+            .mapped_keys(MonotoneMap::new(&second).unwrap());
+        let snapshot = actual.clone();
+        assert_eq!(actual.is_empty(), expected.is_empty());
+        assert_eq!(
+            actual
+                .iter()
+                .map(|(key, &value)| (key, value))
+                .collect::<BTreeMap<_, _>>(),
+            expected
+        );
+        actual.insert(0, 7);
+        actual.insert(u32::MAX, 11);
+        expected.insert(0, 7);
+        expected.insert(u32::MAX, 11);
+        assert_eq!(
+            actual
+                .iter()
+                .map(|(key, &value)| (key, value))
+                .collect::<BTreeMap<_, _>>(),
+            expected
+        );
+        assert_eq!(snapshot.len(), expected.len() - 2);
+    }
+}
+
+#[test]
+fn sparse_domain_boundaries_preserve_zero_and_maximum_keys() {
+    let mut source = WBTreeMap::new();
+    for key in [0, 1, 17, 31, u32::MAX - 1, u32::MAX] {
+        source.insert(key, key);
+    }
+    let mut first = PrefixTree2::new();
+    first.insert([0, 0]);
+    first.insert([u32::MAX, u32::MAX]);
+    let actual = source.mapped_keys(MonotoneMap::new(&first).unwrap());
+    assert_eq!(
+        actual
+            .iter()
+            .map(|(key, &value)| (key, value))
+            .collect::<Vec<_>>(),
+        [(0, 0), (u32::MAX, u32::MAX)]
+    );
+    let mut second = PrefixTree2::new();
+    second.insert([u32::MAX - 1, 0]);
+    assert!(actual
+        .mapped_keys(MonotoneMap::new(&second).unwrap())
+        .is_empty());
+}
+
+#[test]
+fn composed_sparse_domains_match_an_eager_oracle_after_edits() {
+    let mut actual = WBTreeMap::new();
+    let mut expected = BTreeMap::new();
+    for key in 0..2048 {
+        actual.insert(key, key);
+        expected.insert(key, key);
+    }
+    for layer in 0..12 {
+        let mut candidates = BTreeSet::new();
+        for &key in expected.keys() {
+            candidates.extend([key, key + 1, key + 17]);
+        }
+        let mut relation = PrefixTree2::new();
+        let mut images = BTreeMap::new();
+        for key in candidates {
+            if (key + layer) % 3 != 0 {
+                relation.insert([key, key * 2 + 1]);
+                images.insert(key, key * 2 + 1);
+            }
+        }
+        actual = actual.mapped_entries(MonotoneMap::new(&relation), |value| {
+            (value % 7 != 0).then_some(value + 1)
+        });
+        expected = expected
+            .into_iter()
+            .filter_map(|(key, value)| {
+                images
+                    .get(&key)
+                    .and_then(|&image| (value % 7 != 0).then_some((image, value + 1)))
+            })
+            .collect();
+        let snapshot = actual.clone();
+        let snapshot_rows = expected.clone();
+        let inserted = (2048 << layer) + 19;
+        actual.insert(inserted, layer);
+        expected.insert(inserted, layer);
+        assert_eq!(
+            actual
+                .iter()
+                .map(|(key, &value)| (key, value))
+                .collect::<BTreeMap<_, _>>(),
+            expected,
+            "layer {layer}",
+        );
+        assert_eq!(
+            snapshot
+                .iter()
+                .map(|(key, &value)| (key, value))
+                .collect::<BTreeMap<_, _>>(),
+            snapshot_rows,
+            "snapshot layer {layer}",
+        );
+    }
 }

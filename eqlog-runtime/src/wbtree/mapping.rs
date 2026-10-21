@@ -71,6 +71,41 @@ impl MonotoneMap {
         (run.target <= key).then(|| run.source + (key - run.target))
     }
 
+    pub(super) fn source_at_or_after(&self, key: u32) -> Option<u32> {
+        let index = self.runs.partition_point(|run| run.last < key);
+        self.runs.get(index).map(|run| run.source.max(key))
+    }
+
+    pub(super) fn preimage_at_or_after(&self, key: u32) -> Option<u32> {
+        let index = self
+            .runs
+            .partition_point(|run| run.target + (run.last - run.source) < key);
+        let run = self.runs.get(index)?;
+        Some(run.source + (key.max(run.target) - run.target))
+    }
+
+    fn preimage_at_or_before(&self, key: u32) -> Option<u32> {
+        let index = self.runs.partition_point(|run| run.target <= key);
+        let run = self.runs.get(index.checked_sub(1)?)?;
+        Some(run.source + (key - run.target).min(run.last - run.source))
+    }
+
+    pub(super) fn preimage_bounds(&self, first: u32, last: u32) -> Option<(u32, u32)> {
+        let start = self.runs.first()?;
+        let end = self.runs.last()?;
+        let first = if first <= start.target {
+            Some(start.source)
+        } else {
+            self.preimage_at_or_after(first)
+        };
+        let last = if last >= end.target + (end.last - end.source) {
+            Some(end.last)
+        } else {
+            self.preimage_at_or_before(last)
+        };
+        first.zip(last).filter(|(first, last)| first <= last)
+    }
+
     pub fn run_count(&self) -> usize {
         self.runs.len()
     }

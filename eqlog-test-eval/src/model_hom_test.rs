@@ -813,7 +813,11 @@ fn isomorphism_fuel_accounts_for_deferred_column_mappings() {
     let mut identity = PrefixTree2::new();
     identity.insert([0, 0]);
 
+    // A deferred input keeps tiny-image optimizations from erasing this chain.
     let mut composed = identity.clone();
+    composed.map = composed
+        .map
+        .mapped_entries(None, |value| Some(value.clone()));
     for _ in 0..8 {
         composed = composed.mapped(Some(identity.clone()), Some(identity.clone()));
     }

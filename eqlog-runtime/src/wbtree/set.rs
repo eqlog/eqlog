@@ -19,6 +19,20 @@ enum Storage {
 }
 
 impl WBTreeSet {
+    pub(crate) fn fits_materialized_budget(&self, budget: &mut usize) -> bool {
+        let size = match &self.storage {
+            Storage::Empty => 0,
+            Storage::Singleton(_) => 1,
+            Storage::Ranges(ranges) => ranges.len,
+            Storage::Tree(map) => return map.fits_materialized_budget(budget, |_, _| true),
+        };
+        let Some(remaining) = budget.checked_sub(size) else {
+            return false;
+        };
+        *budget = remaining;
+        true
+    }
+
     pub(crate) fn shares_root(&self, other: &Self) -> bool {
         match (&self.storage, &other.storage) {
             (Storage::Empty, Storage::Empty) => true,
@@ -463,7 +477,7 @@ impl WBTreeSet {
                     }
                     Ranges::merge_difference_runs(
                         left.runs.iter(),
-                        RunsIter::Points(right.iter()),
+                        right.iter().map(|(key, ())| (key, key)),
                         |first, last| (first..=last).all(&mut visit),
                     )
                 }
@@ -478,7 +492,7 @@ impl WBTreeSet {
                         return self.iter().all(|key| other.contains(&key) || visit(key));
                     }
                     Ranges::merge_difference_runs(
-                        RunsIter::Points(left.iter()),
+                        left.iter().map(|(key, ())| (key, key)),
                         right.runs.iter(),
                         |first, last| (first..=last).all(&mut visit),
                     )
@@ -893,8 +907,8 @@ impl Ranges {
     }
 
     fn merge_difference_runs(
-        left: RunsIter<'_>,
-        right: RunsIter<'_>,
+        left: impl Iterator<Item = (u32, u32)>,
+        right: impl Iterator<Item = (u32, u32)>,
         mut visit: impl FnMut(u32, u32) -> bool,
     ) -> bool {
         let mut right = right.peekable();
@@ -957,7 +971,6 @@ impl Runs {
 enum RunsIter<'a> {
     Small(std::slice::Iter<'a, (u32, u32)>),
     Tree(Iter<'a, u32>),
-    Points(Iter<'a, ()>),
 }
 
 impl Iterator for RunsIter<'_> {
@@ -967,7 +980,6 @@ impl Iterator for RunsIter<'_> {
         match self {
             Self::Small(runs) => runs.next().copied(),
             Self::Tree(runs) => runs.next().map(|(first, &last)| (first, last)),
-            Self::Points(runs) => runs.next().map(|(key, ())| (key, key)),
         }
     }
 
@@ -980,7 +992,6 @@ impl Iterator for RunsIter<'_> {
             Self::Tree(runs) => runs.fold(initial, |result, (first, &last)| {
                 visit(result, (first, last))
             }),
-            Self::Points(runs) => runs.fold(initial, |result, (key, ())| visit(result, (key, key))),
         }
     }
 }

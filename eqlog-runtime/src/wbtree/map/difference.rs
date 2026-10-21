@@ -138,9 +138,11 @@ impl<'a, V: Clone> Cursor<'a, V> {
                     }
                     let mappings_slice = mappings.as_deref().map_or(&[][..], Vec::as_slice);
                     if let Some(key) = apply_mappings(mappings_slice, data.key) {
-                        if let Some(value) =
-                            apply_value_mappings(mappings_slice, data.key, &data.value)
-                        {
+                        if let Some(value) = apply_value_mappings(
+                            mappings_slice.iter().copied(),
+                            data.key,
+                            &data.value,
+                        ) {
                             self.push(Pending::Entry(key, value));
                         }
                     }
