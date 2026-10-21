@@ -57,3 +57,9 @@ without filling virtual slots, and provide native member root masks.
 Identify equivalent prepared column transforms independently of their
 value caches. Shared source subtrees can then cancel during comparisons
 and set operations without forcing every inherited suffix.
+
+Keep late image changes in whole transported suffixes. Merge destination
+paths once per changed member column, while earlier stable column maps
+retain the existing attribution of simultaneous changes. Sparse
+nonmonotone head maps use direct source lookups instead of scanning
+unrelated rows.

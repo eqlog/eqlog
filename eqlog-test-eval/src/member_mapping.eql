@@ -6,6 +6,8 @@ model World {
     pred tagged(El, Label);
     pred labelled_edge(El, Label, El);
     pred matched_labelled_edge(El, Label, El);
+    pred triple(El, Label, El, El);
+    pred matched_triple(El, Label, El, El);
     pred reached(El);
     rule step {
         if reached(x);
@@ -28,4 +30,10 @@ rule match_labelled_edge {
     if request_label(w, label);
     if w.labelled_edge(x, label, y);
     then w.matched_labelled_edge(x, label, y);
+}
+
+rule match_triple {
+    if request_label(w, label);
+    if w.triple(x, label, y, z);
+    then w.matched_triple(x, label, y, z);
 }

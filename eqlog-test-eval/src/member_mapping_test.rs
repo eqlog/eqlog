@@ -456,3 +456,129 @@ fn overlapping_owned_and_inherited_rows_survive_partial_images_and_cycles() {
     assert_eq!(model.iter_labelled_edge().count(), 4);
     assert_eq!(model.iter_matched_labelled_edge().count(), 4);
 }
+
+#[test]
+fn simultaneous_late_images_cover_all_member_columns_once() {
+    let mut model = MemberMapping::new();
+    let source = model.new_world();
+    let target = model.new_world();
+    let destination = model.new_world();
+    let members: Vec<_> = (0..6).map(|_| model.new_el(source)).collect();
+    let images: Vec<_> = (0..6).map(|_| model.new_el(target)).collect();
+    let final_images: Vec<_> = (0..6).map(|_| model.new_el(destination)).collect();
+    let labels: Vec<_> = (0..2).map(|_| model.new_label()).collect();
+    let first = model.new_world_mor();
+    model.insert_world_mor_dom(first, source);
+    model.insert_world_mor_cod(first, target);
+    let second = model.new_world_mor();
+    model.insert_world_mor_dom(second, target);
+    model.insert_world_mor_cod(second, destination);
+    for world in [target, destination] {
+        for &label in &labels {
+            model.insert_request_label(world, label);
+        }
+    }
+    let mut rows = vec![
+        (0, 0, 1, 2),
+        (1, 1, 1, 1),
+        (2, 0, 3, 4),
+        (4, 1, 2, 5),
+        (0, 0, 0, 0),
+    ];
+    for &(a, label, b, c) in &rows {
+        model.insert_triple(source, members[a], labels[label], members[b], members[c]);
+    }
+    let owned = (0, 1, 2, 4);
+    model.insert_triple(
+        target,
+        images[owned.0],
+        labels[owned.1],
+        images[owned.2],
+        images[owned.3],
+    );
+    let verify = |model: &MemberMapping,
+                  first: &BTreeSet<usize>,
+                  second: &BTreeSet<usize>,
+                  rows: &[(usize, usize, usize, usize)]| {
+        let mut expected = BTreeSet::new();
+        for &(a, label, b, c) in rows {
+            expected.insert((
+                source,
+                model.root_el(members[a]),
+                labels[label],
+                model.root_el(members[b]),
+                model.root_el(members[c]),
+            ));
+            if [a, b, c].iter().all(|key| first.contains(key)) {
+                expected.insert((
+                    target,
+                    model.root_el(images[a]),
+                    labels[label],
+                    model.root_el(images[b]),
+                    model.root_el(images[c]),
+                ));
+                if [a, b, c].iter().all(|key| second.contains(key)) {
+                    expected.insert((
+                        destination,
+                        model.root_el(final_images[a]),
+                        labels[label],
+                        model.root_el(final_images[b]),
+                        model.root_el(final_images[c]),
+                    ));
+                }
+            }
+        }
+        let (a, label, b, c) = owned;
+        expected.insert((
+            target,
+            model.root_el(images[a]),
+            labels[label],
+            model.root_el(images[b]),
+            model.root_el(images[c]),
+        ));
+        if [a, b, c].iter().all(|key| second.contains(key)) {
+            expected.insert((
+                destination,
+                model.root_el(final_images[a]),
+                labels[label],
+                model.root_el(final_images[b]),
+                model.root_el(final_images[c]),
+            ));
+        }
+        let actual: Vec<_> = model.iter_triple().collect();
+        assert_eq!(actual.len(), expected.len());
+        assert_eq!(actual.into_iter().collect::<BTreeSet<_>>(), expected);
+        expected.retain(|(world, _, _, _, _)| *world != source);
+        let matched: Vec<_> = model.iter_matched_triple().collect();
+        assert_eq!(matched.len(), expected.len());
+        assert_eq!(matched.into_iter().collect::<BTreeSet<_>>(), expected);
+    };
+    let mut first_domain = BTreeSet::new();
+    let mut second_domain = BTreeSet::new();
+    let batches = [
+        (vec![0, 2], vec![0], None),
+        (vec![1], vec![1, 2], Some((1, 0, 2, 0))),
+        (vec![3, 4, 5], vec![3, 4, 5], Some((5, 1, 4, 1))),
+    ];
+    for (first_batch, second_batch, new_row) in batches {
+        for key in first_batch {
+            first_domain.insert(key);
+            model.insert_el_mor_app(first, members[key], images[key]);
+        }
+        for key in second_batch {
+            second_domain.insert(key);
+            model.insert_el_mor_app(second, images[key], final_images[key]);
+        }
+        if let Some((a, label, b, c)) = new_row {
+            rows.push((a, label, b, c));
+            model.insert_triple(source, members[a], labels[label], members[b], members[c]);
+        }
+        model.close();
+        verify(&model, &first_domain, &second_domain, &rows);
+    }
+    model.insert_el_mor_app(first, members[0], images[1]);
+    model.close();
+    assert!(model.are_equal_el(images[0], images[1]));
+    assert!(model.are_equal_el(final_images[0], final_images[1]));
+    verify(&model, &first_domain, &second_domain, &rows);
+}

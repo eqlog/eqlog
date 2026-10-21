@@ -2089,6 +2089,25 @@ macro_rules! mapped_tree {
             }
 
             fn extend_mapped_eager(&mut self, source: &Self, map0: Option<&ColumnMapping>, $($map: Option<&ColumnMapping>),+) {
+                if let Some(mapping) = map0 {
+                    if mapping.relation.map.len_upper_bound() < source.map.len_upper_bound() {
+                        // A suffix can force eager mapping despite a sparse head
+                        // map. Its domain still bounds the source lookups.
+                        for (key, images) in mapping.relation.map.iter() {
+                            if images.is_empty() {
+                                continue;
+                            }
+                            let Some(value) = source.map.get(&key) else {
+                                continue;
+                            };
+                            let mapped = value.mapped_prepared($($map),+);
+                            for [image] in images.iter() {
+                                self.insert_restriction(image, mapped.clone());
+                            }
+                        }
+                        return;
+                    }
+                }
                 for (key, value) in source.map.iter() {
                     let image = match map0 {
                         None => key,

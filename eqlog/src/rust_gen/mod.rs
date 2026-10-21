@@ -2072,7 +2072,6 @@ fn display_morphism_index_prefix_walk<'a>(
             source_tree.clone(),
             source_tree_is_ref,
             Vec::new(),
-            None,
         );
         write!(f, "{body}")
     })
@@ -2085,15 +2084,13 @@ fn display_morphism_index_prefix_walk_from(
     source_tree: String,
     source_tree_is_ref: bool,
     target_prefix: Vec<String>,
-    driving_map: Option<usize>,
 ) -> String {
     let prefix_len = columns
         .iter()
         .rposition(|column| column.needs_prefix_walk())
         .unwrap()
         + 1;
-    let walk_len = driving_map.map_or(prefix_len, |column| prefix_len.max(column + 1));
-    if pos == walk_len {
+    if pos == prefix_len {
         let maps = columns[pos..]
             .iter()
             .enumerate()
@@ -2121,17 +2118,10 @@ fn display_morphism_index_prefix_walk_from(
         } else {
             format!("{source_tree}.clone()")
         };
-        // Sparse image deltas still drive lookups before rebuilding the shared suffix.
-        let wrap = (prefix_len..pos).rev().map(|i| {
-            let dim = current_dim + pos - i;
-            let key = &target_prefix[i];
-            format!("let mapped = {{ let mut tree = PrefixTree{dim}::new(); tree.insert_restriction({key}, mapped); tree }};")
-        }).join("\n");
         let target_prefix = target_prefix[..prefix_len].iter().format(", ");
         return formatdoc! {"
             {{
                 let mapped = {suffix};
-                {wrap}
                 propagated.push(([{target_prefix}], mapped));
             }}
         "};
@@ -2162,7 +2152,6 @@ fn display_morphism_index_prefix_walk_from(
                 subtree.clone(),
                 true,
                 target_prefix,
-                driving_map,
             );
             formatdoc! {"
                 if let Some({subtree}) = {source_tree}.get({source}) {{
@@ -2178,22 +2167,10 @@ fn display_morphism_index_prefix_walk_from(
                 pos + 1,
                 current_dim - 1,
                 subtree.clone(),
-                subtree_is_ref || driving_map == Some(pos),
+                subtree_is_ref,
                 target_prefix,
-                driving_map,
             );
-            if driving_map == Some(pos) {
-                return formatdoc! {"
-                    for ({el}, images) in map_{el}.iter_restrictions() {{
-                        let Some({subtree}) = {source_tree}.get({el}) else {{
-                            continue;
-                        }};
-                        for [mapped_{el}] in images.iter() {{
-                            {body}
-                        }}
-                    }}
-                "};
-            }
+
             formatdoc! {"
                 for ({el}, {subtree}) in {source_tree}.iter_restrictions() {{
                     let Some(images) = map_{el}.get({el}) else {{
@@ -2215,7 +2192,6 @@ fn display_morphism_index_prefix_walk_from(
                 subtree.clone(),
                 subtree_is_ref,
                 target_prefix,
-                driving_map,
             );
             formatdoc! {"
                 for ({el}, {subtree}) in {source_tree}.iter_restrictions() {{
@@ -2496,7 +2472,6 @@ fn display_remap_parented_index<'a>(
                 "source_delta".to_string(),
                 true,
                 target_prefix.clone(),
-                None,
             )
         } else {
             display_morphism_index_prefix_walk(
@@ -2580,6 +2555,8 @@ fn display_remap_parented_index<'a>(
             .iter()
             .enumerate()
             .map(|(map, &column)| {
+                // Keep each changed-column case together so destination paths
+                // are merged once instead of rebuilt for individual image rows.
                 let collect = display_morphism_index_prefix_walk_from(
                     &columns,
                     owner_len,
@@ -2587,7 +2564,6 @@ fn display_remap_parented_index<'a>(
                     "source".to_owned(),
                     true,
                     target_prefix.clone(),
-                    Some(column),
                 );
                 let stable = if map + 1 < map_columns.len() {
                     // Attribute a combination to its first changed map column,

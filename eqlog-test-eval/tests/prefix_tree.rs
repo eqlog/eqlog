@@ -9,6 +9,34 @@ use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
+#[test]
+fn sparse_nonmonotone_head_maps_only_read_their_domain() {
+    let mut source = PrefixTree3::new();
+    for key in 0..1024 {
+        source.insert([key, key % 8, key]);
+    }
+    let forced = Rc::new(Cell::new(0));
+    let calls = forced.clone();
+    source.map = source.map.mapped_entries(None, move |value| {
+        calls.set(calls.get() + 1);
+        Some(value.clone())
+    });
+    let mut heads = PrefixTree2::new();
+    for row in [[7, 70], [19, 70], [31, 20], [31, 21], [2048, 99]] {
+        heads.insert(row);
+    }
+    let mut tails = PrefixTree2::new();
+    tails.insert([7, 700]);
+    tails.insert([31, 3100]);
+    let mapped = source.mapped(Some(heads), None, Some(tails));
+    assert_eq!(forced.get(), 3);
+    assert_eq!(
+        mapped.iter().collect::<Vec<_>>(),
+        vec![[20, 7, 3100], [21, 7, 3100], [70, 7, 700]]
+    );
+    assert_eq!(forced.get(), 3);
+}
+
 macro_rules! restriction_tests {
     ($name:ident, $tree:ident, $restriction:ident, $arity:expr) => {
         #[test]
