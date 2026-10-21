@@ -79,6 +79,7 @@ pub struct GuardPlanStmt {
     pub original: Vec<SetVar>,
     pub alternative: Vec<SetVar>,
     pub select_alternative: bool,
+    pub probe_rows: bool,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]

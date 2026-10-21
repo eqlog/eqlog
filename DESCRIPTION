@@ -145,3 +145,7 @@ sources and member argument quotients keep the existing rule path.
 Advance a valid certificate through result-only equality rewrites;
 issue new certificates only after normalizer equations are applied.
 Keep ordinary user-rule histories and insertion behavior unchanged.
+
+Choose a selective owner-bound input before scanning inherited deltas.
+Keep premise ages and selected indexes intact, and bound candidate row
+probes before selecting the alternative join order.

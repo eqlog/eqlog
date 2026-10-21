@@ -463,8 +463,28 @@ fn display_stmt_pre<'a>(ram_stmt: &'a RamStmt, ctx: &'a RustGenCtx<'a>) -> impl 
             let original = display_key_count(&plan.original, ctx);
             let alternative = display_key_count(&plan.alternative, ctx);
             let selected = plan.select_alternative;
+            if !plan.probe_rows {
+                return writedoc! {f, "
+                    if (({alternative}).saturating_mul(2) < {original}) == {selected} {{
+                "};
+            }
+            let (first, rest) = plan.alternative.split_first().expect("a plan has a driver");
+            let first = display_set_var(first, ctx);
+            let rest = rest
+                .iter()
+                .map(|set| {
+                    let name = display_set_var(set, ctx);
+                    format!(".chain({name}.iter())")
+                })
+                .join("");
             writedoc! {f, "
-                if (({alternative}).saturating_mul(2) < {original}) == {selected} {{
+                let __plan_size = {original};
+                let __plan_lookup_cost = (__plan_size.max(1).ilog2() as usize + 1).saturating_mul(2);
+                let __plan_budget = __plan_size / __plan_lookup_cost;
+                let __plan_alternative = __plan_size > 1
+                    && ({alternative}) <= __plan_budget
+                    && {first}.iter(){rest}.take(__plan_budget.saturating_add(1)).count() <= __plan_budget;
+                if __plan_alternative == {selected} {{
             "}
         }
         RamStmt::GuardInhabited(GuardInhabitedStmt { sets }) => {

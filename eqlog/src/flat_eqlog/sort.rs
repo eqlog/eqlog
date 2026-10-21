@@ -177,8 +177,18 @@ fn if_stmt_goodness(
     }
 }
 
-fn find_best_index(stmts: &[FlatIfStmt], fixed_vars: &BTreeSet<FlatVar>) -> Option<usize> {
-    (0..stmts.len()).max_by_key(|i| if_stmt_goodness(&stmts[*i], stmts, fixed_vars))
+fn find_best_index(
+    stmts: &[FlatIfStmt],
+    fixed_vars: &BTreeSet<FlatVar>,
+    prefer_new: bool,
+) -> Option<usize> {
+    (0..stmts.len()).max_by_key(|i| {
+        let mut goodness = if_stmt_goodness(&stmts[*i], stmts, fixed_vars);
+        if !prefer_new {
+            goodness.age = QueryAge::All;
+        }
+        goodness
+    })
 }
 
 /// A pass that optimizes the order of [FlatIfStmt]s in the premise of a [FlatRule].
@@ -187,6 +197,14 @@ pub fn sort_premise<'a>(rule: &mut FlatRule) {
 }
 
 pub fn sort_premise_from(rule: &mut FlatRule, start: usize) {
+    sort_premise_from_with_age_priority(rule, start, true);
+}
+
+pub fn sort_premise_lookup_first_from(rule: &mut FlatRule, start: usize) {
+    sort_premise_from_with_age_priority(rule, start, false);
+}
+
+fn sort_premise_from_with_age_priority(rule: &mut FlatRule, start: usize, prefer_new: bool) {
     let premise = &mut rule.premise;
     let mut fixed_vars: BTreeSet<FlatVar> = rule.scope.owners().iter().cloned().collect();
     fixed_vars.extend(
@@ -196,7 +214,7 @@ pub fn sort_premise_from(rule: &mut FlatRule, start: usize) {
     );
     for sorted_until in start..premise.len() {
         let best_index = sorted_until
-            + find_best_index(&premise[sorted_until..], &fixed_vars)
+            + find_best_index(&premise[sorted_until..], &fixed_vars, prefer_new)
                 .expect("a non-empty slice of if statements should have a best element");
         fixed_vars.extend(premise[best_index].args.iter().cloned());
         premise.swap(sorted_until, best_index);

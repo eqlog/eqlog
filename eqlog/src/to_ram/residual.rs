@@ -144,7 +144,7 @@ fn probe(
         .collect()
 }
 
-pub(super) fn plans(rule: FlatRule, indices: &IndexSelection, mode: ModelMode) -> Vec<RamRoutine> {
+fn residual_plans(rule: FlatRule, indices: &IndexSelection, mode: ModelMode) -> Vec<RamRoutine> {
     let Some((other, start)) = alternative(&rule, indices, mode) else {
         return vec![flat_rule_to_ram(rule, indices)];
     };
@@ -191,6 +191,7 @@ pub(super) fn plans(rule: FlatRule, indices: &IndexSelection, mode: ModelMode) -
                 original: original.clone(),
                 alternative: alternative.clone(),
                 select_alternative: choice != 0,
+                probe_rows: false,
             });
             routine.stmts.splice(
                 after_seed..after_seed,
@@ -199,4 +200,104 @@ pub(super) fn plans(rule: FlatRule, indices: &IndexSelection, mode: ModelMode) -
             routine
         })
         .collect()
+}
+
+fn owner_alternative(rule: &FlatRule, indices: &IndexSelection) -> Option<FlatRule> {
+    if rule.scope.owners().is_empty()
+        || rule.premise.len() < 3
+        || rule.premise[0].age != QueryAge::New
+        || functionality_anchor(rule).is_some()
+    {
+        return None;
+    }
+    let fixed: BTreeSet<_> = rule.scope.owners().iter().cloned().collect();
+    let seed_query = query(&rule.premise[0], &fixed);
+    if seed_query.projections.len() == rule.premise[0].args.len()
+        || indices
+            .existing_query(&rule.premise[0].rel, &seed_query)
+            .is_none()
+    {
+        return None;
+    }
+    let mut candidates: Vec<_> = rule
+        .premise
+        .iter()
+        .enumerate()
+        .skip(1)
+        .filter_map(|(i, stmt)| {
+            let query = query(stmt, &fixed);
+            let free: BTreeSet<_> = stmt
+                .args
+                .iter()
+                .filter(|arg| !fixed.contains(*arg))
+                .collect();
+            (!query.projections.is_empty()
+                && !free.is_empty()
+                && indices.existing_query(&stmt.rel, &query).is_some())
+            .then_some((Reverse(free.len()), i))
+        })
+        .collect();
+    candidates.sort_unstable();
+    for (_, selected) in candidates {
+        let mut other = rule.clone();
+        let first = other.premise.remove(selected);
+        other.premise.insert(0, first);
+        // Age determines match ownership, but need not determine lookup order.
+        sort_premise_lookup_first_from(&mut other, 1);
+        if available(&other, indices) {
+            other.name.push_str("_owner_bound");
+            return Some(other);
+        }
+    }
+    None
+}
+
+pub(super) fn plans(rule: FlatRule, indices: &IndexSelection, mode: ModelMode) -> Vec<RamRoutine> {
+    let other = match mode {
+        ModelMode::Native => owner_alternative(&rule, indices),
+        ModelMode::Desugared => None,
+    };
+    let Some(other) = other else {
+        return residual_plans(rule, indices, mode);
+    };
+    let fixed: BTreeSet<_> = rule.scope.owners().iter().cloned().collect();
+    let mut probes = Vec::new();
+    let original = probe(
+        &mut probes,
+        &rule.premise[0],
+        &fixed,
+        indices,
+        rule.premise.len() + 2,
+    );
+    let alternative = probe(
+        &mut probes,
+        &other.premise[0],
+        &fixed,
+        indices,
+        rule.premise.len() + 3,
+    );
+    let mut routines = residual_plans(rule, indices, mode);
+    for routine in &mut routines {
+        let guard = RamStmt::GuardPlan(GuardPlanStmt {
+            original: original.clone(),
+            alternative: alternative.clone(),
+            select_alternative: false,
+            probe_rows: true,
+        });
+        routine
+            .stmts
+            .splice(0..0, probes.iter().cloned().chain(std::iter::once(guard)));
+    }
+    let mut alternative_routine = flat_rule_to_ram(other, indices);
+    let guard = RamStmt::GuardPlan(GuardPlanStmt {
+        original,
+        alternative,
+        select_alternative: true,
+        probe_rows: true,
+    });
+    alternative_routine
+        .stmts
+        .splice(0..0, probes.into_iter().chain(std::iter::once(guard)));
+    routines.push(alternative_routine);
+    routines
 }

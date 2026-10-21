@@ -1,0 +1,26 @@
+type Key;
+type Value;
+type Tag;
+
+model Scope {
+    func at(Key) -> Value;
+    pred active(Value);
+    pred output(Key);
+}
+
+pred task(Scope, Key, Key, Tag);
+pred request(Scope, Key);
+pred fetched(Scope, Value);
+
+rule fire {
+    if scope.active(value);
+    if scope.at(key) = value;
+    if task(scope, key, output, _);
+    then scope.output(output);
+}
+
+rule fetch {
+    if request(scope, key);
+    if scope.at(key) = value;
+    then fetched(scope, value);
+}
