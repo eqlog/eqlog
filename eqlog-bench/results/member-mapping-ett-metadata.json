@@ -1,0 +1,419 @@
+{
+  "scope": "Native ETT CGU1 checks against f29c6e6. Larger vector cases have fewer samples and should be treated as limited controls. These are separate from the CGU16 native report.",
+  "baseline_revision": "f29c6e6e67d3e715aaedee4646c083bc8a10d1c3",
+  "candidate_code_revision": "8792fa1a64f21c47bc0f3e42b6abaa858a2a559d",
+  "csv_sha256": "19e4a1dddd7d856c25c962b1dc7f96ada83a84b03a6cad2e9ea7eb1256a634f0",
+  "methodology": "CPU0, adjacent alternating variants, exclusive activity lock per case, fresh process per sample. Medians exclude warmups. All status/diagnostic and relation count/hash snapshots match the original; validation and destruction are outside timed intervals.",
+  "timing_units": "nanoseconds",
+  "cases": {
+    "equality_scope_invalid": {
+      "samples": 5,
+      "warmups": 1,
+      "input": {
+        "source": "/tmp/eqlog-opt/native-ett/cases/equality_scope_invalid.ett",
+        "sha256": "9d811dd19ac452369315102957bf8e93d9e8a57056b0a77f9e53f1a346cff110",
+        "expected_status": "error",
+        "declarations": [
+          "Nat",
+          "add",
+          "congr",
+          "false"
+        ]
+      }
+    },
+    "equality_scope_valid": {
+      "samples": 5,
+      "warmups": 1,
+      "input": {
+        "source": "/tmp/eqlog-opt/native-ett/cases/equality_scope_valid.ett",
+        "sha256": "9ba9ade926c7c29d50fb522d1171c29b4679072066806670786c3551d619e70b",
+        "expected_status": "ok",
+        "declarations": [
+          "Nat",
+          "add",
+          "congr"
+        ]
+      }
+    },
+    "nat_addition": {
+      "samples": 5,
+      "warmups": 1,
+      "input": {
+        "source": "/tmp/eqlog-opt/native-ett/cases/nat_addition.ett",
+        "sha256": "da8d66dc2d37768f7767354cdae124a2b4fca7cd16758bad5f948988434a3618",
+        "expected_status": "ok",
+        "declarations": [
+          "Nat",
+          "add",
+          "add_zero",
+          "add_succ",
+          "zero_add",
+          "succ_add",
+          "add_comm",
+          "add_assoc"
+        ]
+      }
+    },
+    "nat_beta": {
+      "samples": 5,
+      "warmups": 1,
+      "input": {
+        "source": "/tmp/eqlog-opt/native-ett/cases/nat_beta.ett",
+        "sha256": "b71d6309837418dc76f2a3fc712df12828611aeaff534ee940a0281488922932",
+        "expected_status": "ok",
+        "declarations": [
+          "Nat",
+          "add",
+          "add_zero",
+          "add_succ"
+        ]
+      }
+    },
+    "nat_defs": {
+      "samples": 5,
+      "warmups": 1,
+      "input": {
+        "source": "/tmp/eqlog-opt/native-ett/cases/nat_defs.ett",
+        "sha256": "c4a48a5f0a2029766c700c05feaedaf7a182a222fbd062dff65e3a0e750f483b",
+        "expected_status": "ok",
+        "declarations": [
+          "Nat",
+          "add"
+        ]
+      }
+    },
+    "nat_equality": {
+      "samples": 5,
+      "warmups": 1,
+      "input": {
+        "source": "/tmp/eqlog-opt/native-ett/cases/nat_equality.ett",
+        "sha256": "3807ca012e9110b32ba9fb9f2739cb3da3038ca809878c5b2e1353a35ceff4c8",
+        "expected_status": "ok",
+        "declarations": [
+          "Nat",
+          "add",
+          "add_zero",
+          "add_succ",
+          "zero_add",
+          "succ_add",
+          "add_comm",
+          "add_assoc",
+          "congr_succ",
+          "twice",
+          "twice_zero",
+          "add_left_comm",
+          "add_right_comm",
+          "add_shuffle"
+        ]
+      }
+    },
+    "nat_full": {
+      "samples": 5,
+      "warmups": 1,
+      "input": {
+        "source": "/tmp/eqlog-opt/native-ett/cases/nat_full.ett",
+        "sha256": "64f4421f714d8f66969ac9dc03dc5e3c7702f34da8b9e0a58b0ee7066232333a",
+        "expected_status": "ok",
+        "declarations": [
+          "Nat",
+          "add",
+          "add_zero",
+          "add_succ",
+          "zero_add",
+          "succ_add",
+          "add_comm",
+          "add_assoc",
+          "congr_succ",
+          "twice",
+          "twice_zero",
+          "add_left_comm",
+          "add_right_comm",
+          "add_shuffle",
+          "pred",
+          "pred_zero",
+          "pred_succ",
+          "succ_inj",
+          "mul",
+          "mul_zero",
+          "mul_succ",
+          "zero_mul",
+          "mul_one",
+          "one_mul",
+          "mul_add",
+          "add_mul",
+          "succ_mul",
+          "mul_comm",
+          "mul_assoc",
+          "mul_left_comm",
+          "twice_mul"
+        ]
+      }
+    },
+    "nat_induction": {
+      "samples": 5,
+      "warmups": 1,
+      "input": {
+        "source": "/tmp/eqlog-opt/native-ett/cases/nat_induction.ett",
+        "sha256": "837089e337676273b01f362f40f016f6413193177df808e8d9e9885420f81c88",
+        "expected_status": "ok",
+        "declarations": [
+          "Nat",
+          "add",
+          "add_zero",
+          "add_succ",
+          "zero_add",
+          "succ_add"
+        ]
+      }
+    },
+    "vec_append": {
+      "samples": 5,
+      "warmups": 1,
+      "input": {
+        "source": "/tmp/eqlog-opt/native-ett/cases/vec_append.ett",
+        "sha256": "a28b9e04528ac28a7d192565dbae2216bb5f07bf4be4c438e99a7f7491694b88",
+        "expected_status": "ok",
+        "declarations": [
+          "Nat",
+          "add",
+          "add_zero",
+          "add_succ",
+          "zero_add",
+          "succ_add",
+          "add_comm",
+          "add_assoc",
+          "Vec",
+          "replicate",
+          "append",
+          "nil_append",
+          "append_nil",
+          "append_cons"
+        ]
+      }
+    },
+    "vec_assoc": {
+      "samples": 3,
+      "warmups": 1,
+      "input": {
+        "source": "/tmp/eqlog-opt/native-ett/cases/vec_assoc.ett",
+        "sha256": "3a67deab436fa514880fc447529b169cc2b74fe221702c9df6ddf4a60be79f8f",
+        "expected_status": "ok",
+        "declarations": [
+          "Nat",
+          "add",
+          "add_zero",
+          "add_succ",
+          "zero_add",
+          "succ_add",
+          "add_comm",
+          "add_assoc",
+          "Vec",
+          "replicate",
+          "append",
+          "nil_append",
+          "append_nil",
+          "append_cons",
+          "cast",
+          "cast_eq",
+          "append_assoc"
+        ]
+      }
+    },
+    "vec_map": {
+      "samples": 2,
+      "warmups": 0,
+      "input": {
+        "source": "/tmp/eqlog-opt/native-ett/cases/vec_map.ett",
+        "sha256": "6ffa57cdb1db0ca83d5e458562e853d4b1eab0e78a7ff4cdaaf7b8f4614d725b",
+        "expected_status": "ok",
+        "declarations": [
+          "Nat",
+          "add",
+          "add_zero",
+          "add_succ",
+          "zero_add",
+          "succ_add",
+          "add_comm",
+          "add_assoc",
+          "Vec",
+          "replicate",
+          "append",
+          "nil_append",
+          "append_nil",
+          "append_cons",
+          "cast",
+          "cast_eq",
+          "append_assoc",
+          "replicate_append",
+          "map_succ",
+          "map_succ_nil",
+          "map_succ_cons",
+          "map_succ_replicate",
+          "map_succ_append"
+        ]
+      }
+    },
+    "vec_replicate": {
+      "samples": 5,
+      "warmups": 1,
+      "input": {
+        "source": "/tmp/eqlog-opt/native-ett/cases/vec_replicate.ett",
+        "sha256": "d44f1b70f1734238805c7f2edcba55823ef193fc87aea062a8935bb968ba1b01",
+        "expected_status": "ok",
+        "declarations": [
+          "Nat",
+          "add",
+          "add_zero",
+          "add_succ",
+          "zero_add",
+          "succ_add",
+          "Vec",
+          "replicate"
+        ]
+      }
+    },
+    "vec_sum": {
+      "samples": 1,
+      "warmups": 0,
+      "input": {
+        "source": "/tmp/eqlog-opt/native-ett/cases/vec_sum.ett",
+        "sha256": "45ea0ef9281f8e3a8ae04f919fc2beb6ab79dcd54bc724607a1e28cbdb9b8b97",
+        "expected_status": "ok",
+        "declarations": [
+          "Nat",
+          "add",
+          "add_zero",
+          "add_succ",
+          "zero_add",
+          "succ_add",
+          "add_comm",
+          "add_assoc",
+          "congr_succ",
+          "twice",
+          "twice_zero",
+          "add_left_comm",
+          "add_right_comm",
+          "Vec",
+          "replicate",
+          "append",
+          "nil_append",
+          "append_nil",
+          "append_cons",
+          "cast",
+          "cast_eq",
+          "append_assoc",
+          "replicate_append",
+          "map_succ",
+          "map_succ_nil",
+          "map_succ_cons",
+          "map_succ_replicate",
+          "map_succ_append",
+          "sum",
+          "sum_nil",
+          "sum_cons",
+          "sum_append"
+        ]
+      }
+    },
+    "wrong_constructor_type": {
+      "samples": 5,
+      "warmups": 1,
+      "input": {
+        "source": "/tmp/eqlog-opt/native-ett/cases/wrong_constructor_type.ett",
+        "sha256": "16a59df351ba06af83fbd7b7cb4caea60cf93c499d02e947449a92ace49bbf1b",
+        "expected_status": "error",
+        "declarations": [
+          "Nat",
+          "add",
+          "Bit",
+          "false"
+        ]
+      }
+    }
+  },
+  "builds": {
+    "base": {
+      "variant": "base",
+      "runtime": "/tmp/eqlog-map-bench/base/libeqlog_runtime.rlib",
+      "runtime_sha256": "7e57db9f52d228d95d6adf6f8066c1bca46cc425b2d64390d9d1a336828d965f",
+      "compiler": "/tmp/eqlog-map-bench/eqlog-base",
+      "compiler_sha256": "2db75e87dcd407ca8335ffa3fdffd7b30014306ab7950528b47400472536802c",
+      "generated_sha256": "faac0f16c198050b9b591fdcae8e8a6d2f6851f61068dce442e54be6a57b5811",
+      "rustc": "rustc 1.95.0 (59807616e 2026-04-14)",
+      "command": [
+        "rustc",
+        "--edition=2021",
+        "-C",
+        "opt-level=3",
+        "-C",
+        "debug-assertions=no",
+        "-C",
+        "codegen-units=1",
+        "/tmp/eqlog-opt/native-ett/main.rs",
+        "--extern",
+        "eqlog_runtime=/tmp/eqlog-map-bench/base/libeqlog_runtime.rlib",
+        "-o",
+        "/tmp/eqlog-opt/native-ett/base/native-ett"
+      ],
+      "build_seconds": 458.95324882189743,
+      "exit_code": 0,
+      "model_mode": "native",
+      "evaluation_mode": "semi-naive",
+      "frontend": {
+        "checker.rs": "5118beadcb54b8d71e62d2b02227a5deb154e9bd94518a40a41c11055fc720a6",
+        "checker-timed.rs": "060bd95efa4e4dd68f1ed944ff921bcc1e72c57996100f1756184c0eae0d40cd",
+        "syntax.rs": "6283f19ee62775629b0297e26dec2718255618ba9904d754bd79496c7ec8c0f9",
+        "nat.ett": "64f4421f714d8f66969ac9dc03dc5e3c7702f34da8b9e0a58b0ee7066232333a",
+        "vec.ett": "bedae5a4986aef40a91d518b2312bcf1528a31621eb27a991f980283a8b55286"
+      },
+      "executable_sha256": "a52a982d52c7cfdfa3565484b82d903ad1ad7e323d8c3c6e1cec404698127b36",
+      "harness": {
+        "main.rs": "2869bbe608039182d40362146cb4430516edff7c472a14621c66d516fd48016d",
+        "summary.rs": "14372adc6c8447c64661edd9955587b8d33d96e264c9f5a4bff044f88f4eae5e"
+      }
+    },
+    "native-mapping-final": {
+      "variant": "native-mapping-final",
+      "runtime": "/tmp/eqlog-opt/native-ett/native-mapping-final/libeqlog_runtime.rlib",
+      "source_runtime": "/tmp/eqlog-opt/native-mapping-candidate-bench/libeqlog_runtime.rlib",
+      "source_revision": "8792fa1",
+      "runtime_sha256": "f8e9874030acb98db225f9255f340238efa66ff2086d036b211dba1f6b807224",
+      "compiler": "/tmp/eqlog-opt/subset-reuse-bench/compiler-candidate",
+      "compiler_sha256": "cd5888fd091f325240365390adfecae41235947855836d6807bc18f94386127f",
+      "generated_sha256": "64eab6c715150f47d801fc6645f7fcd24bf7eaf3d2ae326a53cdba1dba96f38e",
+      "generated_directory": "/tmp/eqlog-opt/native-ett/combined-ranges-subset/generated",
+      "rustc": "rustc 1.95.0 (59807616e 2026-04-14)",
+      "command": [
+        "rustc",
+        "--edition=2021",
+        "-C",
+        "opt-level=3",
+        "-C",
+        "debug-assertions=no",
+        "-C",
+        "codegen-units=1",
+        "/tmp/eqlog-opt/native-ett/main.rs",
+        "--extern",
+        "eqlog_runtime=/tmp/eqlog-opt/native-ett/native-mapping-final/libeqlog_runtime.rlib",
+        "-o",
+        "/tmp/eqlog-opt/native-ett/native-mapping-final/native-ett"
+      ],
+      "build_seconds": 469.5551331860479,
+      "exit_code": 0,
+      "executable_sha256": "0a3c365c5bebbfe7c5e8b7fc0a1ce104f8372a09365df299511e4eb53f09640a",
+      "harness": {
+        "main.rs": "2869bbe608039182d40362146cb4430516edff7c472a14621c66d516fd48016d",
+        "summary.rs": "14372adc6c8447c64661edd9955587b8d33d96e264c9f5a4bff044f88f4eae5e"
+      },
+      "model_mode": "native",
+      "evaluation_mode": "semi-naive",
+      "frontend": {
+        "checker.rs": "5118beadcb54b8d71e62d2b02227a5deb154e9bd94518a40a41c11055fc720a6",
+        "checker-timed.rs": "060bd95efa4e4dd68f1ed944ff921bcc1e72c57996100f1756184c0eae0d40cd",
+        "syntax.rs": "6283f19ee62775629b0297e26dec2718255618ba9904d754bd79496c7ec8c0f9",
+        "nat.ett": "64f4421f714d8f66969ac9dc03dc5e3c7702f34da8b9e0a58b0ee7066232333a",
+        "vec.ett": "bedae5a4986aef40a91d518b2312bcf1528a31621eb27a991f980283a8b55286"
+      }
+    }
+  }
+}

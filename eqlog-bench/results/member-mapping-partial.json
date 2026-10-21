@@ -1,0 +1,136 @@
+{
+  "rustc": "rustc 1.95.0 (59807616e 2026-04-14)",
+  "flags": [
+    "--edition=2021",
+    "-C",
+    "opt-level=3",
+    "-C",
+    "debug-assertions=no",
+    "-C",
+    "codegen-units=1"
+  ],
+  "variants": {
+    "base": {
+      "source_commit": "2d248f7e1e493de49152b45eb3930b26bdff53ac",
+      "runtime_source_tree": "d36589891d93943a3e6667599eac937fc9afb65b",
+      "runtime_path": "/tmp/eqlog-opt/exact-balanced-updates-bench/libeqlog_runtime.rlib",
+      "runtime": {
+        "bytes": 9796842,
+        "sha256": "b3d420fc827d766748da6b3d1b6ac48318abbed35b3a0134260607e7f19c5727"
+      }
+    },
+    "final": {
+      "source_commit": "8792fa1a64f21c47bc0f3e42b6abaa858a2a559d",
+      "runtime_source_tree": "85939fcab021f1e128bd49b3577edcc33a7bef6a",
+      "runtime_path": "/tmp/eqlog-opt/native-mapping-candidate-bench/libeqlog_runtime.rlib",
+      "runtime": {
+        "bytes": 10017868,
+        "sha256": "f8e9874030acb98db225f9255f340238efa66ff2086d036b211dba1f6b807224"
+      }
+    }
+  },
+  "harnesses": {
+    "/tmp/eqlog-opt/final8792-domain-controls/partial.rs": {
+      "bytes": 1468,
+      "sha256": "5668d9e65d482b5e10e1473fd5d35744b232ec6fca94db6e6ba5231c8d1e43f1"
+    },
+    "/tmp/eqlog-opt/final8792-domain-controls/dense-partial.rs": {
+      "bytes": 1517,
+      "sha256": "cbd84a2bcde7d6d15326f2cf88689172dfdcef704fcdcb8fe127fc3f03c265cf"
+    },
+    "/tmp/eqlog-opt/final8792-domain-controls/equivalent.rs": {
+      "bytes": 1260,
+      "sha256": "e15d90d1925c429ddbe73f062216ba5460dd32c8833bfc32b7212f8c2a4b5d87"
+    }
+  },
+  "checks": "Exact ordered full-tuple oracles run after timings; partial mapped value callbacks equal surviving key count; equivalent views make zero per-key comparison callbacks.",
+  "timing_plan": "CPU0 pinned, base/final/final/base order per case; gate released between cases. Partial and full seven samples x50 iterations; equivalent seven samples x10000 iterations; dense21 samples.",
+  "binaries": {
+    "/tmp/eqlog-opt/final8792-domain-controls/partial-base": {
+      "bytes": 4584032,
+      "sha256": "f382616b374b4bfb0435fae54e688deb41273e0c7f47f72e67f2df64081bdde8"
+    },
+    "/tmp/eqlog-opt/final8792-domain-controls/partial-final": {
+      "bytes": 4588504,
+      "sha256": "956ba91e10d61efaf86f8bad2ed7c07d92bb060fcea093e95765f71de9ec2ca1"
+    },
+    "/tmp/eqlog-opt/final8792-domain-controls/dense-partial-base": {
+      "bytes": 4619504,
+      "sha256": "4ef557e15f436f60ad2632814d087137e12239be23ca9024152816e1848ea916"
+    },
+    "/tmp/eqlog-opt/final8792-domain-controls/dense-partial-final": {
+      "bytes": 4627744,
+      "sha256": "a81015aa2bf635ce67c10c7fde763816adcc080b061520ff34d4f31f814b056d"
+    },
+    "/tmp/eqlog-opt/final8792-domain-controls/equivalent-base": {
+      "bytes": 4583072,
+      "sha256": "248ac868f48155670a0a8151de8b8ae5046ff354323f2fa0d4be3897244f8798"
+    },
+    "/tmp/eqlog-opt/final8792-domain-controls/equivalent-final": {
+      "bytes": 4587368,
+      "sha256": "87ecbbad5ea16e12388e034e50ae582a6569bb8e13e3a275cc5e918cd64f88c2"
+    }
+  },
+  "results": {
+    "partial": {
+      "base": {
+        "median_ns": 1788734.0,
+        "calls": 16
+      },
+      "final": {
+        "median_ns": 1917.5,
+        "calls": 16
+      },
+      "ratio": 0.0010719872267201272
+    },
+    "equivalent": {
+      "base": {
+        "median_ns": 64.0,
+        "compared": 0
+      },
+      "final": {
+        "median_ns": 63.5,
+        "compared": 0
+      },
+      "ratio": 0.9921875
+    },
+    "dense-construction": {
+      "base": {
+        "median_ns": 26397.0
+      },
+      "final": {
+        "median_ns": 25430.5
+      },
+      "ratio": 0.9633859908322916
+    },
+    "dense-consume": {
+      "base": {
+        "median_ns": 53058.5
+      },
+      "final": {
+        "median_ns": 52866.5
+      },
+      "ratio": 0.9963813526579153
+    },
+    "full": {
+      "base": {
+        "median_ns": 8937872.5,
+        "calls": 65536
+      },
+      "final": {
+        "median_ns": 8800109.5,
+        "calls": 65536
+      },
+      "ratio": 0.9845866004465827
+    }
+  },
+  "exact_oracle_rows": {
+    "partial": 16,
+    "equivalent": 16,
+    "dense-construction": 65536,
+    "dense-consume": 65536,
+    "full": 65536
+  },
+  "completion_utc": "2026-10-21 08:50:19 UTC",
+  "scope": "Targeted runtime controls against preceding validated candidate2d248f7, not originalf29. Source/tuple/callback oracles match; ratios below1 mean faster."
+}
