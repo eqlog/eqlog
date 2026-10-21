@@ -1,0 +1,26 @@
+type El;
+pred source(El, El);
+pred kick(El);
+pred trigger(El);
+pred joined(El, El);
+pred fixed(El);
+pred mirrored(El, El);
+
+rule full_step {
+    if trigger(y);
+    if source(x, y);
+    then joined(x, y);
+    then kick(x);
+}
+
+rule diagonal_step {
+    if kick(x);
+    if source(x, x);
+    then trigger(x);
+}
+
+rule fixed_step {
+    if fixed(x);
+    if source(x, y);
+    then mirrored(x, y);
+}

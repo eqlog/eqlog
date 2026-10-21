@@ -74,6 +74,14 @@ eqlog_mod!(member_mapping);
 #[cfg(test)]
 mod member_mapping_test;
 eqlog_mod!(canonicalization);
+eqlog_mod!(prefix_diagonals);
+
+#[cfg(test)]
+mod prefix_diagonals_test;
+eqlog_mod!(prefix_diagonal_cache);
+
+#[cfg(test)]
+mod prefix_diagonal_cache_test;
 
 #[cfg(test)]
 mod canonicalization_test;

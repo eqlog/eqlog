@@ -1,0 +1,14 @@
+type El;
+pred source(El, El, El);
+pred diagonal(El, El);
+pred copied(El, El, El);
+
+rule restrict_diagonal {
+    if source(x, x, value);
+    then diagonal(x, value);
+}
+
+rule copy {
+    if source(x, y, value);
+    then copied(x, y, value);
+}

@@ -115,3 +115,7 @@ storage during equality must not reinterpret pending origin values.
 Keep unrelated child index roots stable when a parent relation changes.
 Replaying unchanged local rows breaks sharing and turns publication into
 repeated comparisons of equal inherited tables.
+
+Restrict diagonal-only rule inputs before computing differences. Prefix
+lookups skip inherited rows that cannot match. Restore cached global
+inputs before preparing secondary indexes for another rule group.

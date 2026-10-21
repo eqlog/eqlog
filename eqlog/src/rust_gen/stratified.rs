@@ -46,6 +46,62 @@ fn input_key(rel: FlatInRel, mut index: IndexSpec) -> (FlatInRel, IndexSpec) {
 }
 
 impl<'s> Codegen<'s> {
+    fn diagonal_input(
+        &self,
+        stratum: usize,
+        source: &FlatInRel,
+        modules: &[RamModule],
+        selection: &IndexSelection,
+        ctx: &RustGenCtx<'_>,
+    ) -> Option<String> {
+        if self.strata[stratum].model.is_some() {
+            return None;
+        }
+        let primary = selection.current_primary(source);
+        let [first, second, ..] = primary.order.as_ref() else {
+            return None;
+        };
+        let mut used = false;
+        for &module in &self.strata[stratum].groups {
+            for routine in &modules[module].routines {
+                for (rel, _) in routine.input_indices() {
+                    if source_relation(&rel) != *source {
+                        continue;
+                    }
+                    used = true;
+                    let constrained = match rel {
+                        FlatInRel::RelWithDiagonals { equalities, .. } => {
+                            equalities[*first] == equalities[*second]
+                        }
+                        FlatInRel::Rel(_) | FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => false,
+                    };
+                    if !constrained {
+                        return None;
+                    }
+                }
+            }
+        }
+        if !used {
+            return None;
+        }
+        let field = display_all_index_field_name(source, primary, ctx);
+        let arity = primary.order.len();
+        let suffix = arity - 1;
+        Some(formatdoc! {"
+            {{
+                let mut filtered = PrefixTree{arity}::new();
+                for (key, rows) in self.{field}.map.iter() {{
+                    if let Some(rows) = rows.get(key) {{
+                        let mut suffix = PrefixTree{suffix}::new();
+                        suffix.insert_restriction(key, rows.clone());
+                        filtered.insert_restriction(key, suffix);
+                    }}
+                }}
+                filtered
+            }}
+        "})
+    }
+
     fn transport_baseline(
         &self,
         model: TypeId,
@@ -567,12 +623,31 @@ impl<'s> Codegen<'s> {
                             && selection.is_primary(input, index)
                     });
                     let stable = stratum.stable_inputs.contains(&rel);
-                    if stable {
+                    let stable_global = stable && stratum.model.is_none();
+                    if stable && !stable_global {
                         begin_stable_input(f, &format!("input_{i}"), &rel, ctx)?;
+                    }
+                    if stable_global {
+                        writedoc! {f, "
+                            if let Some(current) = &stable.input_{i} {{
+                                self.__rule_input_{i}.publish(current);
+                            }} else {{
+                        "}?;
                     }
                     let current =
                         display_all_index_field_name(&rel, selection.current_primary(&rel), ctx);
-                    writeln!(f, "self.__rule_input_{i}.publish(&self.{current});")?;
+                    if let Some(filtered) = self.diagonal_input(s, &rel, modules, selection, ctx) {
+                        // Every consumer in this stratum requires this diagonal.
+                        // Restrict before computing differences or projecting rows.
+                        writeln!(f, "let filtered_input_{i} = {filtered};")?;
+                        writeln!(f, "self.__rule_input_{i}.publish(&filtered_input_{i});")?;
+                    } else {
+                        writeln!(f, "self.__rule_input_{i}.publish(&self.{current});")?;
+                    }
+                    if stable_global {
+                        writeln!(f, "}}")?;
+                        begin_stable_input(f, &format!("input_{i}"), &rel, ctx)?;
+                    }
                     if let Some(model) = stratum.model {
                         consume_scoped(
                             f,
