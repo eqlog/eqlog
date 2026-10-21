@@ -111,3 +111,7 @@ without expanding inherited tables for point lookups.
 
 Freeze scoped output handles before applying mutations. A change of
 storage during equality must not reinterpret pending origin values.
+
+Keep unrelated child index roots stable when a parent relation changes.
+Replaying unchanged local rows breaks sharing and turns publication into
+repeated comparisons of equal inherited tables.

@@ -22,6 +22,8 @@ pub struct CompactRecordResult {
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct CompactRebaseStats {
     pub refreshed: bool,
+    /// Child indexes whose parent rows and applicable quotient stayed unchanged.
+    pub reused_indices: usize,
     /// Signature-order support rows, counted once per relation.
     pub local_rows_replayed: usize,
     /// Incidence work is counted separately in each selected index.
@@ -76,6 +78,7 @@ struct RelationLayout {
 
 struct Owner {
     snapshot: CompactOwnerSnapshot,
+    source_rows: Vec<Table>,
     component: u32,
 }
 
@@ -165,6 +168,7 @@ impl CompactOwnerIndices {
                     source_revision: None,
                     revision: 0,
                 },
+                source_rows: Vec::new(),
                 component,
             },
         );
@@ -305,13 +309,42 @@ impl CompactOwnerIndices {
         } else {
             None
         };
-        let mut current = self.owner(source).snapshot.current.clone();
+        let parent = &self.owner(source).snapshot.current;
+        let target_owner = self.owner(target);
+        // Stable roots let rule checkpoints skip unrelated inherited relations.
+        let reused: Vec<_> =
+            self.specs
+                .iter()
+                .enumerate()
+                .map(|(index, spec)| {
+                    (!force || spec.member_types.iter().all(Option::is_none))
+                        && target_owner.source_rows.get(index).is_some_and(|previous| {
+                            previous.shares_storage_with(parent[index].rows())
+                        })
+                })
+                .collect();
+        let mut current: Vec<_> = parent
+            .iter()
+            .enumerate()
+            .map(|(index, parent)| {
+                if reused[index] {
+                    target_owner.snapshot.current[index].clone()
+                } else {
+                    parent.clone()
+                }
+            })
+            .collect();
+        let source_rows = parent.iter().map(|index| index.rows().clone()).collect();
         let mut stats = CompactRebaseStats {
             refreshed: true,
+            reused_indices: reused.iter().filter(|&&reuse| reuse).count(),
             ..CompactRebaseStats::default()
         };
         for (&relation, local) in &self.owner(target).snapshot.local {
             let layout = &self.relations[&relation];
+            if layout.indices.iter().all(|&index| reused[index]) {
+                continue;
+            }
             for mut tuple in local.iter() {
                 stats.local_rows_replayed += 1;
                 for (&member_type, origin) in layout.member_types.iter().zip(&mut tuple) {
@@ -320,26 +353,38 @@ impl CompactOwnerIndices {
                     }
                 }
                 for &index in &layout.indices {
-                    current[index].insert(&project(&tuple, &self.specs[index].order));
+                    if !reused[index] {
+                        current[index].insert(&project(&tuple, &self.specs[index].order));
+                    }
                 }
             }
         }
         for &(member_type, loser, winner) in merges {
-            for index in &mut current {
-                add_rewrite(
-                    &mut stats.rewrite,
-                    index.replace_representative(member_type, loser, winner),
-                );
+            for (index, current) in current.iter_mut().enumerate() {
+                if !reused[index] {
+                    add_rewrite(
+                        &mut stats.rewrite,
+                        current.replace_representative(member_type, loser, winner),
+                    );
+                }
             }
         }
         if let Some((target_root, source_root)) = connection {
             self.components.union_roots_into(target_root, source_root);
         }
-        let snapshot = &mut self.owners.get_mut(&target).unwrap().snapshot;
+        let target_owner = self.owners.get_mut(&target).unwrap();
+        target_owner.source_rows = source_rows;
+        let snapshot = &mut target_owner.snapshot;
+        if current
+            .iter()
+            .zip(&snapshot.current)
+            .any(|(new, previous)| !new.rows().shares_storage_with(previous.rows()))
+        {
+            snapshot.changed();
+        }
         snapshot.current = current;
         snapshot.source = Some(source);
         snapshot.source_revision = Some(source_revision);
-        snapshot.changed();
         stats
     }
 }

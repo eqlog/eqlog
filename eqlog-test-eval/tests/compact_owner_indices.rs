@@ -223,14 +223,21 @@ fn chain_rebases_visit_only_local_support_and_local_losing_buckets() {
             &[(0, owner, 0), (1, owner, 0)],
         );
         assert!(stats.refreshed);
-        assert_eq!(stats.local_rows_replayed, 2);
-        assert_eq!(stats.rewrite.visited_rows, 6);
+        assert_eq!(stats.local_rows_replayed, 1);
+        assert_eq!(stats.reused_indices, 2);
+        assert_eq!(stats.rewrite.visited_rows, 4);
         replayed += stats.local_rows_replayed;
         revisited += stats.rewrite.visited_rows;
         assert!(indices.rows(owner, 0).contains(&[0, 1000, 0]));
         assert!(indices.rows(owner, 1).contains(&[0, 0, 1000]));
         assert!(indices.rows(owner, 2).contains(&[owner, 0]));
         assert!(indices.rows(owner, 3).contains(&[0, owner]));
+        assert!(before[owner as usize]
+            .rows(2)
+            .shares_storage_with(indices.rows(owner, 2)));
+        assert!(before[owner as usize]
+            .rows(3)
+            .shares_storage_with(indices.rows(owner, 3)));
         assert_eq!(indices.rows(owner, 0).iter().count(), owner as usize + 2);
         assert_eq!(indices.local_rows(owner, 10).iter().count(), 1);
         assert_eq!(indices.local_rows(owner, 20).iter().count(), 1);
@@ -240,9 +247,9 @@ fn chain_rebases_visit_only_local_support_and_local_losing_buckets() {
             owner as usize + 1
         );
     }
-    assert_eq!(replayed, 200 * 2);
-    assert_eq!(revisited, 200 * 6);
-    assert_eq!(normalized, 200 * 3);
+    assert_eq!(replayed, 200);
+    assert_eq!(revisited, 200 * 4);
+    assert_eq!(normalized, 200 * 2);
     assert!(indices.owners().eq(0..=200));
     for owner in 1..=200 {
         assert_eq!(
@@ -256,6 +263,132 @@ fn chain_rebases_visit_only_local_support_and_local_losing_buckets() {
             CompactRebaseStats::default()
         );
     }
+}
+
+#[test]
+fn unrelated_parent_changes_preserve_current_local_edits_and_incidence() {
+    let mut specs = item_specs();
+    specs.push(CompactIndexSpec {
+        relation: 20,
+        order: vec![0],
+        member_types: vec![None],
+    });
+    specs.push(CompactIndexSpec {
+        relation: 30,
+        order: vec![0],
+        member_types: vec![Some(0)],
+    });
+    let mut indices = CompactOwnerIndices::new(specs);
+    indices.create_owner(0);
+    indices.create_owner(1);
+    indices.record(0, 10, &[10, 1], false);
+    indices.record(0, 20, &[20], false);
+    indices.record(0, 30, &[1], false);
+    indices.record(1, 10, &[40, 4], false);
+    indices.record(1, 20, &[21], false);
+    indices.record(1, 30, &[4], false);
+    indices.rebase(1, 0, false, |_, origin| origin, &[(0, 4, 1)]);
+    let before = indices.snapshot(1);
+
+    indices.record(0, 30, &[2], false);
+    let mut normalized = 0;
+    let stats = indices.rebase(
+        1,
+        0,
+        false,
+        |_, origin| {
+            normalized += 1;
+            assert_eq!(origin, 4);
+            origin
+        },
+        &[(0, 4, 1)],
+    );
+    assert_eq!(stats.reused_indices, 3);
+    assert_eq!(stats.local_rows_replayed, 1);
+    assert_eq!(stats.rewrite.visited_rows, 1);
+    assert_eq!(normalized, 1);
+    for index in 0..3 {
+        assert!(before
+            .rows(index)
+            .shares_storage_with(indices.rows(1, index)));
+    }
+    assert_eq!(
+        indices.rows(1, 3).iter().collect::<BTreeSet<_>>(),
+        BTreeSet::from([vec![1], vec![2]])
+    );
+
+    indices.record(1, 10, &[50, 5], false);
+    indices.rewrite(1, 0, 5, 1);
+    indices.record(1, 20, &[22], false);
+    let edited = indices.snapshot(1);
+    indices.record(0, 30, &[3], false);
+    let stats = indices.rebase(1, 0, false, |_, origin| origin, &[(0, 4, 1), (0, 5, 1)]);
+    assert_eq!(stats.reused_indices, 3);
+    assert_eq!(stats.local_rows_replayed, 1);
+    for index in 0..3 {
+        assert!(edited
+            .rows(index)
+            .shares_storage_with(indices.rows(1, index)));
+    }
+    assert!(indices.rows(1, 0).contains(&[50, 1]));
+    assert!(indices.local_rows(1, 10).contains(&[50, 5]));
+
+    let before_quotient = indices.snapshot(1);
+    indices.rewrite(0, 0, 1, 2);
+    let stats = indices.rebase(
+        1,
+        0,
+        true,
+        |_, origin| {
+            if origin == 1 {
+                2
+            } else {
+                origin
+            }
+        },
+        &[(0, 4, 2), (0, 5, 2)],
+    );
+    assert_eq!(stats.reused_indices, 1);
+    assert_eq!(stats.local_rows_replayed, 3);
+    assert_eq!(stats.rewrite.visited_rows, 5);
+    assert!(before_quotient
+        .rows(2)
+        .shares_storage_with(indices.rows(1, 2)));
+    assert_eq!(
+        indices.rows(1, 2).iter().collect::<BTreeSet<_>>(),
+        BTreeSet::from([vec![20], vec![21], vec![22]])
+    );
+    assert_eq!(
+        indices.rows(1, 0).iter().collect::<BTreeSet<_>>(),
+        BTreeSet::from([vec![10, 2], vec![40, 2], vec![50, 2]])
+    );
+    assert!(before_quotient.rows(0).contains(&[50, 1]));
+    assert!(indices.local_rows(1, 10).contains(&[40, 4]));
+    assert!(indices.local_rows(1, 10).contains(&[50, 5]));
+    assert_eq!(indices.rewrite(1, 0, 2, 7).visited_rows, 7);
+    assert!(indices.rows(1, 0).contains(&[50, 7]));
+}
+
+#[test]
+fn quotient_refresh_reuses_member_free_indexes_without_changing_row_revision() {
+    let mut indices = CompactOwnerIndices::new(vec![CompactIndexSpec {
+        relation: 10,
+        order: vec![0],
+        member_types: vec![None],
+    }]);
+    indices.create_owner(0);
+    indices.create_owner(1);
+    indices.record(0, 10, &[1], false);
+    indices.record(1, 10, &[2], false);
+    indices.rebase(1, 0, false, |_, _| panic!("no member columns"), &[]);
+    let before = indices.snapshot(1);
+    let stats = indices.rebase(1, 0, true, |_, _| panic!("no member columns"), &[(0, 1, 2)]);
+    assert!(stats.refreshed);
+    assert_eq!(stats.reused_indices, 1);
+    assert_eq!(stats.local_rows_replayed, 0);
+    assert_eq!(stats.rewrite.visited_rows, 0);
+    assert_eq!(before.revision(), indices.revision(1));
+    assert!(before.rows(0).shares_storage_with(indices.rows(1, 0)));
 }
 
 #[test]
