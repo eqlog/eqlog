@@ -149,3 +149,6 @@ Keep ordinary user-rule histories and insertion behavior unchanged.
 Choose a selective owner-bound input before scanning inherited deltas.
 Keep premise ages and selected indexes intact, and bound candidate row
 probes before selecting the alternative join order.
+
+Check reordered joins with private noncanonical witnesses and
+simultaneous new inputs.
