@@ -1132,6 +1132,44 @@ impl<V: Clone> WBTreeMap<V> {
         None
     }
 
+    pub(crate) fn floor_entry(&self, key: u32) -> Option<(u32, &V)> {
+        let mut current = self.root.as_deref();
+        let mut result = None;
+        while let Some(node) = current {
+            match node {
+                Node::Data(data) => match key.cmp(&data.key) {
+                    Ordering::Less => current = data.left.as_deref(),
+                    Ordering::Equal => return Some((data.key, &data.value)),
+                    Ordering::Greater => {
+                        result = Some((data.key, &data.value));
+                        current = data.right.as_deref();
+                    }
+                },
+                Node::Mapping(_) => return self.iter().take_while(|(next, _)| *next <= key).last(),
+            }
+        }
+        result
+    }
+
+    pub(crate) fn ceiling_entry(&self, key: u32) -> Option<(u32, &V)> {
+        let mut current = self.root.as_deref();
+        let mut result = None;
+        while let Some(node) = current {
+            match node {
+                Node::Data(data) => match key.cmp(&data.key) {
+                    Ordering::Less => {
+                        result = Some((data.key, &data.value));
+                        current = data.left.as_deref();
+                    }
+                    Ordering::Equal => return Some((data.key, &data.value)),
+                    Ordering::Greater => current = data.right.as_deref(),
+                },
+                Node::Mapping(_) => return self.iter().find(|(next, _)| *next >= key),
+            }
+        }
+        result
+    }
+
     pub fn get_mut(&mut self, key: &u32) -> Option<&mut V> {
         let mut current = &mut self.root;
         loop {
@@ -1693,6 +1731,68 @@ mod tests {
 
     use rand::rngs::StdRng;
     use rand::{RngExt, SeedableRng};
+
+    #[test]
+    fn boundary_entries_preserve_mapped_coordinates_and_filters() {
+        let mut plain = WBTreeMap::new();
+        let mut relation = PrefixTree2::new();
+        let mut expected = BTreeMap::new();
+        for key in 0..64 {
+            plain.insert(key, key);
+            relation.insert([key, 10 + key * 2]);
+            if key % 3 != 0 {
+                expected.insert(10 + key * 2, key + 1);
+            }
+        }
+        for key in 0..70 {
+            assert_eq!(
+                plain.floor_entry(key),
+                plain.iter().take_while(|(next, _)| *next <= key).last()
+            );
+            assert_eq!(
+                plain.ceiling_entry(key),
+                plain.iter().find(|(next, _)| *next >= key)
+            );
+        }
+        let mut mapped = plain
+            .mapped_entries(Some(MonotoneMap::new(&relation).unwrap()), |value| {
+                (value % 3 != 0).then_some(value + 1)
+            });
+        for key in 0..150 {
+            assert_eq!(
+                mapped.floor_entry(key),
+                expected
+                    .range(..=key)
+                    .next_back()
+                    .map(|(&key, value)| (key, value))
+            );
+            assert_eq!(
+                mapped.ceiling_entry(key),
+                expected
+                    .range(key..)
+                    .next()
+                    .map(|(&key, value)| (key, value))
+            );
+        }
+        mapped.insert(57, 999);
+        expected.insert(57, 999);
+        for key in (0..150).chain([u32::MAX]) {
+            assert_eq!(
+                mapped.floor_entry(key),
+                expected
+                    .range(..=key)
+                    .next_back()
+                    .map(|(&key, value)| (key, value))
+            );
+            assert_eq!(
+                mapped.ceiling_entry(key),
+                expected
+                    .range(key..)
+                    .next()
+                    .map(|(&key, value)| (key, value))
+            );
+        }
+    }
 
     #[test]
     fn balance_ratios_do_not_overflow_large_size_bounds() {

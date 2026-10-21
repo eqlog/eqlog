@@ -12,10 +12,18 @@ Build general image sets in place, preserving empty-result sharing,
 and use sorted keys for any full-level rebuild that is still needed.
 Merge singleton suffixes through mutable entries so late images reuse
 destination paths while empty destinations retain subtree sharing.
+Carry source keys alongside deferred value lookups so the common single
+transform needs no temporary allocation or repeated key conversions.
 
 Represent contiguous leaf elements as shared intervals while keeping
-scattered sets in trees. Preserve canonical current rows, historical
-snapshots, and bounded work accounting through equality and updates.
+scattered sets in trees. Keep fragmented intervals in persistent trees
+so sparse holes never expand every surviving member into a node.
+Compare shared interval subtrees directly and retain covered roots in
+unions and intersections, avoiding repeated work after equality.
+
+Preserve canonical current rows, historical snapshots, and bounded
+work accounting through equality and updates. Charge interval traversal
+separately from member expansion while retaining cheap dense-leaf work.
 Keep balancing ratios valid even when physical size bounds are large.
 Resolve and release deep mapping chains iteratively so evaluator
 threads with small stacks can edit and destroy mapped snapshots.
@@ -24,6 +32,3 @@ Validation covers mapped edits, filtered pivots, partial and conflicting
 images, composition, random set operations, source and owner equality,
 dynamic roundtrips, and finite fuel. Native and desugared generated
 models retain the same results under both evaluation strategies.
-
-Carry source keys alongside deferred value lookups so the common single
-transform needs no temporary allocation or repeated key conversions.

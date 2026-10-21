@@ -891,3 +891,59 @@ fn isomorphism_search_requires_canonical_targets_before_spending_fuel() {
         }
     }
 }
+
+#[test]
+fn isomorphism_fuel_accounts_for_fragmented_interval_storage() {
+    let signature = TransRefl::dynamic_signature();
+    let mut model = Model::new(signature);
+    elements(&mut model, 66);
+    let types = type_data(&model, TypeId(0)).unwrap().clone();
+    let relation = relation_data(&model, RelationId(0)).unwrap().clone();
+    let mut all = PrefixTree1::new();
+    let mut odd = PrefixTree1::new();
+    let mut ordinary = PrefixTree1::new();
+    let mut dense = PrefixTree1::new();
+    for key in 0..66 {
+        all.insert([key]);
+        if key % 2 == 0 {
+            ordinary.insert([key]);
+        } else {
+            odd.insert([key]);
+        }
+        if key < 33 {
+            dense.insert([key]);
+        }
+    }
+    let intervals = all.difference(&odd);
+    assert_eq!(
+        intervals.iter().collect::<Vec<_>>(),
+        ordinary.iter().collect::<Vec<_>>()
+    );
+    let mut budgets = Vec::new();
+    for suffix in [dense, ordinary, intervals] {
+        let mut stored = PrefixTree2::new();
+        stored.insert_restriction(0, suffix);
+        let mut relation = relation.clone();
+        relation.rows.table = Table::from(stored);
+        let model = from_parts(signature, vec![types.clone()], vec![relation]).unwrap();
+        let mut lower = 0;
+        let mut upper = 1_000_000_000;
+        assert!(find_isomorphism(&model, &model, Fuel::Finite(upper))
+            .unwrap()
+            .is_some());
+        while lower < upper {
+            let budget = lower + (upper - lower) / 2;
+            match find_isomorphism(&model, &model, Fuel::Finite(budget)) {
+                Ok(Some(_)) => upper = budget,
+                Ok(None) => panic!("a model is isomorphic to itself"),
+                Err(error) => {
+                    assert_eq!(error, Error::FuelExhausted);
+                    lower = budget + 1;
+                }
+            }
+        }
+        budgets.push(lower);
+    }
+    assert!(budgets[0] < budgets[1], "{budgets:?}");
+    assert!(budgets[1] <= budgets[2], "{budgets:?}");
+}
