@@ -47,6 +47,7 @@ pub(super) fn methods<'a>(
 
                 /// Inherits all current and future source members along this morphism.
                 /// Total inheritance must be acyclic; compact targets have one source.
+                /// Registration is evaluator state and is not included in dynamic snapshots.
                 /// Returns whether this registration or its inherited state changed.
                 pub fn inherit_total_{name}_members(&mut self, morphism: {mor_camel}) -> bool {{
                     let morphism = self.root_{name}_mor(morphism);

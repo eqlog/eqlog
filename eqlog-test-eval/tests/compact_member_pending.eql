@@ -1,0 +1,20 @@
+type Label;
+model World {
+    type El;
+    pred wanted(El);
+    pred ready();
+    func next(El) -> El;
+    rule request_next {
+        if wanted(x);
+        then ready();
+        then next(x)!;
+    }
+}
+pred selected(World);
+pred merge_labels(Label, Label);
+rule merge {
+    if selected(w);
+    if w.ready();
+    if merge_labels(left, right);
+    then left = right;
+}

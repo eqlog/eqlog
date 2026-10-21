@@ -240,3 +240,30 @@ fn total_endpoint_changes_preflight_owner_merges() {
         assert!(model.world_member_el(other, late_image));
     }
 }
+
+#[test]
+fn total_cycle_checks_include_pending_endpoint_equalities() {
+    let mut model = CompactMemberViews::new();
+    model.enable_compact_world();
+    let outside = model.new_world();
+    let first = model.new_world();
+    let second = model.new_world();
+    let middle = model.new_world();
+    let last = model.new_world();
+    let incoming = inherit(&mut model, outside, first);
+    inherit(&mut model, second, middle);
+    let outgoing = inherit(&mut model, middle, last);
+    model.close();
+    model.insert_world_mor_cod(incoming, second);
+    let rejected = match catch_unwind(AssertUnwindSafe(|| {
+        model.insert_world_mor_cod(outgoing, first)
+    })) {
+        Ok(()) => false,
+        Err(_) => true,
+    };
+    assert!(rejected);
+    assert_eq!(model.world_mor_cod(outgoing), Some(last));
+    model.close();
+    assert!(model.are_equal_world(first, second));
+    assert!(!model.are_equal_world(first, last));
+}

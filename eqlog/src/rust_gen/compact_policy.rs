@@ -164,8 +164,11 @@ pub(super) fn methods<'a>(ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
                 if !self.__has_compact_members() {{ return; }}
                 {capture}
                 let snapshot = <Self as eqlog_runtime::CompiledModel>::to_dynamic(self);
-                *self = <Self as eqlog_runtime::CompiledModel>::from_dynamic(&snapshot)
+                let mut materialized = <Self as eqlog_runtime::CompiledModel>::from_dynamic(&snapshot)
                     .expect(\"materialized compact data preserves its signature and handles\");
+                std::mem::swap(&mut materialized.__pending_delta, &mut self.__pending_delta);
+                materialized.__allocated = self.__allocated;
+                *self = materialized;
                 {restore}
             }}
         "}?;
@@ -195,8 +198,25 @@ pub(super) fn methods<'a>(ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
                 {{
                     let policy: BTreeSet<_> = self.__total_members_{name}.iter().copied()
                         .chain(additional).map(|morphism| self.root_{mor_name}({mor}(morphism)).0).collect();
+                    let mut implied_merges = merges.to_vec();
+                    let mut previous_domains = BTreeMap::new();
+                    for (morphism, owner) in self.iter_{dom}() {{
+                        let morphism = self.root_{mor_name}(morphism).0;
+                        let owner = self.root_{name}(owner).0;
+                        if let Some(previous) = previous_domains.insert(morphism, owner) {{
+                            implied_merges.push((previous, owner));
+                        }}
+                    }}
+                    let mut previous_codomains = BTreeMap::new();
+                    for (morphism, owner) in self.iter_{cod}() {{
+                        let morphism = self.root_{mor_name}(morphism).0;
+                        let owner = self.root_{name}(owner).0;
+                        if let Some(previous) = previous_codomains.insert(morphism, owner) {{
+                            implied_merges.push((previous, owner));
+                        }}
+                    }}
                     let mut quotient_roots = BTreeMap::new();
-                    for &(mut left, mut right) in merges {{
+                    for (mut left, mut right) in implied_merges {{
                         while let Some(&parent) = quotient_roots.get(&left) {{ left = parent; }}
                         while let Some(&parent) = quotient_roots.get(&right) {{ right = parent; }}
                         if left != right {{ quotient_roots.insert(left.max(right), left.min(right)); }}

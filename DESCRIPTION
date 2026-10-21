@@ -129,3 +129,7 @@ before changing storage.
 Retain global relation roots when an owner suffix is unchanged. This
 keeps publication and rule checkpoints from comparing equal prefixes
 after an unrelated local relation update.
+
+Preserve suspended definitions when compact storage is materialized.
+Check cumulative endpoint quotients before accepting owner changes,
+including functionality equations not yet applied.
