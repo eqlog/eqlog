@@ -513,6 +513,79 @@ fn column_mapping_preserves_all_images_and_merges_collisions() {
 }
 
 #[test]
+fn colliding_head_images_share_multiple_images_and_filter_empty_suffixes() {
+    let mut source = PrefixTree3::new();
+    let mut heads = PrefixTree2::new();
+    let mut tails = PrefixTree2::new();
+    heads.insert([1, 10]);
+    heads.insert([1, 11]);
+    for value in 0..64 {
+        source.insert([1, value, value]);
+        tails.insert([value, 200 + value / 2]);
+    }
+    let shared = source.mapped(Some(heads.clone()), None, Some(tails.clone()));
+    assert!(SnapshotSet::shares_root(
+        shared.get(10).unwrap(),
+        shared.get(11).unwrap()
+    ));
+
+    source.insert([2, 7, 8]);
+    source.insert([3, 70, 998]);
+    source.insert([4, 71, 999]);
+    heads.insert([2, 10]);
+    heads.insert([3, 12]);
+    heads.insert([4, 10]);
+    let mut mapped = source.mapped(Some(heads), None, Some(tails));
+    let expected: BTreeSet<_> = (0..64)
+        .flat_map(|value| [[10, value, 200 + value / 2], [11, value, 200 + value / 2]])
+        .chain([[10, 7, 204]])
+        .collect();
+    assert_eq!(mapped.iter().collect::<BTreeSet<_>>(), expected);
+    assert!(mapped.get(12).is_none());
+    assert!(mapped.get(10).unwrap().get(71).is_none());
+    mapped.insert([10, 99, 777]);
+    assert!(!mapped.contains([11, 99, 777]));
+    assert_eq!(shared.iter().count(), 128);
+    assert_eq!(source.iter().count(), 67);
+}
+
+#[test]
+fn filtered_collisions_leave_shared_mapped_suffixes_intact() {
+    let mut heads = PrefixTree2::new();
+    for row in [[0, 10], [0, 11], [1, 10]] {
+        heads.insert(row);
+    }
+    let mut tails = PrefixTree2::new();
+    let mut source = PrefixTree3::new();
+    for value in 0..64 {
+        tails.insert([value, value + 200]);
+        source.insert([0, value, value]);
+    }
+    source.insert([1, 999, 999]);
+    let mapped = source.mapped(Some(heads.clone()), None, Some(tails));
+    assert!(SnapshotSet::shares_root(
+        mapped.get(10).unwrap(),
+        mapped.get(11).unwrap()
+    ));
+    assert_eq!(mapped.iter().count(), 128);
+
+    let mut tails = PrefixTree2::new();
+    let mut source = PrefixTree2::new();
+    for value in (0..128).step_by(2) {
+        tails.insert([value, value + 200]);
+        source.insert([0, value]);
+    }
+    source.insert([1, 999]);
+    source.insert([1, 1001]);
+    let mapped = source.mapped(Some(heads), Some(tails));
+    assert!(SnapshotSet::shares_root(
+        mapped.get(10).unwrap(),
+        mapped.get(11).unwrap()
+    ));
+    assert_eq!(mapped.iter().count(), 128);
+}
+
+#[test]
 fn a_single_source_can_share_its_entire_image_set() {
     let mut source = PrefixTree1::new();
     source.insert([7]);
@@ -735,6 +808,67 @@ fn repeated_restriction_inserts_preserve_mapped_and_sibling_snapshots() {
     );
     assert!(tree.get(9).is_none());
     assert_eq!(source.iter().count(), 32 * 32);
+}
+
+#[test]
+fn bulk_restriction_unions_preserve_filtered_snapshots() {
+    let mut tree = PrefixTree4::new();
+    let mut expected = BTreeSet::new();
+    let mut snapshots = Vec::new();
+    let mut sources = Vec::new();
+    for round in 0..8 {
+        let mut source = PrefixTree3::new();
+        let mut first = PrefixTree2::new();
+        let mut last = PrefixTree2::new();
+        for key in 0..24 {
+            if key % 3 != round % 3 {
+                first.insert([key, key + 100]);
+            }
+            for label in 0..3 {
+                source.insert([key, label, 2 * ((17 * key + 7 * label + round) % 41)]);
+            }
+        }
+        for key in 0..41 {
+            if key % 4 != round % 4 {
+                last.insert([2 * key, 2 * key + 200]);
+            }
+        }
+        let source_rows: BTreeSet<_> = source.iter().collect();
+        let image_rows: BTreeSet<_> = source_rows
+            .iter()
+            .filter(|[key, _, last]| key % 3 != round % 3 && (last / 2) % 4 != round % 4)
+            .map(|[key, label, last]| [key + 100, *label, last + 200])
+            .collect();
+        let image = source.mapped(Some(first), None, Some(last));
+        let incoming = if round % 2 == 0 {
+            image.clone()
+        } else {
+            let mut plain = PrefixTree3::new();
+            for row in &image_rows {
+                plain.insert(*row);
+            }
+            plain
+        };
+        tree.insert_restriction(7, incoming.clone());
+        tree.insert_restriction(7, incoming);
+        expected.extend(
+            image_rows
+                .iter()
+                .map(|[first, label, last]| [7, *first, *label, *last]),
+        );
+        assert_eq!(tree.iter().collect::<BTreeSet<_>>(), expected);
+        if round % 2 == 0 {
+            snapshots.push((tree.clone(), expected.clone()));
+        }
+        sources.push((source, source_rows, image, image_rows));
+    }
+    for (snapshot, rows) in snapshots {
+        assert_eq!(snapshot.iter().collect::<BTreeSet<_>>(), rows);
+    }
+    for (source, source_rows, image, image_rows) in sources {
+        assert_eq!(source.iter().collect::<BTreeSet<_>>(), source_rows);
+        assert_eq!(image.iter().collect::<BTreeSet<_>>(), image_rows);
+    }
 }
 
 #[test]

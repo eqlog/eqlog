@@ -1463,6 +1463,24 @@ impl<V: Clone> WBTreeMap<V> {
         self.union_impl(other, merge, true)
     }
 
+    // Shared roots bypass merge, so it must be idempotent. Owning the
+    // destination lets recursive merges reuse its otherwise unshared children.
+    pub(crate) fn union_assign_shared<F>(&mut self, other: &Self, mut merge: F)
+    where
+        F: FnMut(&u32, V, V) -> V,
+    {
+        if other.root.is_none() || self.shares_root(other) {
+            return;
+        }
+        if self.root.is_none() {
+            *self = other.clone();
+            return;
+        }
+        let root = Node::union(self.root.take(), other.root.clone(), &mut merge, true);
+        self.len = SizeBound::combined(Node::size(&root), self.len, other.len);
+        self.root = root;
+    }
+
     fn union_impl<F>(&self, other: &Self, mut merge: F, reuse_shared: bool) -> Self
     where
         F: FnMut(&u32, V, V) -> V,

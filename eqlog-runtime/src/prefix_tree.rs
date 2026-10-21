@@ -1245,7 +1245,11 @@ macro_rules! union_assign {
                     }
                     return;
                 }
-                *self = self.union(other);
+                self.map
+                    .union_assign_shared(&other.map, |_key, mut left, right| {
+                        left.union_assign(&right);
+                        left
+                    });
             }
         }
     };
@@ -1258,6 +1262,7 @@ union_assign!(PrefixTree5, PrefixTree4);
 union_assign!(PrefixTree6, PrefixTree5);
 union_assign!(PrefixTree7, PrefixTree6);
 union_assign!(PrefixTree8, PrefixTree7);
+union_assign!(PrefixTree9, PrefixTree8);
 
 impl PrefixTree2 {
     pub fn union(&self, other: &Self) -> Self {
@@ -1912,6 +1917,19 @@ impl ColumnMapping {
     }
 }
 
+fn prepare_monotone_maps<const N: usize>(
+    mappings: [Option<&ColumnMapping>; N],
+    source_len: usize,
+) -> Option<[Option<MonotoneMap>; N]> {
+    let mut prepared: [Option<MonotoneMap>; N] = std::array::from_fn(|_| None);
+    for (target, mapping) in prepared.iter_mut().zip(mappings) {
+        if let Some(mapping) = mapping {
+            *target = Some(mapping.monotone_for(source_len)?.clone());
+        }
+    }
+    Some(prepared)
+}
+
 fn suffix_mapping_work<const N: usize>(maps: &[Option<MonotoneMap>; N]) -> u64 {
     // A first access can search for a surviving row at every suffix level.
     let lookups = maps.iter().flatten().fold(1u64, |work, map| {
@@ -1957,6 +1975,13 @@ impl PrefixTree1 {
         result
     }
 
+    fn extend_mapped_prepared(&mut self, source: &Self, mapping: Option<&ColumnMapping>) {
+        let mapped = source.mapped_prepared(mapping);
+        if !mapped.is_empty() {
+            self.union_assign(&mapped);
+        }
+    }
+
     fn mapped_monotone(&self, [mapping]: [Option<MonotoneMap>; 1]) -> Self {
         match mapping {
             None => self.clone(),
@@ -1981,40 +2006,62 @@ macro_rules! mapped_tree {
             }
 
             fn mapped_prepared(&self, map0: Option<&ColumnMapping>, $($map: Option<&ColumnMapping>),+) -> Self {
-                if self.map.len_upper_bound() == 0
+                let mut result = Self::new();
+                result.extend_mapped_prepared(self, map0, $($map),+);
+                result
+            }
+
+            fn extend_mapped_prepared(&mut self, source: &Self, map0: Option<&ColumnMapping>, $($map: Option<&ColumnMapping>),+) {
+                if source.map.len_upper_bound() == 0
                     || [map0, $($map),+].into_iter().flatten()
                         .any(|mapping| mapping.relation.map.len_upper_bound() == 0)
                 {
-                    return Self::new();
+                    return;
                 }
-                let prepared = (|| Some([
-                    match map0 {
-                        None => None,
-                        Some(mapping) => Some(mapping.monotone_for(self.map.len_upper_bound())?.clone()),
-                    },
-                    $(match $map {
-                        None => None,
-                        Some(mapping) => Some(mapping.monotone_for(self.map.len_upper_bound())?.clone()),
-                    }),+
-                ]))();
-                if let Some(maps) = prepared {
-                    return self.mapped_monotone(maps);
+                if let Some(maps) = prepare_monotone_maps([map0, $($map),+], source.map.len_upper_bound()) {
+                    let mapped = source.mapped_monotone(maps);
+                    if self.map.len_upper_bound() == 0 {
+                        *self = mapped;
+                    } else if !mapped.is_empty() {
+                        self.union_assign(&mapped);
+                    }
+                    return;
                 }
-                let mut result = Self::new();
-                for (key, value) in self.map.iter() {
-                    match map0 {
-                        None => result.insert_restriction(key, value.mapped_prepared($($map),+)),
+                self.extend_mapped_eager(source, map0, $($map),+);
+            }
+
+            fn extend_mapped_eager(&mut self, source: &Self, map0: Option<&ColumnMapping>, $($map: Option<&ColumnMapping>),+) {
+                for (key, value) in source.map.iter() {
+                    let image = match map0 {
+                        None => key,
                         Some(mapping) => {
-                            if let Some(images) = mapping.relation.get(key) {
-                                let value = value.mapped_prepared($($map),+);
-                                for [image] in images.iter() {
-                                    result.insert_restriction(image, value.clone());
+                            let Some(images) = mapping.relation.get(key) else {
+                                continue;
+                            };
+                            let mut images = images.iter();
+                            let Some([first]) = images.next() else {
+                                continue;
+                            };
+                            if let Some([second]) = images.next() {
+                                // Multiple images can share one transformed suffix.
+                                let mapped = value.mapped_prepared($($map),+);
+                                self.insert_restriction(first, mapped.clone());
+                                self.insert_restriction(second, mapped.clone());
+                                for [image] in images {
+                                    self.insert_restriction(image, mapped.clone());
                                 }
+                                continue;
                             }
+                            first
                         }
+                    };
+                    if let Some(existing) = self.map.get_mut(&image) {
+                        // Colliding head images need no intermediate suffix tree.
+                        existing.extend_mapped_prepared(value, $($map),+);
+                    } else {
+                        self.insert_restriction(image, value.mapped_prepared($($map),+));
                     }
                 }
-                result
             }
 
             fn fits_materialized_budget(&self, budget: &mut usize) -> bool {

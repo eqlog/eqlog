@@ -285,7 +285,17 @@ impl WBTreeSet {
             Storage::Singleton(value) => {
                 self.insert(*value);
             }
-            Storage::Ranges(_) | Storage::Tree(_) => *self = self.union(other),
+            Storage::Ranges(_) => *self = self.union(other),
+            Storage::Tree(right) => match &mut self.storage {
+                Storage::Tree(left) => {
+                    let mut result = mem::replace(left, WBTreeMap::new());
+                    result.union_assign_shared(right, |_element, (), ()| ());
+                    *self = Self::from_map(result);
+                }
+                Storage::Empty | Storage::Singleton(_) | Storage::Ranges(_) => {
+                    *self = self.union(other);
+                }
+            },
         }
     }
 
