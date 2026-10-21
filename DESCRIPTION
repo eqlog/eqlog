@@ -34,3 +34,8 @@ Validation covers mapped edits, filtered pivots, partial and conflicting
 images, composition, random set operations, source and owner equality,
 dynamic roundtrips, and finite fuel. Native and desugared generated
 models retain the same results under both evaluation strategies.
+
+Retain raw cache origins through identity and uniform-offset views so
+value lookups avoid repeatedly searching the same morphism chain. Keep
+proper subtree origins small and compose validated offsets modulo the ID
+width while preserving filtered domains and historical snapshots.

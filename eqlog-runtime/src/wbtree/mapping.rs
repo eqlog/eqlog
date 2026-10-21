@@ -75,6 +75,14 @@ impl MonotoneMap {
         self.runs.len()
     }
 
+    pub(super) fn single_offset(&self) -> Option<u32> {
+        if self.runs.len() != 1 {
+            return None;
+        }
+        let run = &self.runs[0];
+        Some(run.target.wrapping_sub(run.source))
+    }
+
     pub(super) fn same_snapshot(&self, other: &Self) -> bool {
         self.relation.map.shares_root(&other.relation.map)
     }

@@ -875,3 +875,163 @@ fn lookups_keep_value_coordinates_across_key_only_layers() {
     assert_eq!(edited.get(&2004), Some(&28));
     assert_eq!(source.get(&1), Some(&1));
 }
+
+#[test]
+fn cache_origins_survive_offset_views_around_edited_subtrees() {
+    let mut source = WBTreeMap::new();
+    let mut first = PrefixTree2::new();
+    let mut second = PrefixTree2::new();
+    let mut third = PrefixTree2::new();
+    let mut fourth = PrefixTree2::new();
+    for key in 0..128 {
+        first.insert([1000 + key, 3000 + key]);
+        second.insert([2999 + key, 6999 + key]);
+        third.insert([6999 + key, 199 + key]);
+        fourth.insert([199 + key, 499 + key]);
+        if key % 2 == 0 {
+            source.insert(1000 + key, key);
+        }
+    }
+    let mut edited = source.mapped_entries(MonotoneMap::new(&first), |value| Some(value + 1));
+    let snapshot = edited.clone();
+    *edited.get_mut(&3050).unwrap() = 900;
+    edited.insert(2999, 88);
+    edited.remove(&3100);
+    let expected: BTreeMap<_, _> = edited
+        .iter()
+        .filter_map(|(key, value)| (value % 3 != 0).then_some((key - 2500, value + 9)))
+        .collect();
+    let mapped = edited
+        .mapped_keys(MonotoneMap::new(&second).unwrap())
+        .mapped_entries(None, |value| (value % 3 != 0).then_some(value + 2))
+        .mapped_keys(MonotoneMap::new(&third).unwrap())
+        .mapped_entries(MonotoneMap::new(&fourth), |value| Some(value + 7));
+    drop(edited);
+    assert_eq!(
+        mapped
+            .iter()
+            .map(|(key, &value)| (key, value))
+            .collect::<BTreeMap<_, _>>(),
+        expected
+    );
+    for key in 0..700 {
+        assert_eq!(mapped.get(&key), expected.get(&key));
+    }
+    assert_eq!(snapshot.get(&3050), Some(&51));
+    assert_eq!(snapshot.get(&3100), Some(&101));
+    assert_eq!(source.get(&1050), Some(&50));
+}
+
+#[test]
+fn cache_origins_preserve_clipped_affine_domains_at_integer_limits() {
+    let mut source = WBTreeMap::new();
+    let mut clipped = PrefixTree2::new();
+    let mut upper = PrefixTree2::new();
+    for key in 0..128 {
+        source.insert(key, key);
+    }
+    for key in 32..64 {
+        clipped.insert([key, key + 200]);
+        upper.insert([key + 200, u32::MAX - 63 + key]);
+    }
+    let mapped = source
+        .mapped_entries(MonotoneMap::new(&clipped), |value| Some(value + 1))
+        .mapped_entries(MonotoneMap::new(&upper), |value| Some(value + 2))
+        .mapped_entries(None, |value| Some(value + 3));
+    for offset in 0..64 {
+        let key = u32::MAX - offset;
+        assert_eq!(
+            mapped.get(&key).copied(),
+            (offset < 32).then_some(69 - offset)
+        );
+    }
+    assert_eq!(mapped.len(), 32);
+    assert_eq!(mapped.get(&0), None);
+    assert_eq!(source.len(), 128);
+}
+
+#[test]
+fn cache_origins_follow_shared_descriptors_over_proper_subtrees() {
+    let mut source = WBTreeMap::new();
+    source.insert(10, 10);
+    source.insert(11, 11);
+    let mut first = PrefixTree2::new();
+    first.insert([10, 100]);
+    first.insert([11, 101]);
+    let mut edited = source.mapped_entries(MonotoneMap::new(&first), |value| Some(value + 1));
+    let snapshot = edited.clone();
+    assert_eq!(edited.remove(&100), Some(11));
+
+    let mut middle = PrefixTree2::new();
+    middle.insert([101, 501]);
+    let mut last = PrefixTree2::new();
+    last.insert([501, 1]);
+    let mapped = edited
+        .mapped_keys(MonotoneMap::new(&middle).unwrap())
+        .mapped_keys(MonotoneMap::new(&last).unwrap())
+        .mapped_entries(None, |value| Some(value * 3));
+    drop(source);
+    drop(snapshot);
+    drop(edited);
+    assert_eq!(mapped.get(&1), Some(&36));
+    assert_eq!(mapped.get(&100), None);
+    assert_eq!(
+        mapped
+            .iter()
+            .map(|(key, &value)| (key, value))
+            .collect::<Vec<_>>(),
+        [(1, 36)]
+    );
+}
+
+#[test]
+fn cache_origins_compose_alternating_offsets_at_integer_limits() {
+    let mut mapped = WBTreeMap::new();
+    let mut expected = BTreeMap::new();
+    for key in 0..256 {
+        mapped.insert(key, key);
+        expected.insert(key, key);
+    }
+    let original = mapped.clone();
+    let mut source_base = 0;
+    for layer in 0..32 {
+        let target_base = if layer % 2 == 0 { u32::MAX - 255 } else { 17 };
+        let mut relation = PrefixTree2::new();
+        for key in 3..253 {
+            relation.insert([source_base + key, target_base + key]);
+        }
+        let mapping = MonotoneMap::new(&relation).unwrap();
+        mapped = if layer % 3 == 0 {
+            mapped.mapped_keys(mapping)
+        } else {
+            mapped.mapped_entries(Some(mapping), |value| {
+                (value % 67 != 0).then_some(value + 1)
+            })
+        };
+        expected = expected
+            .into_iter()
+            .filter_map(|(key, value)| {
+                let index = key - source_base;
+                if !(3..253).contains(&index) || (layer % 3 != 0 && value % 67 == 0) {
+                    return None;
+                }
+                let value = value + u32::from(layer % 3 != 0);
+                Some((target_base + index, value))
+            })
+            .collect();
+        source_base = target_base;
+    }
+    assert!(!expected.is_empty());
+    for key in 0..300 {
+        assert_eq!(mapped.get(&key), expected.get(&key));
+    }
+    assert_eq!(
+        mapped
+            .iter()
+            .map(|(key, &value)| (key, value))
+            .collect::<BTreeMap<_, _>>(),
+        expected
+    );
+    assert_eq!(original.len(), 256);
+    assert_eq!(original.get(&255), Some(&255));
+}

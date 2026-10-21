@@ -115,12 +115,55 @@ struct ValueMapping<V: Clone> {
     apply: Box<dyn Fn(&V) -> Option<V>>,
     cache: ValueCache<V>,
     source: Rc<Node<V>>,
+    source_offset: u32,
     lookup_work: OnceCell<u64>,
     work_factor: u64,
 }
 
 impl<V: Clone> ValueMapping<V> {
-    fn map_value<'a>(&'a self, mut raw_key: u32, value: &'a V) -> Option<&'a V> {
+    fn source_for_cache(source: &Rc<Node<V>>) -> (Rc<Node<V>>, u32) {
+        let mut current = source;
+        let mut offset = 0u32;
+        loop {
+            match current.as_ref() {
+                Node::Data(_) => return (current.clone(), offset),
+                Node::Mapping(mapping) => {
+                    let shift = match &mapping.transform.keys {
+                        None => 0,
+                        Some(keys) => {
+                            let Some(shift) = keys.single_offset() else {
+                                return (current.clone(), offset);
+                            };
+                            shift
+                        }
+                    };
+                    let next_offset = offset.wrapping_add(shift);
+                    let Some(child) = &mapping.child else {
+                        return (current.clone(), offset);
+                    };
+                    match child.as_ref() {
+                        Node::Data(_) => return (child.clone(), next_offset),
+                        Node::Mapping(_) => {}
+                    }
+                    if let Some(values) = &mapping.transform.values {
+                        // Cache coordinates do not depend on the intervening value
+                        // transforms, so a new view can reuse their raw origin.
+                        return (
+                            values.source.clone(),
+                            next_offset.wrapping_add(values.source_offset),
+                        );
+                    }
+                    offset = next_offset;
+                    current = child;
+                }
+            }
+        }
+    }
+
+    fn map_value<'a>(&'a self, raw_key: u32, value: &'a V) -> Option<&'a V> {
+        // The actual lookup has checked every mapped domain. Wrapping also
+        // represents negative offsets without a branch in this cache lookup.
+        let mut raw_key = raw_key.wrapping_sub(self.source_offset);
         let mut current = Some(self.source.as_ref());
         let mut cache = &self.cache;
         // A snapshot's raw topology gives cache entries stable addresses without
@@ -1520,13 +1563,15 @@ impl<V: Clone> WBTreeMap<V> {
             return Self::new();
         }
         let root = self.root.clone().map(|child| {
+            let (source, source_offset) = ValueMapping::source_for_cache(&child);
             Rc::new(Node::Mapping(MappingNode {
                 transform: Rc::new(MappingTransform {
                     keys: mapping,
                     values: Some(ValueMapping {
                         apply: Box::new(values),
                         cache: ValueCache::new(),
-                        source: child.clone(),
+                        source,
+                        source_offset,
                         lookup_work: OnceCell::new(),
                         work_factor,
                     }),
@@ -1792,6 +1837,54 @@ mod tests {
                     .map(|(&key, value)| (key, value))
             );
         }
+    }
+
+    #[test]
+    fn cold_cache_origin_preprocessing_does_not_force_values() {
+        let mut source = WBTreeMap::new();
+        source.insert(10, 10);
+        source.insert(11, 11);
+        let mut relation = PrefixTree2::new();
+        relation.insert([10, 100]);
+        relation.insert([11, 101]);
+        let calls = Rc::new(Cell::new(0));
+        let first = calls.clone();
+        let second = calls.clone();
+        let mut mapped = source
+            .mapped_entries(MonotoneMap::new(&relation), move |value| {
+                first.set(first.get() + 1);
+                Some(value + 1)
+            })
+            .mapped_entries(None, move |value| {
+                second.set(second.get() + 1);
+                Some(value * 2)
+            });
+        let snapshot = mapped.clone();
+        assert_eq!(mapped.remove(&100), Some(22));
+        calls.set(0);
+        let third = calls.clone();
+        let mapped = mapped.mapped_entries(None, move |value| {
+            third.set(third.get() + 1);
+            Some(value + 3)
+        });
+        assert_eq!(
+            mapped.iteration_work(&mut Fuel::Finite(1), |_, _| Ok(0)),
+            Err(Error::FuelExhausted)
+        );
+        assert_eq!(calls.get(), 0);
+        let mut fuel = Fuel::Finite(1_000);
+        let work = mapped.iteration_work(&mut fuel, |_, _| Ok(0)).unwrap();
+        fuel.consume(work).unwrap();
+        assert_eq!(calls.get(), 0);
+        assert_eq!(
+            mapped
+                .iter()
+                .map(|(key, &value)| (key, value))
+                .collect::<Vec<_>>(),
+            [(101, 27)]
+        );
+        assert_eq!(calls.get(), 3);
+        assert_eq!(snapshot.get(&100), Some(&22));
     }
 
     #[test]
