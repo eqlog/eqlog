@@ -5,6 +5,59 @@ use eqlog_runtime::CompiledModel;
 use crate::member_mapping::*;
 
 #[test]
+fn tagged_member_chains_preserve_offsets_through_late_facts_and_equalities() {
+    let mut model = MemberMapping::new();
+    let worlds: Vec<_> = (0..17).map(|_| model.new_world()).collect();
+    let members: Vec<Vec<_>> = worlds
+        .iter()
+        .map(|&world| (0..16).map(|_| model.new_el(world)).collect())
+        .collect();
+    let labels: Vec<_> = (0..2).map(|_| model.new_label()).collect();
+    for &member in &members[0] {
+        for &label in &labels {
+            model.insert_tagged(worlds[0], member, label);
+        }
+    }
+    for hop in 0..worlds.len() - 1 {
+        let morphism = model.new_world_mor();
+        model.insert_world_mor_dom(morphism, worlds[hop]);
+        model.insert_world_mor_cod(morphism, worlds[hop + 1]);
+        for (&member, &image) in members[hop].iter().zip(&members[hop + 1]) {
+            model.insert_el_mor_app(morphism, member, image);
+        }
+    }
+    model.close();
+    let mut expected = BTreeSet::new();
+    for (&world, members) in worlds.iter().zip(&members) {
+        for &member in members {
+            for &label in &labels {
+                expected.insert((world, member, label));
+            }
+        }
+    }
+    let rows: Vec<_> = model.iter_tagged().collect();
+    let actual: BTreeSet<_> = rows.iter().copied().collect();
+    assert_eq!(rows.len(), actual.len());
+    assert_eq!(actual, expected);
+    let late = model.new_label();
+    model.insert_tagged(worlds[0], members[0][2], late);
+    model.equate_el(worlds[0], members[0][1], members[0][0]);
+    model.close();
+    expected = expected
+        .into_iter()
+        .map(|(world, member, label)| (world, model.root_el(member), label))
+        .collect();
+    for (&world, members) in worlds.iter().zip(&members) {
+        assert!(model.are_equal_el(members[0], members[1]));
+        expected.insert((world, model.root_el(members[2]), late));
+    }
+    let rows: Vec<_> = model.iter_tagged().collect();
+    let actual: BTreeSet<_> = rows.iter().copied().collect();
+    assert_eq!(rows.len(), actual.len());
+    assert_eq!(actual, expected);
+}
+
+#[test]
 fn member_transport_handles_chunks_late_images_and_quotients() {
     for (chunk, reverse) in [(32, false), (8, false), (8, true)] {
         let mut model = MemberMapping::new();

@@ -34,3 +34,8 @@ mutation sequences checked against an independent relational oracle.
 Regression cases cover filtered pivots, partial and conflicting images,
 noncanonical rows, source and owner equalities, shared snapshots, long
 mapping chains, late images, dynamic roundtrips, and finite fuel.
+
+Compose key-only offset views over their intersecting domains so long
+morphism chains need one coordinate translation. Compare the bounded
+composed runs exactly to retain cheap equivalent-view comparisons.
+Value transforms and fragmented maps preserve their existing paths.

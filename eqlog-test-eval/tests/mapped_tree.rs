@@ -80,6 +80,188 @@ fn offset_mapping_and_lookup_share_values_until_mutation() {
     assert!(mapped.get(&2048).is_none());
 }
 
+fn offset_relation(first: u32, count: u32, target: u32) -> PrefixTree2 {
+    let mut relation = PrefixTree2::new();
+    for index in 0..count {
+        relation.insert([first + index, target + index]);
+    }
+    relation
+}
+
+#[test]
+fn consecutive_offset_domains_match_relational_composition_at_integer_limits() {
+    for (source, count, middle, outer_source, target, outer_count) in [
+        (0, 16, 100, 104, 200, 8),
+        (100, 16, 0, 4, 200, 8),
+        (u32::MAX - 31, 16, 16, 20, u32::MAX - 15, 8),
+        (0, 16, u32::MAX - 15, u32::MAX - 7, 8, 8),
+        (u32::MAX - 15, 16, 0, 0, u32::MAX - 15, 16),
+        (0, 16, 100, 116, 300, 8),
+        (0, 16, 100, 80, 200, 16),
+        (0, 1, u32::MAX, u32::MAX, 0, 1),
+        (u32::MAX, 1, 0, 0, u32::MAX, 1),
+    ] {
+        let first = offset_relation(source, count, middle);
+        let second = offset_relation(outer_source, outer_count, target);
+        let mut base = WBTreeMap::new();
+        for index in 0..count {
+            base.insert(source + index, index + 10);
+        }
+        base.insert(0, 1000);
+        base.insert(u32::MAX, 2000);
+        let mut expected: BTreeMap<_, _> = base
+            .iter()
+            .filter_map(|(key, &value)| {
+                let [middle] = first.get(key)?.iter().next()?;
+                let [target] = second.get(middle)?.iter().next()?;
+                Some((target, value))
+            })
+            .collect();
+        let first = base.mapped(first);
+        let original_rows: Vec<_> = first.iter().map(|(key, &value)| (key, value)).collect();
+        let mut composed = first.mapped(second);
+        assert_eq!(composed.is_empty(), expected.is_empty());
+        assert_eq!(composed.len(), expected.len());
+        assert_eq!(
+            composed
+                .iter()
+                .map(|(key, &value)| (key, value))
+                .collect::<BTreeMap<_, _>>(),
+            expected,
+        );
+        for (&key, &value) in &expected {
+            assert_eq!(composed.get(&key), Some(&value));
+        }
+        let snapshot = composed.clone();
+        let snapshot_rows = expected.clone();
+        composed.insert(777_777, 3000);
+        expected.insert(777_777, 3000);
+        if let Some((&key, _)) = snapshot_rows.first_key_value() {
+            assert_eq!(composed.remove(&key), expected.remove(&key));
+        }
+        assert_eq!(
+            composed
+                .iter()
+                .map(|(key, &value)| (key, value))
+                .collect::<BTreeMap<_, _>>(),
+            expected,
+        );
+        assert_eq!(
+            snapshot
+                .iter()
+                .map(|(key, &value)| (key, value))
+                .collect::<BTreeMap<_, _>>(),
+            snapshot_rows,
+        );
+        assert_eq!(
+            first
+                .iter()
+                .map(|(key, &value)| (key, value))
+                .collect::<Vec<_>>(),
+            original_rows
+        );
+    }
+}
+
+#[test]
+fn composed_offsets_keep_distinct_domains_and_snapshot_identities() {
+    let mut base = WBTreeMap::new();
+    for key in 0..24 {
+        base.insert(key, key);
+    }
+    let relation = offset_relation(0, 24, 100);
+    let first = base.mapped(relation.clone());
+    let same = base.mapped(relation);
+    assert_eq!(first.difference_entries(&same).count(), 0);
+
+    let left = first.mapped(offset_relation(100, 12, 200));
+    let right = same.mapped(offset_relation(108, 12, 208));
+    let equivalent = same.mapped(offset_relation(100, 12, 200));
+    assert_eq!(left.difference_entries(&left.clone()).count(), 0);
+    assert_eq!(left.difference_entries(&equivalent).count(), 0);
+    assert!(left
+        .difference(&equivalent, |_, value, other| (value != other)
+            .then_some(value))
+        .is_empty());
+    assert_eq!(
+        left.difference_entries(&right)
+            .filter_map(|(key, _, value)| value.is_none().then_some(key))
+            .collect::<Vec<_>>(),
+        (200..208).collect::<Vec<_>>(),
+    );
+    let shifted = first.mapped(offset_relation(100, 12, 300));
+    assert_eq!(
+        left.difference_entries(&shifted)
+            .filter_map(|(key, _, value)| value.is_none().then_some(key))
+            .collect::<Vec<_>>(),
+        (200..212).collect::<Vec<_>>(),
+    );
+    assert!(!left.all_difference_entries(&right, |_, _, value| value.is_some()));
+}
+
+#[test]
+fn offset_composition_preserves_value_callback_boundaries() {
+    let mut base = WBTreeMap::new();
+    for key in 0..64 {
+        base.insert(key, key);
+    }
+    let calls = Rc::new(Cell::new(0));
+    let counter = calls.clone();
+    let values = base
+        .mapped(offset_relation(0, 64, 100))
+        .mapped_entries(None, move |value| {
+            counter.set(counter.get() + 1);
+            (value % 3 != 0).then_some(value + 7)
+        });
+    let mapped = values
+        .mapped(offset_relation(100, 64, u32::MAX - 63))
+        .mapped(offset_relation(u32::MAX - 63, 64, 0));
+    assert_eq!(calls.get(), 0);
+    assert_eq!(mapped.get(&10), Some(&17));
+    assert_eq!(mapped.get(&10), Some(&17));
+    assert_eq!(calls.get(), 1);
+    let expected: BTreeMap<_, _> = (0..64)
+        .filter(|key| key % 3 != 0)
+        .map(|key| (key, key + 7))
+        .collect();
+    assert_eq!(
+        mapped
+            .iter()
+            .map(|(key, &value)| (key, value))
+            .collect::<BTreeMap<_, _>>(),
+        expected
+    );
+    assert_eq!(calls.get(), 64);
+    assert_eq!(values.get(&110), Some(&17));
+    assert_eq!(calls.get(), 64);
+}
+
+#[test]
+fn deep_uniform_offset_chains_preserve_historical_views_and_edits() {
+    let relation = offset_relation(0, 64, 0);
+    let mapping = MonotoneMap::new(&relation).unwrap();
+    let mut tree = WBTreeMap::new();
+    for key in 0..64 {
+        tree.insert(key, key + 10);
+    }
+    let mut snapshots = Vec::new();
+    for layer in 0..10_000 {
+        tree = tree.mapped_keys(mapping.clone());
+        if layer % 1000 == 0 {
+            snapshots.push(tree.clone());
+        }
+    }
+    assert_eq!(tree.remove(&0), Some(10));
+    *tree.get_mut(&63).unwrap() = 1000;
+    assert_eq!(tree.get(&0), None);
+    assert_eq!(tree.get(&63), Some(&1000));
+    for snapshot in snapshots {
+        assert_eq!(snapshot.len(), 64);
+        assert_eq!(snapshot.get(&0), Some(&10));
+        assert_eq!(snapshot.get(&63), Some(&73));
+    }
+}
+
 #[test]
 fn entry_mappings_defer_values_and_cache_them_across_snapshots() {
     let clones = Rc::new(Cell::new(0));

@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use crate::PrefixTree2;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct Run {
     source: u32,
     target: u32,
@@ -13,6 +13,7 @@ struct Run {
 #[derive(Clone, Debug)]
 pub struct MonotoneMap {
     runs: Rc<[Run]>,
+    // Composed offsets use bounded run contents without retaining origin chains.
     relation: PrefixTree2,
 }
 
@@ -119,6 +120,35 @@ impl MonotoneMap {
     }
 
     pub(super) fn same_snapshot(&self, other: &Self) -> bool {
+        if Rc::ptr_eq(&self.runs, &other.runs) {
+            return true;
+        }
+        if self.relation.map.root_identity() == 0 {
+            return other.relation.map.root_identity() == 0 && self.runs == other.runs;
+        }
         self.relation.map.shares_root(&other.relation.map)
+    }
+
+    pub(super) fn compose_offset(&self, inner: &Self) -> Option<Self> {
+        if self.runs.len() != 1 || inner.runs.len() != 1 {
+            return None;
+        }
+        let outer = &self.runs[0];
+        let inner = &inner.runs[0];
+        let first = outer.source.max(inner.target);
+        let last = outer.last.min(inner.target + (inner.last - inner.source));
+        let runs: Rc<[Run]> = if first <= last {
+            Rc::from([Run {
+                source: inner.source + (first - inner.target),
+                target: outer.target + (first - outer.source),
+                last: inner.source + (last - inner.target),
+            }])
+        } else {
+            Rc::from([])
+        };
+        Some(Self {
+            runs,
+            relation: PrefixTree2::new(),
+        })
     }
 }

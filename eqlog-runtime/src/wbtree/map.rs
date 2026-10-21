@@ -251,6 +251,14 @@ impl<V> ValueCache<V> {
 }
 
 impl<V: Clone> MappingNode<V> {
+    fn compose_keys(&self, outer: &MonotoneMap) -> Option<(MonotoneMap, Option<Rc<Node<V>>>)> {
+        if self.transform.values.is_some() {
+            return None;
+        }
+        let mapping = outer.compose_offset(self.transform.keys.as_ref()?)?;
+        Some((mapping, self.child.clone()))
+    }
+
     fn map_value<'a>(&'a self, raw_key: u32, value: &'a V) -> Option<&'a V> {
         match &self.transform.values {
             None => Some(value),
@@ -1638,7 +1646,15 @@ impl<V: Clone> WBTreeMap<V> {
         if mapping.run_count() == 0 {
             return Self::new();
         }
-        let new_root = self.root.clone().map(|root| {
+        let composed = self.root.as_ref().and_then(|root| match root.as_ref() {
+            Node::Data(_) => None,
+            Node::Mapping(inner) => inner.compose_keys(&mapping),
+        });
+        let (mapping, child) = composed.unwrap_or_else(|| (mapping, self.root.clone()));
+        if mapping.run_count() == 0 {
+            return Self::new();
+        }
+        let new_root = child.map(|root| {
             Rc::new(Node::Mapping(MappingNode {
                 transform: Rc::new(MappingTransform {
                     keys: Some(mapping),
