@@ -70,3 +70,8 @@ and structural merges can check materialized nodes without helper calls.
 Scale bounded eager mapping by the number of outer keys so wide sparse
 relations avoid deferred caches. Cap total preflight work and retain the
 small limit when only keys change, preserving shared dense suffixes.
+
+Consume terminal removal pivots before copying shared paths, avoiding
+replacement allocations while preserving snapshots. Use the same
+subtree weights for joining and balancing so small valid joins retain
+their child roots.

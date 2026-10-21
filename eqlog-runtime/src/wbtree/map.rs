@@ -690,6 +690,14 @@ impl<V: Clone> Node<V> {
 
     fn remove_min(node: Rc<Self>) -> Option<(u32, V, Option<Rc<Self>>)> {
         let mut node = Self::expose(Some(node))?;
+        let has_left = match node.as_ref() {
+            Self::Data(data) => data.left.is_some(),
+            Self::Mapping(_) => unreachable!("expose the root before editing it"),
+        };
+        if !has_left {
+            let data = Self::unwrap_to_data(node);
+            return Some((data.key, data.value, data.right));
+        }
         let data = Self::data_mut(&mut node);
         let removed = data.left.take().and_then(Self::remove_min);
         match removed {
@@ -717,12 +725,20 @@ impl<V: Clone> Node<V> {
 
     fn remove_existing_node(node: Rc<Self>, key: &u32) -> (Option<Rc<Self>>, V) {
         let mut node = Self::expose(Some(node)).expect("the key is present");
-        let data = Self::data_mut(&mut node);
-        let value = match key.cmp(&data.key) {
+        let ordering = match node.as_ref() {
+            Self::Data(data) => key.cmp(&data.key),
+            Self::Mapping(_) => unreachable!("expose the root before editing it"),
+        };
+        match ordering {
             Ordering::Equal => {
                 let data = Self::unwrap_to_data(node);
                 return (Self::concat(data.left, data.right), data.value);
             }
+            Ordering::Less | Ordering::Greater => {}
+        }
+        let data = Self::data_mut(&mut node);
+        let value = match ordering {
+            Ordering::Equal => unreachable!("a matching pivot has already been removed"),
             Ordering::Less => {
                 let (left, value) =
                     Self::remove_existing_node(data.left.take().expect("the key is present"), key);
@@ -777,10 +793,14 @@ impl<V: Clone> Node<V> {
         value: V,
         right: Option<Rc<Node<V>>>,
     ) -> Option<Rc<Node<V>>> {
-        let left_size = Self::size(&left);
-        let right_size = Self::size(&right);
+        let left_weight = Self::size(&left)
+            .checked_add(1)
+            .expect("tree size overflow");
+        let right_weight = Self::size(&right)
+            .checked_add(1)
+            .expect("tree size overflow");
 
-        if too_heavy(right_size, left_size) {
+        if too_heavy(right_weight, left_weight) {
             match Self::expose(right) {
                 None => Self::join(left, key, value, None),
                 Some(r) => {
@@ -796,7 +816,7 @@ impl<V: Clone> Node<V> {
                     Some(Node::balance(new_node))
                 }
             }
-        } else if too_heavy(left_size, right_size) {
+        } else if too_heavy(left_weight, right_weight) {
             match Self::expose(left) {
                 None => Self::join(None, key, value, right),
                 Some(l) => {
