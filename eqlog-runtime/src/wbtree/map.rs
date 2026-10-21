@@ -550,7 +550,8 @@ impl<V: Clone> Node<V> {
         left
     }
 
-    fn balance(mut node: Rc<Self>) -> Rc<Self> {
+    #[inline(always)]
+    fn balance(node: Rc<Self>) -> Rc<Self> {
         let (left_size, right_size) = match node.as_ref() {
             Self::Data(data) => (Self::size(&data.left), Self::size(&data.right)),
             Self::Mapping(_) => unreachable!("expose a pivot before balancing it"),
@@ -558,6 +559,17 @@ impl<V: Clone> Node<V> {
         if left_size + right_size < 2 {
             return node;
         }
+        let left_weight = left_size + 1;
+        let right_weight = right_size + 1;
+        if !too_heavy(right_weight, left_weight) && !too_heavy(left_weight, right_weight) {
+            return node;
+        }
+        Self::balance_heavy(node, left_size, right_size)
+    }
+
+    // Ordinary updates need no rotation state until the weight check fails.
+    #[inline(never)]
+    fn balance_heavy(mut node: Rc<Self>, left_size: usize, right_size: usize) -> Rc<Self> {
         let left_weight = left_size + 1;
         let right_weight = right_size + 1;
         if too_heavy(right_weight, left_weight) {

@@ -48,3 +48,7 @@ when replacing an existing value.
 Use exact tree metadata to specialize ordinary insertion and entry
 updates. Avoid deferred-node checks and increment unchanged subtree
 counts directly; conservative views retain exposure and size repair.
+
+Keep the overflow-safe balance check inline so ordinary updates avoid
+rotation state and reuse subtree sizes already known by their callers.
+Resolve heavy pivots and conservative sizes in a separate helper.
