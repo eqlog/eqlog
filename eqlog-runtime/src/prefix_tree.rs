@@ -1897,6 +1897,7 @@ struct ColumnMapping {
 }
 
 const EAGER_MAPPING_BUDGET: usize = 8;
+const MAX_EAGER_MAPPING_BUDGET: usize = 4096;
 
 impl ColumnMapping {
     fn new(relation: PrefixTree2) -> Self {
@@ -2081,9 +2082,18 @@ macro_rules! mapped_tree {
                 }
                 // Only bounded materialized suffixes have cheap emptiness checks.
                 // Preflight rejects existing lazy children without forcing them.
-                let mut budget = EAGER_MAPPING_BUDGET;
+                let eager_limit = if suffix_unchanged {
+                    EAGER_MAPPING_BUDGET
+                } else {
+                    MAX_EAGER_MAPPING_BUDGET
+                };
+                // Wide sparse prefixes avoid caches while dense suffixes retain sharing.
+                let mut budget = eager_limit.min(
+                    self.map.len_upper_bound().saturating_mul(EAGER_MAPPING_BUDGET)
+                        .max(EAGER_MAPPING_BUDGET)
+                );
                 if suffix_unchanged || self.fits_materialized_budget(&mut budget) {
-                    if let Some(map) = self.map.mapped_small_entries(map0.as_ref(), EAGER_MAPPING_BUDGET, |value| {
+                    if let Some(map) = self.map.mapped_small_entries(map0.as_ref(), eager_limit, |value| {
                         let value = value.mapped_monotone(suffix.clone());
                         (suffix_unchanged || !value.is_empty()).then_some(value)
                     }) {

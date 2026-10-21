@@ -66,3 +66,7 @@ forcing deferred descendants after a path edit.
 
 Keep deferred pivot resolution outside ordinary update paths so inserts
 and structural merges can check materialized nodes without helper calls.
+
+Scale bounded eager mapping by the number of outer keys so wide sparse
+relations avoid deferred caches. Cap total preflight work and retain the
+small limit when only keys change, preserving shared dense suffixes.
