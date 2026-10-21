@@ -1,5 +1,6 @@
 use eqlog_runtime::__private::SnapshotSet;
 use eqlog_runtime::wbtree::map::WBTreeMap;
+use eqlog_runtime::wbtree::mapping::MonotoneMap;
 use eqlog_runtime::{
     PrefixTree1, PrefixTree2, PrefixTree3, PrefixTree4, PrefixTree5, PrefixTree6, PrefixTree7,
     PrefixTree8, PrefixTree9,
@@ -905,4 +906,38 @@ fn difference_visitors_stop_early_and_skip_shared_subtrees() {
             assert!(visits < 64, "a sparse edit scanned shared subtrees");
         }
     }
+}
+
+#[test]
+fn prepared_shared_maps_defer_lookups_through_sparse_prefixes() {
+    let mut source = PrefixTree3::new();
+    let mut images = PrefixTree2::new();
+    for key in 0..64 {
+        images.insert([key, key + 100]);
+        for inner in 0..32 {
+            source.insert([key, inner, inner]);
+        }
+    }
+    let forced = Rc::new(Cell::new(0));
+    let calls = forced.clone();
+    source.map = source.map.mapped_entries(None, move |value| {
+        calls.set(calls.get() + 1);
+        Some(value.clone())
+    });
+    let mapping = MonotoneMap::new(&images).unwrap();
+    let mut mapped = source.mapped_shared([Some(mapping.clone()), None, Some(mapping)]);
+    assert_eq!(forced.get(), 0);
+    assert!(mapped.contains([107, 3, 103]));
+    assert_eq!(forced.get(), 1);
+    assert!(mapped.contains([107, 4, 104]));
+    assert_eq!(forced.get(), 1);
+    let snapshot = mapped.clone();
+    mapped.remove([107, 3, 103]);
+    assert!(snapshot.contains([107, 3, 103]));
+    assert!(source.contains([7, 3, 3]));
+    assert_eq!(snapshot.iter().count(), 64 * 32);
+    assert!(SnapshotSet::shares_root(
+        &source,
+        &source.mapped_shared([None, None, None])
+    ));
 }

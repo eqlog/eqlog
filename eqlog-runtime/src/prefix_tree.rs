@@ -1986,9 +1986,17 @@ impl PrefixTree0 {
     pub fn mapped(&self) -> Self {
         self.clone()
     }
+
+    pub fn mapped_shared(&self, _maps: [Option<MonotoneMap>; 0]) -> Self {
+        self.clone()
+    }
 }
 
 impl PrefixTree1 {
+    pub fn mapped_shared(&self, maps: [Option<MonotoneMap>; 1]) -> Self {
+        self.mapped_monotone(maps)
+    }
+
     pub fn mapped(&self, map0: Option<PrefixTree2>) -> Self {
         let map0 = map0.map(ColumnMapping::new);
         self.mapped_prepared(map0.as_ref())
@@ -2042,6 +2050,12 @@ impl PrefixTree1 {
 macro_rules! mapped_tree {
     ($tree:ident, $arity:literal, $($map:ident),+) => {
         impl $tree {
+            /// Prepared maps can share sparse relations without materializing
+            /// their small suffixes at every inherited owner.
+            pub fn mapped_shared(&self, maps: [Option<MonotoneMap>; $arity]) -> Self {
+                self.mapped_monotone_impl(maps, false)
+            }
+
             pub fn mapped(&self, map0: Option<PrefixTree2>, $($map: Option<PrefixTree2>),+) -> Self {
                 let map0 = map0.map(ColumnMapping::new);
                 $(let $map = $map.map(ColumnMapping::new);)+
@@ -2114,6 +2128,10 @@ macro_rules! mapped_tree {
             }
 
             fn mapped_monotone(&self, [map0, $($map),+]: [Option<MonotoneMap>; $arity]) -> Self {
+                self.mapped_monotone_impl([map0, $($map),+], true)
+            }
+
+            fn mapped_monotone_impl(&self, [map0, $($map),+]: [Option<MonotoneMap>; $arity], allow_eager: bool) -> Self {
                 let suffix = [$($map),+];
                 if suffix.iter().flatten().any(|mapping| mapping.run_count() == 0) {
                     return Self::new();
@@ -2134,7 +2152,7 @@ macro_rules! mapped_tree {
                     self.map.len_upper_bound().saturating_mul(EAGER_MAPPING_BUDGET)
                         .max(EAGER_MAPPING_BUDGET)
                 );
-                if suffix_unchanged || self.fits_materialized_budget(&mut budget) {
+                if allow_eager && (suffix_unchanged || self.fits_materialized_budget(&mut budget)) {
                     if let Some(map) = self.map.mapped_small_entries(map0.as_ref(), eager_limit, |value| {
                         let value = value.mapped_monotone(suffix.clone());
                         (suffix_unchanged || !value.is_empty()).then_some(value)
@@ -2151,7 +2169,11 @@ macro_rules! mapped_tree {
                 let work = suffix_mapping_work(&suffix);
                 Self {
                     map: self.map.mapped_entries_with_work(map0, work, move |value| {
-                        let value = value.mapped_monotone(suffix.clone());
+                        let value = if allow_eager {
+                            value.mapped_monotone(suffix.clone())
+                        } else {
+                            value.mapped_shared(suffix.clone())
+                        };
                         (!value.is_empty()).then_some(value)
                     }),
                 }

@@ -44,3 +44,5 @@ local rule firing revisited all preceding owners in an acyclic chain.
 
 Prepare arithmetic image blocks directly so compact namespaces can map
 shared trees without allocating an explicit tuple for every image.
+Preserve sparse relation sharing when these prepared maps request a
+deferred view instead of materializing small suffixes at every owner.
