@@ -6,8 +6,8 @@ use indoc::writedoc;
 use itertools::Itertools;
 
 use super::{
-    display_all_index_field_name, display_own_index_field_name, display_rel, display_type, indices,
-    RustGenCtx,
+    compact_functionality, display_all_index_field_name, display_own_index_field_name, display_rel,
+    display_type, indices, RustGenCtx,
 };
 use crate::algebra::signature::TypeId;
 use crate::flat_eqlog::{iter_flat_rels, FlatInRel, FlatRel, IndexSelection};
@@ -420,6 +420,16 @@ pub(super) fn methods<'a>(
                         indices.has_owner(owner).then(|| indices.rows(owner, {signature_slot}))
                     }}
 
+                    fn __compact_local_{rel_name}(&self, owner: u32) -> Option<&eqlog_runtime::__private::Table> {{
+                        let indices = self.__compact_indices_{name}.as_ref()?;
+                        indices.has_owner(owner).then(|| indices.local_rows(owner, {relation}))
+                    }}
+
+                    fn __compact_inherited_{rel_name}(&self, owner: u32) -> Option<&eqlog_runtime::__private::Table> {{
+                        let indices = self.__compact_indices_{name}.as_ref()?;
+                        indices.inherited_rows(owner, {signature_slot})
+                    }}
+
                     fn __compact_insert_{rel_name}(&mut self, retain_support: bool, {args}) -> Option<bool> {{
                         self.__compact_indices_{name}.as_ref()?;
                         let owner = el0.0;
@@ -437,6 +447,8 @@ pub(super) fn methods<'a>(
             }
             for (member_type, &typ) in members.iter().enumerate() {
                 let member = model_name(typ, ctx);
+                let preserve_before = compact_functionality::preserve(model, ctx, true);
+                let preserve_after = compact_functionality::preserve(model, ctx, false);
                 writedoc! {f, "
                     fn __compact_allocated_{member}(&mut self, owner: u32, _origin: u32) {{
                         self.__compact_ensure_{name}_owner(owner);
@@ -444,7 +456,9 @@ pub(super) fn methods<'a>(
                     }}
 
                     fn __compact_equate_{member}(&mut self, owner: u32, merge: eqlog_runtime::__private::MemberMerge) {{
+                        {preserve_before}
                         self.__compact_indices_{name}.as_mut().unwrap().rewrite(owner, {member_type}, merge.loser, merge.winner);
+                        {preserve_after}
                         self.__compact_publish_{name}(owner);
                     }}
                 "}?;

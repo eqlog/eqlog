@@ -190,6 +190,11 @@ impl CompactOwnerIndices {
         self.owner(owner).snapshot.rows(index)
     }
 
+    /// Identifies the parent rows whose proved properties survive this rebase.
+    pub fn inherited_rows(&self, owner: u32, index: usize) -> Option<&Table> {
+        self.owner(owner).source_rows.get(index)
+    }
+
     pub fn local_rows(&self, owner: u32, relation: u32) -> &Table {
         self.owner(owner).snapshot.local_rows(relation)
     }

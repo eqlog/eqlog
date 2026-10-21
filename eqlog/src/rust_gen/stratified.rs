@@ -5,9 +5,9 @@ use std::fmt::Display;
 
 use indoc::{formatdoc, writedoc};
 
-use super::compact_policy;
 use super::indices::{projection, source_relation};
 use super::native_indices;
+use super::{compact_functionality, compact_policy};
 use super::{
     display_all_index_field_name, display_index_field_name, display_index_type,
     display_module_env_struct_name, display_morphism_components, display_out_set_field_name,
@@ -487,6 +487,7 @@ impl<'s> Codegen<'s> {
         FmtFn(move |f| {
             for (s, stratum) in self.strata.iter().enumerate() {
                 let inputs = self.stratum_inputs(s);
+                let functionality = compact_functionality::stratum_function(stratum, modules, ctx);
                 let outputs: BTreeSet<_> = stratum
                     .groups
                     .iter()
@@ -559,6 +560,10 @@ impl<'s> Codegen<'s> {
                 }
                 if stratum.model.is_none() && !native.propagation.relations.is_empty() {
                     writeln!(f, "self.recompute_model_indices_stratum_{s}();")?;
+                }
+                if let Some(func) = functionality {
+                    let name = ctx.func_name(func).to_case(Case::Snake);
+                    writeln!(f, "if let Some(changed) = self.__compact_normalize_{name}(owners[0]) {{ return changed; }}")?;
                 }
                 if let Some(model) = stratum.model {
                     // Most owners have no new input on an incremental visit.
@@ -963,6 +968,10 @@ impl<'s> Codegen<'s> {
                 }
                 if stratum.model.is_none() && !compact_policy::models(ctx).is_empty() {
                     writeln!(f, "self.__prepare_total_member_policies();")?;
+                }
+                if let Some(func) = functionality {
+                    let name = ctx.func_name(func).to_case(Case::Snake);
+                    writeln!(f, "self.__compact_certify_{name}(owners[0]);")?;
                 }
                 writeln!(f, "true }}")?;
             }

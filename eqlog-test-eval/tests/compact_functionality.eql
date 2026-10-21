@@ -1,0 +1,26 @@
+type Key;
+model World {
+    type El;
+    func item(Key) -> El;
+    pred marked(El);
+    pred observed(El);
+    rule observe {
+        if marked(x);
+        then observed(x);
+    }
+}
+
+model ArgumentWorld {
+    type Arg;
+    func next(Arg) -> Arg;
+}
+
+model NullaryWorld {
+    type NullaryEl;
+    func point() -> NullaryEl;
+}
+
+model PairWorld {
+    type PairEl;
+    func pair(Key, Key) -> PairEl;
+}

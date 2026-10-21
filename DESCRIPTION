@@ -136,3 +136,12 @@ including functionality equations not yet applied.
 
 Check ambiguous morphism endpoints before registering compact lineage.
 Existing endpoint equations must not hide a cycle or discard a source.
+
+Avoid rescanning function rows already checked in an ancestor. Reuse
+proved functionality of compact parent snapshots when only the result
+column maps between owners. Check local support keys against
+the current graph during the normalizer stratum, while uncertified
+sources and member argument quotients keep the existing rule path.
+Advance a valid certificate through result-only equality rewrites;
+issue new certificates only after normalizer equations are applied.
+Keep ordinary user-rule histories and insertion behavior unchanged.
