@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
+use crate::age_view::AgeView;
 use crate::{
     PrefixTree0, PrefixTree1, PrefixTree2, PrefixTree3, PrefixTree4, PrefixTree5, PrefixTree6,
     PrefixTree7, PrefixTree8, PrefixTree9,
@@ -216,6 +217,47 @@ impl<T: SnapshotSet, Consumer: Ord> RelationVersions<T, Consumer> {
         consumer: Consumer,
     ) -> RelationView<T> {
         self.consume_view::<OLD, NEW, false>(consumer)
+    }
+
+    /// Rules can bind selective keys before asking which rows changed.
+    pub fn consume_lazy_required<const OLD: bool, const NEW: bool>(
+        &mut self,
+        consumer: Consumer,
+    ) -> RelationView<AgeView<T>> {
+        self.consume_lazy_view::<OLD, NEW, true>(consumer)
+    }
+
+    /// The checkpoint-only old view has the same contract as consume_membership.
+    pub fn consume_lazy_membership<const OLD: bool, const NEW: bool>(
+        &mut self,
+        consumer: Consumer,
+    ) -> RelationView<AgeView<T>> {
+        self.consume_lazy_view::<OLD, NEW, false>(consumer)
+    }
+
+    fn consume_lazy_view<const OLD: bool, const NEW: bool, const FILTER_OLD: bool>(
+        &mut self,
+        consumer: Consumer,
+    ) -> RelationView<AgeView<T>> {
+        let seen = self.seen.get(&consumer).unwrap_or(&self.empty);
+        let old = if !OLD {
+            AgeView::empty()
+        } else if FILTER_OLD {
+            AgeView::intersection(self.current.rows.clone(), seen.rows.clone())
+        } else {
+            AgeView::all(seen.rows.clone())
+        };
+        let new = if NEW {
+            AgeView::difference(self.current.rows.clone(), seen.rows.clone())
+        } else {
+            AgeView::empty()
+        };
+        if let Some(previous) = self.seen.insert(consumer, self.current.clone()) {
+            if Rc::strong_count(&previous) == 1 {
+                self.views.remove(&previous.id);
+            }
+        }
+        RelationView { old, new }
     }
 
     fn consume_view<const OLD: bool, const NEW: bool, const FILTER_OLD: bool>(

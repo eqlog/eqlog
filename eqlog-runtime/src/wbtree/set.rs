@@ -210,6 +210,15 @@ impl WBTreeSet {
         }
     }
 
+    pub(crate) fn len_up_to(&self, limit: usize) -> usize {
+        match &self.storage {
+            Storage::Empty => 0,
+            Storage::Singleton(_) => 1.min(limit),
+            Storage::Ranges(ranges) => ranges.len.min(limit),
+            Storage::Tree(map) => map.len_up_to(limit),
+        }
+    }
+
     pub(crate) fn iteration_work(&self, fuel: &mut Fuel) -> Result<u64, Error> {
         match &self.storage {
             Storage::Empty => {

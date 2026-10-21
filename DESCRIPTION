@@ -152,3 +152,7 @@ probes before selecting the alternative join order.
 
 Check reordered joins with private noncanonical witnesses and
 simultaneous new inputs.
+
+Defer old/new relation views until bound keys restrict their snapshots.
+Keep exact age membership and capped cardinality probes without building
+a complete inherited difference for every owner.

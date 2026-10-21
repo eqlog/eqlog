@@ -1,5 +1,6 @@
 //! Generated models need cross-crate access to the runtime's storage.
 
+pub use super::age_view::AgeView;
 pub use super::canonical_mask::CanonicalMask;
 pub use super::compact_owner_indices::{
     CompactIndexSpec, CompactOwnerIndices, CompactOwnerSnapshot, CompactRebaseStats,

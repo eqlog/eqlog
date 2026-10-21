@@ -53,6 +53,7 @@
 #[used]
 static TAG: &'static str = concat!("EQLOG_RUNTIME_TAG_", env!("OUT_DIR"));
 
+mod age_view;
 mod compact_owner_indices;
 mod data;
 mod indexed;
