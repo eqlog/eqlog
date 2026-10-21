@@ -1,5 +1,6 @@
 use std::cell::OnceCell;
 use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
 
 use crate::versions::SnapshotSet;
 use crate::wbtree::mapping::MonotoneMap;
@@ -2167,8 +2168,9 @@ macro_rules! mapped_tree {
                     };
                 }
                 let work = suffix_mapping_work(&suffix);
+                let columns = Some(Rc::from(suffix.clone()));
                 Self {
-                    map: self.map.mapped_entries_with_work(map0, work, move |value| {
+                    map: self.map.mapped_entries_with_columns(map0, work, columns, move |value| {
                         let value = if allow_eager {
                             value.mapped_monotone(suffix.clone())
                         } else {

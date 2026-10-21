@@ -53,3 +53,7 @@ without allocating every inherited image. Refresh shares source state
 and replays local constraints while historical snapshots remain stable.
 Keep old handles valid on explicit adoption, reserve sparse weights
 without filling virtual slots, and provide native member root masks.
+
+Identify equivalent prepared column transforms independently of their
+value caches. Shared source subtrees can then cancel during comparisons
+and set operations without forcing every inherited suffix.

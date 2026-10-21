@@ -118,6 +118,7 @@ struct MappingTransform<V: Clone> {
 
 struct ValueMapping<V: Clone> {
     apply: Box<dyn Fn(&V) -> Option<V>>,
+    columns: Option<Rc<[Option<MonotoneMap>]>>,
     cache: ValueCache<V>,
     source: Rc<Node<V>>,
     source_offset: u32,
@@ -126,6 +127,27 @@ struct ValueMapping<V: Clone> {
 }
 
 impl<V: Clone> ValueMapping<V> {
+    fn same_operation(&self, other: &Self) -> bool {
+        if std::ptr::eq(self, other) {
+            return true;
+        }
+        let Some(left) = &self.columns else {
+            return false;
+        };
+        let Some(right) = &other.columns else {
+            return false;
+        };
+        left.len() == right.len()
+            && left
+                .iter()
+                .zip(right.iter())
+                .all(|(left, right)| match (left, right) {
+                    (None, None) => true,
+                    (Some(left), Some(right)) => left.same_snapshot(right),
+                    (Some(_), None) | (None, Some(_)) => false,
+                })
+    }
+
     fn source_for_cache(source: &Rc<Node<V>>) -> (Rc<Node<V>>, u32) {
         let mut current = source;
         let mut offset = 0u32;
@@ -311,7 +333,7 @@ impl<V: Clone> MappingNode<V> {
         };
         let values = match (&self.transform.values, &other.transform.values) {
             (None, None) => true,
-            (Some(left), Some(right)) => std::ptr::eq(left, right),
+            (Some(left), Some(right)) => left.same_operation(right),
             (Some(_), None) | (None, Some(_)) => false,
         };
         keys && values
@@ -364,6 +386,32 @@ fn needs_double_rotation(inner: usize, outer: usize) -> bool {
 }
 
 impl<V: Clone> Node<V> {
+    fn same_view(mut left: &Rc<Self>, mut right: &Rc<Self>) -> bool {
+        loop {
+            if Rc::ptr_eq(left, right) {
+                return true;
+            }
+            match (left.as_ref(), right.as_ref()) {
+                (Self::Mapping(a), Self::Mapping(b)) => {
+                    if !a.same_mapping(b) {
+                        return false;
+                    }
+                    match (&a.child, &b.child) {
+                        (Some(a), Some(b)) => {
+                            left = a;
+                            right = b;
+                        }
+                        (None, None) => return true,
+                        (Some(_), None) | (None, Some(_)) => return false,
+                    }
+                }
+                (Self::Data(_), Self::Data(_))
+                | (Self::Data(_), Self::Mapping(_))
+                | (Self::Mapping(_), Self::Data(_)) => return false,
+            }
+        }
+    }
+
     fn all_data_values(node: &Option<Rc<Self>>, visit: &mut impl FnMut(&V) -> bool) -> bool {
         let Some(node) = node else {
             return true;
@@ -887,7 +935,7 @@ impl<V: Clone> Node<V> {
             (None, None) => None,
             (Some(t), None) | (None, Some(t)) => Some(t),
             (Some(l), Some(r)) => {
-                if reuse_shared && Rc::ptr_eq(&l, &r) {
+                if reuse_shared && Self::same_view(&l, &r) {
                     return Some(l);
                 }
                 let Some(l) = Self::expose(Some(l)) else {
@@ -962,6 +1010,9 @@ impl<V: Clone> Node<V> {
     {
         let left = left?;
         while let Some(node) = right {
+            if cancel_shared && Self::same_view(&left, node) {
+                return None;
+            }
             let Some(data) = Self::data(node) else {
                 right = None;
                 break;
@@ -1772,6 +1823,19 @@ impl<V: Clone> WBTreeMap<V> {
         work_factor: u64,
         values: impl Fn(&V) -> Option<V> + 'static,
     ) -> Self {
+        self.mapped_entries_with_columns(mapping, work_factor, None, values)
+    }
+
+    /// Equivalent column transforms can skip shared input subtrees even when
+    /// their source snapshots need separate value caches. A descriptor is valid
+    /// only when `values` performs exactly those column mappings on its input.
+    pub(crate) fn mapped_entries_with_columns(
+        &self,
+        mapping: Option<MonotoneMap>,
+        work_factor: u64,
+        columns: Option<Rc<[Option<MonotoneMap>]>>,
+        values: impl Fn(&V) -> Option<V> + 'static,
+    ) -> Self {
         if mapping
             .as_ref()
             .is_some_and(|mapping| mapping.run_count() == 0)
@@ -1785,6 +1849,7 @@ impl<V: Clone> WBTreeMap<V> {
                     keys: mapping,
                     values: Some(ValueMapping {
                         apply: Box::new(values),
+                        columns,
                         cache: ValueCache::new(),
                         source,
                         source_offset,

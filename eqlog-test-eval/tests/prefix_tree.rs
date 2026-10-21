@@ -941,3 +941,63 @@ fn prepared_shared_maps_defer_lookups_through_sparse_prefixes() {
         &source.mapped_shared([None, None, None])
     ));
 }
+
+#[test]
+fn equivalent_suffix_maps_compare_without_forcing_shared_values() {
+    let mut source = PrefixTree2::new();
+    for key in 0..512 {
+        source.insert([key, key]);
+    }
+    let forced = Rc::new(Cell::new(0));
+    let calls = forced.clone();
+    source.map = source.map.mapped_entries(None, move |value| {
+        calls.set(calls.get() + 1);
+        Some(value.clone())
+    });
+    let first = MonotoneMap::from_offsets([(0..=1023, 2048)]).unwrap();
+    let second = MonotoneMap::from_offsets([(0..=1023, 2048)]).unwrap();
+    let left = source.mapped_shared([None, Some(first)]);
+    let right = source.mapped_shared([None, Some(second)]);
+    assert!(left.is_subset(&right));
+    assert!(right.is_subset(&left));
+    assert!(left.difference(&right).is_empty());
+    assert!(left.union(&right).is_subset(&left));
+    assert_eq!(forced.get(), 0);
+
+    let changed = source.mapped_shared([
+        None,
+        Some(MonotoneMap::from_offsets([(0..=1023, 4096)]).unwrap()),
+    ]);
+    assert!(!left.is_subset(&changed));
+    assert!(!changed.is_subset(&left));
+    assert!(left.contains([7, 2055]));
+    assert!(changed.contains([7, 4103]));
+}
+
+#[test]
+fn suffix_map_identity_does_not_hide_source_edits_or_filtered_domains() {
+    let mut source = PrefixTree2::new();
+    for key in 0..128 {
+        source.insert([key, key]);
+    }
+    let mapping = MonotoneMap::from_offsets([(0..=255, 1024)]).unwrap();
+    let before = source.mapped_shared([None, Some(mapping.clone())]);
+    source.remove([5, 5]);
+    source.insert([5, 200]);
+    source.insert([128, 128]);
+    let after = source.mapped_shared([None, Some(mapping)]);
+    assert_eq!(
+        after.difference(&before).iter().collect::<Vec<_>>(),
+        vec![[5, 1224], [128, 1152]]
+    );
+    assert_eq!(
+        before.difference(&after).iter().collect::<Vec<_>>(),
+        vec![[5, 1029]]
+    );
+    let filtered = source.mapped_shared([
+        None,
+        Some(MonotoneMap::from_offsets([(0..=127, 1024)]).unwrap()),
+    ]);
+    assert!(filtered.is_subset(&after));
+    assert!(!after.is_subset(&filtered));
+}
