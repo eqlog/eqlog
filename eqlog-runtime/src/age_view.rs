@@ -93,9 +93,17 @@ impl AgeView<PrefixTree0> {
     pub fn row_count_up_to(&self, limit: usize) -> usize {
         self.key_count_up_to(limit)
     }
+
+    pub fn key_count_upper_bound(&self) -> usize {
+        usize::from(!self.is_empty())
+    }
 }
 
 impl PrefixTree0 {
+    pub fn key_count_upper_bound(&self) -> usize {
+        usize::from(!self.is_empty())
+    }
+
     pub fn key_count_up_to(&self, _limit: usize) -> usize {
         usize::from(!self.is_empty())
     }
@@ -106,6 +114,17 @@ impl PrefixTree0 {
 }
 
 impl AgeView<PrefixTree1> {
+    /// A lookup-cost estimate must not enumerate the delta being avoided.
+    pub fn key_count_upper_bound(&self) -> usize {
+        match self.kind {
+            Kind::All | Kind::Difference => self.current.key_count_upper_bound(),
+            Kind::Intersection => self
+                .current
+                .key_count_upper_bound()
+                .min(self.checkpoint.key_count_upper_bound()),
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
         match self.kind {
             Kind::All => self.current.is_empty(),
@@ -174,6 +193,10 @@ impl AgeView<PrefixTree1> {
 }
 
 impl PrefixTree1 {
+    pub fn key_count_upper_bound(&self) -> usize {
+        self.set.len_upper_bound()
+    }
+
     pub fn key_count_up_to(&self, limit: usize) -> usize {
         self.set.len_up_to(limit.saturating_add(1))
     }
@@ -186,6 +209,15 @@ impl PrefixTree1 {
 macro_rules! age_views {
     ($(($tree:ident, $child:ident, $arity:literal)),*) => {$(
         impl AgeView<$tree> {
+            /// A lookup-cost estimate must not enumerate the delta being avoided.
+            pub fn key_count_upper_bound(&self) -> usize {
+                match self.kind {
+                    Kind::All | Kind::Difference => self.current.key_count_upper_bound(),
+                    Kind::Intersection => self.current.key_count_upper_bound()
+                        .min(self.checkpoint.key_count_upper_bound()),
+                }
+            }
+
             pub fn is_empty(&self) -> bool {
                 match self.kind {
                     Kind::All | Kind::Intersection => self.iter_restrictions().next().is_none(),
@@ -252,6 +284,10 @@ macro_rules! age_views {
         }
 
         impl $tree {
+            pub fn key_count_upper_bound(&self) -> usize {
+                self.map.len_upper_bound()
+            }
+
             pub fn key_count_up_to(&self, limit: usize) -> usize {
                 self.map.len_up_to(limit.saturating_add(1))
             }
@@ -281,4 +317,36 @@ age_views!(
     (PrefixTree7, PrefixTree6, 7),
     (PrefixTree8, PrefixTree7, 8),
     (PrefixTree9, PrefixTree8, 9)
+);
+
+macro_rules! prepend {
+    ($(($tree:ident, $parent:ident)),*) => {$(
+        impl AgeView<$tree> {
+            /// Scoped inputs retain both histories when restoring owner columns.
+            pub fn prepend(self, key: u32) -> AgeView<$parent> {
+                let mut current = $parent::new();
+                current.insert_restriction(key, self.current);
+                let mut checkpoint = $parent::new();
+                checkpoint.insert_restriction(key, self.checkpoint);
+                AgeView {
+                    current,
+                    checkpoint,
+                    kind: self.kind,
+                    materialized: OnceCell::new(),
+                }
+            }
+        }
+    )*};
+}
+
+prepend!(
+    (PrefixTree0, PrefixTree1),
+    (PrefixTree1, PrefixTree2),
+    (PrefixTree2, PrefixTree3),
+    (PrefixTree3, PrefixTree4),
+    (PrefixTree4, PrefixTree5),
+    (PrefixTree5, PrefixTree6),
+    (PrefixTree6, PrefixTree7),
+    (PrefixTree7, PrefixTree8),
+    (PrefixTree8, PrefixTree9)
 );

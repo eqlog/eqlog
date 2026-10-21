@@ -7,6 +7,7 @@ use eqlog_runtime::{
 fn check0(view: &AgeView<PrefixTree0>, expected: &PrefixTree0) {
     assert_eq!(view.is_empty(), expected.is_empty());
     assert_eq!(view.contains([]), expected.contains([]));
+    assert!(view.key_count_upper_bound() >= expected.key_count_up_to(10));
     for limit in [0, 1, 5] {
         assert_eq!(view.key_count_up_to(limit), expected.key_count_up_to(limit));
         assert_eq!(view.row_count_up_to(limit), expected.row_count_up_to(limit));
@@ -15,6 +16,8 @@ fn check0(view: &AgeView<PrefixTree0>, expected: &PrefixTree0) {
 
 fn check1(view: &AgeView<PrefixTree1>, expected: &PrefixTree1) {
     assert_eq!(view.is_empty(), expected.is_empty());
+    assert!(view.key_count_upper_bound() >= expected.iter().count());
+    assert!(expected.key_count_upper_bound() >= expected.iter().count());
     let children: Vec<_> = view.iter_restrictions().collect();
     let keys: Vec<_> = children.iter().map(|(key, _)| *key).collect();
     assert_eq!(keys, expected.iter().map(|[key]| key).collect::<Vec<_>>());
@@ -42,6 +45,8 @@ macro_rules! checks {
     ($(($check:ident, $tree:ident, $child:ident, $check_child:ident)),*) => {$(
         fn $check(view: &AgeView<$tree>, expected: &$tree) {
             assert_eq!(view.is_empty(), expected.is_empty());
+            assert!(view.key_count_upper_bound() >= expected.iter_restrictions().count());
+            assert!(expected.key_count_upper_bound() >= expected.iter_restrictions().count());
             if expected.is_empty() {
                 assert_eq!(view.key_count_up_to(0), 0);
                 assert_eq!(view.row_count_up_to(0), 0);
@@ -298,4 +303,98 @@ fn lazy_membership_retains_alias_witnesses_without_relabeling_them() {
         .consume_lazy_required::<true, true>(3)
         .new
         .is_empty());
+}
+
+#[test]
+fn owner_prefix_wrapping_preserves_every_age_and_arity() {
+    macro_rules! check_prepend {
+        ($tree:ident, $parent:ident, $check:ident, $check_parent:ident, $arity:literal) => {{
+            let mut previous = $tree::new();
+            previous.insert([0; $arity]);
+            previous.insert([1; $arity]);
+            let mut current = previous.clone();
+            current.remove([1; $arity]);
+            current.insert([2; $arity]);
+            for (view, expected) in [
+                (AgeView::all(current.clone()), current.clone()),
+                (
+                    AgeView::difference(current.clone(), previous.clone()),
+                    current.difference(&previous),
+                ),
+                (
+                    AgeView::intersection(current.clone(), previous.clone()),
+                    current.intersection(&previous),
+                ),
+                (AgeView::all($tree::new()), $tree::new()),
+                (
+                    AgeView::difference(previous.clone(), previous.clone()),
+                    $tree::new(),
+                ),
+                (
+                    AgeView::intersection(current.clone(), $tree::new()),
+                    $tree::new(),
+                ),
+            ] {
+                let wrapped = view.prepend(41);
+                let mut prefixed = $parent::new();
+                prefixed.insert_restriction(41, expected.clone());
+                $check_parent(&wrapped, &prefixed);
+                $check(&wrapped.restrict(41), &expected);
+                assert!(wrapped.get(42).is_none());
+                assert!(wrapped.restrict(42).is_empty());
+            }
+        }};
+    }
+    check_prepend!(PrefixTree0, PrefixTree1, check0, check1, 0);
+    check_prepend!(PrefixTree1, PrefixTree2, check1, check2, 1);
+    check_prepend!(PrefixTree2, PrefixTree3, check2, check3, 2);
+    check_prepend!(PrefixTree3, PrefixTree4, check3, check4, 3);
+    check_prepend!(PrefixTree4, PrefixTree5, check4, check5, 4);
+    check_prepend!(PrefixTree5, PrefixTree6, check5, check6, 5);
+    check_prepend!(PrefixTree6, PrefixTree7, check6, check7, 6);
+    check_prepend!(PrefixTree7, PrefixTree8, check7, check8, 7);
+    check_prepend!(PrefixTree8, PrefixTree9, check8, check9, 8);
+    let new_fact = AgeView::difference(PrefixTree0(Some(())), PrefixTree0::new()).prepend(17);
+    assert!(new_fact.contains([17]));
+}
+
+#[test]
+fn multiple_owner_prefixes_keep_unmaterialized_source_bounds() {
+    let mut previous = PrefixTree1::new();
+    for key in 0..128 {
+        previous.insert([key]);
+    }
+    let mut current = previous.clone();
+    current.remove([7]);
+    current.insert([128]);
+    for (view, expected, bound) in [
+        (AgeView::all(current.clone()), current.clone(), 128),
+        (
+            AgeView::difference(current.clone(), previous.clone()),
+            current.difference(&previous),
+            128,
+        ),
+        (
+            AgeView::intersection(current.clone(), previous.clone()),
+            current.intersection(&previous),
+            128,
+        ),
+    ] {
+        let wrapped = view.prepend(41).prepend(73);
+        assert_eq!(wrapped.key_count_upper_bound(), 1);
+        let roundtrip = wrapped.restrict(73).restrict(41);
+        assert_eq!(roundtrip.key_count_upper_bound(), bound);
+        check1(&roundtrip, &expected);
+        assert!(wrapped.restrict(73).restrict(42).is_empty());
+        for key in 0..129 {
+            assert_eq!(wrapped.contains([73, 41, key]), expected.contains([key]));
+        }
+    }
+    let mut retained_empty = PrefixTree2::new();
+    retained_empty.insert([1, 2]);
+    retained_empty.get_mut(1).unwrap().remove([2]);
+    let wrapped = AgeView::all(retained_empty).prepend(41).prepend(73);
+    assert!(wrapped.is_empty());
+    assert!(wrapped.restrict(73).restrict(41).is_empty());
+    assert_eq!(wrapped.row_count_up_to(0), 0);
 }
