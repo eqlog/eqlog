@@ -44,3 +44,7 @@ Keep leaf iterator cursors within the element width and expose their
 construction to callers so short restrictions avoid unused state.
 Preserve the count tag in place during edits and avoid metadata work
 when replacing an existing value.
+
+Use exact tree metadata to specialize ordinary insertion and entry
+updates. Avoid deferred-node checks and increment unchanged subtree
+counts directly; conservative views retain exposure and size repair.

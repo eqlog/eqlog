@@ -606,12 +606,13 @@ impl<V: Clone> Node<V> {
     }
 
     /// Insert a key-value pair into the tree.
-    fn insert_simple(
+    fn insert_simple<const EXACT: bool>(
         node: Option<Rc<Node<V>>>,
         key: u32,
         value: V,
     ) -> (Option<Rc<Node<V>>>, Option<V>) {
-        let mut node = match Self::expose(node) {
+        let node = if EXACT { node } else { Self::expose(node) };
+        let mut node = match node {
             Some(n) => n,
             None => {
                 return (Some(Rc::new(Node::new(key, value))), None);
@@ -631,21 +632,28 @@ impl<V: Clone> Node<V> {
             }
             Ordering::Less => {
                 let old_left = data_node.left.take();
-                let (new_left, old_value) = Self::insert_simple(old_left, key, value);
+                let (new_left, old_value) = Self::insert_simple::<EXACT>(old_left, key, value);
                 data_node.left = new_left;
-                data_node.update_size_internal();
+                if !EXACT {
+                    data_node.update_size_internal();
+                }
                 old_value
             }
             Ordering::Greater => {
                 let old_right = data_node.right.take();
-                let (new_right, old_value) = Self::insert_simple(old_right, key, value);
+                let (new_right, old_value) = Self::insert_simple::<EXACT>(old_right, key, value);
                 data_node.right = new_right;
-                data_node.update_size_internal();
+                if !EXACT {
+                    data_node.update_size_internal();
+                }
                 old_value
             }
         };
 
         let balanced_node = if old_value.is_none() {
+            if EXACT {
+                data_node.size = data_node.size.checked_add(1).expect("tree size overflow");
+            }
             // Only balance if we actually inserted a new node
             Self::balance(node)
         } else {
@@ -655,7 +663,7 @@ impl<V: Clone> Node<V> {
         (Some(balanced_node), old_value)
     }
 
-    fn update_entry<F, G, R>(
+    fn update_entry<const EXACT: bool, F, G, R>(
         node: Option<Rc<Self>>,
         key: u32,
         default: F,
@@ -665,7 +673,8 @@ impl<V: Clone> Node<V> {
         F: FnOnce() -> V,
         G: FnOnce(&mut V) -> R,
     {
-        let mut node = match Self::expose(node) {
+        let node = if EXACT { node } else { Self::expose(node) };
+        let mut node = match node {
             Some(node) => node,
             None => {
                 let mut value = default();
@@ -681,19 +690,23 @@ impl<V: Clone> Node<V> {
             Ordering::Equal => (false, update(&mut data.value)),
             Ordering::Less => {
                 let (child, inserted, result) =
-                    Self::update_entry(data.left.take(), key, default, update);
+                    Self::update_entry::<EXACT, _, _, _>(data.left.take(), key, default, update);
                 data.left = Some(child);
                 (inserted, result)
             }
             Ordering::Greater => {
                 let (child, inserted, result) =
-                    Self::update_entry(data.right.take(), key, default, update);
+                    Self::update_entry::<EXACT, _, _, _>(data.right.take(), key, default, update);
                 data.right = Some(child);
                 (inserted, result)
             }
         };
         if inserted {
-            data.update_size_internal();
+            if EXACT {
+                data.size = data.size.checked_add(1).expect("tree size overflow");
+            } else {
+                data.update_size_internal();
+            }
             node = Self::balance(node);
         }
         (node, inserted, result)
@@ -1224,7 +1237,12 @@ impl<V: Clone> WBTreeMap<V> {
     }
 
     pub fn insert(&mut self, key: u32, value: V) -> Option<V> {
-        let (new_root, old_value) = Node::insert_simple(self.root.take(), key, value);
+        // An exact count certifies that no deferred nodes need exposure on this path.
+        let (new_root, old_value) = if self.len.is_exact() {
+            Node::insert_simple::<true>(self.root.take(), key, value)
+        } else {
+            Node::insert_simple::<false>(self.root.take(), key, value)
+        };
         self.root = new_root;
         self.len.inserted(old_value.is_none());
         old_value
@@ -1235,7 +1253,11 @@ impl<V: Clone> WBTreeMap<V> {
         F: FnOnce() -> V,
         G: FnOnce(&mut V) -> R,
     {
-        let (root, inserted, result) = Node::update_entry(self.root.take(), key, default, update);
+        let (root, inserted, result) = if self.len.is_exact() {
+            Node::update_entry::<true, _, _, _>(self.root.take(), key, default, update)
+        } else {
+            Node::update_entry::<false, _, _, _>(self.root.take(), key, default, update)
+        };
         self.root = Some(root);
         self.len.inserted(inserted);
         result
