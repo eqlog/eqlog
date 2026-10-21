@@ -1,5 +1,6 @@
 use super::{Error, Fuel};
-use crate::wbtree::map::WBTreeMap;
+use crate::versions::SnapshotSet;
+use crate::wbtree::map::{Entry, WBTreeMap};
 use crate::{
     PrefixTree0, PrefixTree1, PrefixTree2, PrefixTree3, PrefixTree4, PrefixTree5, PrefixTree6,
     PrefixTree7, PrefixTree8, PrefixTree9,
@@ -122,6 +123,54 @@ macro_rules! table {
                     Rows::Long { arity, rows } => {
                         assert_eq!(tuple.len(), *arity);
                         rows.entry(tuple[0]).or_insert_with(|| Self::new(*arity - 1)).insert(&tuple[1..])
+                    }
+                }
+            }
+
+            /// Persistent removal preserves snapshots held by other callers.
+            pub fn remove(&mut self, tuple: &[u32]) -> bool {
+                match &mut self.0 {
+                    $(Rows::$variant(tree) => tree.remove(tuple.try_into().expect("tuple arity")),)*
+                    Rows::Long { arity, rows } => {
+                        assert_eq!(tuple.len(), *arity);
+                        match rows.entry(tuple[0]) {
+                            Entry::Occupied(mut entry) => {
+                                let tree = entry.get_mut();
+                                let removed = tree.remove(&tuple[1..]);
+                                if tree.is_empty() {
+                                    entry.remove();
+                                }
+                                removed
+                            }
+                            Entry::Vacant(_) => false,
+                        }
+                    }
+                }
+            }
+
+            pub fn is_empty(&self) -> bool {
+                match &self.0 {
+                    $(Rows::$variant(tree) => tree.is_empty(),)*
+                    Rows::Long { arity: _, rows } => rows.is_empty(),
+                }
+            }
+
+            /// Shared roots let callers recognize unchanged snapshots without enumeration.
+            pub fn shares_storage_with(&self, other: &Self) -> bool {
+                if self.arity() != other.arity() {
+                    return false;
+                }
+                match &self.0 {
+                    $(Rows::$variant(tree) => {
+                        let other = $tree::try_from(other).expect("equal arities");
+                        tree.shares_root(&other)
+                    },)*
+                    Rows::Long { arity: _, rows } => {
+                        let other_rows = match &other.0 {
+                            $(Rows::$variant(_) => unreachable!("equal arities"),)*
+                            Rows::Long { arity: _, rows } => rows,
+                        };
+                        rows.shares_root(other_rows)
                     }
                 }
             }

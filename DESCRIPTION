@@ -63,3 +63,7 @@ paths once per changed member column, while earlier stable column maps
 retain the existing attribution of simultaneous changes. Sparse
 nonmonotone head maps use direct source lookups instead of scanning
 unrelated rows.
+
+Track origin-row incidence so equality rewrites visit only the losing
+representative's rows. Parent relation snapshots
+and historical owner states keep sharing unaffected structure.
