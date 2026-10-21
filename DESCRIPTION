@@ -52,3 +52,8 @@ counts directly; conservative views retain exposure and size repair.
 Keep the overflow-safe balance check inline so ordinary updates avoid
 rotation state and reuse subtree sizes already known by their callers.
 Resolve heavy pivots and conservative sizes in a separate helper.
+
+Consume incoming suffix trees during restriction insertion so fresh
+propagated pivots remain uniquely owned through recursive merges.
+Preserve borrowed merge callers and the singleton update path while
+moving whole incoming roots into empty destinations.

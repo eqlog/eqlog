@@ -410,7 +410,7 @@ impl PrefixTree2 {
         }
 
         self.map.update_entry(el0, PrefixTree1::new, |suffix| {
-            suffix.union_assign(&restriction);
+            suffix.union_assign_owned(restriction);
         });
     }
 }
@@ -421,7 +421,7 @@ impl PrefixTree3 {
         }
 
         self.map.update_entry(el0, PrefixTree2::new, |suffix| {
-            suffix.union_assign(&restriction);
+            suffix.union_assign_owned(restriction);
         });
     }
 }
@@ -432,7 +432,7 @@ impl PrefixTree4 {
         }
 
         self.map.update_entry(el0, PrefixTree3::new, |suffix| {
-            suffix.union_assign(&restriction);
+            suffix.union_assign_owned(restriction);
         });
     }
 }
@@ -443,7 +443,7 @@ impl PrefixTree5 {
         }
 
         self.map.update_entry(el0, PrefixTree4::new, |suffix| {
-            suffix.union_assign(&restriction);
+            suffix.union_assign_owned(restriction);
         });
     }
 }
@@ -454,7 +454,7 @@ impl PrefixTree6 {
         }
 
         self.map.update_entry(el0, PrefixTree5::new, |suffix| {
-            suffix.union_assign(&restriction);
+            suffix.union_assign_owned(restriction);
         });
     }
 }
@@ -465,7 +465,7 @@ impl PrefixTree7 {
         }
 
         self.map.update_entry(el0, PrefixTree6::new, |suffix| {
-            suffix.union_assign(&restriction);
+            suffix.union_assign_owned(restriction);
         });
     }
 }
@@ -476,7 +476,7 @@ impl PrefixTree8 {
         }
 
         self.map.update_entry(el0, PrefixTree7::new, |suffix| {
-            suffix.union_assign(&restriction);
+            suffix.union_assign_owned(restriction);
         });
     }
 }
@@ -487,7 +487,7 @@ impl PrefixTree9 {
         }
 
         self.map.update_entry(el0, PrefixTree8::new, |suffix| {
-            suffix.union_assign(&restriction);
+            suffix.union_assign_owned(restriction);
         });
     }
 }
@@ -1219,12 +1219,53 @@ impl PrefixTree1 {
         self.set.union_assign(&other.set);
     }
 
+    fn union_assign_owned(&mut self, other: Self) {
+        self.set.union_assign(&other.set);
+    }
+
     pub fn union(&self, other: &Self) -> Self {
         Self {
             set: self.set.union(&other.set),
         }
     }
 }
+
+macro_rules! union_assign_owned {
+    ($tree:ident, $child:ident) => {
+        impl $tree {
+            fn union_assign_owned(&mut self, other: Self) {
+                if self.map.shares_root(&other.map) || other.map.len_upper_bound() == 0 {
+                    return;
+                }
+                if self.map.len_upper_bound() == 0 {
+                    *self = other;
+                    return;
+                }
+                if other.map.len_upper_bound() == 1 {
+                    if let Some((key, value)) = other.map.into_single_entry() {
+                        self.map.update_entry(key, $child::new, |suffix| {
+                            suffix.union_assign_owned(value);
+                        });
+                    }
+                    return;
+                }
+                self.map
+                    .union_assign_owned_shared(other.map, |_key, mut left, right| {
+                        left.union_assign_owned(right);
+                        left
+                    });
+            }
+        }
+    };
+}
+
+union_assign_owned!(PrefixTree2, PrefixTree1);
+union_assign_owned!(PrefixTree3, PrefixTree2);
+union_assign_owned!(PrefixTree4, PrefixTree3);
+union_assign_owned!(PrefixTree5, PrefixTree4);
+union_assign_owned!(PrefixTree6, PrefixTree5);
+union_assign_owned!(PrefixTree7, PrefixTree6);
+union_assign_owned!(PrefixTree8, PrefixTree7);
 
 macro_rules! union_assign {
     ($tree:ident, $child:ident) => {

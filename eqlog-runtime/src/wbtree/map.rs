@@ -1564,6 +1564,37 @@ impl<V: Clone> WBTreeMap<V> {
         self.root = root;
     }
 
+    // Consuming the incoming snapshot keeps fresh pivots unique during the merge.
+    pub(crate) fn union_assign_owned_shared<F>(&mut self, other: Self, mut merge: F)
+    where
+        F: FnMut(&u32, V, V) -> V,
+    {
+        if other.root.is_none() || self.shares_root(&other) {
+            return;
+        }
+        if self.root.is_none() {
+            *self = other;
+            return;
+        }
+        let root = Node::union(self.root.take(), other.root, &mut merge, true);
+        self.len = SizeBound::combined(Node::size(&root), self.len, other.len);
+        self.root = root;
+    }
+
+    pub(crate) fn into_single_entry(self) -> Option<(u32, V)> {
+        assert!(
+            self.len.upper_bound() <= 1,
+            "single-entry extraction needs a bounded tree"
+        );
+        // Iterator filtering keeps excluded lazy entries from forcing their values.
+        if self.has_mapping() {
+            return self.iter().next().map(|(key, value)| (key, value.clone()));
+        }
+        let root = self.root?;
+        let data = Node::unwrap_to_data(root);
+        Some((data.key, data.value))
+    }
+
     fn union_impl<F>(&self, other: &Self, mut merge: F, reuse_shared: bool) -> Self
     where
         F: FnMut(&u32, V, V) -> V,
@@ -2107,6 +2138,66 @@ mod tests {
 
     use rand::rngs::StdRng;
     use rand::{RngExt, SeedableRng};
+
+    struct CloneProbe {
+        value: u32,
+        clones: Rc<Cell<usize>>,
+    }
+
+    impl Clone for CloneProbe {
+        fn clone(&self) -> Self {
+            self.clones.set(self.clones.get() + 1);
+            Self {
+                value: self.value,
+                clones: self.clones.clone(),
+            }
+        }
+    }
+
+    #[test]
+    fn owned_union_moves_unique_pivots_without_cloning_values() {
+        let clones = Rc::new(Cell::new(0));
+        let mut left = WBTreeMap::new();
+        let mut right = WBTreeMap::new();
+        for key in 0..64 {
+            let tree = if key % 2 == 0 { &mut left } else { &mut right };
+            tree.insert(
+                key,
+                CloneProbe {
+                    value: key,
+                    clones: clones.clone(),
+                },
+            );
+        }
+        assert_eq!(clones.get(), 0);
+        left.union_assign_owned_shared(right, |_key, left, _right| left);
+        assert_eq!(clones.get(), 0);
+        assert_eq!(
+            left.iter()
+                .map(|(key, value)| (key, value.value))
+                .collect::<Vec<_>>(),
+            (0..64).map(|key| (key, key)).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn consuming_a_filtered_singleton_does_not_force_its_value() {
+        let calls = Rc::new(Cell::new(0));
+        let counter = calls.clone();
+        let mut source = WBTreeMap::new();
+        source.insert(1, 7);
+        let mapped = source.mapped_entries(None, move |value| {
+            counter.set(counter.get() + 1);
+            Some(*value)
+        });
+        let mut relation = PrefixTree2::new();
+        relation.insert([0, 10]);
+        let excluded = mapped.mapped(relation);
+        assert_eq!(excluded.into_single_entry(), None);
+        assert_eq!(calls.get(), 0);
+        assert_eq!(mapped.into_single_entry(), Some((1, 7)));
+        assert_eq!(calls.get(), 1);
+    }
 
     #[test]
     fn size_bound_edits_preserve_count_and_exactness_at_boundaries() {
