@@ -120,6 +120,37 @@ fn entry_mappings_defer_values_and_cache_them_across_snapshots() {
 }
 
 #[test]
+fn materialized_pivots_prove_nonempty_without_forcing_mapped_children() {
+    let mut source = WBTreeMap::new();
+    for key in 0..128 {
+        source.insert(key, key);
+    }
+    let calls = Rc::new(Cell::new(0));
+    let transform_calls = calls.clone();
+    let mut mapped = source.mapped_entries(None, move |value| {
+        transform_calls.set(transform_calls.get() + 1);
+        Some(value + 1)
+    });
+    let snapshot = mapped.clone();
+    mapped.insert(256, 257);
+    calls.set(0);
+
+    assert!(!mapped.is_empty());
+    assert_eq!(calls.get(), 0);
+    assert_eq!(mapped.iter().count(), 129);
+    assert_eq!(snapshot.iter().count(), 128);
+    assert!(snapshot.get(&256).is_none());
+    assert_eq!(mapped.get(&256), Some(&257));
+
+    let mut filtered = source.mapped_entries(None, |_| None);
+    assert!(filtered.is_empty());
+    filtered.insert(256, 257);
+    assert!(!filtered.is_empty());
+    filtered.remove(&256);
+    assert!(filtered.is_empty());
+}
+
+#[test]
 fn layered_entry_mappings_compose_keys_values_and_filters() {
     let mut base = WBTreeMap::new();
     let mut first = PrefixTree2::new();

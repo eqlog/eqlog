@@ -1302,7 +1302,12 @@ impl<V: Clone> WBTreeMap<V> {
 
     pub fn is_empty(&self) -> bool {
         if self.has_mapping() {
-            self.iter().next().is_none()
+            match self.root.as_deref() {
+                None => true,
+                // A materialized pivot survives regardless of its mapped children.
+                Some(Node::Data(_)) => false,
+                Some(Node::Mapping(_)) => self.iter().next().is_none(),
+            }
         } else {
             self.len.upper_bound() == 0
         }

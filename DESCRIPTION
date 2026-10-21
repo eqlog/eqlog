@@ -58,3 +58,6 @@ still share a transformed child, and filtering keeps snapshots intact.
 
 Keep mapped seeking outside the ordinary iterator's inlining budget so
 full tuple consumption retains a compact range traversal loop.
+
+Use a surviving materialized pivot to answer emptiness checks without
+forcing deferred descendants after a path edit.
