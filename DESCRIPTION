@@ -51,8 +51,10 @@ evaluating their callbacks, so a small parent cannot force a large
 suffix emptiness check. Keep point adapters outside range iterator
 storage so ordinary leaf traversal needs less stack space.
 
-Reuse owned destination suffixes during bulk unions. When non-injective
-head maps collide, extend the existing child directly instead of
-building
-and discarding an intermediate suffix; multiple images still share one
-transformed child, and filtered images preserve untouched snapshots.
+Reuse owned destination suffixes during bulk unions. For colliding
+non-injective head images, extend the existing child directly instead
+of building and discarding an intermediate suffix. Multiple images
+still share a transformed child, and filtering keeps snapshots intact.
+
+Keep mapped seeking outside the ordinary iterator's inlining budget so
+full tuple consumption retains a compact range traversal loop.

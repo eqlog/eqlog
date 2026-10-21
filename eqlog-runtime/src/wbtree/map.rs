@@ -1842,15 +1842,10 @@ impl<'a, V: Clone> Iter<'a, V> {
         }
         Some(key)
     }
-}
 
-impl<'a, V: Clone> Iterator for Iter<'a, V> {
-    type Item = (u32, &'a V);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.current_mappings.is_none() {
-            return self.next_plain();
-        }
+    // Keep domain seeking out of the ordinary iterator's inlining budget.
+    #[inline(never)]
+    fn next_mapped(&mut self) -> Option<(u32, &'a V)> {
         let mut seek = false;
         loop {
             let data = if seek {
@@ -1873,6 +1868,19 @@ impl<'a, V: Clone> Iterator for Iter<'a, V> {
             } else {
                 seek = true;
             }
+        }
+    }
+}
+
+impl<'a, V: Clone> Iterator for Iter<'a, V> {
+    type Item = (u32, &'a V);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current_mappings.is_none() {
+            self.next_plain()
+        } else {
+            self.next_mapped()
         }
     }
 }
