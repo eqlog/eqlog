@@ -133,3 +133,6 @@ after an unrelated local relation update.
 Preserve suspended definitions when compact storage is materialized.
 Check cumulative endpoint quotients before accepting owner changes,
 including functionality equations not yet applied.
+
+Check ambiguous morphism endpoints before registering compact lineage.
+Existing endpoint equations must not hide a cycle or discard a source.

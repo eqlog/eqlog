@@ -267,3 +267,53 @@ fn total_cycle_checks_include_pending_endpoint_equalities() {
     assert!(model.are_equal_world(first, second));
     assert!(!model.are_equal_world(first, last));
 }
+
+#[test]
+fn total_registration_rejects_cyclic_ambiguous_endpoints() {
+    let mut model = CompactMemberViews::new();
+    model.enable_compact_world();
+    let source = model.new_world();
+    let target = model.new_world();
+    let member = model.new_el(source);
+    let morphism = model.new_world_mor();
+    model.insert_world_mor_dom(morphism, source);
+    model.insert_world_mor_dom(morphism, target);
+    model.insert_world_mor_cod(morphism, target);
+    let rejected = match catch_unwind(AssertUnwindSafe(|| {
+        model.inherit_total_world_members(morphism)
+    })) {
+        Ok(_) => false,
+        Err(_) => true,
+    };
+    assert!(rejected);
+    assert!(!model.are_equal_world(source, target));
+    assert_eq!(model.el_mor_app(morphism, member), None);
+    model.close();
+    assert!(model.are_equal_world(source, target));
+    assert_eq!(model.el_mor_app(morphism, member), None);
+}
+
+#[test]
+fn acyclic_ambiguous_endpoints_keep_both_sources_live() {
+    let mut model = CompactMemberViews::new();
+    model.enable_compact_world();
+    let source = model.new_world();
+    let other = model.new_world();
+    let target = model.new_world();
+    let first = model.new_el(source);
+    let second = model.new_el(other);
+    let morphism = model.new_world_mor();
+    model.insert_world_mor_dom(morphism, source);
+    model.insert_world_mor_dom(morphism, other);
+    model.insert_world_mor_cod(morphism, target);
+    model.inherit_total_world_members(morphism);
+    model.close();
+    assert!(model.are_equal_world(source, other));
+    let first_image = model.el_mor_app(morphism, first).unwrap();
+    let second_image = model.el_mor_app(morphism, second).unwrap();
+    assert!(!model.are_equal_el(first_image, second_image));
+    let late = model.new_el(other);
+    model.close();
+    let late_image = model.el_mor_app(morphism, late).unwrap();
+    assert!(model.world_member_el(target, late_image));
+}
