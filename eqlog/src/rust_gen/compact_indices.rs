@@ -6,11 +6,11 @@ use indoc::writedoc;
 use itertools::Itertools;
 
 use super::{
-    compact_functionality, display_all_index_field_name, display_own_index_field_name, display_rel,
-    display_type, indices, RustGenCtx,
+    display_all_index_field_name, display_own_index_field_name, display_rel, display_type, indices,
+    RustGenCtx,
 };
 use crate::algebra::signature::TypeId;
-use crate::flat_eqlog::{iter_flat_rels, FlatInRel, FlatRel, IndexSelection};
+use crate::flat_eqlog::{iter_flat_rels, FlatInRel, FlatRel, IndexSelection, IndexSpec};
 use crate::fmt_util::FmtFn;
 use crate::ram::NativeIndexPreparation;
 
@@ -41,6 +41,43 @@ pub(super) fn owner(rel: &FlatInRel, ctx: &RustGenCtx<'_>) -> Option<TypeId> {
             .parent_model_type(ctx.signature())
             .filter(|&model| supports_model(model, ctx)),
     }
+}
+
+pub(super) fn inherited_slot(
+    rel: &FlatInRel,
+    index: &IndexSpec,
+    model: TypeId,
+    ctx: &RustGenCtx<'_>,
+    selection: &IndexSelection,
+) -> Option<usize> {
+    if owner(rel, ctx) != Some(model) || index.order.first() != Some(&0) {
+        return None;
+    }
+    let relation = match rel {
+        FlatInRel::Rel(rel) => *rel,
+        FlatInRel::RelWithDiagonals { .. } | FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => {
+            return None;
+        }
+    };
+    let mut order = index.order.to_vec();
+    order.sort_unstable();
+    if !order
+        .iter()
+        .copied()
+        .eq(0..rel.arity(ctx.signature()).len())
+    {
+        return None;
+    }
+    let order = index.order[1..]
+        .iter()
+        .map(|&column| column - 1)
+        .collect_vec();
+    layouts(model, ctx, selection)
+        .into_iter()
+        .find(|layout| layout.rel == relation)?
+        .slots
+        .into_iter()
+        .find_map(|(candidate, slot)| (candidate == order).then_some(slot))
 }
 
 struct RelationLayout {
@@ -420,16 +457,6 @@ pub(super) fn methods<'a>(
                         indices.has_owner(owner).then(|| indices.rows(owner, {signature_slot}))
                     }}
 
-                    fn __compact_local_{rel_name}(&self, owner: u32) -> Option<&eqlog_runtime::__private::Table> {{
-                        let indices = self.__compact_indices_{name}.as_ref()?;
-                        indices.has_owner(owner).then(|| indices.local_rows(owner, {relation}))
-                    }}
-
-                    fn __compact_inherited_{rel_name}(&self, owner: u32) -> Option<&eqlog_runtime::__private::Table> {{
-                        let indices = self.__compact_indices_{name}.as_ref()?;
-                        indices.inherited_rows(owner, {signature_slot})
-                    }}
-
                     fn __compact_insert_{rel_name}(&mut self, retain_support: bool, {args}) -> Option<bool> {{
                         self.__compact_indices_{name}.as_ref()?;
                         let owner = el0.0;
@@ -447,8 +474,6 @@ pub(super) fn methods<'a>(
             }
             for (member_type, &typ) in members.iter().enumerate() {
                 let member = model_name(typ, ctx);
-                let preserve_before = compact_functionality::preserve(model, ctx, true);
-                let preserve_after = compact_functionality::preserve(model, ctx, false);
                 writedoc! {f, "
                     fn __compact_allocated_{member}(&mut self, owner: u32, _origin: u32) {{
                         self.__compact_ensure_{name}_owner(owner);
@@ -456,9 +481,7 @@ pub(super) fn methods<'a>(
                     }}
 
                     fn __compact_equate_{member}(&mut self, owner: u32, merge: eqlog_runtime::__private::MemberMerge) {{
-                        {preserve_before}
                         self.__compact_indices_{name}.as_mut().unwrap().rewrite(owner, {member_type}, merge.loser, merge.winner);
-                        {preserve_after}
                         self.__compact_publish_{name}(owner);
                     }}
                 "}?;

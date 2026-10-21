@@ -1,6 +1,5 @@
 mod compact_api;
 mod compact_eligibility;
-mod compact_functionality;
 mod compact_indices;
 mod compact_members;
 mod compact_policy;
@@ -1965,6 +1964,26 @@ fn display_model_delta_impl<'a>(
         let apply_def_fn = display_model_delta_apply_def_fn(outputs, ctx);
         write!(f, "{}", apply_def_fn).unwrap();
 
+        let pending = outputs
+            .iter()
+            .filter_map(|output| match output {
+                FlatOutRel::FuncDomain(_) => {
+                    let field = display_out_set_field_name(output, ctx);
+                    Some(format!("!self.{field}.is_empty()"))
+                }
+                FlatOutRel::Rel(_) | FlatOutRel::Equality(_) => None,
+            })
+            .join(" || ");
+        let pending = if pending.is_empty() {
+            "false"
+        } else {
+            &pending
+        };
+        writedoc! {f, "
+            #[allow(dead_code)]
+            fn has_pending_func_defs(&self) -> bool {{ {pending} }}
+        "}?;
+
         writedoc! {f, "
             }}
         "}
@@ -2991,7 +3010,6 @@ fn display_new_fn<'a>(
         writeln!(f, "__pending_delta: ModelDelta::new(),")?;
         write!(f, "{}", native_indices::init(native_plans))?;
         write!(f, "{}", compact_indices::fields(ctx, true))?;
-        write!(f, "{}", compact_functionality::fields(ctx, true))?;
         write!(f, "{}", compact_policy::fields(ctx, true))?;
         write!(f, "{}", transport::fields(ctx, index_selection, true))?;
         write!(f, "{}", codegen.init(index_selection, ctx))?;
@@ -3413,7 +3431,6 @@ fn display_theory_struct<'a>(
         let scheduler_fields = FmtFn(move |f| {
             write!(f, "{}", compact_policy::fields(ctx, false))?;
             write!(f, "{}", compact_indices::fields(ctx, false))?;
-            write!(f, "{}", compact_functionality::fields(ctx, false))?;
             write!(f, "{}", transport::fields(ctx, index_selection, false))?;
             write!(f, "{}", native_indices::fields(native_plans, ctx))?;
             write!(f, "{}", codegen.fields(ctx, index_selection))?;
@@ -3450,7 +3467,6 @@ fn display_theory_impl<'a>(
         write!(f, "{}", compact_api::methods(program, index_selection, ctx))?;
         write!(f, "{}", compact_policy::methods(ctx))?;
         write!(f, "{}", compact_views::methods(ctx))?;
-        write!(f, "{}", compact_functionality::methods(ctx))?;
         match ctx.model_mode() {
             ModelMode::Native => {
                 write!(f, "{}", indices::accessors(index_selection, ctx))?;
