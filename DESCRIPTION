@@ -19,6 +19,8 @@ transported fact; recognize predicate uniqueness and function rules
 through the same logical constraint. Keep one coherent incoming source
 as the old matching baseline so joins across parents still fire.
 Union relation rows and reverse incidence without expanding ancestry.
+Reuse proved overlap when every adopted source revision is unchanged,
+while still rejecting target equations before taking that shortcut.
 
 Register pending edges before transport to avoid repeated walks through
 future descendants, and refresh descendants in topological order.

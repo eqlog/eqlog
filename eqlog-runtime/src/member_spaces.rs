@@ -506,7 +506,26 @@ impl MemberSpaces {
     }
 
     pub fn can_refresh(&self, owner: u32) -> bool {
-        self.owners[&owner].additional.is_empty() || self.shared_inputs(owner, None).is_some()
+        let space = &self.owners[&owner];
+        if space.additional.is_empty() {
+            return true;
+        }
+        let inherited = space
+            .inherited
+            .as_ref()
+            .expect("shared owner has a primary source");
+        // Source revisions retain the overlap proof, but target equations still
+        // require materialization even when every source is unchanged.
+        if space.local_equations.is_empty()
+            && inherited.revision == self.owners[&inherited.source].snapshot.revision
+            && space
+                .additional
+                .iter()
+                .all(|input| input.revision == self.owners[&input.source].snapshot.revision)
+        {
+            return true;
+        }
+        self.shared_inputs(owner, None).is_some()
     }
 
     pub fn inherit_shared_members(&mut self, source: u32, target: u32) -> bool {

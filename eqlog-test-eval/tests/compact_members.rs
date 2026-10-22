@@ -473,6 +473,34 @@ fn shared_refresh_rechecks_late_origins_and_changed_partitions() {
 }
 
 #[test]
+fn shared_refresh_rechecks_equations_in_each_participating_owner() {
+    for equated_owner in [1, 2, 3] {
+        let mut spaces = MemberSpaces::new();
+        for owner in 0..4 {
+            spaces.create_owner(owner);
+        }
+        let a = spaces.allocate(0);
+        let b = spaces.allocate(0);
+        for member in [a, b] {
+            let origin = spaces.snapshot(0).origin(member).unwrap();
+            spaces.witness(0, origin);
+        }
+        spaces.inherit_total_members(0, 1);
+        spaces.inherit_total_members(0, 2);
+        spaces.inherit_total_members(1, 3);
+        spaces.inherit_shared_members(2, 3);
+        assert!(spaces.can_refresh(3));
+        assert!(!spaces.refresh(3));
+
+        let members = spaces.iter(equated_owner).collect::<Vec<_>>();
+        assert_eq!(members.len(), 2);
+        assert!(spaces.equate(equated_owner, members[0], members[1]));
+        assert!(!spaces.can_refresh(3));
+        assert_ne!(spaces.root(a), spaces.root(b));
+    }
+}
+
+#[test]
 fn descendant_refresh_visits_skewed_diamonds_in_topological_order() {
     let mut spaces = MemberSpaces::new();
     for owner in 0..5 {
