@@ -1,6 +1,7 @@
 mod compact_api;
 mod compact_eligibility;
 mod compact_indices;
+mod compact_keys;
 mod compact_members;
 mod compact_policy;
 mod compact_views;

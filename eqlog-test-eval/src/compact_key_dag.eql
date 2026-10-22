@@ -1,0 +1,30 @@
+type Key;
+
+model World {
+    type El;
+    pred named(El, Key);
+    pred conditional(Key, El);
+    pred enabled();
+    pred left(El);
+    pred right(El);
+    pred joined(El);
+
+    rule uniqueness {
+        if named(first, key);
+        if named(second, key);
+        then first = second;
+    }
+
+    rule conditional_uniqueness {
+        if enabled();
+        if conditional(key, first);
+        if conditional(key, second);
+        then first = second;
+    }
+
+    rule join {
+        if left(value);
+        if right(value);
+        then joined(value);
+    }
+}
