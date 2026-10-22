@@ -1442,6 +1442,10 @@ fn display_equate_elements<'a>(
                 return Ok(());
             }
             writedoc! {f, "
+                if self.__compact_members_{type_snake}.as_ref().is_some_and(|spaces|
+                    spaces.has_multiple_sources() && spaces.root(lhs.0) != spaces.root(rhs.0)) {{
+                    self.__materialize_compact_members();
+                }}
                 if let Some(spaces) = &mut self.__compact_members_{type_snake} {{
                     let owner = spaces.owner(lhs.0).expect(\"left member has an enclosing compact model\");
                     assert!(spaces.owner(rhs.0) == Some(owner), \"member equality requires one enclosing model\");
@@ -3489,7 +3493,7 @@ fn display_theory_impl<'a>(
                 write!(
                     f,
                     "{}",
-                    compact_indices::methods(ctx, index_selection, &program.native_indices)
+                    compact_indices::methods(ctx, index_selection, program)
                 )?;
                 write!(f, "{}", codegen.methods(ram_modules, ctx, index_selection))?;
                 write!(f, "{}", codegen.close(ctx, index_selection))?;

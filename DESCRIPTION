@@ -13,6 +13,21 @@ individual inherited images. Virtual handle blocks preserve distinct
 public identities for each owner. Rebase from parent snapshots and
 replay only local support and quotient changes.
 
+Share intersections at DAG merges when invariant-key equality rules
+prove their images equal. Carry persistent witnesses for the same
+transported fact; recognize predicate uniqueness and function rules
+through the same logical constraint. Keep one coherent incoming source
+as the old matching baseline so joins across parents still fire.
+Union relation rows and reverse incidence without expanding ancestry.
+
+Register pending edges before transport to avoid repeated walks through
+future descendants, and refresh descendants in topological order.
+Keep each incoming source's adopted domain so late source growth cannot
+expose another path's image before its own transport. Preserve the
+first incoming map immediately; adopt additional maps during closure.
+Materialize unproved overlaps and changing multi-source quotients before
+mutation, retaining ordinary semantics for bare members and equations.
+
 Index equality work by the losing representative's incidence bucket.
 Unary relations already provide that index through their row set.
 Preserve unchanged relation roots so publication and consumer histories

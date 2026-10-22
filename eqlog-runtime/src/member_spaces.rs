@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use crate::wbtree::map::WBTreeMap;
 use crate::wbtree::set::WBTreeSet;
@@ -109,6 +109,7 @@ pub struct MemberSnapshot {
     domain: WBTreeSet,
     canonical_domain: WBTreeSet,
     partition: Partition,
+    witnesses: WBTreeMap<u64>,
     by_origin: WBTreeMap<MemberBlock>,
     by_handle: WBTreeMap<MemberBlock>,
     extent: u64,
@@ -122,6 +123,7 @@ impl MemberSnapshot {
             domain: WBTreeSet::new(),
             canonical_domain: WBTreeSet::new(),
             partition: Partition::new(),
+            witnesses: WBTreeMap::new(),
             by_origin: WBTreeMap::new(),
             by_handle: WBTreeMap::new(),
             extent: 0,
@@ -202,6 +204,13 @@ impl MemberSnapshot {
 struct Inheritance {
     source: u32,
     revision: u64,
+    domain: WBTreeSet,
+}
+
+struct SharedMembers {
+    domain: WBTreeSet,
+    witnesses: WBTreeMap<u64>,
+    extent: u64,
 }
 
 struct MemberSpace {
@@ -209,9 +218,11 @@ struct MemberSpace {
     local_domain: WBTreeSet,
     local_equations: Vec<(u32, u32)>,
     local_merges: Vec<MemberMerge>,
+    local_witnesses: WBTreeMap<u64>,
     inherited: Option<Inheritance>,
+    additional: Vec<Inheritance>,
     component: u32,
-    children: Vec<u32>,
+    children: BTreeSet<u32>,
 }
 
 /// Storage counts distinguish reserved numeric IDs from allocated member data.
@@ -225,7 +236,7 @@ pub struct MemberSpaceStats {
     pub replayed_equations: u64,
 }
 
-/// Compact total inheritance with one incoming lineage per owner.
+/// Compact total inheritance with shared, proved intersections at DAG merges.
 ///
 /// The explicit partial-map evaluator does not use this opt-in representation.
 /// Refresh shares the source domain and union-by-rank partition, then reapplies
@@ -234,6 +245,9 @@ pub struct MemberSpaceStats {
 /// number of local waves. A partition lookup uses at most logarithmically many
 /// persistent tree lookups. Virtual handle reservations still consume the u32
 /// address space, including holes, without allocating one entry per handle.
+/// Additional sources require equal witness tokens on overlapping origins and
+/// empty partitions. The evaluator materializes unsupported quotients before
+/// mutation; unrelated paths never acquire equality merely from shared origins.
 pub struct MemberSpaces {
     owners: BTreeMap<u32, MemberSpace>,
     blocks: BTreeMap<u32, MemberBlock>,
@@ -243,6 +257,8 @@ pub struct MemberSpaces {
     adoption_bound: u64,
     owned_origins: u64,
     replayed_equations: u64,
+    next_witness: u64,
+    multiple_sources: bool,
 }
 
 impl Default for MemberSpaces {
@@ -272,6 +288,8 @@ impl MemberSpaces {
             adoption_bound: bound,
             owned_origins: 0,
             replayed_equations: 0,
+            next_witness: 0,
+            multiple_sources: false,
         }
     }
 
@@ -320,9 +338,11 @@ impl MemberSpaces {
                 local_domain: WBTreeSet::new(),
                 local_equations: Vec::new(),
                 local_merges: Vec::new(),
+                local_witnesses: WBTreeMap::new(),
                 inherited: None,
+                additional: Vec::new(),
                 component,
-                children: Vec::new(),
+                children: BTreeSet::new(),
             },
         );
     }
@@ -386,6 +406,123 @@ impl MemberSpaces {
             .inherited
             .as_ref()
             .map(|inherited| inherited.revision)
+    }
+
+    /// A witness identifies one fact whose invariant key determines this member.
+    /// Copying its token proves equality between images of that fact, without
+    /// assuming that unrelated paths through a model graph commute.
+    pub fn witness(&mut self, owner: u32, origin: u32) {
+        let space = self.owners.get_mut(&owner).expect("unknown owner");
+        assert!(space.snapshot.domain.contains(&origin), "unknown origin");
+        if space.snapshot.witnesses.get(&origin).is_some() {
+            return;
+        }
+        let token = self.next_witness;
+        self.next_witness = token.checked_add(1).expect("witness space exhausted");
+        space.local_witnesses.insert(origin, token);
+        space.snapshot.witnesses.insert(origin, token);
+        space.snapshot.revision += 1;
+    }
+
+    pub fn has_multiple_sources(&self) -> bool {
+        self.multiple_sources
+    }
+
+    /// Pending edges participate in cycle checks before their images exist.
+    pub fn register_edge(&mut self, source: u32, target: u32) {
+        assert!(self.has_owner(source), "unknown source owner");
+        assert!(self.has_owner(target), "unknown target owner");
+        if self.owners[&source].children.contains(&target) {
+            return;
+        }
+        let source_component = self.components.root(self.owners[&source].component);
+        let target_component = self.components.root(self.owners[&target].component);
+        if source_component == target_component {
+            let mut pending = vec![target];
+            let mut visited = BTreeSet::new();
+            while let Some(owner) = pending.pop() {
+                assert_ne!(owner, source, "cyclic member inheritance");
+                if visited.insert(owner) {
+                    pending.extend(self.owners[&owner].children.iter().copied());
+                }
+            }
+        } else {
+            self.components
+                .union_roots_into(target_component, source_component);
+        }
+        self.owners
+            .get_mut(&source)
+            .unwrap()
+            .children
+            .insert(target);
+    }
+
+    fn shared_inputs(&self, target: u32, additional: Option<u32>) -> Option<SharedMembers> {
+        let space = &self.owners[&target];
+        let source = space.inherited.as_ref()?.source;
+        let source = &self.owners[&source].snapshot;
+        if !source.partition.parents.is_empty() || !space.local_equations.is_empty() {
+            return None;
+        }
+        let mut result = SharedMembers {
+            domain: source.domain.clone(),
+            witnesses: source.witnesses.clone(),
+            extent: source.extent,
+        };
+        let sources = space
+            .additional
+            .iter()
+            .map(|input| input.source)
+            .chain(additional);
+        for source in sources {
+            let next = &self.owners[&source].snapshot;
+            if !next.partition.parents.is_empty() {
+                return None;
+            }
+            let overlap = result.domain.intersection(&next.domain);
+            let proved = result.witnesses.intersection_shared(
+                &next.witnesses,
+                |_, left, right| (left == right).then_some(*left),
+                |left, right| left == right,
+            );
+            if overlap.len() != proved.len() {
+                return None;
+            }
+            result.domain = result.domain.union(&next.domain);
+            result.witnesses = result
+                .witnesses
+                .union_shared(&next.witnesses, |_, left, _| left);
+            result.extent = result.extent.max(next.extent);
+        }
+        Some(result)
+    }
+
+    /// Unsupported overlap must be materialized before changing any snapshot.
+    pub fn can_share_inheritance(&self, source: u32, target: u32) -> bool {
+        self.shared_inputs(target, Some(source)).is_some()
+    }
+
+    pub fn can_refresh(&self, owner: u32) -> bool {
+        self.owners[&owner].additional.is_empty() || self.shared_inputs(owner, None).is_some()
+    }
+
+    pub fn inherit_shared_members(&mut self, source: u32, target: u32) -> bool {
+        assert!(
+            self.can_share_inheritance(source, target),
+            "unproved shared images"
+        );
+        self.register_edge(source, target);
+        self.owners
+            .get_mut(&target)
+            .unwrap()
+            .additional
+            .push(Inheritance {
+                source,
+                revision: u64::MAX,
+                domain: WBTreeSet::new(),
+            });
+        self.multiple_sources = true;
+        self.refresh(target)
     }
 
     pub fn get_snapshot(&self, owner: u32) -> Option<&MemberSnapshot> {
@@ -465,18 +602,11 @@ impl MemberSpaces {
             );
             return;
         }
-        let source_component = self.components.root(self.owners[&source].component);
-        let target_component = self.components.root(self.owners[&target].component);
-        assert!(
-            source_component != target_component,
-            "cyclic member inheritance"
-        );
-        self.components
-            .union_roots_into(target_component, source_component);
-        self.owners.get_mut(&source).unwrap().children.push(target);
+        self.register_edge(source, target);
         self.owners.get_mut(&target).unwrap().inherited = Some(Inheritance {
             source,
             revision: u64::MAX,
+            domain: WBTreeSet::new(),
         });
     }
 
@@ -501,15 +631,37 @@ impl MemberSpaces {
             return None;
         };
         let source = &self.owners[&inherited.source].snapshot;
-        if inherited.revision == source.revision {
+        if inherited.revision == source.revision
+            && space
+                .additional
+                .iter()
+                .all(|input| input.revision == self.owners[&input.source].snapshot.revision)
+        {
             return None;
         }
-        let mut domain = source.domain.clone();
-        let mut canonical_domain = source.canonical_domain.clone();
+        let (mut domain, mut canonical_domain, witnesses, extent) = if space.additional.is_empty() {
+            (
+                source.domain.clone(),
+                source.canonical_domain.clone(),
+                source.witnesses.clone(),
+                source.extent,
+            )
+        } else {
+            let combined = self
+                .shared_inputs(owner, None)
+                .expect("unproved shared images");
+            (
+                combined.domain.clone(),
+                combined.domain,
+                combined.witnesses,
+                combined.extent,
+            )
+        };
         for origin in space.local_domain.iter() {
             domain.insert(origin);
             canonical_domain.insert(origin);
         }
+        let witnesses = witnesses.union_shared(&space.local_witnesses, |_, left, _| left);
         let mut partition = source.partition.clone();
         let mut local_merges = Vec::new();
         for &(lhs, rhs) in &space.local_equations {
@@ -521,28 +673,63 @@ impl MemberSpaces {
         }
         self.replayed_equations += u64::try_from(space.local_equations.len()).unwrap();
         let revision = source.revision;
-        let extent = source.extent;
         let source = source.clone();
+        let additional_snapshots: Vec<_> = space
+            .additional
+            .iter()
+            .map(|input| {
+                let snapshot = &self.owners[&input.source].snapshot;
+                (snapshot.revision, snapshot.domain.clone())
+            })
+            .collect();
         self.reserve(owner, extent);
         let space = self.owners.get_mut(&owner).unwrap();
         space.snapshot.domain = domain;
         space.snapshot.canonical_domain = canonical_domain;
         space.snapshot.partition = partition;
+        space.snapshot.witnesses = witnesses;
         space.local_merges = local_merges;
         space.snapshot.revision += 1;
         space.inherited.as_mut().unwrap().revision = revision;
+        space.inherited.as_mut().unwrap().domain = source.domain.clone();
+        for (input, (revision, domain)) in space.additional.iter_mut().zip(additional_snapshots) {
+            input.revision = revision;
+            input.domain = domain;
+        }
         Some(source)
     }
 
     pub fn refresh_descendants(&mut self, owner: u32) -> usize {
         let children = &self.owners.get(&owner).expect("unknown owner").children;
-        let mut pending: VecDeque<_> = children.iter().copied().collect();
+        let mut discover: Vec<_> = children.iter().copied().collect();
+        let mut incoming = BTreeMap::<u32, usize>::new();
+        while let Some(next) = discover.pop() {
+            if incoming.insert(next, 0).is_none() {
+                discover.extend(self.owners[&next].children.iter().copied());
+            }
+        }
+        let descendants: Vec<_> = incoming.keys().copied().collect();
+        for source in descendants {
+            for child in &self.owners[&source].children {
+                *incoming.get_mut(child).unwrap() += 1;
+            }
+        }
+        let mut pending: VecDeque<_> = incoming
+            .iter()
+            .filter_map(|(&owner, &count)| (count == 0).then_some(owner))
+            .collect();
         let mut changed = 0;
         while let Some(next) = pending.pop_front() {
             if self.refresh(next) {
                 changed += 1;
             }
-            pending.extend(self.owners[&next].children.iter().copied());
+            for child in &self.owners[&next].children {
+                let count = incoming.get_mut(child).unwrap();
+                *count -= 1;
+                if *count == 0 {
+                    pending.push_back(*child);
+                }
+            }
         }
         changed
     }
@@ -600,8 +787,15 @@ impl MemberSpaces {
     /// A noncanonical source handle still denotes its original mapped member.
     pub fn image(&self, source_handle: u32, target: u32) -> Option<u32> {
         let target = self.owners.get(&target)?;
-        let source = target.inherited.as_ref()?.source;
+        let source = self.owner(source_handle)?;
         let origin = self.owners[&source].snapshot.origin(source_handle)?;
+        let inherited = target.inherited.as_ref()?;
+        if !std::iter::once(inherited)
+            .chain(&target.additional)
+            .any(|input| input.source == source && input.domain.contains(&origin))
+        {
+            return None;
+        }
         let image = target.snapshot.handle(origin)?;
         target.snapshot.root(image)
     }

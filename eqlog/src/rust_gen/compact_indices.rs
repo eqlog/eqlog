@@ -6,13 +6,13 @@ use indoc::writedoc;
 use itertools::Itertools;
 
 use super::{
-    display_all_index_field_name, display_own_index_field_name, display_rel, display_type, indices,
-    RustGenCtx,
+    compact_keys, display_all_index_field_name, display_own_index_field_name, display_rel,
+    display_type, indices, RustGenCtx,
 };
 use crate::algebra::signature::TypeId;
 use crate::flat_eqlog::{iter_flat_rels, FlatInRel, FlatRel, IndexSelection, IndexSpec};
 use crate::fmt_util::FmtFn;
-use crate::ram::NativeIndexPreparation;
+use crate::ram::RamProgram;
 
 pub(super) fn members(model: TypeId, ctx: &RustGenCtx<'_>) -> Vec<TypeId> {
     ctx.signature()
@@ -152,6 +152,15 @@ fn model_name(model: TypeId, ctx: &RustGenCtx<'_>) -> String {
     display_type(model, ctx).to_string().to_case(Case::Snake)
 }
 
+fn witnesses(rel: FlatRel, keys: &[(FlatRel, usize)], owner: &str, ctx: &RustGenCtx<'_>) -> String {
+    let arity = rel.arity(ctx.signature());
+    keys.iter().filter(|&&(candidate, _)| candidate == rel).map(|&(_, column)| {
+        let member = model_name(arity[column], ctx);
+        let column = column - 1;
+        format!("self.__compact_members_{member}.as_mut().unwrap().witness({owner}, row[{column}]);")
+    }).join("\n")
+}
+
 pub(super) fn fields<'a>(ctx: &'a RustGenCtx<'a>, initialize: bool) -> impl Display + 'a {
     FmtFn(move |f| {
         for (_, ids) in ctx.signature().iter_model_decls() {
@@ -163,9 +172,11 @@ pub(super) fn fields<'a>(ctx: &'a RustGenCtx<'a>, initialize: bool) -> impl Disp
             if initialize {
                 writeln!(f, "__compact_indices_{name}: None,")?;
                 writeln!(f, "__total_members_{name}: BTreeSet::new(),")?;
+                writeln!(f, "__compact_adopted_{name}: BTreeSet::new(),")?;
             } else {
                 writeln!(f, "__compact_indices_{name}: Option<eqlog_runtime::__private::CompactOwnerIndices>,")?;
                 writeln!(f, "__total_members_{name}: BTreeSet<u32>,")?;
+                writeln!(f, "__compact_adopted_{name}: BTreeSet<u32>,")?;
             }
             for typ in members(model, ctx) {
                 let name = model_name(typ, ctx);
@@ -227,13 +238,13 @@ pub(super) fn graph_guard<'a>(model: TypeId, ctx: &'a RustGenCtx<'a>) -> impl Di
             writedoc! {f, "
                 if self.__compact_indices_{name}.is_some() {{
                     let mut changed = false;
-                    for component in components.iter() {{
+                    'compact: for component in components.iter() {{
                         assert!(component.internal.is_empty(), \"compact inheritance is acyclic\");
                         for morphism in &component.outgoing {{
-                            changed |= self.__compact_transport_{name}(morphism.dom, morphism.cod).unwrap();
+                            if let Some(next) = self.__compact_transport_{name}(morphism.morph, morphism.dom, morphism.cod) {{ changed |= next; }} else {{ break 'compact; }}
                         }}
                     }}
-                    return changed;
+                    if self.__compact_indices_{name}.is_some() {{ return changed; }}
                 }}
             "}?;
         }
@@ -249,9 +260,9 @@ pub(super) fn component_guard<'a>(model: TypeId, ctx: &'a RustGenCtx<'a>) -> imp
                 if self.__compact_indices_{name}.is_some() {{
                     let mut changed = false;
                     for morphism in morphisms {{
-                        changed |= self.__compact_transport_{name}(morphism.dom, morphism.cod).unwrap();
+                        if let Some(next) = self.__compact_transport_{name}(morphism.morph, morphism.dom, morphism.cod) {{ changed |= next; }} else {{ break; }}
                     }}
-                    return changed;
+                    if self.__compact_indices_{name}.is_some() {{ return changed; }}
                 }}
             "}?;
         }
@@ -264,7 +275,7 @@ pub(super) fn selected_guard<'a>(model: TypeId, ctx: &'a RustGenCtx<'a>) -> impl
         if supports_model(model, ctx) {
             let name = model_name(model, ctx);
             writedoc! {f, "
-                if let Some(changed) = self.__compact_transport_{name}(*dom, *cod) {{
+                if let Some(changed) = self.__compact_transport_{name}(*morph, *dom, *cod) {{
                     inserted.fill(changed);
                     return changed;
                 }}
@@ -277,9 +288,10 @@ pub(super) fn selected_guard<'a>(model: TypeId, ctx: &'a RustGenCtx<'a>) -> impl
 pub(super) fn methods<'a>(
     ctx: &'a RustGenCtx<'a>,
     selection: &'a IndexSelection,
-    native: &'a [NativeIndexPreparation],
+    program: &'a RamProgram,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
+        let native = &program.native_indices;
         for (_, ids) in ctx.signature().iter_model_decls() {
             let model = ids.type_;
             if !supports_model(model, ctx) {
@@ -288,6 +300,7 @@ pub(super) fn methods<'a>(
             let name = model_name(model, ctx);
             let members = members(model, ctx);
             let layouts = layouts(model, ctx, selection);
+            let keys = compact_keys::invariant_keys(model, program, ctx);
             let owner_leading = layouts.iter().all(|layout| {
                 selection
                     .current_primary(&FlatInRel::Rel(layout.rel))
@@ -359,7 +372,8 @@ pub(super) fn methods<'a>(
                     }
                 }).join(", ");
                 let relation = layout.relation;
-                writeln!(f, "for [{args}] in self.{own}.iter() {{ indices.record(el0, {relation}, &[{row}], true); }}")?;
+                let witnesses = witnesses(layout.rel, &keys, "el0", ctx);
+                writeln!(f, "for [{args}] in self.{own}.iter() {{ let row = [{row}]; indices.record(el0, {relation}, &row, true); {witnesses} }}")?;
             }
             writedoc! {f, "
                     self.__compact_indices_{name} = Some(indices);
@@ -451,6 +465,7 @@ pub(super) fn methods<'a>(
                 }).join(", ");
                 let signature_slot = layout.signature_slot();
                 let invalidate = indices::invalidate(layout.rel, selection, ctx);
+                let witnesses = witnesses(layout.rel, &keys, "owner", ctx);
                 writedoc! {f, "
                     fn __compact_primary_{rel_name}(&self, owner: u32) -> Option<&eqlog_runtime::__private::Table> {{
                         let indices = self.__compact_indices_{name}.as_ref()?;
@@ -463,6 +478,7 @@ pub(super) fn methods<'a>(
                         self.__compact_ensure_{name}_owner(owner);
                         let row = [{row}];
                         let result = self.__compact_indices_{name}.as_mut().unwrap().record(owner, {relation}, &row, retain_support);
+                        {witnesses}
                         if result.inserted || result.retained_support {{ self.__closed = false; }}
                         if result.inserted {{
                             self.__compact_publish_{name}(owner);
@@ -488,7 +504,7 @@ pub(super) fn methods<'a>(
             }
             let refresh_members = members.iter().enumerate().map(|(member_type, &typ)| {
                 let member = model_name(typ, ctx);
-                format!("let spaces = self.__compact_members_{member}.as_mut().unwrap(); assert_eq!(spaces.source(target), Some(source), \"compact transport requires declared total inheritance\"); force |= spaces.refresh_with_merges(target).is_some(); let source_{member_type} = spaces.snapshot(source); merges.extend(spaces.local_merges(target).iter().map(|merge| ({member_type}, merge.loser, merge.winner))); self.__sync_compact_{member}_weights();")
+                format!("let spaces = self.__compact_members_{member}.as_mut().unwrap(); force |= spaces.refresh_with_merges(target).is_some(); let source_{member_type} = spaces.snapshot(source); merges.extend(spaces.local_merges(target).iter().map(|merge| ({member_type}, merge.loser, merge.winner))); self.__sync_compact_{member}_weights();")
             }).join("\n");
             let normalize = members.iter().enumerate().map(|(member_type, _)| {
                 format!("{member_type} => source_{member_type}.root_origin(origin).unwrap_or(origin),")
@@ -497,6 +513,26 @@ pub(super) fn methods<'a>(
                 let member = model_name(typ, ctx);
                 format!("force |= self.__compact_members_{member}.as_mut().unwrap().inherit_total_members_with_merges(source, target).is_some(); self.__sync_compact_{member}_weights();")
             }).join("\n");
+            let register = members.iter().map(|&typ| {
+                let member = model_name(typ, ctx);
+                format!("self.__compact_members_{member}.as_mut().unwrap().register_edge(source, target);")
+            }).join("\n");
+            let share = members.iter().map(|&typ| {
+                let member = model_name(typ, ctx);
+                format!("self.__compact_members_{member}.as_mut().unwrap().inherit_shared_members(source, target); self.__sync_compact_{member}_weights();")
+            }).join("\n");
+            let can_share = members.iter().map(|&typ| {
+                let member = model_name(typ, ctx);
+                format!("self.__compact_members_{member}.as_ref().unwrap().can_share_inheritance(source, target)")
+            }).join(" && ");
+            let can_refresh = members
+                .iter()
+                .map(|&typ| {
+                    let member = model_name(typ, ctx);
+                    format!("self.__compact_members_{member}.as_ref().unwrap().can_refresh(target)")
+                })
+                .join(" && ");
+            let first_member = model_name(members[0], ctx);
             writedoc! {f, "
                 fn __compact_refresh_{name}_impl(&mut self, source: u32, target: u32, mut force: bool) -> bool {{
                     self.__compact_ensure_{name}_owner(source);
@@ -517,8 +553,39 @@ pub(super) fn methods<'a>(
                     self.__compact_refresh_{name}_impl(source, target, force)
                 }}
 
-                fn __compact_transport_{name}(&mut self, source: u32, target: u32) -> Option<bool> {{
+                fn __compact_register_{name}(&mut self, morphism: u32, source: u32, target: u32) -> bool {{
+                    self.__compact_ensure_{name}_owner(source);
+                    self.__compact_ensure_{name}_owner(target);
+                    {register}
+                    self.__compact_indices_{name}.as_mut().unwrap().register_edge(source, target);
+                    if self.__compact_members_{first_member}.as_ref().unwrap().source(target).is_none() {{
+                        let changed = self.__compact_inherit_{name}(source, target);
+                        self.__compact_adopted_{name}.insert(morphism);
+                        return changed;
+                    }}
+                    false
+                }}
+
+                fn __compact_transport_{name}(&mut self, morphism: u32, source: u32, target: u32) -> Option<bool> {{
                     self.__compact_indices_{name}.as_ref()?;
+                    if !self.__compact_adopted_{name}.contains(&morphism) {{
+                        if !({can_share}) {{
+                            self.__materialize_compact_members();
+                            self.__complete_total_members();
+                            return None;
+                        }}
+                        {share}
+                        self.__compact_indices_{name}.as_mut().unwrap().inherit_shared(target, source);
+                        self.__compact_adopted_{name}.insert(morphism);
+                        self.__compact_publish_{name}(target);
+                        return Some(true);
+                    }}
+                    if !({can_refresh}) {{
+                        self.__materialize_compact_members();
+                        self.__complete_total_members();
+                        return None;
+                    }}
+                    let source = self.__compact_members_{first_member}.as_ref().unwrap().source(target).unwrap();
                     Some(self.__compact_refresh_{name}_impl(source, target, false))
                 }}
             "}?;

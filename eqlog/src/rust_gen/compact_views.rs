@@ -106,7 +106,7 @@ pub(super) fn methods<'a>(ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
                             -> Option<impl '_ + Iterator<Item = [u32; {arity}]>>
                         {{
                             let spaces = self.__compact_members_{member_name}.as_ref()?;
-                            Some(self.__total_members_{owner_name}.iter().flat_map(move |&morphism| {{
+                            Some(self.__compact_adopted_{owner_name}.iter().flat_map(move |&morphism| {{
                                 let source = self.{owner_name}_mor_dom({mor_camel}(morphism))
                                     .expect(\"total morphisms have a source\").0;
                                 let target = self.{owner_name}_mor_cod({mor_camel}(morphism))
@@ -186,7 +186,9 @@ pub(super) fn lookup<'a>(
                 writedoc! {f, "
                     if let Some(spaces) = &self.__compact_members_{member_name} {{
                         let morphism = self.root_{owner_name}_mor(arg0);
-                        if self.__total_members_{owner_name}.contains(&morphism.0) {{
+                        if self.__compact_adopted_{owner_name}.contains(&morphism.0) {{
+                            let source = self.{owner_name}_mor_dom(morphism)?;
+                            if spaces.owner(arg1.0) != Some(source.0) {{ return None; }}
                             let target = self.{owner_name}_mor_cod(morphism)?;
                             return spaces.image(spaces.root(arg1.0)?, target.0).map({member_camel});
                         }}

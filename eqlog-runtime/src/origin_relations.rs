@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::rc::Rc;
 
 use crate::table::Table;
@@ -22,7 +23,7 @@ pub struct OriginRelation {
     member_types: Rc<[Option<u32>]>,
     rows: Table,
     incidence: WBTreeMap<WBTreeMap<Table>>,
-    len: usize,
+    len: Cell<Option<usize>>,
 }
 
 fn references<'a>(
@@ -50,7 +51,7 @@ impl OriginRelation {
             member_types: Rc::from(member_types),
             rows: Table::new(member_types.len()),
             incidence: WBTreeMap::new(),
-            len: 0,
+            len: Cell::new(Some(0)),
         }
     }
 
@@ -63,11 +64,37 @@ impl OriginRelation {
     }
 
     pub fn len(&self) -> usize {
-        self.len
+        if let Some(len) = self.len.get() {
+            return len;
+        }
+        let len = self.rows.iter().count();
+        self.len.set(Some(len));
+        len
     }
 
     pub fn is_empty(&self) -> bool {
-        self.len == 0
+        self.rows.is_empty()
+    }
+
+    /// Shared ancestry remains shared in both rows and reverse incidence.
+    pub fn union(&self, other: &Self) -> Self {
+        assert_eq!(self.member_types, other.member_types);
+        if self.shares_storage_with(other) || other.is_empty() {
+            return self.clone();
+        }
+        if self.is_empty() {
+            return other.clone();
+        }
+        Self {
+            member_types: self.member_types.clone(),
+            rows: self.rows.union(&other.rows),
+            incidence: self
+                .incidence
+                .union_shared(&other.incidence, |_, left, right| {
+                    left.union_shared(&right, |_, left, right| left.union(&right))
+                }),
+            len: Cell::new(None),
+        }
     }
 
     pub fn contains(&self, tuple: &[u32]) -> bool {
@@ -80,7 +107,7 @@ impl OriginRelation {
             return false;
         }
         assert!(self.rows.insert(tuple));
-        self.len += 1;
+        self.len.set(self.len.get().map(|len| len + 1));
         let arity = self.member_types.len();
         // Unary rows already provide the complete member incidence index.
         if arity == 1 {
@@ -100,7 +127,7 @@ impl OriginRelation {
 
     fn remove(&mut self, tuple: &[u32]) {
         assert!(self.rows.remove(tuple), "incidence refers to an absent row");
-        self.len -= 1;
+        self.len.set(self.len.get().map(|len| len - 1));
         for (member_type, origin) in references(&self.member_types, tuple) {
             let origins = self
                 .incidence
@@ -139,7 +166,7 @@ impl OriginRelation {
             if self.member_types[0] != Some(member_type) || !self.rows.remove(&[loser]) {
                 return OriginRewriteStats::default();
             }
-            self.len -= 1;
+            self.len.set(self.len.get().map(|len| len - 1));
             let inserted = self.insert(&[winner]);
             return OriginRewriteStats {
                 visited_rows: 1,

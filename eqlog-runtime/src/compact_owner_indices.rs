@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::origin_relations::{OriginRelation, OriginRewriteStats};
 use crate::table::Table;
@@ -80,6 +80,9 @@ struct Owner {
     snapshot: CompactOwnerSnapshot,
     source_rows: Vec<Table>,
     component: u32,
+    children: BTreeSet<u32>,
+    additional: Vec<(u32, u64)>,
+    shared_rows: Vec<Vec<Table>>,
 }
 
 /// Separate local support lets a new parent snapshot replace inherited history.
@@ -170,6 +173,9 @@ impl CompactOwnerIndices {
                 },
                 source_rows: Vec::new(),
                 component,
+                children: BTreeSet::new(),
+                additional: Vec::new(),
+                shared_rows: Vec::new(),
             },
         );
     }
@@ -191,6 +197,8 @@ impl CompactOwnerIndices {
     }
 
     /// Identifies the parent rows whose proved properties survive this rebase.
+    /// One incoming source supplies this baseline: combining sources would hide
+    /// joins that become possible only after their facts meet at the target.
     pub fn inherited_rows(&self, owner: u32, index: usize) -> Option<&Table> {
         self.owner(owner).source_rows.get(index)
     }
@@ -213,6 +221,142 @@ impl CompactOwnerIndices {
 
     pub fn snapshot(&self, owner: u32) -> CompactOwnerSnapshot {
         self.owner(owner).snapshot.clone()
+    }
+
+    /// Checking pending edges at registration avoids revisiting future branches
+    /// when their rows are eventually transported in topological order.
+    pub fn register_edge(&mut self, source: u32, target: u32) {
+        if self.owner(source).children.contains(&target) {
+            return;
+        }
+        let source_root = self.components.root(self.owner(source).component);
+        let target_root = self.components.root(self.owner(target).component);
+        if source_root == target_root {
+            let mut pending = vec![target];
+            let mut visited = BTreeSet::new();
+            while let Some(owner) = pending.pop() {
+                assert_ne!(owner, source, "cyclic compact inheritance");
+                if visited.insert(owner) {
+                    pending.extend(self.owner(owner).children.iter().copied());
+                }
+            }
+        } else {
+            self.components.union_roots_into(target_root, source_root);
+        }
+        self.owners
+            .get_mut(&source)
+            .unwrap()
+            .children
+            .insert(target);
+    }
+
+    /// The caller has proved that common origin coordinates denote equal images.
+    pub fn inherit_shared(&mut self, target: u32, source: u32) -> CompactRebaseStats {
+        assert!(
+            self.source(target).is_some(),
+            "shared inheritance needs a primary source"
+        );
+        self.register_edge(source, target);
+        self.owners
+            .get_mut(&target)
+            .unwrap()
+            .additional
+            .push((source, u64::MAX));
+        self.rebase_shared(target, true)
+    }
+
+    fn rebase_shared(&mut self, target: u32, force: bool) -> CompactRebaseStats {
+        let owner = self.owner(target);
+        let source = owner.snapshot.source.unwrap();
+        let source_revision = self.revision(source);
+        if !force
+            && owner.snapshot.source_revision == Some(source_revision)
+            && owner
+                .additional
+                .iter()
+                .all(|&(source, revision)| self.revision(source) == revision)
+        {
+            return CompactRebaseStats::default();
+        }
+        let sources: Vec<_> = std::iter::once(source)
+            .chain(owner.additional.iter().map(|&(source, _)| source))
+            .collect();
+        let shared_rows: Vec<Vec<_>> = sources
+            .iter()
+            .map(|&source| {
+                self.owner(source)
+                    .snapshot
+                    .current
+                    .iter()
+                    .map(|index| index.rows().clone())
+                    .collect()
+            })
+            .collect();
+        let reused: Vec<_> = (0..self.specs.len())
+            .map(|index| {
+                !force
+                    && owner.shared_rows.len() == shared_rows.len()
+                    && owner
+                        .shared_rows
+                        .iter()
+                        .zip(&shared_rows)
+                        .all(|(old, new)| old[index].shares_storage_with(&new[index]))
+            })
+            .collect();
+        let mut current: Vec<_> = self
+            .specs
+            .iter()
+            .enumerate()
+            .map(|(index, _)| {
+                if reused[index] {
+                    return owner.snapshot.current[index].clone();
+                }
+                let mut result = self.owner(source).snapshot.current[index].clone();
+                for &source in &sources[1..] {
+                    result = result.union(&self.owner(source).snapshot.current[index]);
+                }
+                result
+            })
+            .collect();
+        let mut stats = CompactRebaseStats {
+            refreshed: true,
+            reused_indices: reused.iter().filter(|&&reuse| reuse).count(),
+            ..CompactRebaseStats::default()
+        };
+        for (&relation, local) in &owner.snapshot.local {
+            let layout = &self.relations[&relation];
+            if layout.indices.iter().all(|&index| reused[index]) {
+                continue;
+            }
+            for tuple in local.iter() {
+                stats.local_rows_replayed += 1;
+                for &index in &layout.indices {
+                    if !reused[index] {
+                        current[index].insert(&project(&tuple, &self.specs[index].order));
+                    }
+                }
+            }
+        }
+        let additional: Vec<_> = owner
+            .additional
+            .iter()
+            .map(|&(source, _)| (source, self.revision(source)))
+            .collect();
+        let owner = self.owners.get_mut(&target).unwrap();
+        owner.source_rows = shared_rows[0].clone();
+        owner.shared_rows = shared_rows;
+        owner.additional = additional;
+        let snapshot = &mut owner.snapshot;
+        if current
+            .iter()
+            .zip(&snapshot.current)
+            .any(|(new, old)| !new.rows().shares_storage_with(old.rows()))
+        {
+            snapshot.changed();
+        }
+        snapshot.current = current;
+        snapshot.source_revision = Some(source_revision);
+        stats
     }
 
     /// Redundant derived facts need no local support; explicit facts can retain it.
@@ -300,20 +444,19 @@ impl CompactOwnerIndices {
         let target_owner = self.owner(target);
         if let Some(previous) = target_owner.snapshot.source {
             assert_eq!(previous, source, "compact owner already has another source");
+            if !target_owner.additional.is_empty() {
+                assert!(
+                    merges.is_empty(),
+                    "shared inheritance requires an unchanged partition"
+                );
+                return self.rebase_shared(target, force);
+            }
             if !force && target_owner.snapshot.source_revision == Some(source_revision) {
                 return CompactRebaseStats::default();
             }
-        }
-        let source_component = self.owner(source).component;
-        let target_component = target_owner.component;
-        let connection = if target_owner.snapshot.source.is_none() {
-            let source_root = self.components.root(source_component);
-            let target_root = self.components.root(target_component);
-            assert_ne!(source_root, target_root, "cyclic compact inheritance");
-            Some((target_root, source_root))
         } else {
-            None
-        };
+            self.register_edge(source, target);
+        }
         let parent = &self.owner(source).snapshot.current;
         let target_owner = self.owner(target);
         // Stable roots let rule checkpoints skip unrelated inherited relations.
@@ -373,9 +516,6 @@ impl CompactOwnerIndices {
                     );
                 }
             }
-        }
-        if let Some((target_root, source_root)) = connection {
-            self.components.union_roots_into(target_root, source_root);
         }
         let target_owner = self.owners.get_mut(&target).unwrap();
         target_owner.source_rows = source_rows;

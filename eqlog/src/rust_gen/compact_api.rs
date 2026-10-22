@@ -21,8 +21,6 @@ pub(super) fn methods<'a>(
             }
             let name = ctx.type_name(model).to_case(Case::Snake);
             let mor_camel = ctx.type_name(ids.mor).to_case(Case::UpperCamel);
-            let member = compact_indices::members(model, ctx)[0];
-            let member_name = ctx.type_name(member).to_case(Case::Snake);
             let endpoint_ambiguity = [ids.dom, ids.cod].map(|func| {
                 let rel = FlatInRel::Rel(FlatRel::Func(func));
                 let query = QuerySpec::eval_func(func, ctx.signature());
@@ -54,7 +52,8 @@ pub(super) fn methods<'a>(
                 }}
 
                 /// Inherits all current and future source members along this morphism.
-                /// Total inheritance must be acyclic; compact targets have one source.
+                /// Total inheritance must be acyclic. Additional incoming images
+                /// become available during closure, with proved overlaps shared.
                 /// Registration is evaluator state and is not included in dynamic snapshots.
                 /// Returns whether this registration or its inherited state changed.
                 #[allow(dead_code)]
@@ -68,15 +67,14 @@ pub(super) fn methods<'a>(
                         .expect(\"total inheritance requires a morphism source\");
                     let target = self.{name}_mor_cod(morphism)
                         .expect(\"total inheritance requires a morphism target\");
-                    if !self.__total_members_{name}.contains(&morphism.0)
-                        && self.__compact_members_{member_name}.as_ref()
-                            .is_some_and(|spaces| spaces.source(target.0).is_some())
-                    {{
-                        self.__check_total_{name}_morphism(morphism.0);
-                        self.__materialize_compact_members();
-                    }}
                     let refreshed = if self.__compact_indices_{name}.is_some() {{
-                        self.__compact_inherit_{name}(source.0, target.0)
+                        if self.__total_members_{name}.contains(&morphism.0) {{
+                            if self.__compact_adopted_{name}.contains(&morphism.0) {{
+                                self.__compact_transport_{name}(morphism.0, source.0, target.0).unwrap_or(false)
+                            }} else {{ false }}
+                        }} else {{
+                            self.__compact_register_{name}(morphism.0, source.0, target.0)
+                        }}
                     }} else {{
                         self.__check_total_{name}_morphism(morphism.0);
                         false
