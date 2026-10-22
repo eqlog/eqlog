@@ -472,3 +472,126 @@ fn snapshot_index_access_checks_its_boundary() {
     indices.create_owner(0);
     indices.rows(0, 0);
 }
+
+#[test]
+fn shared_indexes_union_sources_but_keep_one_raw_inherited_baseline() {
+    let mut specs = item_specs();
+    specs.push(CompactIndexSpec {
+        relation: 20,
+        order: vec![0],
+        member_types: vec![Some(0)],
+    });
+    let mut indices = CompactOwnerIndices::new(specs);
+    for owner in 0..4 {
+        indices.create_owner(owner);
+    }
+    indices.record(0, 10, &[10, 1], false);
+    indices.record(0, 20, &[1], false);
+    for owner in [1, 2] {
+        indices.rebase(owner, 0, false, |_, origin| origin, &[]);
+    }
+    indices.record(1, 10, &[20, 2], false);
+    indices.record(1, 20, &[2], false);
+    indices.record(2, 10, &[30, 3], false);
+    indices.record(2, 20, &[3], false);
+    indices.record(3, 10, &[40, 4], false);
+    indices.rebase(3, 1, false, |_, origin| origin, &[]);
+    let before = indices.snapshot(3);
+    assert!(indices.inherit_shared(3, 2).refreshed);
+    assert_eq!(
+        indices.rows(3, 0).iter().collect::<BTreeSet<_>>(),
+        BTreeSet::from([vec![10, 1], vec![20, 2], vec![30, 3], vec![40, 4]])
+    );
+    assert_eq!(
+        indices.rows(3, 1).iter().collect::<BTreeSet<_>>(),
+        BTreeSet::from([vec![1, 10], vec![2, 20], vec![3, 30], vec![4, 40]])
+    );
+    assert!(!before.rows(0).contains(&[30, 3]));
+    let baseline = indices.inherited_rows(3, 0).unwrap();
+    assert!(baseline.shares_storage_with(indices.rows(1, 0)));
+    assert!(baseline.contains(&[20, 2]));
+    assert!(!baseline.contains(&[30, 3]));
+    assert!(!baseline.contains(&[40, 4]));
+    assert_eq!(
+        indices.record(3, 10, &[30, 3], true),
+        CompactRecordResult {
+            inserted: false,
+            retained_support: true,
+        }
+    );
+    indices.record(3, 20, &[4], false);
+    let combined = indices.snapshot(3);
+    indices.record(2, 10, &[50, 5], false);
+    let refreshed = indices.rebase(3, 1, false, |_, _| panic!("unchanged partition"), &[]);
+    assert!(refreshed.refreshed);
+    assert_eq!(refreshed.reused_indices, 1);
+    assert_eq!(refreshed.local_rows_replayed, 2);
+    assert!(indices.rows(3, 2).shares_storage_with(combined.rows(2)));
+    assert!(indices.rows(3, 0).contains(&[50, 5]));
+    assert!(indices.rows(3, 0).contains(&[40, 4]));
+    assert!(!combined.rows(0).contains(&[50, 5]));
+    assert!(!indices.inherited_rows(3, 0).unwrap().contains(&[50, 5]));
+    assert_eq!(
+        indices.rebase(3, 1, false, |_, _| panic!("unchanged sources"), &[]),
+        CompactRebaseStats::default()
+    );
+    let rewrite = indices.rewrite(3, 0, 3, 2);
+    assert_eq!(rewrite.visited_rows, 3);
+    assert_eq!(rewrite.merged_rows, 1);
+    assert!(indices.rows(3, 0).contains(&[30, 2]));
+    assert!(indices.rows(3, 1).contains(&[2, 30]));
+    assert!(!indices.rows(3, 2).contains(&[3]));
+    assert!(indices.rows(2, 0).contains(&[30, 3]));
+    assert!(combined.rows(0).contains(&[30, 3]));
+}
+
+#[test]
+fn late_primary_edges_can_complete_an_acyclic_shared_component() {
+    let mut indices = CompactOwnerIndices::new(item_specs());
+    for owner in 0..3 {
+        indices.create_owner(owner);
+    }
+    indices.record(0, 10, &[10, 1], false);
+    indices.record(1, 10, &[20, 2], false);
+    indices.rebase(2, 0, false, |_, origin| origin, &[]);
+    indices.inherit_shared(2, 1);
+    assert!(
+        indices
+            .rebase(1, 0, false, |_, origin| origin, &[])
+            .refreshed
+    );
+    assert!(
+        indices
+            .rebase(2, 0, false, |_, origin| origin, &[])
+            .refreshed
+    );
+    assert_eq!(
+        indices.rows(2, 0).iter().collect::<BTreeSet<_>>(),
+        BTreeSet::from([vec![10, 1], vec![20, 2]])
+    );
+}
+
+#[test]
+#[should_panic(expected = "already has another source")]
+fn shared_rebases_reject_an_unrelated_primary_source() {
+    let mut indices = CompactOwnerIndices::new(Vec::new());
+    for owner in 0..4 {
+        indices.create_owner(owner);
+    }
+    indices.rebase(2, 0, false, |_, origin| origin, &[]);
+    indices.inherit_shared(2, 1);
+    indices.rebase(2, 3, false, |_, origin| origin, &[]);
+}
+
+#[test]
+#[should_panic(expected = "cyclic compact inheritance")]
+fn shared_edges_reject_directed_cycles() {
+    let mut indices = CompactOwnerIndices::new(Vec::new());
+    for owner in 0..4 {
+        indices.create_owner(owner);
+    }
+    indices.rebase(1, 0, false, |_, origin| origin, &[]);
+    indices.rebase(2, 3, false, |_, origin| origin, &[]);
+    indices.inherit_shared(2, 1);
+    indices.inherit_shared(1, 2);
+}

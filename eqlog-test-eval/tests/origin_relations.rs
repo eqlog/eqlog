@@ -329,3 +329,92 @@ fn indexed_replacements_match_an_independent_row_oracle() {
         assert_eq!(rows(&relation), expected);
     }
 }
+
+#[test]
+fn shared_unions_keep_incidence_after_overlapping_rewrites() {
+    for cache_length in [false, true] {
+        let mut ancestor = OriginRelation::new(&[Some(0), None, Some(0), Some(1)]);
+        ancestor.insert(&[7, 100, 7, 9]);
+        let mut left = ancestor.clone();
+        let mut right = ancestor.clone();
+        left.insert(&[7, 101, 2, 9]);
+        right.insert(&[2, 101, 2, 9]);
+        let mut combined = left.union(&right);
+        let before = combined.clone();
+        if cache_length {
+            assert_eq!(combined.len(), 3);
+        }
+        assert!(combined.insert(&[50, 200, 50, 11]));
+        assert!(!combined.insert(&[7, 100, 7, 9]));
+        assert_eq!(
+            combined.replace_representative(0, 7, 2),
+            OriginRewriteStats {
+                visited_rows: 2,
+                rewritten_rows: 1,
+                merged_rows: 1,
+            }
+        );
+        assert_eq!(
+            rows(&combined),
+            BTreeSet::from([
+                vec![2, 100, 2, 9],
+                vec![2, 101, 2, 9],
+                vec![50, 200, 50, 11],
+            ])
+        );
+        assert_eq!(combined.replace_representative(1, 9, 10).visited_rows, 2);
+        assert_eq!(combined.replace_representative(0, 2, 3).visited_rows, 2);
+        assert_eq!(
+            rows(&combined),
+            BTreeSet::from([
+                vec![3, 100, 3, 10],
+                vec![3, 101, 3, 10],
+                vec![50, 200, 50, 11],
+            ])
+        );
+        assert_eq!(
+            rows(&before),
+            BTreeSet::from([vec![7, 100, 7, 9], vec![7, 101, 2, 9], vec![2, 101, 2, 9],])
+        );
+        assert_eq!(rows(&ancestor), BTreeSet::from([vec![7, 100, 7, 9]]));
+        assert_eq!(left.len(), 2);
+        assert_eq!(right.len(), 2);
+    }
+}
+
+#[test]
+fn union_lengths_remain_exact_across_storage_arities_and_snapshots() {
+    for arity in 0..=12 {
+        let member_types: Vec<_> = (0..arity)
+            .map(|column| (column % 2 == 0).then_some(0))
+            .collect();
+        let empty = OriginRelation::new(&member_types);
+        let mut left = empty.clone();
+        let mut right = empty.clone();
+        left.insert(&vec![7; arity]);
+        right.insert(&vec![2; arity]);
+        let mut combined = left.union(&right);
+        let before = combined.clone();
+        assert!(left.union(&empty).shares_storage_with(&left));
+        assert!(empty.union(&left).shares_storage_with(&left));
+        assert!(left.union(&left).shares_storage_with(&left));
+        let mut rewritten = vec![7; arity];
+        for (column, value) in rewritten.iter_mut().enumerate() {
+            if column % 2 == 0 {
+                *value = 2;
+            }
+        }
+        assert_eq!(
+            combined.replace_representative(0, 7, 2).visited_rows,
+            usize::from(arity > 0)
+        );
+        assert_eq!(rows(&combined), BTreeSet::from([rewritten, vec![2; arity]]));
+        assert_eq!(
+            rows(&before),
+            BTreeSet::from([vec![7; arity], vec![2; arity]])
+        );
+        let count = combined.len();
+        assert_eq!(combined.len(), count);
+        assert!(!combined.is_empty());
+    }
+}
