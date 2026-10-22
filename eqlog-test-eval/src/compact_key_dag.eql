@@ -8,6 +8,9 @@ model World {
     pred left(El);
     pred right(El);
     pred joined(El);
+    pred wanted(El);
+    pred ready(El);
+    func next(El) -> El;
 
     rule uniqueness {
         if named(first, key);
@@ -26,5 +29,11 @@ model World {
         if left(value);
         if right(value);
         then joined(value);
+    }
+
+    rule request {
+        if wanted(value);
+        then ready(value);
+        then next(value)!;
     }
 }

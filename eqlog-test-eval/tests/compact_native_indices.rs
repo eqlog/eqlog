@@ -25,8 +25,7 @@ fn inherit(model: &mut CompactNativeIndices, source: World, target: World) {
     let morphism = model.new_world_mor();
     model.insert_world_mor_dom(morphism, source);
     model.insert_world_mor_cod(morphism, target);
-    model.__compact_inherit_world(source.0, target.0);
-    model.__total_members_world.insert(morphism.0);
+    model.inherit_total_world_members(morphism);
 }
 
 #[test]
