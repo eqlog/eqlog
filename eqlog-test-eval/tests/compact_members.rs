@@ -282,6 +282,14 @@ fn inheritance_rejects_cycles() {
 }
 
 #[test]
+#[should_panic(expected = "cyclic member inheritance")]
+fn a_leaf_rejects_its_own_incoming_edge() {
+    let mut spaces = MemberSpaces::new();
+    spaces.create_owner(0);
+    spaces.register_edge(0, 0);
+}
+
+#[test]
 #[should_panic(expected = "owner already has another source")]
 fn inheritance_rejects_multiple_sources() {
     let mut spaces = MemberSpaces::new();

@@ -455,6 +455,14 @@ fn inherited_indexes_reject_cycles_without_walking_ancestor_rows() {
 }
 
 #[test]
+#[should_panic(expected = "cyclic compact inheritance")]
+fn a_leaf_index_owner_rejects_its_own_incoming_edge() {
+    let mut indices = CompactOwnerIndices::new(Vec::new());
+    indices.create_owner(0);
+    indices.register_edge(0, 0);
+}
+
+#[test]
 #[should_panic(expected = "already has another source")]
 fn inherited_indexes_reject_multiple_sources() {
     let mut indices = CompactOwnerIndices::new(Vec::new());

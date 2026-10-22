@@ -223,7 +223,7 @@ struct MemberSpace {
     inherited_witnesses: WBTreeMap<u64>,
     additional: Vec<Inheritance>,
     component: u32,
-    children: BTreeSet<u32>,
+    children: WBTreeSet,
 }
 
 /// Storage counts distinguish reserved numeric IDs from allocated member data.
@@ -344,7 +344,7 @@ impl MemberSpaces {
                 inherited_witnesses: WBTreeMap::new(),
                 additional: Vec::new(),
                 component,
-                children: BTreeSet::new(),
+                children: WBTreeSet::new(),
             },
         );
     }
@@ -440,12 +440,13 @@ impl MemberSpaces {
         let source_component = self.components.root(self.owners[&source].component);
         let target_component = self.components.root(self.owners[&target].component);
         if source_component == target_component {
-            let mut pending = vec![target];
+            assert_ne!(source, target, "cyclic member inheritance");
+            let mut pending: Vec<_> = self.owners[&target].children.iter().collect();
             let mut visited = BTreeSet::new();
             while let Some(owner) = pending.pop() {
                 assert_ne!(owner, source, "cyclic member inheritance");
                 if visited.insert(owner) {
-                    pending.extend(self.owners[&owner].children.iter().copied());
+                    pending.extend(self.owners[&owner].children.iter());
                 }
             }
         } else {
@@ -713,17 +714,17 @@ impl MemberSpaces {
 
     pub fn refresh_descendants(&mut self, owner: u32) -> usize {
         let children = &self.owners.get(&owner).expect("unknown owner").children;
-        let mut discover: Vec<_> = children.iter().copied().collect();
+        let mut discover: Vec<_> = children.iter().collect();
         let mut incoming = BTreeMap::<u32, usize>::new();
         while let Some(next) = discover.pop() {
             if incoming.insert(next, 0).is_none() {
-                discover.extend(self.owners[&next].children.iter().copied());
+                discover.extend(self.owners[&next].children.iter());
             }
         }
         let descendants: Vec<_> = incoming.keys().copied().collect();
         for source in descendants {
-            for child in &self.owners[&source].children {
-                *incoming.get_mut(child).unwrap() += 1;
+            for child in self.owners[&source].children.iter() {
+                *incoming.get_mut(&child).unwrap() += 1;
             }
         }
         let mut pending: VecDeque<_> = incoming
@@ -735,11 +736,11 @@ impl MemberSpaces {
             if self.refresh(next) {
                 changed += 1;
             }
-            for child in &self.owners[&next].children {
-                let count = incoming.get_mut(child).unwrap();
+            for child in self.owners[&next].children.iter() {
+                let count = incoming.get_mut(&child).unwrap();
                 *count -= 1;
                 if *count == 0 {
-                    pending.push_back(*child);
+                    pending.push_back(child);
                 }
             }
         }

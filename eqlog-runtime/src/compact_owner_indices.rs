@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::origin_relations::{OriginRelation, OriginRewriteStats};
 use crate::table::Table;
+use crate::wbtree::set::WBTreeSet;
 use crate::Unification;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -80,7 +81,7 @@ struct Owner {
     snapshot: CompactOwnerSnapshot,
     source_rows: Vec<Table>,
     component: u32,
-    children: BTreeSet<u32>,
+    children: WBTreeSet,
     additional: Vec<(u32, u64)>,
     shared_rows: Vec<Vec<Table>>,
 }
@@ -173,7 +174,7 @@ impl CompactOwnerIndices {
                 },
                 source_rows: Vec::new(),
                 component,
-                children: BTreeSet::new(),
+                children: WBTreeSet::new(),
                 additional: Vec::new(),
                 shared_rows: Vec::new(),
             },
@@ -232,12 +233,13 @@ impl CompactOwnerIndices {
         let source_root = self.components.root(self.owner(source).component);
         let target_root = self.components.root(self.owner(target).component);
         if source_root == target_root {
-            let mut pending = vec![target];
+            assert_ne!(source, target, "cyclic compact inheritance");
+            let mut pending: Vec<_> = self.owner(target).children.iter().collect();
             let mut visited = BTreeSet::new();
             while let Some(owner) = pending.pop() {
                 assert_ne!(owner, source, "cyclic compact inheritance");
                 if visited.insert(owner) {
-                    pending.extend(self.owner(owner).children.iter().copied());
+                    pending.extend(self.owner(owner).children.iter());
                 }
             }
         } else {

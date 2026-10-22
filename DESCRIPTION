@@ -86,5 +86,7 @@ validation hooks by checking public lookups and equality.
 
 Avoid rebuilding witness trees when an equality changes only the source
 partition. Preserve local proofs while invalidating inherited proof
-caches on source changes. Keep lazy exact relation counts in one word
-so shared unions do not enlarge every index on ordinary chains.
+caches on source proof changes. Keep lazy exact relation counts in one
+word so shared unions do not enlarge every index on ordinary chains.
+Avoid allocating edge containers for one-child lineages or search state
+for leaf targets, while preserving directed cycle checks for late edges.
