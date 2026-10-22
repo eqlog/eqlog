@@ -362,6 +362,68 @@ fn equal_origin_numbers_do_not_prove_shared_images() {
 }
 
 #[test]
+fn refreshed_witnesses_keep_late_local_and_source_proofs() {
+    let mut spaces = MemberSpaces::new();
+    for owner in 0..5 {
+        spaces.create_owner(owner);
+    }
+    let first = spaces.allocate(0);
+    spaces.inherit_total_members(0, 1);
+    let local = spaces.allocate(1);
+    let local_origin = spaces.snapshot(1).origin(local).unwrap();
+    spaces.witness(1, local_origin);
+    let late = spaces.allocate(0);
+    assert!(spaces.refresh(1));
+    for member in [first, late] {
+        let origin = spaces.snapshot(0).origin(member).unwrap();
+        spaces.witness(0, origin);
+    }
+    assert!(spaces.refresh(1));
+    spaces.inherit_total_members(1, 2);
+    spaces.inherit_total_members(1, 3);
+    spaces.inherit_total_members(2, 4);
+    assert!(spaces.can_share_inheritance(3, 4));
+    spaces.inherit_shared_members(3, 4);
+    for member in [
+        spaces.image(first, 1).unwrap(),
+        spaces.image(late, 1).unwrap(),
+        local,
+    ] {
+        let left = spaces.image(member, 2).unwrap();
+        let right = spaces.image(member, 3).unwrap();
+        assert_eq!(spaces.image(left, 4), spaces.image(right, 4));
+        assert!(spaces.image(left, 4).is_some());
+    }
+}
+
+#[test]
+fn a_late_source_proof_supersedes_an_independent_local_proof() {
+    let mut spaces = MemberSpaces::new();
+    for owner in 0..4 {
+        spaces.create_owner(owner);
+    }
+    let first = spaces.allocate(0);
+    let origin = spaces.snapshot(0).origin(first).unwrap();
+    spaces.inherit_total_members(0, 1);
+    spaces.witness(1, origin);
+    let late = spaces.allocate(0);
+    assert!(spaces.refresh(1));
+    spaces.witness(0, origin);
+    let late_origin = spaces.snapshot(0).origin(late).unwrap();
+    spaces.witness(0, late_origin);
+    assert!(spaces.refresh(1));
+    spaces.inherit_total_members(0, 2);
+    spaces.inherit_total_members(1, 3);
+    assert!(spaces.can_share_inheritance(2, 3));
+    spaces.inherit_shared_members(2, 3);
+    for member in [first, late] {
+        let left = spaces.image(member, 1).unwrap();
+        let right = spaces.image(member, 2).unwrap();
+        assert_eq!(spaces.image(left, 3), spaces.image(right, 3));
+    }
+}
+
+#[test]
 fn shared_refresh_rechecks_late_origins_and_changed_partitions() {
     let mut spaces = MemberSpaces::new();
     for owner in 0..4 {

@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::num::NonZeroUsize;
 use std::rc::Rc;
 
 use crate::table::Table;
@@ -23,7 +24,8 @@ pub struct OriginRelation {
     member_types: Rc<[Option<u32>]>,
     rows: Table,
     incidence: WBTreeMap<WBTreeMap<Table>>,
-    len: Cell<Option<usize>>,
+    // The zero niche keeps a lazy cardinality in the space of an exact count.
+    len: Cell<Option<NonZeroUsize>>,
 }
 
 fn references<'a>(
@@ -51,7 +53,7 @@ impl OriginRelation {
             member_types: Rc::from(member_types),
             rows: Table::new(member_types.len()),
             incidence: WBTreeMap::new(),
-            len: Cell::new(Some(0)),
+            len: Cell::new(Some(NonZeroUsize::MIN)),
         }
     }
 
@@ -65,11 +67,23 @@ impl OriginRelation {
 
     pub fn len(&self) -> usize {
         if let Some(len) = self.len.get() {
-            return len;
+            return len.get() - 1;
         }
-        let len = self.rows.iter().count();
+        let len = self.rows.iter().fold(NonZeroUsize::MIN, |len, _| {
+            len.checked_add(1).expect("relation length overflow")
+        });
         self.len.set(Some(len));
-        len
+        len.get() - 1
+    }
+
+    fn change_len(&self, difference: isize) {
+        self.len.set(self.len.get().map(|len| {
+            let len = len
+                .get()
+                .checked_add_signed(difference)
+                .expect("relation length overflow");
+            NonZeroUsize::new(len).expect("relation length underflow")
+        }));
     }
 
     pub fn is_empty(&self) -> bool {
@@ -107,7 +121,7 @@ impl OriginRelation {
             return false;
         }
         assert!(self.rows.insert(tuple));
-        self.len.set(self.len.get().map(|len| len + 1));
+        self.change_len(1);
         let arity = self.member_types.len();
         // Unary rows already provide the complete member incidence index.
         if arity == 1 {
@@ -127,7 +141,7 @@ impl OriginRelation {
 
     fn remove(&mut self, tuple: &[u32]) {
         assert!(self.rows.remove(tuple), "incidence refers to an absent row");
-        self.len.set(self.len.get().map(|len| len - 1));
+        self.change_len(-1);
         for (member_type, origin) in references(&self.member_types, tuple) {
             let origins = self
                 .incidence
@@ -166,7 +180,7 @@ impl OriginRelation {
             if self.member_types[0] != Some(member_type) || !self.rows.remove(&[loser]) {
                 return OriginRewriteStats::default();
             }
-            self.len.set(self.len.get().map(|len| len - 1));
+            self.change_len(-1);
             let inserted = self.insert(&[winner]);
             return OriginRewriteStats {
                 visited_rows: 1,

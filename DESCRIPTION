@@ -83,3 +83,8 @@ including recursive local/inherited joins, target equality, late parent
 changes, owner-valued data, and pending existential consequences across
 partial closure. Keep functionality coverage independent of internal
 validation hooks by checking public lookups and equality.
+
+Avoid rebuilding witness trees when an equality changes only the source
+partition. Preserve local proofs while invalidating inherited proof
+caches on source changes. Keep lazy exact relation counts in one word
+so shared unions do not enlarge every index on ordinary chains.

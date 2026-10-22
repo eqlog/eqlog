@@ -418,3 +418,25 @@ fn union_lengths_remain_exact_across_storage_arities_and_snapshots() {
         assert!(!combined.is_empty());
     }
 }
+
+#[test]
+fn lazy_lengths_survive_insertion_replacement_and_repeated_reads() {
+    let mut left = OriginRelation::new(&[Some(0)]);
+    let mut right = OriginRelation::new(&[Some(0)]);
+    assert_eq!(left.len(), 0);
+    assert!(left.insert(&[1]));
+    assert!(right.insert(&[2]));
+    let mut combined = left.union(&right);
+    assert!(combined.insert(&[3]));
+    assert_eq!(combined.replace_representative(0, 1, 2).merged_rows, 1);
+    assert_eq!(combined.len(), 2);
+    assert_eq!(combined.len(), 2);
+    let before = combined.clone();
+    assert!(combined.insert(&[4]));
+    assert_eq!(combined.len(), 3);
+    assert_eq!(combined.replace_representative(0, 2, 4).merged_rows, 1);
+    assert_eq!(combined.replace_representative(0, 3, 4).merged_rows, 1);
+    assert_eq!(combined.len(), 1);
+    assert_eq!(before.len(), 2);
+    assert_eq!(rows(&combined), BTreeSet::from([vec![4]]));
+}

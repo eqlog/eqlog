@@ -220,6 +220,7 @@ struct MemberSpace {
     local_merges: Vec<MemberMerge>,
     local_witnesses: WBTreeMap<u64>,
     inherited: Option<Inheritance>,
+    inherited_witnesses: WBTreeMap<u64>,
     additional: Vec<Inheritance>,
     component: u32,
     children: BTreeSet<u32>,
@@ -340,6 +341,7 @@ impl MemberSpaces {
                 local_merges: Vec::new(),
                 local_witnesses: WBTreeMap::new(),
                 inherited: None,
+                inherited_witnesses: WBTreeMap::new(),
                 additional: Vec::new(),
                 component,
                 children: BTreeSet::new(),
@@ -661,7 +663,15 @@ impl MemberSpaces {
             domain.insert(origin);
             canonical_domain.insert(origin);
         }
-        let witnesses = witnesses.union_shared(&space.local_witnesses, |_, left, _| left);
+        // Equality can advance the source revision without changing its proofs.
+        // The current snapshot already includes any newly added local proofs.
+        let witnesses = if space.additional.is_empty()
+            && space.inherited_witnesses.shares_root(&source.witnesses)
+        {
+            space.snapshot.witnesses.clone()
+        } else {
+            witnesses.union_shared(&space.local_witnesses, |_, left, _| left)
+        };
         let mut partition = source.partition.clone();
         let mut local_merges = Vec::new();
         for &(lhs, rhs) in &space.local_equations {
@@ -690,8 +700,10 @@ impl MemberSpaces {
         space.snapshot.witnesses = witnesses;
         space.local_merges = local_merges;
         space.snapshot.revision += 1;
-        space.inherited.as_mut().unwrap().revision = revision;
-        space.inherited.as_mut().unwrap().domain = source.domain.clone();
+        let inherited = space.inherited.as_mut().unwrap();
+        inherited.revision = revision;
+        inherited.domain = source.domain.clone();
+        space.inherited_witnesses = source.witnesses.clone();
         for (input, (revision, domain)) in space.additional.iter_mut().zip(additional_snapshots) {
             input.revision = revision;
             input.domain = domain;
