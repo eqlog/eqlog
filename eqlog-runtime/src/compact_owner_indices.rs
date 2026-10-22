@@ -27,13 +27,45 @@ pub struct CompactRebaseStats {
     pub reused_indices: usize,
     /// Signature-order support rows, counted once per relation.
     pub local_rows_replayed: usize,
-    /// Incidence work is counted separately in each selected index.
+    /// Row updates are counted separately in each selected index.
     pub rewrite: OriginRewriteStats,
 }
 
 #[derive(Clone, Debug)]
+enum OwnerIndex {
+    Incidence(OriginRelation),
+    Rows(Table),
+}
+
+impl OwnerIndex {
+    fn rows(&self) -> &Table {
+        match self {
+            Self::Incidence(relation) => relation.rows(),
+            Self::Rows(rows) => rows,
+        }
+    }
+
+    fn insert(&mut self, tuple: &[u32]) -> bool {
+        match self {
+            Self::Incidence(relation) => relation.insert(tuple),
+            Self::Rows(rows) => !rows.contains(tuple) && rows.insert(tuple),
+        }
+    }
+
+    fn union(&self, other: &Self) -> Self {
+        match (self, other) {
+            (Self::Incidence(left), Self::Incidence(right)) => Self::Incidence(left.union(right)),
+            (Self::Rows(left), Self::Rows(right)) => Self::Rows(left.union(right)),
+            (Self::Incidence(_), Self::Rows(_)) | (Self::Rows(_), Self::Incidence(_)) => {
+                unreachable!("each index retains its incidence role")
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct CompactOwnerSnapshot {
-    current: Vec<OriginRelation>,
+    current: Vec<OwnerIndex>,
     local: BTreeMap<u32, Table>,
     source: Option<u32>,
     source_revision: Option<u64>,
@@ -75,6 +107,8 @@ impl CompactOwnerSnapshot {
 struct RelationLayout {
     member_types: Vec<Option<u32>>,
     indices: Vec<usize>,
+    incidence: usize,
+    incidence_positions: Vec<usize>,
 }
 
 struct Owner {
@@ -110,6 +144,67 @@ fn project(tuple: &[u32], order: &[usize]) -> Vec<u32> {
     order.iter().map(|&column| tuple[column]).collect()
 }
 
+fn reuse_relations(reused: &mut [bool], relations: &BTreeMap<u32, RelationLayout>) {
+    for layout in relations.values() {
+        // A full permutation certifies the relation, even if another index changed shape.
+        let reuse = reused[layout.incidence];
+        for &index in &layout.indices {
+            reused[index] = reuse;
+        }
+    }
+}
+
+fn rewrite_relation(
+    current: &mut [OwnerIndex],
+    specs: &[CompactIndexSpec],
+    layout: &RelationLayout,
+    member_type: u32,
+    loser: u32,
+    winner: u32,
+) -> OriginRewriteStats {
+    let (before, remainder) = current.split_at_mut(layout.incidence);
+    let (primary, after) = remainder.split_first_mut().unwrap();
+    let primary = match primary {
+        OwnerIndex::Incidence(primary) => primary,
+        OwnerIndex::Rows(_) => unreachable!("the selected incidence owner has incidence"),
+    };
+    let mut total = OriginRewriteStats::default();
+    let primary_stats = primary.replace_representative_with(member_type, loser, winner, |row| {
+        for &index in &layout.indices {
+            if index == layout.incidence {
+                continue;
+            }
+            let selected = if index < layout.incidence {
+                &mut before[index]
+            } else {
+                &mut after[index - layout.incidence - 1]
+            };
+            let rows = match selected {
+                OwnerIndex::Rows(rows) => rows,
+                OwnerIndex::Incidence(_) => unreachable!("a relation has one incidence owner"),
+            };
+            let spec = &specs[index];
+            let mut tuple: Vec<_> = spec
+                .order
+                .iter()
+                .map(|&column| row[layout.incidence_positions[column]])
+                .collect();
+            assert!(rows.remove(&tuple), "selected indices disagree");
+            for (&column, origin) in spec.order.iter().zip(&mut tuple) {
+                if layout.member_types[column] == Some(member_type) && *origin == loser {
+                    *origin = winner;
+                }
+            }
+            let inserted = rows.insert(&tuple);
+            total.visited_rows += 1;
+            total.rewritten_rows += usize::from(inserted);
+            total.merged_rows += usize::from(!inserted);
+        }
+    });
+    add_rewrite(&mut total, primary_stats);
+    total
+}
+
 impl CompactOwnerIndices {
     pub fn new(specs: Vec<CompactIndexSpec>) -> Self {
         let mut relations = BTreeMap::<u32, RelationLayout>::new();
@@ -125,12 +220,30 @@ impl CompactOwnerIndices {
                 .or_insert_with(|| RelationLayout {
                     member_types: spec.member_types.clone(),
                     indices: Vec::new(),
+                    incidence: index,
+                    incidence_positions: Vec::new(),
                 });
             assert_eq!(
                 relation.member_types, spec.member_types,
                 "inconsistent relation signature"
             );
             relation.indices.push(index);
+        }
+        for layout in relations.values_mut() {
+            layout.incidence = *layout
+                .indices
+                .iter()
+                .min_by_key(|&&index| {
+                    !specs[index]
+                        .order
+                        .first()
+                        .is_some_and(|&column| layout.member_types[column].is_some())
+                })
+                .unwrap();
+            layout.incidence_positions = vec![0; layout.member_types.len()];
+            for (position, &column) in specs[layout.incidence].order.iter().enumerate() {
+                layout.incidence_positions[column] = position;
+            }
         }
         Self {
             specs,
@@ -150,13 +263,18 @@ impl CompactOwnerIndices {
         let current = self
             .specs
             .iter()
-            .map(|spec| {
+            .enumerate()
+            .map(|(index, spec)| {
                 let columns: Vec<_> = spec
                     .order
                     .iter()
                     .map(|&column| spec.member_types[column])
                     .collect();
-                OriginRelation::new(&columns)
+                if self.relations[&spec.relation].incidence == index {
+                    OwnerIndex::Incidence(OriginRelation::new(&columns))
+                } else {
+                    OwnerIndex::Rows(Table::new(columns.len()))
+                }
             })
             .collect();
         let local = self
@@ -340,7 +458,7 @@ impl CompactOwnerIndices {
                     .collect()
             })
             .collect();
-        let reused: Vec<_> = (0..self.specs.len())
+        let mut reused: Vec<_> = (0..self.specs.len())
             .map(|index| {
                 !force
                     && owner.shared_rows.len() == shared_rows.len()
@@ -351,6 +469,7 @@ impl CompactOwnerIndices {
                         .all(|(old, new)| old[index].shares_storage_with(&new[index]))
             })
             .collect();
+        reuse_relations(&mut reused, &self.relations);
         let mut current: Vec<_> = self
             .specs
             .iter()
@@ -463,10 +582,17 @@ impl CompactOwnerIndices {
         let owner = self.owners.get_mut(&owner).expect("unknown compact owner");
         let snapshot = &mut owner.snapshot;
         let mut stats = OriginRewriteStats::default();
-        for index in &mut snapshot.current {
+        for layout in self.relations.values() {
             add_rewrite(
                 &mut stats,
-                index.replace_representative(member_type, loser, winner),
+                rewrite_relation(
+                    &mut snapshot.current,
+                    &self.specs,
+                    layout,
+                    member_type,
+                    loser,
+                    winner,
+                ),
             );
         }
         if stats.visited_rows > 0 {
@@ -508,7 +634,7 @@ impl CompactOwnerIndices {
         let parent = &self.owner(source).snapshot.current;
         let target_owner = self.owner(target);
         // Stable roots let rule checkpoints skip unrelated inherited relations.
-        let reused: Vec<_> =
+        let mut reused: Vec<_> =
             self.specs
                 .iter()
                 .enumerate()
@@ -519,6 +645,7 @@ impl CompactOwnerIndices {
                         })
                 })
                 .collect();
+        reuse_relations(&mut reused, &self.relations);
         let mut current: Vec<_> = parent
             .iter()
             .enumerate()
@@ -559,11 +686,18 @@ impl CompactOwnerIndices {
             }
         }
         for &(member_type, loser, winner) in merges {
-            for (index, current) in current.iter_mut().enumerate() {
-                if !reused[index] {
+            for layout in self.relations.values() {
+                if !reused[layout.incidence] {
                     add_rewrite(
                         &mut stats.rewrite,
-                        current.replace_representative(member_type, loser, winner),
+                        rewrite_relation(
+                            &mut current,
+                            &self.specs,
+                            layout,
+                            member_type,
+                            loser,
+                            winner,
+                        ),
                     );
                 }
             }

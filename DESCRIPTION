@@ -42,6 +42,10 @@ mutation, retaining ordinary semantics for bare members and equations.
 Index equality work by the losing representative. Reuse the row tree
 for leading member columns instead of duplicating their incidence.
 Retain auxiliary incidence only for occurrences outside that prefix.
+Share one equality index across each relation's selected column orders.
+Use its affected rows to update every permutation, and retain plain row
+trees for the remaining orders. Reuse or rebuild each relation together
+so equality never mixes an old permutation with newly inherited rows.
 Preserve unchanged relation roots so publication and consumer histories
 can skip unrelated updates. Extend secondary indexes with new owned
 rows instead of repeatedly unioning their entire previous seed.

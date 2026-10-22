@@ -754,3 +754,147 @@ fn pending_index_edges_reject_cycles_before_installing_snapshots() {
     indices.register_edge(0, 2);
     indices.register_edge(2, 0);
 }
+
+#[test]
+fn one_incidence_owner_rewrites_permutations_types_repeats_and_collisions() {
+    let orders = [vec![0, 1, 2, 3], vec![2, 0, 3, 1], vec![1, 3, 0, 2]];
+    let specs = orders
+        .iter()
+        .map(|order| CompactIndexSpec {
+            relation: 10,
+            order: order.clone(),
+            member_types: vec![None, Some(0), Some(1), Some(0)],
+        })
+        .collect();
+    let mut indices = CompactOwnerIndices::new(specs);
+    for owner in 0..4 {
+        indices.create_owner(owner);
+    }
+    let mut expected = BTreeSet::new();
+    for left in 0..4 {
+        for middle in 0..4 {
+            for right in 0..4 {
+                let row = vec![(left + middle + right) % 2, left, middle, right];
+                indices.record(0, 10, &row, false);
+                expected.insert(row);
+            }
+        }
+    }
+    let original = indices.snapshot(0);
+    for (member_type, loser, winner) in [(0, 3, 1), (1, 3, 2), (0, 2, 1), (1, 2, 1)] {
+        let affected = expected
+            .iter()
+            .filter(|row| {
+                if member_type == 0 {
+                    row[1] == loser || row[3] == loser
+                } else {
+                    row[2] == loser
+                }
+            })
+            .count();
+        let unaffected = expected.len() - affected;
+        expected = expected
+            .into_iter()
+            .map(|mut row| {
+                for column in 1..4 {
+                    let typ = if column == 2 { 1 } else { 0 };
+                    if typ == member_type && row[column] == loser {
+                        row[column] = winner;
+                    }
+                }
+                row
+            })
+            .collect();
+        let stats = indices.rewrite(0, member_type, loser, winner);
+        assert_eq!(stats.visited_rows, affected * orders.len());
+        assert_eq!(
+            stats.rewritten_rows,
+            (expected.len() - unaffected) * orders.len()
+        );
+        assert_eq!(
+            stats.merged_rows,
+            (affected - (expected.len() - unaffected)) * orders.len()
+        );
+        for (index, order) in orders.iter().enumerate() {
+            let projected: BTreeSet<_> = expected
+                .iter()
+                .map(|row| order.iter().map(|&column| row[column]).collect::<Vec<_>>())
+                .collect();
+            assert_eq!(
+                indices.rows(0, index).iter().collect::<BTreeSet<_>>(),
+                projected
+            );
+        }
+    }
+    assert_eq!(original.rows(0).iter().count(), 64);
+    indices.record(1, 10, &[100, 3, 3, 2], false);
+    indices.rebase(
+        1,
+        0,
+        false,
+        |_, origin| if origin >= 2 { 1 } else { origin },
+        &[(0, 1, 0)],
+    );
+    let mut inherited = expected.clone();
+    inherited.insert(vec![100, 1, 1, 1]);
+    inherited = inherited
+        .into_iter()
+        .map(|mut row| {
+            for column in [1, 3] {
+                if row[column] == 1 {
+                    row[column] = 0;
+                }
+            }
+            row
+        })
+        .collect();
+    for (index, order) in orders.iter().enumerate() {
+        let projected: BTreeSet<_> = inherited
+            .iter()
+            .map(|row| order.iter().map(|&column| row[column]).collect::<Vec<_>>())
+            .collect();
+        assert_eq!(
+            indices.rows(1, index).iter().collect::<BTreeSet<_>>(),
+            projected
+        );
+    }
+    let before = indices.snapshot(1);
+    indices.record(0, 10, &[101, 1, 1, 1], false);
+    expected.insert(vec![101, 1, 1, 1]);
+    let refreshed = indices.rebase(
+        1,
+        0,
+        false,
+        |_, origin| if origin >= 2 { 1 } else { origin },
+        &[(0, 1, 0)],
+    );
+    assert_eq!(refreshed.reused_indices, 0);
+    assert!(!before.rows(0).contains(&[101, 0, 1, 0]));
+    assert!(indices.rows(1, 0).contains(&[101, 0, 1, 0]));
+    indices.rebase(3, 0, false, |_, origin| origin, &[]);
+    indices.record(2, 10, &[102, 2, 3, 2], false);
+    indices.inherit_shared(3, 2);
+    expected.insert(vec![102, 2, 3, 2]);
+    indices.rewrite(3, 0, 2, 1);
+    expected = expected
+        .into_iter()
+        .map(|mut row| {
+            for column in [1, 3] {
+                if row[column] == 2 {
+                    row[column] = 1;
+                }
+            }
+            row
+        })
+        .collect();
+    for (index, order) in orders.iter().enumerate() {
+        let projected: BTreeSet<_> = expected
+            .iter()
+            .map(|row| order.iter().map(|&column| row[column]).collect::<Vec<_>>())
+            .collect();
+        assert_eq!(
+            indices.rows(3, index).iter().collect::<BTreeSet<_>>(),
+            projected
+        );
+    }
+}

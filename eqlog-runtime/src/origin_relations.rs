@@ -171,6 +171,17 @@ impl OriginRelation {
         loser: u32,
         winner: u32,
     ) -> OriginRewriteStats {
+        self.replace_representative_with(member_type, loser, winner, |_| {})
+    }
+
+    /// Selected permutations can reuse this incidence without storing copies.
+    pub(crate) fn replace_representative_with(
+        &mut self,
+        member_type: u32,
+        loser: u32,
+        winner: u32,
+        mut on_row: impl FnMut(&[u32]),
+    ) -> OriginRewriteStats {
         if loser == winner {
             return OriginRewriteStats::default();
         }
@@ -178,6 +189,7 @@ impl OriginRelation {
             if self.member_types[0] != Some(member_type) || !self.rows.remove(&[loser]) {
                 return OriginRewriteStats::default();
             }
+            on_row(&[loser]);
             self.change_len(-1);
             let inserted = self.insert(&[winner]);
             return OriginRewriteStats {
@@ -204,6 +216,7 @@ impl OriginRelation {
         for mut tuple in prefix_rows.chain(affected.iter().flat_map(|rows| rows.iter())) {
             stats.visited_rows += 1;
             self.remove(&tuple);
+            on_row(&tuple);
             for (column_type, origin) in self.member_types.iter().zip(&mut tuple) {
                 if *column_type == Some(member_type) && *origin == loser {
                     *origin = winner;
