@@ -1838,7 +1838,32 @@ fn emit_components(
         )?;
         writeln!(f, "baseline_{m}.work = transport_work;")?;
     }
+    let compact = super::compact_indices::supports_model(model, ctx);
+    if compact {
+        // A completed target batch avoids repeatedly adopting provisional
+        // snapshots from an already registered primary source.
+        writeln!(
+            f,
+            "let compact_incoming = self.__compact_incoming_{name}(&components);"
+        )?;
+    }
     writeln!(f, "for component in components.iter() {{")?;
+    if compact {
+        writedoc! {f, "
+            if let Some(incoming) = &compact_incoming {{
+                for object in &component.objects {{
+                    if let Some(morphisms) = incoming.get(object) {{
+        "}?;
+        if let Some(active) = active {
+            write!(f, "active_{active} |= ")?;
+        }
+        writedoc! {f, "
+                        self.__transport_component_{m}_{name}({baseline}parents, morphisms, {retain_own});
+                    }}
+                }}
+            }}
+        "}?;
+    }
     writeln!(f, "#[allow(unused_variables)] let retain_component_{depth} = {retain_own} || !component.internal.is_empty();")?;
     writedoc! {f, "
             loop {{
@@ -1872,13 +1897,22 @@ fn emit_components(
         f,
         "if component.internal.is_empty() || !active_{depth} {{ break; }} }}"
     )?;
+    if compact {
+        // Keep the traversal direction after materialization so transport
+        // deferred by earlier components still reaches each later target.
+        writeln!(f, "if compact_incoming.is_none() {{")?;
+    }
     if let Some(active) = active {
         write!(f, "active_{active} |= ")?;
     }
     writeln!(
         f,
-        "self.__transport_component_{m}_{name}({baseline}parents, &component.outgoing, {retain_own}); }}"
+        "self.__transport_component_{m}_{name}({baseline}parents, &component.outgoing, {retain_own});"
     )?;
+    if compact {
+        writeln!(f, "}}")?;
+    }
+    writeln!(f, "}}")?;
     if let Some(baseline) = codegen.transport_baseline(root, selection, ctx) {
         for (i, rel) in baseline.relations.iter().enumerate() {
             let field = super::transport::field(rel, model, ctx);

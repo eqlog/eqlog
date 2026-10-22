@@ -29,14 +29,19 @@ target row rewrites, preserving the primary matching baseline.
 
 Register pending edges before transport to avoid repeated walks through
 future descendants, and refresh descendants in topological order.
+Batch incoming transport before closing each acyclic compact target,
+so merged indexes see completed parent snapshots. Preserve the original
+primary source and traversal direction through storage fallback; leave
+cyclic component iteration on its ordinary path.
 Keep each incoming source's adopted domain so late source growth cannot
 expose another path's image before its own transport. Preserve the
 first incoming map immediately; adopt additional maps during closure.
 Materialize unproved overlaps and changing multi-source quotients before
 mutation, retaining ordinary semantics for bare members and equations.
 
-Index equality work by the losing representative's incidence bucket.
-Unary relations already provide that index through their row set.
+Index equality work by the losing representative. Reuse the row tree
+for leading member columns instead of duplicating their incidence.
+Retain auxiliary incidence only for occurrences outside that prefix.
 Preserve unchanged relation roots so publication and consumer histories
 can skip unrelated updates. Extend secondary indexes with new owned
 rows instead of repeatedly unioning their entire previous seed.

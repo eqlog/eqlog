@@ -71,3 +71,106 @@ fn incoming_images_require_proofs_for_every_member_type() {
         assert!(!model.joined(right, first_right, second_right));
     }
 }
+
+#[test]
+fn interrupted_target_closure_resumes_descendant_matches() {
+    let mut model = CompactSharedTypes::new();
+    model.enable_compact_world();
+    let [source, left, right, target, child] = std::array::from_fn(|_| model.new_world());
+    let key = model.new_key();
+    let first = model.new_first(source);
+    let second = model.new_second(source);
+    let extra_key = model.new_key();
+    let extra_first = model.new_first(source);
+    model.insert_named_first(source, key, first);
+    model.insert_named_first(source, extra_key, extra_first);
+    model.insert_named_second(source, key, second);
+    let source_left = inherit(&mut model, source, left);
+    let source_right = inherit(&mut model, source, right);
+    let first_left = model.first_mor_app(source_left, first).unwrap();
+    let extra_left = model.first_mor_app(source_left, extra_first).unwrap();
+    let second_left = model.second_mor_app(source_left, second).unwrap();
+    let first_right = model.first_mor_app(source_right, first).unwrap();
+    let extra_right = model.first_mor_app(source_right, extra_first).unwrap();
+    let second_right = model.second_mor_app(source_right, second).unwrap();
+    let right_target = inherit(&mut model, right, target);
+    let left_target = inherit(&mut model, left, target);
+    let target_child = inherit(&mut model, target, child);
+    let target_first = model.first_mor_app(right_target, first_right).unwrap();
+    let target_extra = model.first_mor_app(right_target, extra_right).unwrap();
+    let target_second = model.second_mor_app(right_target, second_right).unwrap();
+    let child_first = model.first_mor_app(target_child, target_first).unwrap();
+    let child_extra = model.first_mor_app(target_child, target_extra).unwrap();
+    let child_second = model.second_mor_app(target_child, target_second).unwrap();
+    assert_eq!(model.first_mor_app(left_target, first_left), None);
+    model.insert_left(left, first_left, second_left);
+    model.insert_left(left, extra_left, second_left);
+    model.insert_right(right, first_right, second_right);
+    model.insert_right(child, child_extra, child_second);
+
+    assert!(model.close_until(|model| {
+        model.joined(target, target_first, target_second)
+            && !model.joined(child, child_extra, child_second)
+    }));
+    assert!(model.are_equal_first(
+        target_first,
+        model.first_mor_app(left_target, first_left).unwrap()
+    ));
+    assert!(model.are_equal_second(
+        target_second,
+        model.second_mor_app(left_target, second_left).unwrap()
+    ));
+    model.close();
+    assert!(model.joined(child, child_first, child_second));
+    assert!(model.joined(child, child_extra, child_second));
+    assert_eq!(
+        model.first_mor_app(right_target, first_right),
+        Some(target_first)
+    );
+    assert_eq!(
+        model.second_mor_app(right_target, second_right),
+        Some(target_second)
+    );
+    assert!(!model.joined(left, first_left, second_left));
+    assert!(!model.joined(right, first_right, second_right));
+    model.close();
+    assert!(model.joined(child, child_first, child_second));
+}
+
+#[test]
+fn materialization_keeps_deferred_edges_from_earlier_sources() {
+    let mut model = CompactSharedTypes::new();
+    model.enable_compact_world();
+    let [source, left, right, target, child] = std::array::from_fn(|_| model.new_world());
+    let key = model.new_key();
+    let first = model.new_first(source);
+    let second = model.new_second(source);
+    model.insert_named_first(source, key, first);
+    let source_left = inherit(&mut model, source, left);
+    let source_right = inherit(&mut model, source, right);
+    let first_left = model.first_mor_app(source_left, first).unwrap();
+    let second_left = model.second_mor_app(source_left, second).unwrap();
+    let first_right = model.first_mor_app(source_right, first).unwrap();
+    let second_right = model.second_mor_app(source_right, second).unwrap();
+    model.insert_left(left, first_left, second_left);
+    model.insert_right(right, first_right, second_right);
+    let left_target = inherit(&mut model, left, target);
+    let right_target = inherit(&mut model, right, target);
+    let target_child = inherit(&mut model, target, child);
+    let left_child = inherit(&mut model, left, child);
+    let target_second = model.second_mor_app(left_target, second_left).unwrap();
+    assert!(model.second_mor_app(target_child, target_second).is_some());
+    assert_eq!(model.second_mor_app(left_child, second_left), None);
+
+    model.close();
+    let direct_first = model.first_mor_app(left_child, first_left).unwrap();
+    let direct_second = model.second_mor_app(left_child, second_left).unwrap();
+    assert!(model.left(child, direct_first, direct_second));
+    let target_first = model.first_mor_app(right_target, first_right).unwrap();
+    let target_second = model.second_mor_app(right_target, second_right).unwrap();
+    let child_first = model.first_mor_app(target_child, target_first).unwrap();
+    let child_second = model.second_mor_app(target_child, target_second).unwrap();
+    assert!(model.right(child, child_first, child_second));
+    assert!(model.are_equal_first(direct_first, child_first));
+    assert!(!model.are_equal_second(direct_second, child_second));
+}

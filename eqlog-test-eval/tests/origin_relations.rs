@@ -420,6 +420,88 @@ fn union_lengths_remain_exact_across_storage_arities_and_snapshots() {
 }
 
 #[test]
+fn first_column_snapshots_preserve_suffixes_at_every_storage_arity() {
+    assert!(Table::new(0).first_column(7).is_none());
+    for arity in 1..=12 {
+        let mut table = Table::new(arity);
+        let mut tuple = vec![3; arity];
+        tuple[0] = 7;
+        assert!(table.insert(&tuple));
+        let suffix = table.first_column(7).unwrap();
+        assert_eq!(suffix.arity(), arity - 1);
+        assert!(suffix.contains(&tuple[1..]));
+        assert!(table.first_column(8).is_none());
+        assert!(table.remove(&tuple));
+        assert!(table.first_column(7).is_none());
+        assert_eq!(suffix.iter().collect::<Vec<_>>(), vec![tuple[1..].to_vec()]);
+    }
+}
+
+#[test]
+fn prefix_and_auxiliary_incidence_match_row_rewriting_after_unions() {
+    for arity in 1..=12 {
+        let member_types: Vec<_> = (0..arity)
+            .map(|column| (column % 3 != 1).then_some((column % 2) as u32))
+            .collect();
+        let mut relation = OriginRelation::new(&member_types);
+        let mut expected = BTreeSet::<Vec<u32>>::new();
+        let mut random = 29u64;
+        for step in 0..120 {
+            let tuple: Vec<_> = (0..arity)
+                .map(|_| {
+                    random = random.wrapping_mul(6364136223846793005).wrapping_add(1);
+                    ((random >> 32) % 7) as u32
+                })
+                .collect();
+            if step % 4 == 0 {
+                let mut parent = OriginRelation::new(&member_types);
+                assert!(parent.insert(&tuple));
+                relation = relation.union(&parent);
+                expected.insert(tuple);
+            } else {
+                assert_eq!(relation.insert(&tuple), expected.insert(tuple));
+            }
+            let member_type = step % 2;
+            let loser = ((random >> 8) % 7) as u32;
+            let winner = (loser + 1) % 7;
+            let before = relation.clone();
+            let old_expected = expected.clone();
+            let affected = expected
+                .iter()
+                .filter(|tuple| {
+                    member_types
+                        .iter()
+                        .zip(*tuple)
+                        .any(|(typ, origin)| *typ == Some(member_type) && *origin == loser)
+                })
+                .count();
+            expected = expected
+                .into_iter()
+                .map(|mut tuple| {
+                    for (typ, origin) in member_types.iter().zip(&mut tuple) {
+                        if *typ == Some(member_type) && *origin == loser {
+                            *origin = winner;
+                        }
+                    }
+                    tuple
+                })
+                .collect();
+            let merged = old_expected.len() - expected.len();
+            assert_eq!(
+                relation.replace_representative(member_type, loser, winner),
+                OriginRewriteStats {
+                    visited_rows: affected,
+                    rewritten_rows: affected - merged,
+                    merged_rows: merged,
+                }
+            );
+            assert_eq!(rows(&relation), expected);
+            assert_eq!(rows(&before), old_expected);
+        }
+    }
+}
+
+#[test]
 fn lazy_lengths_survive_insertion_replacement_and_repeated_reads() {
     let mut left = OriginRelation::new(&[Some(0)]);
     let mut right = OriginRelation::new(&[Some(0)]);

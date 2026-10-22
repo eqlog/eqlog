@@ -5,7 +5,7 @@ use std::rc::Rc;
 use crate::table::Table;
 use crate::wbtree::map::WBTreeMap;
 
-/// Equality work counts rows from one losing representative's incidence bucket.
+/// Equality work counts rows mentioning one losing representative.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct OriginRewriteStats {
     pub visited_rows: usize,
@@ -28,13 +28,15 @@ pub struct OriginRelation {
     len: Cell<Option<NonZeroUsize>>,
 }
 
-fn references<'a>(
+fn auxiliary_references<'a>(
     member_types: &'a [Option<u32>],
     tuple: &'a [u32],
 ) -> impl Iterator<Item = (u32, u32)> + 'a {
     member_types
         .iter()
         .enumerate()
+        // The row tree indexes the first column, including its repeated uses.
+        .skip(1)
         .filter_map(move |(column, member_type)| {
             let member_type = (*member_type)?;
             let origin = tuple[column];
@@ -123,11 +125,7 @@ impl OriginRelation {
         assert!(self.rows.insert(tuple));
         self.change_len(1);
         let arity = self.member_types.len();
-        // Unary rows already provide the complete member incidence index.
-        if arity == 1 {
-            return true;
-        }
-        for (member_type, origin) in references(&self.member_types, tuple) {
+        for (member_type, origin) in auxiliary_references(&self.member_types, tuple) {
             let rows = self
                 .incidence
                 .entry(member_type)
@@ -142,7 +140,7 @@ impl OriginRelation {
     fn remove(&mut self, tuple: &[u32]) {
         assert!(self.rows.remove(tuple), "incidence refers to an absent row");
         self.change_len(-1);
-        for (member_type, origin) in references(&self.member_types, tuple) {
+        for (member_type, origin) in auxiliary_references(&self.member_types, tuple) {
             let origins = self
                 .incidence
                 .get_mut(&member_type)
@@ -188,16 +186,22 @@ impl OriginRelation {
                 merged_rows: usize::from(!inserted),
             };
         }
+        let prefix = if self.member_types.first() == Some(&Some(member_type)) {
+            self.rows.first_column(loser)
+        } else {
+            None
+        };
         let affected = self
             .incidence
             .get(&member_type)
             .and_then(|origins| origins.get(&loser))
             .cloned();
-        let Some(affected) = affected else {
-            return OriginRewriteStats::default();
-        };
         let mut stats = OriginRewriteStats::default();
-        for mut tuple in affected.iter() {
+        let prefix_rows = prefix.iter().flat_map(|rows| rows.iter()).map(|mut tuple| {
+            tuple.insert(0, loser);
+            tuple
+        });
+        for mut tuple in prefix_rows.chain(affected.iter().flat_map(|rows| rows.iter())) {
             stats.visited_rows += 1;
             self.remove(&tuple);
             for (column_type, origin) in self.member_types.iter().zip(&mut tuple) {

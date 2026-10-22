@@ -249,3 +249,22 @@ table! {
     Rows8(PrefixTree8, 8),
     Rows9(PrefixTree9, 9),
 }
+
+impl Table {
+    /// A shared suffix snapshot lets equality visit only one first-column bucket.
+    pub fn first_column(&self, first: u32) -> Option<Self> {
+        match &self.0 {
+            Rows::Rows0(_) => None,
+            Rows::Rows1(tree) => tree.get(first).cloned().map(Self::from),
+            Rows::Rows2(tree) => tree.get(first).cloned().map(Self::from),
+            Rows::Rows3(tree) => tree.get(first).cloned().map(Self::from),
+            Rows::Rows4(tree) => tree.get(first).cloned().map(Self::from),
+            Rows::Rows5(tree) => tree.get(first).cloned().map(Self::from),
+            Rows::Rows6(tree) => tree.get(first).cloned().map(Self::from),
+            Rows::Rows7(tree) => tree.get(first).cloned().map(Self::from),
+            Rows::Rows8(tree) => tree.get(first).cloned().map(Self::from),
+            Rows::Rows9(tree) => tree.get(first).cloned().map(Self::from),
+            Rows::Long { arity: _, rows } => rows.get(&first).cloned(),
+        }
+    }
+}

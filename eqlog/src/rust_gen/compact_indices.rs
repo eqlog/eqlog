@@ -236,12 +236,15 @@ pub(super) fn graph_guard<'a>(model: TypeId, ctx: &'a RustGenCtx<'a>) -> impl Di
         if supports_model(model, ctx) {
             let name = model_name(model, ctx);
             writedoc! {f, "
-                if self.__compact_indices_{name}.is_some() {{
+                if let Some(incoming) = self.__compact_incoming_{name}(&components) {{
                     let mut changed = false;
                     'compact: for component in components.iter() {{
-                        assert!(component.internal.is_empty(), \"compact inheritance is acyclic\");
-                        for morphism in &component.outgoing {{
-                            if let Some(next) = self.__compact_transport_{name}(morphism.morph, morphism.dom, morphism.cod) {{ changed |= next; }} else {{ break 'compact; }}
+                        for object in &component.objects {{
+                            if let Some(morphisms) = incoming.get(object) {{
+                                for morphism in morphisms {{
+                                    if let Some(next) = self.__compact_transport_{name}(morphism.morph, morphism.dom, morphism.cod) {{ changed |= next; }} else {{ break 'compact; }}
+                                }}
+                            }}
                         }}
                     }}
                     if self.__compact_indices_{name}.is_some() {{ return changed; }}
@@ -386,6 +389,28 @@ pub(super) fn methods<'a>(
                     let indices = self.__compact_indices_{name}.as_mut().expect(\"compact owner indices are enabled\");
                     if !indices.has_owner(owner) {{ indices.create_owner(owner); }}
                     {ensure_members}
+                }}
+
+                fn __compact_incoming_{name}(&self, components: &[MorphismComponent])
+                    -> Option<BTreeMap<u32, Vec<MorphismWithSignature>>>
+                {{
+                    let indices = self.__compact_indices_{name}.as_ref()?;
+                    if components.iter().any(|component| !component.internal.is_empty()) {{ return None; }}
+                    let mut incoming = BTreeMap::<u32, Vec<MorphismWithSignature>>::new();
+                    for component in components {{
+                        for morphism in &component.outgoing {{
+                            incoming.entry(morphism.cod).or_default().push(morphism.clone());
+                        }}
+                    }}
+                    for (&target, morphisms) in &mut incoming {{
+                        let primary = indices.has_owner(target).then(|| indices.source(target)).flatten();
+                        if let Some(position) = morphisms.iter().position(|morphism| {{
+                            Some(morphism.dom) == primary && self.__compact_adopted_{name}.contains(&morphism.morph)
+                        }}) {{
+                            morphisms[..=position].rotate_right(1);
+                        }}
+                    }}
+                    Some(incoming)
                 }}
 
                 fn __compact_publish_{name}(&mut self, owner: u32) {{

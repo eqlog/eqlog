@@ -20,6 +20,27 @@ fn inherit(model: &mut CompactKeyDag, source: World, target: World) -> WorldMor 
     morphism
 }
 
+#[test]
+fn ordinary_cycles_propagate_nullary_facts_to_later_components() {
+    let mut model = CompactKeyDag::new();
+    model.enable_compact_world();
+    let [left, right, child] = std::array::from_fn(|_| model.new_world());
+    for (source, target) in [(left, right), (right, left), (right, child)] {
+        let morphism = model.new_world_mor();
+        model.insert_world_mor_dom(morphism, source);
+        model.insert_world_mor_cod(morphism, target);
+    }
+    model.insert_enabled(left);
+    model.close();
+    for owner in [left, right, child] {
+        assert!(model.enabled(owner));
+    }
+    assert_eq!(model.iter_el().count(), 0);
+    assert_eq!(model.iter_world().count(), 3);
+    model.close();
+    assert!(model.enabled(child));
+}
+
 fn named_diamond() -> (CompactKeyDag, [World; 4], [WorldMor; 4], [El; 2]) {
     let mut model = CompactKeyDag::new();
     model.enable_compact_world();
