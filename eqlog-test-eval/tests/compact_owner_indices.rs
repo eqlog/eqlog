@@ -595,3 +595,40 @@ fn shared_edges_reject_directed_cycles() {
     indices.inherit_shared(2, 1);
     indices.inherit_shared(1, 2);
 }
+
+#[test]
+fn pending_index_edges_do_not_install_source_snapshots() {
+    let mut indices = CompactOwnerIndices::new(item_specs());
+    for owner in 0..4 {
+        indices.create_owner(owner);
+    }
+    for (source, target) in [(0, 1), (0, 2), (1, 3), (2, 3)] {
+        indices.register_edge(source, target);
+        assert_eq!(indices.source(target), None);
+        assert!(indices.rows(target, 0).is_empty());
+    }
+    indices.record(0, 10, &[10, 1], false);
+    indices.rebase(1, 0, false, |_, origin| origin, &[]);
+    indices.rebase(2, 0, false, |_, origin| origin, &[]);
+    indices.record(1, 10, &[20, 2], false);
+    indices.record(2, 10, &[30, 3], false);
+    indices.rebase(3, 1, false, |_, origin| origin, &[]);
+    indices.inherit_shared(3, 2);
+    assert_eq!(
+        indices.rows(3, 0).iter().collect::<BTreeSet<_>>(),
+        BTreeSet::from([vec![10, 1], vec![20, 2], vec![30, 3]])
+    );
+}
+
+#[test]
+#[should_panic(expected = "cyclic compact inheritance")]
+fn pending_index_edges_reject_cycles_before_installing_snapshots() {
+    let mut indices = CompactOwnerIndices::new(Vec::new());
+    for owner in 0..3 {
+        indices.create_owner(owner);
+    }
+    indices.register_edge(0, 1);
+    indices.register_edge(1, 2);
+    indices.register_edge(0, 2);
+    indices.register_edge(2, 0);
+}
