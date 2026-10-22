@@ -10,6 +10,7 @@ pub use super::element_weights::ElementWeights;
 pub use super::lazy_index::{IndexSeed, LazyIndex};
 pub use super::member_spaces::{
     MemberBlock, MemberMerge, MemberRefresh, MemberSnapshot, MemberSpaceStats, MemberSpaces,
+    SharedInheritance,
 };
 pub use super::origin_relations::{OriginRelation, OriginRewriteStats};
 pub use super::table::Table;

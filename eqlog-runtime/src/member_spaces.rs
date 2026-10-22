@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::rc::Rc;
 
 use crate::wbtree::map::WBTreeMap;
 use crate::wbtree::set::WBTreeSet;
@@ -207,10 +208,23 @@ struct Inheritance {
     domain: WBTreeSet,
 }
 
+#[derive(Clone)]
 struct SharedMembers {
     domain: WBTreeSet,
     witnesses: WBTreeMap<u64>,
     extent: u64,
+}
+
+/// Prepared separately so every member type can prove its images before any
+/// type installs them. A plan is valid only while its participating snapshots
+/// remain unchanged.
+pub struct SharedInheritance {
+    identity: Rc<()>,
+    source: u32,
+    target: u32,
+    target_revision: u64,
+    inputs: Vec<(u32, u64)>,
+    members: SharedMembers,
 }
 
 struct MemberSpace {
@@ -222,6 +236,7 @@ struct MemberSpace {
     inherited: Option<Inheritance>,
     inherited_witnesses: WBTreeMap<u64>,
     additional: Vec<Inheritance>,
+    shared_members: Option<Box<SharedMembers>>,
     component: u32,
     children: WBTreeSet,
 }
@@ -250,6 +265,7 @@ pub struct MemberSpaceStats {
 /// empty partitions. The evaluator materializes unsupported quotients before
 /// mutation; unrelated paths never acquire equality merely from shared origins.
 pub struct MemberSpaces {
+    identity: Rc<()>,
     owners: BTreeMap<u32, MemberSpace>,
     blocks: BTreeMap<u32, MemberBlock>,
     components: Unification<u32>,
@@ -281,6 +297,7 @@ impl MemberSpaces {
             "invalid member handle bound"
         );
         Self {
+            identity: Rc::new(()),
             owners: BTreeMap::new(),
             blocks: BTreeMap::new(),
             components: Unification::new(),
@@ -343,6 +360,7 @@ impl MemberSpaces {
                 inherited: None,
                 inherited_witnesses: WBTreeMap::new(),
                 additional: Vec::new(),
+                shared_members: None,
                 component,
                 children: WBTreeSet::new(),
             },
@@ -460,6 +478,17 @@ impl MemberSpaces {
             .insert(target);
     }
 
+    fn inputs_current(&self, space: &MemberSpace) -> bool {
+        let Some(inherited) = &space.inherited else {
+            return false;
+        };
+        inherited.revision == self.owners[&inherited.source].snapshot.revision
+            && space
+                .additional
+                .iter()
+                .all(|input| input.revision == self.owners[&input.source].snapshot.revision)
+    }
+
     fn shared_inputs(&self, target: u32, additional: Option<u32>) -> Option<SharedMembers> {
         let space = &self.owners[&target];
         let source = space.inherited.as_ref()?.source;
@@ -467,14 +496,29 @@ impl MemberSpaces {
         if !source.partition.parents.is_empty() || !space.local_equations.is_empty() {
             return None;
         }
-        let mut result = SharedMembers {
-            domain: source.domain.clone(),
-            witnesses: source.witnesses.clone(),
-            extent: source.extent,
+        // Local proofs cannot establish equality between two incoming images.
+        // Only the previously proved incoming aggregate can extend a proof.
+        let cached = space
+            .shared_members
+            .as_deref()
+            .filter(|_| self.inputs_current(space));
+        let mut result = if let Some(cached) = cached {
+            cached.clone()
+        } else {
+            SharedMembers {
+                domain: source.domain.clone(),
+                witnesses: source.witnesses.clone(),
+                extent: source.extent,
+            }
         };
         let sources = space
             .additional
             .iter()
+            .skip(if cached.is_some() {
+                space.additional.len()
+            } else {
+                0
+            })
             .map(|input| input.source)
             .chain(additional);
         for source in sources {
@@ -505,34 +549,79 @@ impl MemberSpaces {
         self.shared_inputs(target, Some(source)).is_some()
     }
 
+    pub fn prepare_shared_inheritance(
+        &self,
+        source: u32,
+        target: u32,
+    ) -> Option<SharedInheritance> {
+        let members = self.shared_inputs(target, Some(source))?;
+        let space = &self.owners[&target];
+        let inputs = std::iter::once(space.inherited.as_ref()?.source)
+            .chain(space.additional.iter().map(|input| input.source))
+            .chain(std::iter::once(source))
+            .map(|source| (source, self.owners[&source].snapshot.revision))
+            .collect();
+        Some(SharedInheritance {
+            identity: self.identity.clone(),
+            source,
+            target,
+            target_revision: space.snapshot.revision,
+            inputs,
+            members,
+        })
+    }
+
     pub fn can_refresh(&self, owner: u32) -> bool {
         let space = &self.owners[&owner];
         if space.additional.is_empty() {
             return true;
         }
-        let inherited = space
-            .inherited
-            .as_ref()
-            .expect("shared owner has a primary source");
         // Source revisions retain the overlap proof, but target equations still
         // require materialization even when every source is unchanged.
-        if space.local_equations.is_empty()
-            && inherited.revision == self.owners[&inherited.source].snapshot.revision
-            && space
-                .additional
-                .iter()
-                .all(|input| input.revision == self.owners[&input.source].snapshot.revision)
-        {
+        if space.local_equations.is_empty() && self.inputs_current(space) {
             return true;
         }
         self.shared_inputs(owner, None).is_some()
     }
 
     pub fn inherit_shared_members(&mut self, source: u32, target: u32) -> bool {
+        let prepared = self
+            .prepare_shared_inheritance(source, target)
+            .expect("unproved shared images");
+        self.install_shared_inheritance(prepared)
+    }
+
+    pub fn install_shared_inheritance(&mut self, prepared: SharedInheritance) -> bool {
         assert!(
-            self.can_share_inheritance(source, target),
-            "unproved shared images"
+            Rc::ptr_eq(&self.identity, &prepared.identity),
+            "shared inheritance proof belongs to another member space"
         );
+        let SharedInheritance {
+            identity: _,
+            source,
+            target,
+            target_revision,
+            inputs,
+            members,
+        } = prepared;
+        let space = &self.owners[&target];
+        assert_eq!(
+            space.snapshot.revision, target_revision,
+            "stale shared inheritance target"
+        );
+        assert!(
+            std::iter::once(space.inherited.as_ref().unwrap().source)
+                .chain(space.additional.iter().map(|input| input.source))
+                .chain(std::iter::once(source))
+                .eq(inputs.iter().map(|&(source, _)| source)),
+            "stale shared inheritance inputs"
+        );
+        for (source, revision) in inputs {
+            assert_eq!(
+                self.owners[&source].snapshot.revision, revision,
+                "stale shared inheritance source"
+            );
+        }
         self.register_edge(source, target);
         self.owners
             .get_mut(&target)
@@ -544,7 +633,8 @@ impl MemberSpaces {
                 domain: WBTreeSet::new(),
             });
         self.multiple_sources = true;
-        self.refresh(target)
+        self.refresh_with_shared(target, Some(members), |_| {})
+            .is_some()
     }
 
     pub fn get_snapshot(&self, owner: u32) -> Option<&MemberSnapshot> {
@@ -646,6 +736,15 @@ impl MemberSpaces {
     fn refresh_with(
         &mut self,
         owner: u32,
+        on_merge: impl FnMut(MemberMerge),
+    ) -> Option<MemberSnapshot> {
+        self.refresh_with_shared(owner, None, on_merge)
+    }
+
+    fn refresh_with_shared(
+        &mut self,
+        owner: u32,
+        shared: Option<SharedMembers>,
         mut on_merge: impl FnMut(MemberMerge),
     ) -> Option<MemberSnapshot> {
         let space = self.owners.get(&owner).expect("unknown owner");
@@ -653,14 +752,17 @@ impl MemberSpaces {
             return None;
         };
         let source = &self.owners[&inherited.source].snapshot;
-        if inherited.revision == source.revision
-            && space
-                .additional
-                .iter()
-                .all(|input| input.revision == self.owners[&input.source].snapshot.revision)
-        {
+        if self.inputs_current(space) {
             return None;
         }
+        let shared = if space.additional.is_empty() {
+            None
+        } else {
+            Some(Box::new(shared.unwrap_or_else(|| {
+                self.shared_inputs(owner, None)
+                    .expect("unproved shared images")
+            })))
+        };
         let (mut domain, mut canonical_domain, witnesses, extent) = if space.additional.is_empty() {
             (
                 source.domain.clone(),
@@ -669,13 +771,11 @@ impl MemberSpaces {
                 source.extent,
             )
         } else {
-            let combined = self
-                .shared_inputs(owner, None)
-                .expect("unproved shared images");
+            let combined = shared.as_ref().unwrap();
             (
                 combined.domain.clone(),
-                combined.domain,
-                combined.witnesses,
+                combined.domain.clone(),
+                combined.witnesses.clone(),
                 combined.extent,
             )
         };
@@ -724,6 +824,7 @@ impl MemberSpaces {
         inherited.revision = revision;
         inherited.domain = source.domain.clone();
         space.inherited_witnesses = source.witnesses.clone();
+        space.shared_members = shared;
         for (input, (revision, domain)) in space.additional.iter_mut().zip(additional_snapshots) {
             input.revision = revision;
             input.domain = domain;

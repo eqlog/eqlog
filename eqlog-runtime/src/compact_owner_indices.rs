@@ -84,6 +84,8 @@ struct Owner {
     children: WBTreeSet,
     additional: Vec<(u32, u64)>,
     shared_rows: Vec<Vec<Table>>,
+    // Rewritten rows cannot replace the raw support used by shared rebases.
+    is_raw_union: bool,
 }
 
 /// Separate local support lets a new parent snapshot replace inherited history.
@@ -177,6 +179,7 @@ impl CompactOwnerIndices {
                 children: WBTreeSet::new(),
                 additional: Vec::new(),
                 shared_rows: Vec::new(),
+                is_raw_union: true,
             },
         );
     }
@@ -254,17 +257,60 @@ impl CompactOwnerIndices {
 
     /// The caller has proved that common origin coordinates denote equal images.
     pub fn inherit_shared(&mut self, target: u32, source: u32) -> CompactRebaseStats {
-        assert!(
-            self.source(target).is_some(),
-            "shared inheritance needs a primary source"
-        );
+        let owner = self.owner(target);
+        let primary = owner
+            .snapshot
+            .source
+            .expect("shared inheritance needs a primary source");
+        let extend = owner.is_raw_union
+            && owner.snapshot.source_revision == Some(self.revision(primary))
+            && owner
+                .additional
+                .iter()
+                .all(|&(source, revision)| self.revision(source) == revision);
         self.register_edge(source, target);
-        self.owners
-            .get_mut(&target)
-            .unwrap()
-            .additional
-            .push((source, u64::MAX));
-        self.rebase_shared(target, true)
+        if !extend {
+            self.owners
+                .get_mut(&target)
+                .unwrap()
+                .additional
+                .push((source, u64::MAX));
+            return self.rebase_shared(target, true);
+        }
+        let incoming = &self.owner(source).snapshot;
+        let source_revision = incoming.revision;
+        let source_rows = incoming
+            .current
+            .iter()
+            .map(|index| index.rows().clone())
+            .collect();
+        let current: Vec<_> = self
+            .owner(target)
+            .snapshot
+            .current
+            .iter()
+            .zip(&incoming.current)
+            .map(|(current, incoming)| current.union(incoming))
+            .collect();
+        let owner = self.owners.get_mut(&target).unwrap();
+        if owner.additional.is_empty() {
+            owner.shared_rows.push(owner.source_rows.clone());
+        }
+        owner.additional.push((source, source_revision));
+        owner.shared_rows.push(source_rows);
+        let snapshot = &mut owner.snapshot;
+        if current
+            .iter()
+            .zip(&snapshot.current)
+            .any(|(new, old)| !new.rows().shares_storage_with(old.rows()))
+        {
+            snapshot.changed();
+        }
+        snapshot.current = current;
+        CompactRebaseStats {
+            refreshed: true,
+            ..CompactRebaseStats::default()
+        }
     }
 
     fn rebase_shared(&mut self, target: u32, force: bool) -> CompactRebaseStats {
@@ -344,10 +390,12 @@ impl CompactOwnerIndices {
             .iter()
             .map(|&(source, _)| (source, self.revision(source)))
             .collect();
+        let is_raw_union = owner.is_raw_union || reused.iter().all(|&reused| !reused);
         let owner = self.owners.get_mut(&target).unwrap();
         owner.source_rows = shared_rows[0].clone();
         owner.shared_rows = shared_rows;
         owner.additional = additional;
+        owner.is_raw_union = is_raw_union;
         let snapshot = &mut owner.snapshot;
         if current
             .iter()
@@ -412,11 +460,8 @@ impl CompactOwnerIndices {
         loser: u32,
         winner: u32,
     ) -> OriginRewriteStats {
-        let snapshot = &mut self
-            .owners
-            .get_mut(&owner)
-            .expect("unknown compact owner")
-            .snapshot;
+        let owner = self.owners.get_mut(&owner).expect("unknown compact owner");
+        let snapshot = &mut owner.snapshot;
         let mut stats = OriginRewriteStats::default();
         for index in &mut snapshot.current {
             add_rewrite(
@@ -426,6 +471,7 @@ impl CompactOwnerIndices {
         }
         if stats.visited_rows > 0 {
             snapshot.changed();
+            owner.is_raw_union = false;
         }
         stats
     }
@@ -485,6 +531,7 @@ impl CompactOwnerIndices {
             })
             .collect();
         let source_rows = parent.iter().map(|index| index.rows().clone()).collect();
+        let mut is_raw_union = target_owner.is_raw_union || reused.iter().all(|&reused| !reused);
         let mut stats = CompactRebaseStats {
             refreshed: true,
             reused_indices: reused.iter().filter(|&&reuse| reuse).count(),
@@ -499,7 +546,9 @@ impl CompactOwnerIndices {
                 stats.local_rows_replayed += 1;
                 for (&member_type, origin) in layout.member_types.iter().zip(&mut tuple) {
                     if let Some(member_type) = member_type {
+                        let previous = *origin;
                         *origin = normalize_parent(member_type, *origin);
+                        is_raw_union &= *origin == previous;
                     }
                 }
                 for &index in &layout.indices {
@@ -521,6 +570,7 @@ impl CompactOwnerIndices {
         }
         let target_owner = self.owners.get_mut(&target).unwrap();
         target_owner.source_rows = source_rows;
+        target_owner.is_raw_union = is_raw_union && stats.rewrite.visited_rows == 0;
         let snapshot = &mut target_owner.snapshot;
         if current
             .iter()

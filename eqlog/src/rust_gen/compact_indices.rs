@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::fmt::Display;
 
 use convert_case::{Case, Casing};
-use indoc::writedoc;
+use indoc::{formatdoc, writedoc};
 use itertools::Itertools;
 
 use super::{
@@ -519,12 +519,17 @@ pub(super) fn methods<'a>(
             }).join("\n");
             let share = members.iter().map(|&typ| {
                 let member = model_name(typ, ctx);
-                format!("self.__compact_members_{member}.as_mut().unwrap().inherit_shared_members(source, target); self.__sync_compact_{member}_weights();")
+                format!("self.__compact_members_{member}.as_mut().unwrap().install_shared_inheritance(shared_{member}); self.__sync_compact_{member}_weights();")
             }).join("\n");
-            let can_share = members.iter().map(|&typ| {
+            let prepare_shared = members.iter().map(|&typ| {
                 let member = model_name(typ, ctx);
-                format!("self.__compact_members_{member}.as_ref().unwrap().can_share_inheritance(source, target)")
-            }).join(" && ");
+                formatdoc!("
+                    let Some(shared_{member}) = self.__compact_members_{member}.as_ref().unwrap().prepare_shared_inheritance(source, target) else {{
+                        self.__materialize_compact_members();
+                        self.__complete_total_members();
+                        return None;
+                    }};")
+            }).join("\n");
             let can_refresh = members
                 .iter()
                 .map(|&typ| {
@@ -569,11 +574,7 @@ pub(super) fn methods<'a>(
                 fn __compact_transport_{name}(&mut self, morphism: u32, source: u32, target: u32) -> Option<bool> {{
                     self.__compact_indices_{name}.as_ref()?;
                     if !self.__compact_adopted_{name}.contains(&morphism) {{
-                        if !({can_share}) {{
-                            self.__materialize_compact_members();
-                            self.__complete_total_members();
-                            return None;
-                        }}
+                        {prepare_shared}
                         {share}
                         self.__compact_indices_{name}.as_mut().unwrap().inherit_shared(target, source);
                         self.__compact_adopted_{name}.insert(morphism);

@@ -21,6 +21,11 @@ as the old matching baseline so joins across parents still fire.
 Union relation rows and reverse incidence without expanding ancestry.
 Reuse proved overlap when every adopted source revision is unchanged,
 while still rejecting target equations before taking that shortcut.
+Prepare incoming member proofs once before changing any member type.
+Retain the inherited aggregate so another incoming morphism extends its
+proof and indexes without rebuilding previously adopted parents. Keep
+local witnesses out of these proofs and rebuild after source changes or
+target row rewrites, preserving the primary matching baseline.
 
 Register pending edges before transport to avoid repeated walks through
 future descendants, and refresh descendants in topological order.

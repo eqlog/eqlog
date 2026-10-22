@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use eqlog_runtime::__private::{CanonicalMask, MemberSpaces};
 
@@ -351,6 +352,122 @@ fn shared_diamonds_identify_only_witnessed_ancestor_images() {
 }
 
 #[test]
+fn successive_shared_adoptions_keep_local_members_and_stale_source_growth() {
+    let mut spaces = MemberSpaces::new();
+    for owner in 0..7 {
+        spaces.create_owner(owner);
+    }
+    let common = spaces.allocate(0);
+    let origin = spaces.snapshot(0).origin(common).unwrap();
+    spaces.witness(0, origin);
+    for source in 1..6 {
+        spaces.inherit_total_members(0, source);
+    }
+    let local = spaces.allocate(6);
+    spaces.inherit_total_members(1, 6);
+    let prepared = spaces.prepare_shared_inheritance(2, 6).unwrap();
+    assert!(spaces.install_shared_inheritance(prepared));
+    let prepared = spaces.prepare_shared_inheritance(3, 6).unwrap();
+    assert!(spaces.install_shared_inheritance(prepared));
+    let first = spaces.snapshot(6);
+
+    let late_primary = spaces.allocate(1);
+    let prepared = spaces.prepare_shared_inheritance(4, 6).unwrap();
+    assert!(spaces.install_shared_inheritance(prepared));
+    let primary_image = spaces.image(late_primary, 6).unwrap();
+    assert!(!first.contains(primary_image));
+
+    let late_secondary = spaces.allocate(2);
+    let local_late = spaces.allocate(6);
+    let prepared = spaces.prepare_shared_inheritance(5, 6).unwrap();
+    assert!(spaces.install_shared_inheritance(prepared));
+    let secondary_image = spaces.image(late_secondary, 6).unwrap();
+    let common_image = spaces.image(spaces.image(common, 1).unwrap(), 6).unwrap();
+    for source in 2..6 {
+        let source_common = spaces.image(common, source).unwrap();
+        assert_eq!(spaces.image(source_common, 6), Some(common_image));
+    }
+    assert_eq!(
+        spaces.iter(6).collect::<BTreeSet<_>>(),
+        BTreeSet::from([
+            common_image,
+            primary_image,
+            secondary_image,
+            local,
+            local_late
+        ])
+    );
+    assert!(!spaces.refresh(6));
+}
+
+#[test]
+fn cached_incoming_proofs_do_not_include_target_local_witnesses() {
+    let mut spaces = MemberSpaces::new();
+    for owner in 0..5 {
+        spaces.create_owner(owner);
+    }
+    let common = spaces.allocate(0);
+    let origin = spaces.snapshot(0).origin(common).unwrap();
+    spaces.witness(0, origin);
+    for source in [1, 2] {
+        spaces.inherit_total_members(0, source);
+    }
+    let bare = spaces.allocate(1);
+    let bare_origin = spaces.snapshot(1).origin(bare).unwrap();
+    spaces.inherit_total_members(1, 3);
+    spaces.inherit_total_members(1, 4);
+    spaces.inherit_shared_members(2, 4);
+    spaces.witness(4, bare_origin);
+    let before = spaces.snapshot(4);
+    assert!(spaces.prepare_shared_inheritance(3, 4).is_none());
+    assert_eq!(spaces.snapshot(4).revision(), before.revision());
+    let secondary_bare = spaces.image(bare, 3).unwrap();
+    assert_eq!(spaces.image(secondary_bare, 4), None);
+}
+
+#[test]
+fn prepared_shared_inheritance_rejects_changed_participants() {
+    for changed in 1..5 {
+        let mut spaces = MemberSpaces::new();
+        for owner in 0..5 {
+            spaces.create_owner(owner);
+        }
+        let common = spaces.allocate(0);
+        let origin = spaces.snapshot(0).origin(common).unwrap();
+        spaces.witness(0, origin);
+        for source in 1..4 {
+            spaces.inherit_total_members(0, source);
+        }
+        spaces.inherit_total_members(1, 4);
+        spaces.inherit_shared_members(2, 4);
+        let prepared = spaces.prepare_shared_inheritance(3, 4).unwrap();
+        spaces.allocate(changed);
+        let before = spaces.snapshot(4);
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            spaces.install_shared_inheritance(prepared)
+        }));
+        assert!(result.is_err());
+        assert_eq!(spaces.snapshot(4).revision(), before.revision());
+        let third_common = spaces.image(common, 3).unwrap();
+        assert_eq!(spaces.image(third_common, 4), None);
+    }
+}
+
+#[test]
+#[should_panic(expected = "shared inheritance proof belongs to another member space")]
+fn prepared_shared_inheritance_rejects_another_member_space() {
+    let mut spaces = [MemberSpaces::new(), MemberSpaces::new()];
+    for spaces in &mut spaces {
+        for owner in 0..3 {
+            spaces.create_owner(owner);
+        }
+        spaces.inherit_total_members(0, 2);
+    }
+    let prepared = spaces[0].prepare_shared_inheritance(1, 2).unwrap();
+    spaces[1].install_shared_inheritance(prepared);
+}
+
+#[test]
 fn equal_origin_numbers_do_not_prove_shared_images() {
     let mut spaces = MemberSpaces::new();
     for owner in 0..4 {
@@ -476,7 +593,7 @@ fn shared_refresh_rechecks_late_origins_and_changed_partitions() {
 fn shared_refresh_rechecks_equations_in_each_participating_owner() {
     for equated_owner in [1, 2, 3] {
         let mut spaces = MemberSpaces::new();
-        for owner in 0..4 {
+        for owner in 0..5 {
             spaces.create_owner(owner);
         }
         let a = spaces.allocate(0);
@@ -491,11 +608,13 @@ fn shared_refresh_rechecks_equations_in_each_participating_owner() {
         spaces.inherit_shared_members(2, 3);
         assert!(spaces.can_refresh(3));
         assert!(!spaces.refresh(3));
+        assert!(spaces.prepare_shared_inheritance(4, 3).is_some());
 
         let members = spaces.iter(equated_owner).collect::<Vec<_>>();
         assert_eq!(members.len(), 2);
         assert!(spaces.equate(equated_owner, members[0], members[1]));
         assert!(!spaces.can_refresh(3));
+        assert!(spaces.prepare_shared_inheritance(4, 3).is_none());
         assert_ne!(spaces.root(a), spaces.root(b));
     }
 }

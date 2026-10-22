@@ -554,6 +554,120 @@ fn shared_indexes_union_sources_but_keep_one_raw_inherited_baseline() {
 }
 
 #[test]
+fn additional_sources_extend_rows_without_replaying_local_support() {
+    let mut indices = CompactOwnerIndices::new(item_specs());
+    for owner in 0..=6 {
+        indices.create_owner(owner);
+    }
+    for source in 0..6 {
+        indices.record(source, 10, &[10 * (source + 1), source + 1], false);
+    }
+    indices.record(6, 10, &[90, 9], false);
+    indices.rebase(6, 0, false, |_, origin| origin, &[]);
+    let before = indices.snapshot(6);
+    assert_eq!(indices.inherit_shared(6, 1).local_rows_replayed, 0);
+    indices.record(6, 10, &[91, 10], false);
+    assert_eq!(indices.inherit_shared(6, 2).local_rows_replayed, 0);
+    assert!(!before.rows(0).contains(&[20, 2]));
+
+    indices.record(0, 10, &[70, 7], false);
+    assert_eq!(indices.inherit_shared(6, 3).local_rows_replayed, 2);
+    assert!(indices.rows(6, 0).contains(&[70, 7]));
+    indices.record(1, 10, &[80, 8], false);
+    assert_eq!(indices.inherit_shared(6, 4).local_rows_replayed, 2);
+    assert_eq!(indices.inherit_shared(6, 5).local_rows_replayed, 0);
+
+    assert_eq!(
+        indices.rows(6, 0).iter().collect::<BTreeSet<_>>(),
+        BTreeSet::from([
+            vec![10, 1],
+            vec![20, 2],
+            vec![30, 3],
+            vec![40, 4],
+            vec![50, 5],
+            vec![60, 6],
+            vec![70, 7],
+            vec![80, 8],
+            vec![90, 9],
+            vec![91, 10],
+        ])
+    );
+    let baseline = indices.inherited_rows(6, 0).unwrap();
+    assert!(baseline.shares_storage_with(indices.rows(0, 0)));
+    assert!(baseline.contains(&[70, 7]));
+    assert!(!baseline.contains(&[80, 8]));
+    assert!(!baseline.contains(&[90, 9]));
+    assert_eq!(indices.rewrite(6, 0, 10, 9).visited_rows, 2);
+    assert!(indices.rows(6, 0).contains(&[91, 9]));
+    assert!(indices.rows(6, 1).contains(&[9, 91]));
+}
+
+#[test]
+fn shared_adoption_rebuilds_rewritten_or_normalized_support() {
+    for rewrite in [false, true] {
+        let mut indices = CompactOwnerIndices::new(item_specs());
+        for owner in 0..4 {
+            indices.create_owner(owner);
+        }
+        indices.record(0, 10, &[10, 1], false);
+        indices.record(1, 10, &[20, 2], false);
+        indices.record(2, 10, &[30, 3], false);
+        indices.record(3, 10, &[40, 4], false);
+        indices.rebase(
+            3,
+            0,
+            false,
+            |_, origin| {
+                if !rewrite && origin == 4 {
+                    5
+                } else {
+                    origin
+                }
+            },
+            &[],
+        );
+        if rewrite {
+            indices.rewrite(3, 0, 4, 5);
+        }
+        assert!(indices.rows(3, 0).contains(&[40, 5]));
+        assert_eq!(indices.inherit_shared(3, 1).local_rows_replayed, 1);
+        assert!(indices.rows(3, 0).contains(&[40, 4]));
+        assert!(!indices.rows(3, 0).contains(&[40, 5]));
+        assert_eq!(indices.inherit_shared(3, 2).local_rows_replayed, 0);
+        assert!(indices.rows(3, 0).contains(&[30, 3]));
+        assert!(indices.rows(3, 0).contains(&[40, 4]));
+    }
+}
+
+#[test]
+fn partial_shared_rebases_keep_rewrites_ineligible_for_extension() {
+    let mut specs = item_specs();
+    specs.push(CompactIndexSpec {
+        relation: 20,
+        order: vec![0],
+        member_types: vec![Some(0)],
+    });
+    let mut indices = CompactOwnerIndices::new(specs);
+    for owner in 0..4 {
+        indices.create_owner(owner);
+    }
+    indices.record(0, 10, &[10, 1], false);
+    indices.record(1, 10, &[20, 2], false);
+    indices.record(2, 10, &[30, 3], false);
+    indices.record(3, 10, &[40, 4], false);
+    indices.rebase(3, 0, false, |_, origin| origin, &[]);
+    indices.inherit_shared(3, 1);
+    indices.rewrite(3, 0, 4, 5);
+    indices.record(1, 20, &[2], false);
+    let rebase = indices.rebase(3, 0, false, |_, origin| origin, &[]);
+    assert_eq!(rebase.reused_indices, 2);
+    assert!(indices.rows(3, 0).contains(&[40, 5]));
+    assert_eq!(indices.inherit_shared(3, 2).local_rows_replayed, 1);
+    assert!(indices.rows(3, 0).contains(&[40, 4]));
+    assert!(!indices.rows(3, 0).contains(&[40, 5]));
+}
+
+#[test]
 fn late_primary_edges_can_complete_an_acyclic_shared_component() {
     let mut indices = CompactOwnerIndices::new(item_specs());
     for owner in 0..3 {

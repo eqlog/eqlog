@@ -1,0 +1,17 @@
+type Key;
+
+model World {
+    type First;
+    type Second;
+    func named_first(Key) -> First;
+    func named_second(Key) -> Second;
+    pred left(First, Second);
+    pred right(First, Second);
+    pred joined(First, Second);
+
+    rule join_incoming {
+        if left(x, y);
+        if right(x, y);
+        then joined(x, y);
+    }
+}
