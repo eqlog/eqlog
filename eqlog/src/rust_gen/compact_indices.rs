@@ -241,9 +241,7 @@ pub(super) fn graph_guard<'a>(model: TypeId, ctx: &'a RustGenCtx<'a>) -> impl Di
                     'compact: for component in components.iter() {{
                         for object in &component.objects {{
                             if let Some(morphisms) = incoming.get(object) {{
-                                for morphism in morphisms {{
-                                    if let Some(next) = self.__compact_transport_{name}(morphism.morph, morphism.dom, morphism.cod) {{ changed |= next; }} else {{ break 'compact; }}
-                                }}
+                                if let Some(next) = self.__compact_transport_batch_{name}(morphisms) {{ changed |= next; }} else {{ break 'compact; }}
                             }}
                         }}
                     }}
@@ -262,8 +260,13 @@ pub(super) fn component_guard<'a>(model: TypeId, ctx: &'a RustGenCtx<'a>) -> imp
             writedoc! {f, "
                 if self.__compact_indices_{name}.is_some() {{
                     let mut changed = false;
-                    for morphism in morphisms {{
-                        if let Some(next) = self.__compact_transport_{name}(morphism.morph, morphism.dom, morphism.cod) {{ changed |= next; }} else {{ break; }}
+                    let target = morphisms[0].cod;
+                    if morphisms.iter().all(|morphism| morphism.cod == target && morphism.dom != target) {{
+                        if let Some(next) = self.__compact_transport_batch_{name}(morphisms) {{ changed |= next; }}
+                    }} else {{
+                        for morphism in morphisms {{
+                            if let Some(next) = self.__compact_transport_{name}(morphism.morph, morphism.dom, morphism.cod) {{ changed |= next; }} else {{ break; }}
+                        }}
                     }}
                     if self.__compact_indices_{name}.is_some() {{ return changed; }}
                 }}
@@ -555,6 +558,15 @@ pub(super) fn methods<'a>(
                         return None;
                     }};")
             }).join("\n");
+            let prepare_shared_many = members.iter().map(|&typ| {
+                let member = model_name(typ, ctx);
+                formatdoc!("
+                    let Some(shared_{member}) = self.__compact_members_{member}.as_ref().unwrap().prepare_shared_inheritance_many(&sources, target) else {{
+                        self.__materialize_compact_members();
+                        self.__complete_total_members();
+                        return None;
+                    }};")
+            }).join("\n");
             let can_refresh = members
                 .iter()
                 .map(|&typ| {
@@ -603,6 +615,32 @@ pub(super) fn methods<'a>(
                         {share}
                         self.__compact_indices_{name}.as_mut().unwrap().inherit_shared(target, source);
                         self.__compact_adopted_{name}.insert(morphism);
+                        self.__compact_publish_{name}(target);
+                        return Some(true);
+                    }}
+                    if !({can_refresh}) {{
+                        self.__materialize_compact_members();
+                        self.__complete_total_members();
+                        return None;
+                    }}
+                    let source = self.__compact_members_{first_member}.as_ref().unwrap().source(target).unwrap();
+                    Some(self.__compact_refresh_{name}_impl(source, target, false))
+                }}
+
+                fn __compact_transport_batch_{name}(&mut self, morphisms: &[MorphismWithSignature]) -> Option<bool> {{
+                    self.__compact_indices_{name}.as_ref()?;
+                    let Some(first) = morphisms.first() else {{ return Some(false); }};
+                    let target = first.cod;
+                    let mut seen_morphisms = BTreeSet::new();
+                    let (new_morphisms, sources): (Vec<_>, Vec<_>) = morphisms.iter()
+                        .filter(|morphism| !self.__compact_adopted_{name}.contains(&morphism.morph) && seen_morphisms.insert(morphism.morph))
+                        .map(|morphism| (morphism.morph, morphism.dom))
+                        .unzip();
+                    if !sources.is_empty() {{
+                        {prepare_shared_many}
+                        {share}
+                        self.__compact_indices_{name}.as_mut().unwrap().inherit_shared_many(target, &sources);
+                        self.__compact_adopted_{name}.extend(new_morphisms);
                         self.__compact_publish_{name}(target);
                         return Some(true);
                     }}

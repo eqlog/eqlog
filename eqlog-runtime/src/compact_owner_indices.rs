@@ -375,7 +375,16 @@ impl CompactOwnerIndices {
 
     /// The caller has proved that common origin coordinates denote equal images.
     pub fn inherit_shared(&mut self, target: u32, source: u32) -> CompactRebaseStats {
+        self.inherit_shared_many(target, &[source])
+    }
+
+    /// The caller has proved that common origins denote equal images.
+    /// Batches avoid revisiting old inputs for every new edge.
+    pub fn inherit_shared_many(&mut self, target: u32, sources: &[u32]) -> CompactRebaseStats {
         let owner = self.owner(target);
+        if sources.is_empty() {
+            return CompactRebaseStats::default();
+        }
         let primary = owner
             .snapshot
             .source
@@ -386,36 +395,40 @@ impl CompactOwnerIndices {
                 .additional
                 .iter()
                 .all(|&(source, revision)| self.revision(source) == revision);
-        self.register_edge(source, target);
+        for &source in sources {
+            self.register_edge(source, target);
+        }
         if !extend {
             self.owners
                 .get_mut(&target)
                 .unwrap()
                 .additional
-                .push((source, u64::MAX));
+                .extend(sources.iter().map(|&source| (source, u64::MAX)));
             return self.rebase_shared(target, true);
         }
-        let incoming = &self.owner(source).snapshot;
-        let source_revision = incoming.revision;
-        let source_rows = incoming
-            .current
-            .iter()
-            .map(|index| index.rows().clone())
-            .collect();
-        let current: Vec<_> = self
-            .owner(target)
-            .snapshot
-            .current
-            .iter()
-            .zip(&incoming.current)
-            .map(|(current, incoming)| current.union(incoming))
-            .collect();
+        let mut current = self.owner(target).snapshot.current.clone();
+        let mut additional = Vec::with_capacity(sources.len());
+        let mut shared_rows = Vec::with_capacity(sources.len());
+        for &source in sources {
+            let incoming = &self.owner(source).snapshot;
+            additional.push((source, incoming.revision));
+            shared_rows.push(
+                incoming
+                    .current
+                    .iter()
+                    .map(|index| index.rows().clone())
+                    .collect(),
+            );
+            for (index, incoming) in current.iter_mut().zip(&incoming.current) {
+                *index = index.union(incoming);
+            }
+        }
         let owner = self.owners.get_mut(&target).unwrap();
         if owner.additional.is_empty() {
             owner.shared_rows.push(owner.source_rows.clone());
         }
-        owner.additional.push((source, source_revision));
-        owner.shared_rows.push(source_rows);
+        owner.additional.extend(additional);
+        owner.shared_rows.extend(shared_rows);
         let snapshot = &mut owner.snapshot;
         if current
             .iter()

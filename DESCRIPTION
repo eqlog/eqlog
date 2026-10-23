@@ -33,6 +33,12 @@ Batch incoming transport before closing each acyclic compact target,
 so merged indexes see completed parent snapshots. Preserve the original
 primary source and traversal direction through storage fallback; leave
 cyclic component iteration on its ordinary path.
+Validate and install each target's incoming batch together so wide
+merges do not repeatedly scan previously adopted parents. Preserve each
+parallel morphism's adopted domain and prepare every member type before
+changing the target. Publish the merged indexes once, keeping the raw
+primary source as the matching baseline. Refresh an already adopted
+batch once per owner and replay the whole group after ordinary fallback.
 Keep each incoming source's adopted domain so late source growth cannot
 expose another path's image before its own transport. Preserve the
 first incoming map immediately; adopt additional maps during closure.

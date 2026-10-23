@@ -174,3 +174,60 @@ fn materialization_keeps_deferred_edges_from_earlier_sources() {
     assert!(model.are_equal_first(direct_first, child_first));
     assert!(!model.are_equal_second(direct_second, child_second));
 }
+
+#[test]
+fn failed_second_member_proof_replays_every_incoming_edge() {
+    let mut model = CompactSharedTypes::new();
+    model.enable_compact_world();
+    let [source, left, right, independent, target] = std::array::from_fn(|_| model.new_world());
+    let key = model.new_key();
+    let first = model.new_first(source);
+    let second = model.new_second(source);
+    model.insert_named_first(source, key, first);
+    let other_first = model.new_first(independent);
+    let other_second = model.new_second(independent);
+    model.insert_named_first(independent, key, other_first);
+    model.insert_left(independent, other_first, other_second);
+    let source_left = inherit(&mut model, source, left);
+    let source_right = inherit(&mut model, source, right);
+    let left_first = model.first_mor_app(source_left, first).unwrap();
+    let left_second = model.second_mor_app(source_left, second).unwrap();
+    let right_first = model.first_mor_app(source_right, first).unwrap();
+    let right_second = model.second_mor_app(source_right, second).unwrap();
+    model.insert_left(left, left_first, left_second);
+    model.insert_right(right, right_first, right_second);
+    let left_target = inherit(&mut model, left, target);
+    let right_target = inherit(&mut model, right, target);
+    let other_target = inherit(&mut model, independent, target);
+    let initial_first = model.first_mor_app(left_target, left_first).unwrap();
+    let initial_second = model.second_mor_app(left_target, left_second).unwrap();
+    assert_eq!(model.second_mor_app(right_target, right_second), None);
+    assert_eq!(model.second_mor_app(other_target, other_second), None);
+    model.close();
+    let firsts = [
+        model.first_mor_app(left_target, left_first).unwrap(),
+        model.first_mor_app(right_target, right_first).unwrap(),
+        model.first_mor_app(other_target, other_first).unwrap(),
+    ];
+    let seconds = [
+        model.second_mor_app(left_target, left_second).unwrap(),
+        model.second_mor_app(right_target, right_second).unwrap(),
+        model.second_mor_app(other_target, other_second).unwrap(),
+    ];
+    assert!(model.are_equal_first(initial_first, firsts[0]));
+    assert!(model.are_equal_second(initial_second, seconds[0]));
+    assert!(model.left(target, firsts[0], seconds[0]));
+    assert!(model.right(target, firsts[1], seconds[1]));
+    assert!(model.left(target, firsts[2], seconds[2]));
+    for first in firsts {
+        assert!(model.are_equal_first(firsts[0], first));
+    }
+    for left in 0..seconds.len() {
+        assert!(!model.joined(target, firsts[0], seconds[left]));
+        for right in left + 1..seconds.len() {
+            assert!(!model.are_equal_second(seconds[left], seconds[right]));
+        }
+    }
+    assert_eq!(model.iter_first().count(), 5);
+    assert_eq!(model.iter_second().count(), 7);
+}

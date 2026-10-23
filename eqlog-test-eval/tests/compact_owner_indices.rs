@@ -898,3 +898,116 @@ fn one_incidence_owner_rewrites_permutations_types_repeats_and_collisions() {
         );
     }
 }
+
+#[test]
+fn shared_index_batches_replay_support_once_and_keep_the_primary_baseline() {
+    let mut indices = CompactOwnerIndices::new(item_specs());
+    for owner in 0..7 {
+        indices.create_owner(owner);
+    }
+    for source in 0..5 {
+        indices.record(source, 10, &[10 * (source + 1), source + 1], false);
+    }
+    assert_eq!(
+        indices.inherit_shared_many(6, &[]),
+        CompactRebaseStats::default()
+    );
+    indices.record(5, 10, &[90, 9], false);
+    indices.rebase(5, 0, false, |_, origin| origin, &[]);
+    let before = indices.snapshot(5);
+    assert_eq!(
+        indices
+            .inherit_shared_many(5, &[1, 2, 1])
+            .local_rows_replayed,
+        0
+    );
+    assert_eq!(indices.revision(5), before.revision() + 1);
+    indices.record(5, 10, &[91, 10], false);
+    indices.record(1, 10, &[80, 8], false);
+    assert_eq!(
+        indices.inherit_shared_many(5, &[3, 4]).local_rows_replayed,
+        2
+    );
+    assert_eq!(
+        indices.rebase(5, 0, false, |_, _| panic!("shared sources unchanged"), &[]),
+        CompactRebaseStats::default()
+    );
+    assert!(indices
+        .inherited_rows(5, 0)
+        .unwrap()
+        .shares_storage_with(indices.rows(0, 0)));
+    assert!(!indices.inherited_rows(5, 0).unwrap().contains(&[80, 8]));
+    assert!(!indices.inherited_rows(5, 0).unwrap().contains(&[90, 9]));
+    assert_eq!(
+        indices.rows(5, 0).iter().collect::<BTreeSet<_>>(),
+        BTreeSet::from([
+            vec![10, 1],
+            vec![20, 2],
+            vec![30, 3],
+            vec![40, 4],
+            vec![50, 5],
+            vec![80, 8],
+            vec![90, 9],
+            vec![91, 10],
+        ])
+    );
+    assert!(!before.rows(0).contains(&[20, 2]));
+    assert_eq!(indices.rewrite(5, 0, 10, 9).visited_rows, 2);
+    assert!(indices.rows(5, 1).contains(&[9, 91]));
+}
+
+#[test]
+fn batched_indexes_match_sequential_adoption_after_stale_inputs_and_rewrites() {
+    for stale in [false, true] {
+        for rewritten in [false, true] {
+            let mut models = [
+                CompactOwnerIndices::new(item_specs()),
+                CompactOwnerIndices::new(item_specs()),
+            ];
+            for indices in &mut models {
+                for owner in 0..6 {
+                    indices.create_owner(owner);
+                }
+                for source in 0..5 {
+                    indices.record(source, 10, &[10 * (source + 1), source + 1], false);
+                }
+                indices.record(5, 10, &[90, 9], false);
+                indices.rebase(5, 0, false, |_, origin| origin, &[]);
+                indices.inherit_shared(5, 1);
+                if stale {
+                    indices.record(0, 10, &[70, 7], false);
+                    indices.record(1, 10, &[80, 8], false);
+                }
+                if rewritten {
+                    indices.rewrite(5, 0, 9, 8);
+                }
+            }
+            models[0].inherit_shared_many(5, &[2, 3, 2, 4]);
+            for source in [2, 3, 2, 4] {
+                models[1].inherit_shared(5, source);
+            }
+            for index in 0..2 {
+                assert_eq!(
+                    models[0].rows(5, index).iter().collect::<Vec<_>>(),
+                    models[1].rows(5, index).iter().collect::<Vec<_>>()
+                );
+                assert_eq!(
+                    models[0]
+                        .inherited_rows(5, index)
+                        .unwrap()
+                        .iter()
+                        .collect::<Vec<_>>(),
+                    models[1]
+                        .inherited_rows(5, index)
+                        .unwrap()
+                        .iter()
+                        .collect::<Vec<_>>()
+                );
+            }
+            assert_eq!(
+                models[0].local_rows(5, 10).iter().collect::<Vec<_>>(),
+                models[1].local_rows(5, 10).iter().collect::<Vec<_>>()
+            );
+        }
+    }
+}

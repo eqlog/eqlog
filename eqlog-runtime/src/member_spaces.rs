@@ -220,7 +220,7 @@ struct SharedMembers {
 /// remain unchanged.
 pub struct SharedInheritance {
     identity: Rc<()>,
-    source: u32,
+    sources: Vec<u32>,
     target: u32,
     target_revision: u64,
     inputs: Vec<(u32, u64)>,
@@ -489,7 +489,7 @@ impl MemberSpaces {
                 .all(|input| input.revision == self.owners[&input.source].snapshot.revision)
     }
 
-    fn shared_inputs(&self, target: u32, additional: Option<u32>) -> Option<SharedMembers> {
+    fn shared_inputs(&self, target: u32, additional: &[u32]) -> Option<SharedMembers> {
         let space = &self.owners[&target];
         let source = space.inherited.as_ref()?.source;
         let source = &self.owners[&source].snapshot;
@@ -520,7 +520,7 @@ impl MemberSpaces {
                 0
             })
             .map(|input| input.source)
-            .chain(additional);
+            .chain(additional.iter().copied());
         for source in sources {
             let next = &self.owners[&source].snapshot;
             if !next.partition.parents.is_empty() {
@@ -546,7 +546,7 @@ impl MemberSpaces {
 
     /// Unsupported overlap must be materialized before changing any snapshot.
     pub fn can_share_inheritance(&self, source: u32, target: u32) -> bool {
-        self.shared_inputs(target, Some(source)).is_some()
+        self.shared_inputs(target, &[source]).is_some()
     }
 
     pub fn prepare_shared_inheritance(
@@ -554,16 +554,29 @@ impl MemberSpaces {
         source: u32,
         target: u32,
     ) -> Option<SharedInheritance> {
-        let members = self.shared_inputs(target, Some(source))?;
+        self.prepare_shared_inheritance_many(&[source], target)
+    }
+
+    /// Prove the complete extension before any incoming edge changes the target.
+    /// Existing sources without an extension use the ordinary refresh path.
+    pub fn prepare_shared_inheritance_many(
+        &self,
+        sources: &[u32],
+        target: u32,
+    ) -> Option<SharedInheritance> {
+        if sources.is_empty() {
+            return None;
+        }
+        let members = self.shared_inputs(target, sources)?;
         let space = &self.owners[&target];
         let inputs = std::iter::once(space.inherited.as_ref()?.source)
             .chain(space.additional.iter().map(|input| input.source))
-            .chain(std::iter::once(source))
+            .chain(sources.iter().copied())
             .map(|source| (source, self.owners[&source].snapshot.revision))
             .collect();
         Some(SharedInheritance {
             identity: self.identity.clone(),
-            source,
+            sources: sources.to_vec(),
             target,
             target_revision: space.snapshot.revision,
             inputs,
@@ -581,7 +594,7 @@ impl MemberSpaces {
         if space.local_equations.is_empty() && self.inputs_current(space) {
             return true;
         }
-        self.shared_inputs(owner, None).is_some()
+        self.shared_inputs(owner, &[]).is_some()
     }
 
     pub fn inherit_shared_members(&mut self, source: u32, target: u32) -> bool {
@@ -598,7 +611,7 @@ impl MemberSpaces {
         );
         let SharedInheritance {
             identity: _,
-            source,
+            sources,
             target,
             target_revision,
             inputs,
@@ -612,7 +625,7 @@ impl MemberSpaces {
         assert!(
             std::iter::once(space.inherited.as_ref().unwrap().source)
                 .chain(space.additional.iter().map(|input| input.source))
-                .chain(std::iter::once(source))
+                .chain(sources.iter().copied())
                 .eq(inputs.iter().map(|&(source, _)| source)),
             "stale shared inheritance inputs"
         );
@@ -622,16 +635,18 @@ impl MemberSpaces {
                 "stale shared inheritance source"
             );
         }
-        self.register_edge(source, target);
+        for &source in &sources {
+            self.register_edge(source, target);
+        }
         self.owners
             .get_mut(&target)
             .unwrap()
             .additional
-            .push(Inheritance {
+            .extend(sources.into_iter().map(|source| Inheritance {
                 source,
                 revision: u64::MAX,
                 domain: WBTreeSet::new(),
-            });
+            }));
         self.multiple_sources = true;
         self.refresh_with_shared(target, Some(members), |_| {})
             .is_some()
@@ -759,7 +774,7 @@ impl MemberSpaces {
             None
         } else {
             Some(Box::new(shared.unwrap_or_else(|| {
-                self.shared_inputs(owner, None)
+                self.shared_inputs(owner, &[])
                     .expect("unproved shared images")
             })))
         };

@@ -658,3 +658,112 @@ fn pending_edges_reject_cycles_before_installing_images() {
     spaces.register_edge(0, 2);
     spaces.register_edge(2, 0);
 }
+
+#[test]
+fn shared_batches_keep_parallel_sources_and_adopted_domains() {
+    let mut spaces = MemberSpaces::new();
+    for owner in 0..6 {
+        spaces.create_owner(owner);
+    }
+    let common = spaces.allocate(0);
+    spaces.witness(0, spaces.snapshot(0).origin(common).unwrap());
+    let mut owned = Vec::new();
+    for source in 1..5 {
+        spaces.inherit_total_members(0, source);
+        let member = spaces.allocate(source);
+        spaces.witness(source, spaces.snapshot(source).origin(member).unwrap());
+        owned.push(member);
+    }
+    let local = spaces.allocate(5);
+    spaces.inherit_total_members(1, 5);
+    let original = spaces.snapshot(5);
+    let primary_common = spaces.image(common, 1).unwrap();
+    let common_image = spaces.image(primary_common, 5).unwrap();
+    let prepared = spaces
+        .prepare_shared_inheritance_many(&[2, 2, 3, 4], 5)
+        .unwrap();
+    assert!(spaces.install_shared_inheritance(prepared));
+    assert_eq!(spaces.snapshot(5).revision(), original.revision() + 1);
+    assert_eq!(spaces.iter(5).count(), 6);
+    assert!(spaces.contains(5, local));
+    for source in 1..5 {
+        assert_eq!(
+            spaces.image(spaces.image(common, source).unwrap(), 5),
+            Some(common_image)
+        );
+        assert!(spaces.image(owned[(source - 1) as usize], 5).is_some());
+    }
+    assert!(!original.contains(spaces.image(owned[1], 5).unwrap()));
+    let late = spaces.allocate(0);
+    spaces.witness(0, spaces.snapshot(0).origin(late).unwrap());
+    assert!(spaces.refresh(2));
+    assert!(spaces.refresh(5));
+    let image = spaces.image(spaces.image(late, 2).unwrap(), 5).unwrap();
+    assert!(spaces.refresh(3));
+    let third_late = spaces.image(late, 3).unwrap();
+    assert_eq!(spaces.image(third_late, 5), None);
+    assert!(spaces.can_refresh(5));
+    assert!(spaces.refresh(5));
+    assert_eq!(spaces.image(third_late, 5), Some(image));
+    assert!(!spaces.refresh(5));
+    assert!(spaces.prepare_shared_inheritance_many(&[], 5).is_none());
+}
+
+#[test]
+fn a_failed_batch_does_not_adopt_its_successful_prefix() {
+    let mut spaces = MemberSpaces::new();
+    for owner in 0..5 {
+        spaces.create_owner(owner);
+    }
+    let common = spaces.allocate(0);
+    let origin = spaces.snapshot(0).origin(common).unwrap();
+    spaces.inherit_total_members(0, 1);
+    spaces.inherit_total_members(0, 2);
+    spaces.inherit_total_members(1, 3);
+    let separate = spaces.allocate(4);
+    let before = spaces.snapshot(3);
+    assert!(spaces.prepare_shared_inheritance_many(&[4, 2], 3).is_none());
+    assert!(spaces.prepare_shared_inheritance_many(&[4, 4], 3).is_none());
+    assert_eq!(spaces.snapshot(3).revision(), before.revision());
+    assert_eq!(spaces.image(separate, 3), None);
+    spaces.witness(3, origin);
+    assert!(spaces.prepare_shared_inheritance_many(&[4, 2], 3).is_none());
+    spaces.witness(0, origin);
+    spaces.refresh(1);
+    spaces.refresh(2);
+    spaces.witness(4, spaces.snapshot(4).origin(separate).unwrap());
+    let prepared = spaces
+        .prepare_shared_inheritance_many(&[4, 4, 2], 3)
+        .unwrap();
+    assert!(spaces.install_shared_inheritance(prepared));
+    assert!(spaces.image(separate, 3).is_some());
+    assert_eq!(spaces.iter(3).count(), 2);
+}
+
+#[test]
+fn batch_tokens_validate_old_new_and_target_snapshots_before_installing() {
+    for changed in 1..6 {
+        let mut spaces = MemberSpaces::new();
+        for owner in 0..6 {
+            spaces.create_owner(owner);
+        }
+        let common = spaces.allocate(0);
+        spaces.witness(0, spaces.snapshot(0).origin(common).unwrap());
+        for source in 1..5 {
+            spaces.inherit_total_members(0, source);
+        }
+        spaces.inherit_total_members(1, 5);
+        spaces.inherit_shared_members(2, 5);
+        let prepared = spaces.prepare_shared_inheritance_many(&[3, 4], 5).unwrap();
+        spaces.allocate(changed);
+        let before = spaces.snapshot(5);
+        assert!(catch_unwind(AssertUnwindSafe(|| {
+            spaces.install_shared_inheritance(prepared)
+        }))
+        .is_err());
+        assert_eq!(spaces.snapshot(5).revision(), before.revision());
+        for source in [3, 4] {
+            assert_eq!(spaces.image(spaces.image(common, source).unwrap(), 5), None);
+        }
+    }
+}

@@ -127,6 +127,69 @@ fn guarded_uniqueness_does_not_identify_independent_images() {
 }
 
 #[test]
+fn parallel_incoming_edges_keep_distinct_unproved_images_after_growth() {
+    for witnessed in [false, true] {
+        let mut model = CompactKeyDag::new();
+        model.enable_compact_world();
+        let source = model.new_world();
+        let target = model.new_world();
+        let key = model.new_key();
+        let first = model.new_el(source);
+        if witnessed {
+            model.insert_named(source, first, key);
+        }
+        model.insert_left(source, first);
+        let morphisms = std::array::from_fn::<_, 3, _>(|_| inherit(&mut model, source, target));
+        let primary = model.el_mor_app(morphisms[0], first).unwrap();
+        for morphism in &morphisms[1..] {
+            assert_eq!(model.el_mor_app(*morphism, first), None);
+        }
+        model.close();
+        let first_images = morphisms.map(|morphism| model.el_mor_app(morphism, first).unwrap());
+        assert_eq!(first_images[0], primary);
+        for left in 0..morphisms.len() {
+            assert!(model.left(target, first_images[left]));
+            for right in left + 1..morphisms.len() {
+                assert_eq!(
+                    model.are_equal_el(first_images[left], first_images[right]),
+                    witnessed
+                );
+            }
+        }
+
+        let key = model.new_key();
+        let late = model.new_el(source);
+        if witnessed {
+            model.insert_named(source, late, key);
+        }
+        model.insert_right(source, late);
+        for morphism in morphisms {
+            assert_eq!(model.el_mor_app(morphism, late), None);
+        }
+        model.close();
+        let late_images = morphisms.map(|morphism| model.el_mor_app(morphism, late).unwrap());
+        for left in 0..morphisms.len() {
+            assert!(model.right(target, late_images[left]));
+            assert_eq!(
+                model.el_mor_app(morphisms[left], first),
+                Some(first_images[left])
+            );
+            for right in left + 1..morphisms.len() {
+                assert_eq!(
+                    model.are_equal_el(late_images[left], late_images[right]),
+                    witnessed
+                );
+            }
+        }
+        model.close();
+        assert_eq!(
+            morphisms.map(|morphism| model.el_mor_app(morphism, late).unwrap()),
+            late_images
+        );
+    }
+}
+
+#[test]
 fn unrelated_witnesses_do_not_make_a_diamond_commute() {
     let mut model = CompactKeyDag::new();
     model.enable_compact_world();
