@@ -208,6 +208,23 @@ struct Inheritance {
     domain: WBTreeSet,
 }
 
+/// Positional access keeps a batched proof linear in the number of inputs.
+pub struct MemberInheritedInputs<'a> {
+    primary: Option<&'a Inheritance>,
+    additional: &'a [Inheritance],
+}
+
+impl<'a> MemberInheritedInputs<'a> {
+    pub fn get(&self, position: usize) -> Option<(u32, u64, &'a WBTreeSet)> {
+        let input = if position == 0 {
+            self.primary?
+        } else {
+            self.additional.get(position - 1)?
+        };
+        Some((input.source, input.revision, &input.domain))
+    }
+}
+
 #[derive(Clone)]
 struct SharedMembers {
     domain: WBTreeSet,
@@ -426,6 +443,16 @@ impl MemberSpaces {
             .inherited
             .as_ref()
             .map(|inherited| inherited.revision)
+    }
+
+    /// These domains and revisions describe adopted inputs, including stale
+    /// snapshots when a source has advanced without reaching this owner.
+    pub fn inherited_inputs(&self, owner: u32) -> Option<MemberInheritedInputs<'_>> {
+        let space = self.owners.get(&owner)?;
+        Some(MemberInheritedInputs {
+            primary: space.inherited.as_ref(),
+            additional: &space.additional,
+        })
     }
 
     /// A witness identifies one fact whose invariant key determines this member.

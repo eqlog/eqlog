@@ -107,6 +107,125 @@ fn predicate_uniqueness_preserves_mixed_incoming_matches() {
 }
 
 #[test]
+fn larger_secondary_sources_preserve_cross_parent_and_local_joins() {
+    let mut model = CompactKeyDag::new();
+    model.enable_compact_world();
+    let [source, primary, secondary, target, child] = std::array::from_fn(|_| model.new_world());
+    let members = std::array::from_fn::<_, 3, _>(|_| {
+        let key = model.new_key();
+        let member = model.new_el(source);
+        model.insert_named(source, member, key);
+        member
+    });
+    let to_primary = inherit(&mut model, source, primary);
+    let to_secondary = inherit(&mut model, source, secondary);
+    let primary_members = members.map(|member| model.el_mor_app(to_primary, member).unwrap());
+    let secondary_members = members.map(|member| model.el_mor_app(to_secondary, member).unwrap());
+    for member in &primary_members[..2] {
+        model.insert_left(primary, *member);
+    }
+    for member in [secondary_members[0], secondary_members[2]] {
+        model.insert_right(secondary, member);
+    }
+    for _ in 0..8 {
+        let key = model.new_key();
+        let member = model.new_el(secondary);
+        model.insert_named(secondary, member, key);
+        model.insert_right(secondary, member);
+    }
+    model.close();
+
+    let from_primary = inherit(&mut model, primary, target);
+    let target_members =
+        primary_members.map(|member| model.el_mor_app(from_primary, member).unwrap());
+    let from_secondary = inherit(&mut model, secondary, target);
+    model.close();
+    let to_child = inherit(&mut model, target, child);
+    model.close();
+    let child_members = target_members.map(|member| model.el_mor_app(to_child, member).unwrap());
+    for (primary_image, secondary_member) in target_members.into_iter().zip(secondary_members) {
+        let secondary_image = model.el_mor_app(from_secondary, secondary_member).unwrap();
+        assert!(model.are_equal_el(primary_image, secondary_image));
+    }
+    assert!(model.joined(target, target_members[0]));
+    assert!(model.joined(child, child_members[0]));
+    assert!(!model.joined(target, target_members[1]));
+    assert!(!model.joined(target, target_members[2]));
+
+    model.insert_right(secondary, secondary_members[1]);
+    model.insert_left(target, target_members[2]);
+    model.close();
+    for member in target_members {
+        assert!(model.joined(target, member));
+    }
+    for member in child_members {
+        assert!(model.joined(child, member));
+    }
+    for member in primary_members {
+        assert!(!model.joined(primary, member));
+    }
+    for member in secondary_members {
+        assert!(!model.joined(secondary, member));
+    }
+
+    let bare = model.new_el(secondary);
+    assert_eq!(model.el_mor_app(from_secondary, bare), None);
+    model.close();
+    let target_bare = model.el_mor_app(from_secondary, bare).unwrap();
+    let child_bare = model.el_mor_app(to_child, target_bare).unwrap();
+    assert!(model.world_member_el(target, target_bare));
+    assert!(model.world_member_el(child, child_bare));
+    assert!(!model.left(target, target_bare));
+    assert!(!model.right(target, target_bare));
+    assert!(!model.joined(target, target_bare));
+    assert_eq!(
+        primary_members.map(|member| model.el_mor_app(from_primary, member).unwrap()),
+        target_members
+    );
+}
+
+#[test]
+fn partially_closed_larger_secondary_keeps_pending_witnesses() {
+    let mut model = CompactKeyDag::new();
+    model.enable_compact_world();
+    let [source, secondary, target, child] = std::array::from_fn(|_| model.new_world());
+    let key = model.new_key();
+    let member = model.new_el(source);
+    model.insert_named(source, member, key);
+    let to_secondary = inherit(&mut model, source, secondary);
+    let secondary_member = model.el_mor_app(to_secondary, member).unwrap();
+    for _ in 0..8 {
+        let key = model.new_key();
+        let extra = model.new_el(secondary);
+        model.insert_named(secondary, extra, key);
+    }
+    model.close();
+    model.insert_wanted(secondary, secondary_member);
+    assert!(model.close_until(|model| {
+        model.ready(secondary, secondary_member)
+            && model.next(secondary, secondary_member).is_none()
+    }));
+
+    let from_primary = inherit(&mut model, source, target);
+    let target_member = model.el_mor_app(from_primary, member).unwrap();
+    let from_secondary = inherit(&mut model, secondary, target);
+    let to_child = inherit(&mut model, target, child);
+    let child_member = model.el_mor_app(to_child, target_member).unwrap();
+    model.close();
+    let witness = model.next(secondary, secondary_member).unwrap();
+    let target_witness = model.el_mor_app(from_secondary, witness).unwrap();
+    let child_witness = model.el_mor_app(to_child, target_witness).unwrap();
+    assert_eq!(model.next(target, target_member), Some(target_witness));
+    assert_eq!(model.next(child, child_member), Some(child_witness));
+    assert!(model.ready(target, target_member));
+    assert!(model.ready(child, child_member));
+    assert_eq!(model.next(source, member), None);
+    assert_eq!(model.el_mor_app(from_primary, member), Some(target_member));
+    model.close();
+    assert_eq!(model.next(target, target_member), Some(target_witness));
+}
+
+#[test]
 fn guarded_uniqueness_does_not_identify_independent_images() {
     let mut model = CompactKeyDag::new();
     model.enable_compact_world();

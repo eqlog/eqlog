@@ -216,13 +216,14 @@ impl<'s> Codegen<'s> {
                     return None;
                 }
                 let name = display_type(*typ, ctx).to_string().to_case(Case::Snake);
-                Some(format!("PrefixTree1 {{ set: self.__compact_members_{name}.as_ref()?.get_snapshot(source)?.canonical_domain().clone() }}"))
+                Some(format!(
+                    "PrefixTree1 {{ set: source_{name}.canonical_domain().clone() }}"
+                ))
             }
             FlatInRel::Rel(FlatRel::Pred(_) | FlatRel::Func(_)) => {
                 let slot = compact_indices::inherited_slot(rel, index, model, ctx, selection)?;
-                let name = display_type(model, ctx).to_string().to_case(Case::Snake);
                 let arity = rel.arity(ctx.signature()).len() - scope_prefix(&rel, model, ctx);
-                Some(format!("<&PrefixTree{arity}>::try_from(self.__compact_indices_{name}.as_ref()?.inherited_rows(owners[0], {slot})?).expect(\"inherited index arity\").clone()"))
+                Some(format!("<&PrefixTree{arity}>::try_from(rows.get({slot})?).expect(\"inherited index arity\").clone()"))
             }
             FlatInRel::TypeSet(typ) => {
                 if *typ != model || index.order.as_ref() != [0] {
@@ -626,24 +627,38 @@ impl<'s> Codegen<'s> {
                         fn __inherited_inputs_{s}(&self, owners: [u32; 1]) -> Option<__InheritedInputs{s}> {{
                             let indices = self.__compact_indices_{name}.as_ref()?;
                             if !indices.has_owner(owners[0]) {{ return None; }}
-                            let source = indices.source(owners[0])?;
-                            let revision = indices.revision(source);
-                            if indices.source_revision(owners[0]) != Some(revision) {{ return None; }}
                     "}?;
-                    let mut revisions = Vec::new();
-                    for typ in compact_indices::members(model, ctx) {
+                    let member_types = compact_indices::members(model, ctx);
+                    for &typ in &member_types {
                         let name = display_type(typ, ctx).to_string().to_case(Case::Snake);
                         writedoc! {f, "
-                            let spaces = self.__compact_members_{name}.as_ref()?;
-                            let revision_{name} = spaces.get_snapshot(source)?.revision();
-                            if spaces.source_revision(owners[0]) != Some(revision_{name}) {{ return None; }}
+                            let spaces_{name} = self.__compact_members_{name}.as_ref()?;
+                            let inputs_{name} = spaces_{name}.inherited_inputs(owners[0])?;
+                        "}?;
+                    }
+                    writedoc! {f, "
+                        let mut best: Option<(u64, __InheritedInputs{s})> = None;
+                        for (position, (source, revision, rows)) in indices.inherited_inputs(owners[0]).enumerate() {{
+                            let candidate = (|| {{
+                                if indices.revision(source) != revision {{ return None; }}
+                                let mut score = 0u64;
+                    "}?;
+                    let mut revisions = Vec::new();
+                    for &typ in &member_types {
+                        let name = display_type(typ, ctx).to_string().to_case(Case::Snake);
+                        writedoc! {f, "
+                            let (member_source, revision_{name}, domain_{name}) = inputs_{name}.get(position)?;
+                            if member_source != source {{ return None; }}
+                            let source_{name} = spaces_{name}.get_snapshot(source)?;
+                            if source_{name}.revision() != revision_{name} {{ return None; }}
+                            score = score.checked_add(u64::try_from(domain_{name}.len()).unwrap())
+                                .expect(\"inherited matching score overflow\");
                         "}?;
                         revisions.push(format!("revision_{name}"));
                     }
                     let revisions = revisions.join(", ");
                     writedoc! {f, "
                         let revision = (source, revision, [{revisions}]);
-                        if self.__owner_inputs_{s}.get(&owners).is_some_and(|previous| previous.inherited == Some(revision)) {{ return None; }}
                         let proved = self.__owner_inputs_{s}.get(&[source])?;
                     "}?;
                     for (name, (rel, index)) in fields {
@@ -668,7 +683,19 @@ impl<'s> Codegen<'s> {
                         }
                     }
                     let names = fields.keys().join(", ");
-                    writeln!(f, "Some(__InheritedInputs{s} {{ revision, {names} }}) }}")?;
+                    writedoc! {f, "
+                                Some((score, __InheritedInputs{s} {{ revision, {names} }}))
+                            }})();
+                            let Some((score, candidate)) = candidate else {{ continue; }};
+                            if best.as_ref().is_none_or(|(previous, _)| score > *previous) {{
+                                best = Some((score, candidate));
+                            }}
+                        }}
+                        let (_, best) = best?;
+                        if self.__owner_inputs_{s}.get(&owners).is_some_and(|previous| previous.inherited == Some(best.revision)) {{ return None; }}
+                        Some(best)
+                    }}
+                    "}?;
                 }
                 let outputs: BTreeSet<_> = stratum
                     .groups

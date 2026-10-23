@@ -25,7 +25,7 @@ Prepare incoming member proofs once before changing any member type.
 Retain the inherited aggregate so another incoming morphism extends its
 proof and indexes without rebuilding previously adopted parents. Keep
 local witnesses out of these proofs and rebuild after source changes or
-target row rewrites, preserving the primary matching baseline.
+target row rewrites, retaining raw snapshots for matching proofs.
 
 Register pending edges before transport to avoid repeated walks through
 future descendants, and refresh descendants in topological order.
@@ -36,9 +36,10 @@ cyclic component iteration on its ordinary path.
 Validate and install each target's incoming batch together so wide
 merges do not repeatedly scan previously adopted parents. Preserve each
 parallel morphism's adopted domain and prepare every member type before
-changing the target. Publish the merged indexes once, keeping the raw
-primary source as the matching baseline. Refresh an already adopted
-batch once per owner and replay the whole group after ordinary fallback.
+changing the target. Publish the merged indexes once, retaining the raw
+snapshot of each incoming source for matching proofs. Refresh an already
+adopted batch once per owner and replay the whole group after ordinary
+fallback.
 Keep each incoming source's adopted domain so late source growth cannot
 expose another path's image before its own transport. Preserve the
 first incoming map immediately; adopt additional maps during closure.
@@ -64,6 +65,13 @@ makes rewritten rows new matching work. When parent facts advance,
 replay local rows to preserve joins with facts processed earlier; then
 resume ordinary temporal deltas. Track member revisions as well as
 relation revisions so pure domain growth follows the same contract.
+
+Avoid repeating ancestor matches when a small primary source is joined
+by a larger completed model. Choose one certified incoming snapshot by
+its combined member-domain size, checking its adopted revisions and
+processed rule inputs before reuse. Preserve primary mapping identities
+and raw rows, and keep tied choices stable so local closure does not
+rotate between already consumed proofs.
 
 Use the same mechanism for predicates and functionality. Keep
 owner-dependent global premises and owner-valued data on the ordinary

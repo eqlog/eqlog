@@ -73,6 +73,77 @@ fn incoming_images_require_proofs_for_every_member_type() {
 }
 
 #[test]
+fn mixed_member_sizes_preserve_one_coherent_incoming_join() {
+    let mut model = CompactSharedTypes::new();
+    model.enable_compact_world();
+    let [source, primary, secondary, target] = std::array::from_fn(|_| model.new_world());
+    let key = model.new_key();
+    let first = model.new_first(source);
+    let second = model.new_second(source);
+    model.insert_named_first(source, key, first);
+    model.insert_named_second(source, key, second);
+    let to_primary = inherit(&mut model, source, primary);
+    let to_secondary = inherit(&mut model, source, secondary);
+    let primary_first = model.first_mor_app(to_primary, first).unwrap();
+    let primary_second = model.second_mor_app(to_primary, second).unwrap();
+    let secondary_first = model.first_mor_app(to_secondary, first).unwrap();
+    let secondary_second = model.second_mor_app(to_secondary, second).unwrap();
+    model.insert_left(primary, primary_first, primary_second);
+    model.insert_right(secondary, secondary_first, secondary_second);
+    for _ in 0..8 {
+        let key = model.new_key();
+        let extra = model.new_first(primary);
+        model.insert_named_first(primary, key, extra);
+        model.insert_left(primary, extra, primary_second);
+    }
+    for _ in 0..12 {
+        let key = model.new_key();
+        let extra = model.new_second(secondary);
+        model.insert_named_second(secondary, key, extra);
+        model.insert_right(secondary, secondary_first, extra);
+    }
+    model.close();
+
+    let from_primary = inherit(&mut model, primary, target);
+    let target_first = model.first_mor_app(from_primary, primary_first).unwrap();
+    let target_second = model.second_mor_app(from_primary, primary_second).unwrap();
+    let from_secondary = inherit(&mut model, secondary, target);
+    model.close();
+    let other_first = model
+        .first_mor_app(from_secondary, secondary_first)
+        .unwrap();
+    let other_second = model
+        .second_mor_app(from_secondary, secondary_second)
+        .unwrap();
+    assert!(model.are_equal_first(target_first, other_first));
+    assert!(model.are_equal_second(target_second, other_second));
+    assert!(model.joined(target, target_first, target_second));
+    assert!(!model.joined(primary, primary_first, primary_second));
+    assert!(!model.joined(secondary, secondary_first, secondary_second));
+    assert_eq!(model.iter_joined().count(), 1);
+
+    let bare_first = model.new_first(secondary);
+    model.close();
+    let image_first = model.first_mor_app(from_secondary, bare_first).unwrap();
+    assert!(model.world_member_first(target, image_first));
+    assert!(!model.joined(target, image_first, target_second));
+    let bare_second = model.new_second(secondary);
+    model.close();
+    let image_second = model.second_mor_app(from_secondary, bare_second).unwrap();
+    assert!(model.world_member_second(target, image_second));
+    assert!(!model.joined(target, target_first, image_second));
+    assert_eq!(model.iter_joined().count(), 1);
+    assert_eq!(
+        model.first_mor_app(from_primary, primary_first),
+        Some(target_first)
+    );
+    assert_eq!(
+        model.second_mor_app(from_primary, primary_second),
+        Some(target_second)
+    );
+}
+
+#[test]
 fn interrupted_target_closure_resumes_descendant_matches() {
     let mut model = CompactSharedTypes::new();
     model.enable_compact_world();

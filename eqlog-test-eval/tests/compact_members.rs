@@ -767,3 +767,50 @@ fn batch_tokens_validate_old_new_and_target_snapshots_before_installing() {
         }
     }
 }
+
+#[test]
+fn matching_member_inputs_retain_adopted_domains_until_refresh() {
+    let mut spaces = MemberSpaces::new();
+    for owner in 0..4 {
+        spaces.create_owner(owner);
+    }
+    spaces.allocate(0);
+    for _ in 0..2 {
+        let member = spaces.allocate(1);
+        spaces.witness(1, spaces.snapshot(1).origin(member).unwrap());
+    }
+    spaces.allocate(2);
+    spaces.allocate(3);
+    spaces.inherit_total_members(0, 3);
+    let prepared = spaces
+        .prepare_shared_inheritance_many(&[1, 1, 2], 3)
+        .unwrap();
+    spaces.install_shared_inheritance(prepared);
+    let adopted_revision = spaces.snapshot(1).revision();
+    let late = spaces.allocate(1);
+    spaces.witness(1, spaces.snapshot(1).origin(late).unwrap());
+    let inputs = spaces.inherited_inputs(3).unwrap();
+    for (position, source, len) in [(0, 0, 1), (1, 1, 2), (2, 1, 2), (3, 2, 1)] {
+        let (actual_source, revision, domain) = inputs.get(position).unwrap();
+        assert_eq!(actual_source, source);
+        assert_eq!(domain.len(), len);
+        if source == 1 {
+            assert_eq!(revision, adopted_revision);
+            assert_ne!(revision, spaces.snapshot(1).revision());
+        }
+    }
+    assert!(inputs.get(4).is_none());
+    assert!(spaces.inherited_inputs(4).is_none());
+    assert!(spaces.inherited_inputs(0).unwrap().get(0).is_none());
+    assert_eq!(spaces.image(late, 3), None);
+    assert!(spaces.refresh(3));
+    let inputs = spaces.inherited_inputs(3).unwrap();
+    for position in [1, 2] {
+        let (source, revision, domain) = inputs.get(position).unwrap();
+        assert_eq!(source, 1);
+        assert_eq!(revision, spaces.snapshot(1).revision());
+        assert_eq!(domain.len(), 3);
+    }
+    assert_eq!(spaces.source(3), Some(0));
+    assert!(spaces.image(late, 3).is_some());
+}

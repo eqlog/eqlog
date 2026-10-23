@@ -1011,3 +1011,42 @@ fn batched_indexes_match_sequential_adoption_after_stale_inputs_and_rewrites() {
         }
     }
 }
+
+#[test]
+fn matching_inputs_preserve_raw_rows_and_adopted_revisions() {
+    let mut indices = CompactOwnerIndices::new(item_specs());
+    for owner in 0..4 {
+        indices.create_owner(owner);
+    }
+    indices.record(0, 10, &[10, 1], false);
+    indices.record(1, 10, &[20, 2], false);
+    indices.record(1, 10, &[30, 3], false);
+    indices.rebase(2, 0, false, |_, origin| origin, &[]);
+    indices.inherit_shared_many(2, &[1, 1]);
+    indices.rewrite(2, 0, 2, 1);
+    let adopted_revision = indices.revision(1);
+    indices.record(1, 10, &[40, 4], false);
+    let inputs: Vec<_> = indices.inherited_inputs(2).collect();
+    assert_eq!(
+        inputs.iter().map(|input| input.0).collect::<Vec<_>>(),
+        vec![0, 1, 1]
+    );
+    assert_eq!(inputs[1].1, adopted_revision);
+    assert_ne!(inputs[1].1, indices.revision(1));
+    assert!(inputs[1].2[0].contains(&[20, 2]));
+    assert!(!inputs[1].2[0].contains(&[20, 1]));
+    assert!(!inputs[1].2[0].contains(&[40, 4]));
+    assert!(indices.rows(2, 0).contains(&[20, 1]));
+    assert!(inputs[0].2[0].shares_storage_with(indices.inherited_rows(2, 0).unwrap()));
+    assert_eq!(indices.source(2), Some(0));
+    assert_eq!(indices.inherited_inputs(3).count(), 0);
+    indices.inherit_shared_many(2, &[3]);
+    let inputs: Vec<_> = indices.inherited_inputs(2).collect();
+    assert_eq!(
+        inputs.iter().map(|input| input.0).collect::<Vec<_>>(),
+        vec![0, 1, 1, 3]
+    );
+    assert_eq!(inputs[1].1, indices.revision(1));
+    assert!(inputs[1].2[0].contains(&[40, 4]));
+    assert!(!inputs[0].2[0].contains(&[40, 4]));
+}

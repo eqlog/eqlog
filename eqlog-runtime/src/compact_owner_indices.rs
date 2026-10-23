@@ -325,6 +325,29 @@ impl CompactOwnerIndices {
         self.owner(owner).source_rows.get(index)
     }
 
+    /// Each raw input can certify matching independently of the primary map.
+    /// Keeping one input coherent preserves joins between different sources.
+    pub fn inherited_inputs(&self, owner: u32) -> impl Iterator<Item = (u32, u64, &[Table])> {
+        let owner = self.owner(owner);
+        assert!(
+            owner.additional.is_empty() || owner.shared_rows.len() == owner.additional.len() + 1,
+            "shared row snapshots follow the adopted input order"
+        );
+        owner
+            .snapshot
+            .source
+            .zip(owner.snapshot.source_revision)
+            .into_iter()
+            .map(move |(source, revision)| (source, revision, owner.source_rows.as_slice()))
+            .chain(
+                owner
+                    .additional
+                    .iter()
+                    .zip(owner.shared_rows.iter().skip(1))
+                    .map(|(&(source, revision), rows)| (source, revision, rows.as_slice())),
+            )
+    }
+
     pub fn local_rows(&self, owner: u32, relation: u32) -> &Table {
         self.owner(owner).snapshot.local_rows(relation)
     }
