@@ -3232,64 +3232,44 @@ fn display_theory_impl<'a>(
                     "{}",
                     native_indices::methods(&program.native_indices, index_selection, ctx)
                 )?;
-                let recompute_model_indices_fn =
-                    display_recompute_model_indices_fn(ctx, index_selection, None, "");
-                write!(f, "{recompute_model_indices_fn}")?;
-                for (s, preparation) in program.preparations.iter().enumerate() {
-                    let scoped = program.evaluation.strata[s].model.is_some();
-                    let plans = std::iter::once((format!("_stratum_{s}"), &preparation.native))
-                        .chain(
-                            preparation
-                                .stable
-                                .iter()
-                                .map(|plan| (format!("_stratum_stable_{s}"), plan)),
-                        );
-                    for (suffix, plan) in plans {
-                        if scoped {
-                            for &model in &plan.propagation.models {
-                                if plan.descendants.iter().any(|child| {
-                                    *child == model
-                                        || ctx.signature().type_(model).parents.contains(child)
-                                }) {
-                                    write!(
-                                        f,
-                                        "{}",
-                                        display_propagate_model_morphisms_fn(
-                                            model,
-                                            ctx,
-                                            index_selection,
-                                            Some(&plan.propagation),
-                                            &suffix
-                                        )
-                                    )?;
-                                }
-                            }
-                            continue;
+                for helper in &program.transport.helpers {
+                    let (plan, suffix) = match helper.source {
+                        TransportHelperSource::Global => (None, String::new()),
+                        TransportHelperSource::Stratum { stratum, stable } => {
+                            let preparation = &program.preparations[stratum];
+                            let (plan, suffix) = if stable {
+                                (
+                                    preparation.stable.as_ref().unwrap(),
+                                    format!("_stratum_stable_{stratum}"),
+                                )
+                            } else {
+                                (&preparation.native, format!("_stratum_{stratum}"))
+                            };
+                            (Some(&plan.propagation), suffix)
                         }
-                        if plan.propagation.relations.is_empty() {
-                            continue;
-                        }
-                        let recompute = display_recompute_model_indices_fn(
-                            ctx,
-                            index_selection,
-                            Some(&plan.propagation),
-                            &suffix,
-                        );
-                        write!(f, "{recompute}")?;
+                        TransportHelperSource::Model { model, index } => (
+                            Some(&program.model_preparations[&model].propagation),
+                            format!("_model_{index}"),
+                        ),
+                    };
+                    match helper.kind {
+                        TransportHelperKind::Recompute => write!(
+                            f,
+                            "{}",
+                            display_recompute_model_indices_fn(ctx, index_selection, plan, &suffix)
+                        )?,
+                        TransportHelperKind::Propagate(model) => write!(
+                            f,
+                            "{}",
+                            display_propagate_model_morphisms_fn(
+                                model,
+                                ctx,
+                                index_selection,
+                                plan,
+                                &suffix
+                            )
+                        )?,
                     }
-                }
-                for (m, plan) in program.model_preparations.values().enumerate() {
-                    let suffix = format!("_model_{m}");
-                    write!(
-                        f,
-                        "{}",
-                        display_recompute_model_indices_fn(
-                            ctx,
-                            index_selection,
-                            Some(&plan.propagation),
-                            &suffix
-                        )
-                    )?;
                 }
             }
             ModelMode::Desugared => {}

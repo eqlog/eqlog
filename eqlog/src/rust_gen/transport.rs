@@ -336,8 +336,12 @@ pub(super) fn display_driver<'a>(
                         display_morphism_components(driver.model, ctx, selection, prepared)
                     )?;
                 }
-                TransportInstruction::CompactGraph => {
-                    write!(f, "{}", compact_indices::graph_guard(driver.model, ctx))?;
+                TransportInstruction::CompactBlock(body) => {
+                    write!(
+                        f,
+                        "{}",
+                        compact_indices::transport_body(body, driver.model, ctx)
+                    )?;
                 }
                 TransportInstruction::PrepareFrontier | TransportInstruction::FinishFrontier => {
                     let plan = match &driver.kind {
@@ -363,7 +367,7 @@ pub(super) fn display_driver<'a>(
                         )?,
                         TransportInstruction::PrepareGraph
                         | TransportInstruction::ComputeComponents
-                        | TransportInstruction::CompactGraph
+                        | TransportInstruction::CompactBlock(_)
                         | TransportInstruction::ReturnUnlessWork
                         | TransportInstruction::InitializeChanges(_)
                         | TransportInstruction::ForEach { .. }

@@ -318,8 +318,91 @@ pub enum EvaluationStmt {
     },
 }
 
+#[derive(Clone)]
+pub struct BaselineRelation {
+    pub id: usize,
+    pub rel: FlatInRel,
+    pub index: IndexSpec,
+    pub suffix: usize,
+    pub maps: Vec<usize>,
+}
+
+pub enum EvaluationHelperCondition {
+    NoMorphisms,
+    BaselineUnchanged {
+        maps: usize,
+        relations: Vec<BaselineRelation>,
+    },
+    AnyActive,
+}
+
+pub enum EvaluationHelperStmt {
+    When {
+        condition: EvaluationHelperCondition,
+        body: Vec<EvaluationHelperStmt>,
+    },
+    ForMorphisms(Vec<EvaluationHelperStmt>),
+    ReturnFalse,
+    CompactComponent(TypeId),
+    InitializeChanged,
+    PrepareIndex {
+        rel: FlatInRel,
+        index: IndexSpec,
+    },
+    CompareBaselineMap {
+        id: usize,
+        rel: FlatInRel,
+        index: IndexSpec,
+    },
+    CompareMorphismMap {
+        id: usize,
+        rel: FlatInRel,
+        index: IndexSpec,
+    },
+    ComputeActive(Vec<BaselineRelation>),
+    PropagateMorphism {
+        root: usize,
+        model: TypeId,
+        selected: Option<usize>,
+    },
+    ExtendNative(usize),
+    ReadNative(usize),
+    NativeMorphism {
+        id: usize,
+        level: usize,
+    },
+    PublishNative(usize),
+    PropagateDescendant {
+        model: TypeId,
+        stratum: usize,
+        stable: bool,
+    },
+    NativeModel {
+        id: usize,
+        level: usize,
+    },
+    ReturnChanged,
+}
+
+pub struct ComponentHelper {
+    pub root: usize,
+    pub model: TypeId,
+    pub parents: usize,
+    pub baseline: bool,
+    pub body: Vec<EvaluationHelperStmt>,
+}
+
+pub struct DescendantHelper {
+    pub stratum: usize,
+    pub stable: bool,
+    pub owners: usize,
+    pub body: Vec<EvaluationHelperStmt>,
+}
+
 #[derive(Default)]
 pub struct EvaluationPlan {
+    pub component_helpers: Vec<ComponentHelper>,
+    pub descendant_helpers: Vec<DescendantHelper>,
     pub models: BTreeMap<TypeId, usize>,
     pub inputs: BTreeMap<FlatInRel, usize>,
     pub indices: BTreeMap<(FlatInRel, IndexSpec), usize>,
@@ -1291,6 +1374,185 @@ impl ScheduleLowering<'_> {
     }
 }
 
+fn component_helpers(
+    model_preparations: &BTreeMap<TypeId, NativePreparation>,
+    native_indices: &[NativeIndexPreparation],
+    baselines: &BTreeMap<TypeId, TransportBaseline>,
+    selection: &IndexSelection,
+    signature: &Signature,
+    compact: &CompactPlan,
+) -> Vec<ComponentHelper> {
+    let mut helpers = Vec::new();
+    for (root, (&root_model, plan)) in model_preparations.iter().enumerate() {
+        let baseline = baselines.get(&root_model);
+        for &model in &plan.propagation.models {
+            let mut body = vec![EvaluationHelperStmt::When {
+                condition: EvaluationHelperCondition::NoMorphisms,
+                body: vec![EvaluationHelperStmt::ReturnFalse],
+            }];
+            if compact.supports_model(model) {
+                body.push(EvaluationHelperStmt::CompactComponent(model));
+            }
+            body.push(EvaluationHelperStmt::InitializeChanged);
+            if let Some(baseline) = baseline {
+                for (id, (rel, index)) in baseline.maps.iter().enumerate() {
+                    body.push(EvaluationHelperStmt::PrepareIndex {
+                        rel: rel.clone(),
+                        index: index.clone(),
+                    });
+                    body.push(EvaluationHelperStmt::CompareBaselineMap {
+                        id,
+                        rel: rel.clone(),
+                        index: index.clone(),
+                    });
+                }
+                let relations: Vec<_> = baseline
+                    .relations
+                    .iter()
+                    .enumerate()
+                    .map(|(id, rel)| BaselineRelation {
+                        id,
+                        rel: rel.clone(),
+                        index: selection.current_primary(rel).clone(),
+                        suffix: rel.arity(signature).len() - 1,
+                        maps: baseline.relation_maps[id].clone(),
+                    })
+                    .collect();
+                body.push(EvaluationHelperStmt::When {
+                    condition: EvaluationHelperCondition::BaselineUnchanged {
+                        maps: baseline.maps.len(),
+                        relations: relations.clone(),
+                    },
+                    body: vec![EvaluationHelperStmt::ReturnFalse],
+                });
+                let mut morphism: Vec<_> = baseline
+                    .maps
+                    .iter()
+                    .enumerate()
+                    .map(
+                        |(id, (rel, index))| EvaluationHelperStmt::CompareMorphismMap {
+                            id,
+                            rel: rel.clone(),
+                            index: index.clone(),
+                        },
+                    )
+                    .collect();
+                morphism.push(EvaluationHelperStmt::ComputeActive(relations));
+                morphism.push(EvaluationHelperStmt::When {
+                    condition: EvaluationHelperCondition::AnyActive,
+                    body: vec![EvaluationHelperStmt::PropagateMorphism {
+                        root,
+                        model,
+                        selected: Some(baseline.relations.len()),
+                    }],
+                });
+                body.push(EvaluationHelperStmt::ForMorphisms(morphism));
+            } else {
+                body.push(EvaluationHelperStmt::ForMorphisms(vec![
+                    EvaluationHelperStmt::PropagateMorphism {
+                        root,
+                        model,
+                        selected: None,
+                    },
+                ]));
+            }
+            body.extend(plan.support_indices.iter().map(|(rel, index)| {
+                EvaluationHelperStmt::PrepareIndex {
+                    rel: rel.clone(),
+                    index: index.clone(),
+                }
+            }));
+            for &id in &plan.native_indices {
+                let native = &native_indices[id];
+                if native.from_primary {
+                    continue;
+                }
+                if let Some(level) = native.models.iter().position(|&typ| typ == model) {
+                    body.extend([
+                        EvaluationHelperStmt::ExtendNative(id),
+                        EvaluationHelperStmt::ReadNative(id),
+                        EvaluationHelperStmt::ForMorphisms(vec![
+                            EvaluationHelperStmt::NativeMorphism { id, level },
+                        ]),
+                        EvaluationHelperStmt::PublishNative(id),
+                    ]);
+                }
+            }
+            body.push(EvaluationHelperStmt::ReturnChanged);
+            helpers.push(ComponentHelper {
+                root,
+                model,
+                parents: signature.type_(model).parents.len(),
+                baseline: baseline.is_some(),
+                body,
+            });
+        }
+    }
+    helpers
+}
+
+fn descendant_helpers(
+    strata: &[StratumEvaluation],
+    preparations: &[IndexPreparation],
+    native_indices: &[NativeIndexPreparation],
+    signature: &Signature,
+) -> Vec<DescendantHelper> {
+    let mut helpers = Vec::new();
+    for (stratum, (evaluation, preparation)) in strata.iter().zip(preparations).enumerate() {
+        for (stable, plan) in std::iter::once((false, &preparation.native))
+            .chain(preparation.stable.iter().map(|plan| (true, plan)))
+        {
+            if plan.descendants.is_empty() {
+                continue;
+            }
+            let model = evaluation
+                .model
+                .expect("descendant preparation needs a bound owner");
+            let owners = signature.type_(model).parents.len() + 1;
+            let mut body: Vec<_> = plan
+                .descendants
+                .iter()
+                .map(|&model| EvaluationHelperStmt::PropagateDescendant {
+                    model,
+                    stratum,
+                    stable,
+                })
+                .collect();
+            body.extend(plan.support_indices.iter().map(|(rel, index)| {
+                EvaluationHelperStmt::PrepareIndex {
+                    rel: rel.clone(),
+                    index: index.clone(),
+                }
+            }));
+            for &id in &plan.native_indices {
+                let native = &native_indices[id];
+                if native.from_primary {
+                    continue;
+                }
+                if native
+                    .models
+                    .get(owners)
+                    .is_some_and(|child| plan.descendants.contains(child))
+                {
+                    body.extend([
+                        EvaluationHelperStmt::ExtendNative(id),
+                        EvaluationHelperStmt::ReadNative(id),
+                        EvaluationHelperStmt::NativeModel { id, level: owners },
+                        EvaluationHelperStmt::PublishNative(id),
+                    ]);
+                }
+            }
+            helpers.push(DescendantHelper {
+                stratum,
+                stable,
+                owners,
+                body,
+            });
+        }
+    }
+    helpers
+}
+
 fn close_body(schedule: Vec<EvaluationStmt>, policies: bool) -> Vec<EvaluationStmt> {
     let mut body = vec![EvaluationStmt::When {
         condition: EvaluationCondition::Closed,
@@ -1529,6 +1791,15 @@ pub fn plan_evaluation(
             transport_baseline(model, plan, selection, signature, compact).map(|plan| (model, plan))
         })
         .collect();
+    let component_helpers = component_helpers(
+        model_preparations,
+        native_indices,
+        &transport_baselines,
+        selection,
+        signature,
+        compact,
+    );
+    let descendant_helpers = descendant_helpers(&strata, preparations, native_indices, signature);
     let body = ScheduleLowering {
         strata: &schedule.strata,
         plans: &strata,
@@ -1542,6 +1813,8 @@ pub fn plan_evaluation(
     .lower(&schedule.body, None, 0, None, RetainedOwners::None);
     let body = close_body(body, !compact.policy_models().is_empty());
     EvaluationPlan {
+        component_helpers,
+        descendant_helpers,
         models: model_preparations
             .keys()
             .copied()

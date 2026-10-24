@@ -17,12 +17,12 @@ use crate::algebra::signature::TypeId;
 use crate::flat_eqlog::{FlatInRel, FlatOutRel, IndexAge, IndexSelection, IndexSpec};
 use crate::fmt_util::FmtFn;
 use crate::ram::{
-    CanonicalInput, Consumption, EvaluationCondition, EvaluationIteration, EvaluationLifecycle,
-    EvaluationPlan, EvaluationStmt, IndexPreparation, InheritedEvidence, InheritedInput,
-    InheritedInstruction, InheritedRows, InputProjection, InputRead, InputReadSource, InputStorage,
-    NativeIndexPreparation, NativePreparation, NativeReadPreparation, ProofRows, RamFunction,
-    RamProgram, RetainedOwners, ScopedInput, StratumEvaluation, StratumInstruction,
-    TransportBaseline, TransportEdges,
+    BaselineRelation, CanonicalInput, Consumption, EvaluationCondition, EvaluationHelperCondition,
+    EvaluationHelperStmt, EvaluationIteration, EvaluationLifecycle, EvaluationPlan, EvaluationStmt,
+    IndexPreparation, InheritedEvidence, InheritedInput, InheritedInstruction, InheritedRows,
+    InputProjection, InputRead, InputReadSource, InputStorage, NativeIndexPreparation,
+    NativePreparation, NativeReadPreparation, ProofRows, RamFunction, RamProgram, RetainedOwners,
+    ScopedInput, StratumEvaluation, StratumInstruction, TransportBaseline, TransportEdges,
 };
 
 pub struct Codegen<'s> {
@@ -749,96 +749,28 @@ impl<'s> Codegen<'s> {
                 self.emit_stratum(f, &evaluation.body, s, modules, ctx, selection)?;
                 writeln!(f, "}}")?;
             }
-            for (&root, &m) in self.models {
-                let plan = &self.model_preparations[&root];
-                let baseline = self.transport_baseline(root);
-                for &model in &plan.propagation.models {
-                    let name = display_type(model, ctx).to_string().to_case(Case::Snake);
-                    let count = ctx.signature().type_(model).parents.len();
-                    let baseline_arg = if baseline.is_some() {
-                        format!("baseline: &__TransportBaseline{m}, ")
-                    } else {
-                        String::new()
-                    };
-                    let compact_guard = super::compact_indices::component_guard(model, ctx);
-                    writedoc! {f, "
-                    fn __transport_component_{m}_{name}(&mut self, {baseline_arg}parents: [u32; {count}], morphisms: &[MorphismWithSignature], retain_own: bool) -> bool {{
-                        if morphisms.is_empty() {{ return false; }}
-                        {compact_guard}
-                        let mut changed = false;
-                "}?;
-                    if let Some(baseline) = &baseline {
-                        emit_transport_since_baseline(f, baseline, model, m, selection, ctx)?;
-                    } else {
-                        writeln!(f, "for morphism in morphisms {{ changed |= self.__propagate_{name}_morphism_model_{m}(parents, morphism, retain_own); }}")?;
-                    }
-                    for (rel, index) in &plan.support_indices {
-                        write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
-                    }
-                    for id in &plan.native_indices {
-                        let native = &self.native_indices[*id];
-                        if native.from_primary {
-                            continue;
-                        }
-                        if let Some(level) = native.models.iter().position(|&typ| typ == model) {
-                            writedoc! {f, "
-                            self.__extend_native_index_{id}();
-                            let mut index = self.__native_input_{id}.current().clone();
-                            for morphism in morphisms {{ changed |= self.__native_{id}_morphism_{level}(parents, morphism, &mut index, retain_own); }}
-                            self.__native_input_{id}.publish(&index);
-                        "}?;
-                        }
-                    }
-                    writeln!(f, "changed }}")?;
-                }
+            for helper in &self.evaluation.component_helpers {
+                let m = helper.root;
+                let name = display_type(helper.model, ctx)
+                    .to_string()
+                    .to_case(Case::Snake);
+                let count = helper.parents;
+                let baseline_arg = if helper.baseline {
+                    format!("baseline: &__TransportBaseline{m}, ")
+                } else {
+                    String::new()
+                };
+                writeln!(f,"fn __transport_component_{m}_{name}(&mut self, {baseline_arg}parents: [u32; {count}], morphisms: &[MorphismWithSignature], retain_own: bool) -> bool {{")?;
+                emit_helper(f, &helper.body, ctx, selection)?;
+                writeln!(f, "}}")?;
             }
-            for (s, stratum) in self.strata.iter().enumerate() {
-                let preparation = &self.preparations[s];
-                let plans = std::iter::once((s.to_string(), &preparation.native)).chain(
-                    preparation
-                        .stable
-                        .iter()
-                        .map(|plan| (format!("stable_{s}"), plan)),
-                );
-                for (suffix, plan) in plans {
-                    if plan.descendants.is_empty() {
-                        continue;
-                    }
-                    let model = stratum
-                        .model
-                        .expect("descendant preparation needs a bound owner");
-                    let count = ctx.signature().type_(model).parents.len() + 1;
-                    writeln!(f, "fn __prepare_descendants_{suffix}(&mut self, owners: [u32; {count}], retain_own: bool) {{")?;
-                    for &child in &plan.descendants {
-                        let name = display_type(child, ctx).to_string().to_case(Case::Snake);
-                        writeln!(
-                            f,
-                            "self.__propagate_{name}_morphisms_stratum_{suffix}(owners, retain_own);"
-                        )?;
-                    }
-                    for (rel, index) in &plan.support_indices {
-                        write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
-                    }
-                    for id in &plan.native_indices {
-                        let native = &self.native_indices[*id];
-                        if native.from_primary {
-                            continue;
-                        }
-                        if native
-                            .models
-                            .get(count)
-                            .is_some_and(|child| plan.descendants.contains(child))
-                        {
-                            writedoc! {f, "
-                                self.__extend_native_index_{id}();
-                                let mut index = self.__native_input_{id}.current().clone();
-                                self.__native_{id}_model_{count}(owners, &mut index, retain_own);
-                                self.__native_input_{id}.publish(&index);
-                            "}?;
-                        }
-                    }
-                    writeln!(f, "}}")?;
-                }
+            for helper in &self.evaluation.descendant_helpers {
+                let stable = if helper.stable { "stable_" } else { "" };
+                let stratum = helper.stratum;
+                let count = helper.owners;
+                writeln!(f,"fn __prepare_descendants_{stable}{stratum}(&mut self, owners: [u32; {count}], retain_own: bool) {{")?;
+                emit_helper(f, &helper.body, ctx, selection)?;
+                writeln!(f, "}}")?;
             }
             writedoc! {f, "
                 #[allow(unused_variables)]
@@ -963,78 +895,89 @@ fn retain_owners(owners: &[TypeId], ctx: &RustGenCtx<'_>) -> String {
         .join(" && ")
 }
 
-fn emit_transport_since_baseline(
+fn baseline_relation_fields(relation: &BaselineRelation, ctx: &RustGenCtx<'_>) -> (String, String) {
+    let id = relation.id;
+    let field = display_all_index_field_name(&relation.rel, &relation.index, ctx).to_string();
+    let unchanged = format!(
+        "eqlog_runtime::__private::SnapshotSet::shares_root(&self.{field}, &baseline.source_{id})"
+    );
+    (field, unchanged)
+}
+
+fn emit_helper(
     f: &mut std::fmt::Formatter<'_>,
-    baseline: &TransportBaseline,
-    model: TypeId,
-    m: usize,
-    selection: &IndexSelection,
+    body: &[EvaluationHelperStmt],
     ctx: &RustGenCtx<'_>,
+    selection: &IndexSelection,
 ) -> std::fmt::Result {
-    let name = display_type(model, ctx).to_string().to_case(Case::Snake);
-    let mut unchanged = Vec::new();
-    for (i, (rel, index)) in baseline.maps.iter().enumerate() {
-        write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
-        let read = super::indices::read_method(rel, index, selection, ctx, true);
-        writeln!(f, "let same_map_{i} = eqlog_runtime::__private::SnapshotSet::shares_root(self.{read}(), &baseline.map_{i});")?;
-        unchanged.push(format!("same_map_{i}"));
+    for instruction in body {
+        match instruction {
+            EvaluationHelperStmt::When { condition, body } => {
+                let condition = match condition {
+                    EvaluationHelperCondition::NoMorphisms => "morphisms.is_empty()".to_owned(),
+                    EvaluationHelperCondition::AnyActive => "active.iter().any(|&active| active)".to_owned(),
+                    EvaluationHelperCondition::BaselineUnchanged { maps, relations } => {
+                        let unchanged: Vec<_> = (0..*maps).map(|id| format!("same_map_{id}")).chain(relations.iter().map(|relation| baseline_relation_fields(relation,ctx).1)).collect();
+                        let unchanged = if unchanged.is_empty() { "true".to_owned() } else { unchanged.join(" && ") };
+                        format!("baseline.work.iter().all(|work| work.is_empty()) && {unchanged}")
+                    }
+                };
+                writeln!(f,"if {condition} {{")?;
+                emit_helper(f,body,ctx,selection)?;
+                writeln!(f,"}}")?;
+            }
+            EvaluationHelperStmt::ForMorphisms(body) => {
+                writeln!(f,"for morphism in morphisms {{")?;
+                emit_helper(f,body,ctx,selection)?;
+                writeln!(f,"}}")?;
+            }
+            EvaluationHelperStmt::ReturnFalse => writeln!(f,"return false;")?,
+            EvaluationHelperStmt::CompactComponent(model) => write!(f,"{}",compact_indices::component_guard(*model,ctx))?,
+            EvaluationHelperStmt::InitializeChanged => writeln!(f,"let mut changed = false;")?,
+            EvaluationHelperStmt::PrepareIndex { rel,index } => write!(f,"{}",super::indices::prepare(rel,index,selection,ctx))?,
+            EvaluationHelperStmt::CompareBaselineMap { id,rel,index } => {
+                let read=super::indices::read_method(rel,index,selection,ctx,true);
+                writeln!(f,"let same_map_{id} = eqlog_runtime::__private::SnapshotSet::shares_root(self.{read}(), &baseline.map_{id});")?;
+            }
+            EvaluationHelperStmt::CompareMorphismMap { id,rel,index } => {
+                let read=super::indices::read_method(rel,index,selection,ctx,true);
+                writedoc! {f, "
+                    let changed_map_{id} = !same_map_{id} && !eqlog_runtime::__private::SnapshotSet::shares_root(
+                        self.{read}().get(morphism.morph).unwrap_or_else(|| PrefixTree2::empty()),
+                        baseline.map_{id}.get(morphism.morph).unwrap_or_else(|| PrefixTree2::empty()),
+                    );
+                "}?;
+            }
+            EvaluationHelperStmt::ComputeActive(relations) => {
+                let active=relations.iter().map(|relation| {
+                    let id=relation.id; let dim=relation.suffix;
+                    let (field,same)=baseline_relation_fields(relation,ctx);
+                    let mut changed=vec![format!("baseline.work[{id}].needs_visit(morphism)"),format!("(!({same}) && !eqlog_runtime::__private::SnapshotSet::shares_root(self.{field}.get(morphism.dom).unwrap_or_else(|| PrefixTree{dim}::empty()), baseline.source_{id}.get(morphism.dom).unwrap_or_else(|| PrefixTree{dim}::empty())))")];
+                    changed.extend(relation.maps.iter().map(|id|format!("changed_map_{id}")));
+                    changed.join(" || ")
+                }).join(", ");
+                writeln!(f,"let active = [{active}];")?;
+            }
+            EvaluationHelperStmt::PropagateMorphism { root,model,selected } => {
+                let name=display_type(*model,ctx).to_string().to_case(Case::Snake);
+                if let Some(count)=selected {
+                    writeln!(f,"changed |= self.__propagate_{name}_morphism_selected_model_{root}(parents, morphism, retain_own, &active, &mut [false; {count}]);")?;
+                } else { writeln!(f,"changed |= self.__propagate_{name}_morphism_model_{root}(parents, morphism, retain_own);")?; }
+            }
+            EvaluationHelperStmt::ExtendNative(id) => writeln!(f,"self.__extend_native_index_{id}();")?,
+            EvaluationHelperStmt::ReadNative(id) => writeln!(f,"let mut index = self.__native_input_{id}.current().clone();")?,
+            EvaluationHelperStmt::NativeMorphism { id,level } => writeln!(f,"changed |= self.__native_{id}_morphism_{level}(parents, morphism, &mut index, retain_own);")?,
+            EvaluationHelperStmt::PublishNative(id) => writeln!(f,"self.__native_input_{id}.publish(&index);")?,
+            EvaluationHelperStmt::PropagateDescendant { model,stratum,stable } => {
+                let name=display_type(*model,ctx).to_string().to_case(Case::Snake);
+                let stable=if *stable { "stable_" } else { "" };
+                writeln!(f,"self.__propagate_{name}_morphisms_stratum_{stable}{stratum}(owners, retain_own);")?;
+            }
+            EvaluationHelperStmt::NativeModel { id,level } => writeln!(f,"self.__native_{id}_model_{level}(owners, &mut index, retain_own);")?,
+            EvaluationHelperStmt::ReturnChanged => writeln!(f,"changed")?,
+        }
     }
-    let sources: Vec<_> = baseline
-        .relations
-        .iter()
-        .enumerate()
-        .map(|(i, rel)| {
-            let index = selection.current_primary(rel);
-            let field = display_all_index_field_name(rel, index, ctx);
-            let same = format!("eqlog_runtime::__private::SnapshotSet::shares_root(&self.{field}, &baseline.source_{i})");
-            unchanged.push(same.clone());
-            (field.to_string(), same)
-        })
-        .collect();
-    let unchanged = if unchanged.is_empty() {
-        "true".to_owned()
-    } else {
-        unchanged.join(" && ")
-    };
-    writeln!(
-        f,
-        "if baseline.work.iter().all(|work| work.is_empty()) && {unchanged} {{ return false; }}"
-    )?;
-    writeln!(f, "for morphism in morphisms {{")?;
-    for (i, (rel, index)) in baseline.maps.iter().enumerate() {
-        let read = super::indices::read_method(rel, index, selection, ctx, true);
-        writedoc! {f, "
-            let changed_map_{i} = !same_map_{i} && !eqlog_runtime::__private::SnapshotSet::shares_root(
-                self.{read}().get(morphism.morph).unwrap_or_else(|| PrefixTree2::empty()),
-                baseline.map_{i}.get(morphism.morph).unwrap_or_else(|| PrefixTree2::empty()),
-            );
-        "}?;
-    }
-    let mut active = Vec::new();
-    for (i, rel) in baseline.relations.iter().enumerate() {
-        let (field, same) = &sources[i];
-        let dim = rel.arity(ctx.signature()).len() - 1;
-        let mut changed = vec![format!("baseline.work[{i}].needs_visit(morphism)"), format!(
-            "(!({same}) && !eqlog_runtime::__private::SnapshotSet::shares_root(self.{field}.get(morphism.dom).unwrap_or_else(|| PrefixTree{dim}::empty()), baseline.source_{i}.get(morphism.dom).unwrap_or_else(|| PrefixTree{dim}::empty())))"
-        )];
-        changed.extend(
-            baseline.relation_maps[i]
-                .iter()
-                .map(|j| format!("changed_map_{j}")),
-        );
-        active.push(changed.join(" || "));
-    }
-    let count = baseline.relations.len();
-    let active = active.join(", ");
-    writedoc! {f, "
-        let active = [{active}];
-        if active.iter().any(|&active| active) {{
-            changed |= self.__propagate_{name}_morphism_selected_model_{m}(
-                parents, morphism, retain_own, &active, &mut [false; {count}],
-            );
-        }}
-    }}
-    "}
+    Ok(())
 }
 
 fn begin_stable_input(

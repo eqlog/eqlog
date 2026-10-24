@@ -1,10 +1,15 @@
+mod compact;
+
+pub use compact::*;
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::algebra::signature::{MorphismMemberTypes, Signature, TypeId, TypeKind};
 use crate::flat_eqlog::{iter_flat_rels, FlatInRel, FlatRel, IndexSelection, IndexSpec};
 use crate::options::ModelMode;
 use crate::ram::{
-    CompactPlan, IndexPreparation, NativeIndexPreparation, NativePreparation, PropagationPlan,
+    CompactPlan, EvaluationPlan, IndexPreparation, NativeIndexPreparation, NativePreparation,
+    PropagationPlan,
 };
 
 #[derive(Clone)]
@@ -98,6 +103,7 @@ pub struct TransportModelPlan {
     pub checkpoints: Vec<TransportCheckpointPlan>,
     pub frontier: bool,
     pub key_types: Vec<TypeId>,
+    pub compact: CompactTransportPlan,
 }
 
 pub enum TransportIteration {
@@ -122,7 +128,7 @@ pub enum TransportRetention {
 pub enum TransportInstruction {
     PrepareGraph,
     ComputeComponents,
-    CompactGraph,
+    CompactBlock(Vec<CompactTransportInstruction>),
     PrepareFrontier,
     ReturnUnlessWork,
     InitializeChanges(TransportChanges),
@@ -193,10 +199,28 @@ pub struct TransportPropagation {
     pub invalidated: Vec<FlatRel>,
 }
 
+#[derive(Clone, Copy)]
+pub enum TransportHelperSource {
+    Global,
+    Stratum { stratum: usize, stable: bool },
+    Model { model: TypeId, index: usize },
+}
+
+pub enum TransportHelperKind {
+    Recompute,
+    Propagate(TypeId),
+}
+
+pub struct TransportHelper {
+    pub source: TransportHelperSource,
+    pub kind: TransportHelperKind,
+}
+
 #[derive(Default)]
 pub struct TransportPlan {
     pub models: BTreeMap<TypeId, TransportModelPlan>,
     pub model_order: Vec<TypeId>,
+    pub helpers: Vec<TransportHelper>,
     indices: BTreeMap<(FlatInRel, Vec<usize>, TypeId), TransportIndexPlan>,
     groups: Vec<TransportPropagation>,
     pub native_bodies: BTreeMap<(usize, usize), Vec<TransportInstruction>>,
@@ -382,6 +406,8 @@ fn index_plan(
                 .collect();
             walk(&columns, owners, prefix, target)
         });
+    // Assign combinations to their first changed map so simultaneous image
+    // updates do not repeat the same transported suffix.
     let map_deltas = maps
         .iter()
         .enumerate()
@@ -430,12 +456,16 @@ fn edge_body(
     body
 }
 
-fn driver(children: Vec<TypeId>, work: bool) -> Vec<TransportInstruction> {
+fn driver(
+    children: Vec<TypeId>,
+    work: bool,
+    compact: &[CompactTransportInstruction],
+) -> Vec<TransportInstruction> {
     let mut body = vec![TransportInstruction::ComputeComponents];
     if work {
         body.insert(0, TransportInstruction::PrepareGraph);
         body.extend([
-            TransportInstruction::CompactGraph,
+            TransportInstruction::CompactBlock(compact.to_vec()),
             TransportInstruction::PrepareFrontier,
             TransportInstruction::ReturnUnlessWork,
         ]);
@@ -445,6 +475,8 @@ fn driver(children: Vec<TypeId>, work: bool) -> Vec<TransportInstruction> {
         TransportInstruction::ForEach {
             iteration: TransportIteration::Components,
             body: vec![
+                // Cyclic copies cannot replace owned support with other copies
+                // from the same cycle, including cycles in nested models.
                 TransportInstruction::RetainComponent,
                 TransportInstruction::Loop(vec![
                     TransportInstruction::InitializeChanges(TransportChanges::Component),
@@ -489,6 +521,7 @@ impl TransportPlan {
         preparations: &[IndexPreparation],
         model_preparations: &BTreeMap<TypeId, NativePreparation>,
         native: &[NativeIndexPreparation],
+        evaluation: &EvaluationPlan,
     ) -> Self {
         let mut result = Self::default();
         match mode {
@@ -579,6 +612,7 @@ impl TransportPlan {
                     checkpoints,
                     frontier,
                     key_types,
+                    compact: CompactTransportPlan::new(compact.supports_model(model)),
                 },
             );
         }
@@ -599,6 +633,7 @@ impl TransportPlan {
                     driver(
                         plan.models.get(level + 1).copied().into_iter().collect(),
                         false,
+                        &[],
                     ),
                 );
             }
@@ -622,6 +657,41 @@ impl TransportPlan {
                 selection,
                 compact,
             );
+        }
+        result.helpers.push(TransportHelper {
+            source: TransportHelperSource::Global,
+            kind: TransportHelperKind::Recompute,
+        });
+        for (stratum, preparation) in preparations.iter().enumerate() {
+            let scoped = evaluation.strata[stratum].model.is_some();
+            let plans = std::iter::once((false, &preparation.native))
+                .chain(preparation.stable.iter().map(|plan| (true, plan)));
+            for (stable, plan) in plans {
+                let source = TransportHelperSource::Stratum { stratum, stable };
+                if scoped {
+                    for &model in &plan.propagation.models {
+                        if plan.descendants.iter().any(|child| {
+                            *child == model || signature.type_(model).parents.contains(child)
+                        }) {
+                            result.helpers.push(TransportHelper {
+                                source,
+                                kind: TransportHelperKind::Propagate(model),
+                            });
+                        }
+                    }
+                } else if !plan.propagation.relations.is_empty() {
+                    result.helpers.push(TransportHelper {
+                        source,
+                        kind: TransportHelperKind::Recompute,
+                    });
+                }
+            }
+        }
+        for (index, &model) in model_preparations.keys().enumerate() {
+            result.helpers.push(TransportHelper {
+                source: TransportHelperSource::Model { model, index },
+                kind: TransportHelperKind::Recompute,
+            });
         }
         for rel in iter_flat_rels(signature) {
             let index = selection.current_primary(&FlatInRel::Rel(rel));
@@ -743,7 +813,7 @@ impl TransportPlan {
                         .and_then(|plan| plan.graph_indices.get(&model))
                         .cloned()
                         .unwrap_or_default(),
-                    body: driver(children, true),
+                    body: driver(children, true, &self.models[&model].compact.graph),
                 },
             );
         }

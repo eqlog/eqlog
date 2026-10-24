@@ -11,7 +11,11 @@ use super::{
 use crate::algebra::signature::TypeId;
 use crate::flat_eqlog::{FlatInRel, FlatRel, IndexSelection};
 use crate::fmt_util::FmtFn;
-use crate::ram::RamProgram;
+use crate::ram::{
+    CompactTransportBinding, CompactTransportCall, CompactTransportCondition,
+    CompactTransportInstruction, CompactTransportIteration, CompactTransportLocal,
+    CompactTransportOptional, CompactTransportReturn, RamProgram,
+};
 
 pub(super) fn members(model: TypeId, ctx: &RustGenCtx<'_>) -> Vec<TypeId> {
     ctx.compact().members(model).to_vec()
@@ -108,61 +112,148 @@ pub(super) fn native_guard<'a>(rel: &'a FlatInRel, ctx: &'a RustGenCtx<'a>) -> i
     })
 }
 
-pub(super) fn graph_guard<'a>(model: TypeId, ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
-    FmtFn(move |f| {
-        if supports_model(model, ctx) {
-            let name = model_name(model, ctx);
-            writedoc! {f, "
-                if let Some(incoming) = self.__compact_incoming_{name}(&components) {{
-                    let mut changed = false;
-                    'compact: for component in components.iter() {{
-                        for object in &component.objects {{
-                            if let Some(morphisms) = incoming.get(object) {{
-                                if let Some(next) = self.__compact_transport_batch_{name}(morphisms) {{ changed |= next; }} else {{ break 'compact; }}
-                            }}
-                        }}
-                    }}
-                    if self.__compact_indices_{name}.is_some() {{ return changed; }}
-                }}
-            "}?;
-        }
-        Ok(())
-    })
-}
-
 pub(super) fn component_guard<'a>(model: TypeId, ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
-    FmtFn(move |f| {
-        if supports_model(model, ctx) {
-            let name = model_name(model, ctx);
-            writedoc! {f, "
-                if self.__compact_indices_{name}.is_some() {{
-                    let mut changed = false;
-                    let target = morphisms[0].cod;
-                    if morphisms.iter().all(|morphism| morphism.cod == target && morphism.dom != target) {{
-                        if let Some(next) = self.__compact_transport_batch_{name}(morphisms) {{ changed |= next; }}
-                    }} else {{
-                        for morphism in morphisms {{
-                            if let Some(next) = self.__compact_transport_{name}(morphism.morph, morphism.dom, morphism.cod) {{ changed |= next; }} else {{ break; }}
-                        }}
-                    }}
-                    if self.__compact_indices_{name}.is_some() {{ return changed; }}
-                }}
-            "}?;
-        }
-        Ok(())
-    })
+    transport_body(
+        &ctx.transport().models[&model].compact.component,
+        model,
+        ctx,
+    )
 }
 
 pub(super) fn selected_guard<'a>(model: TypeId, ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
+    transport_body(&ctx.transport().models[&model].compact.selected, model, ctx)
+}
+
+fn binding_name(binding: CompactTransportBinding) -> &'static str {
+    match binding {
+        CompactTransportBinding::Incoming => "incoming",
+        CompactTransportBinding::Morphisms => "morphisms",
+        CompactTransportBinding::Indices => "indices",
+        CompactTransportBinding::Next => "next",
+        CompactTransportBinding::Changed => "changed",
+        CompactTransportBinding::Position => "position",
+    }
+}
+
+fn optional_value(source: CompactTransportOptional, name: &str) -> String {
+    match source {
+        CompactTransportOptional::Call(call) => match call {
+            CompactTransportCall::Incoming => {
+                format!("self.__compact_incoming_{name}(&components)")
+            }
+            CompactTransportCall::Batch => {
+                format!("self.__compact_transport_batch_{name}(morphisms)")
+            }
+            CompactTransportCall::Morphism => format!(
+                "self.__compact_transport_{name}(morphism.morph, morphism.dom, morphism.cod)"
+            ),
+            CompactTransportCall::Selected => {
+                format!("self.__compact_transport_{name}(*morph, *dom, *cod)")
+            }
+        },
+        CompactTransportOptional::IncomingForObject => "incoming.get(object)".to_owned(),
+        CompactTransportOptional::Indices => format!("self.__compact_indices_{name}.as_ref()"),
+        CompactTransportOptional::Position => "primary_position".to_owned(),
+    }
+}
+
+fn transport_condition(condition: &CompactTransportCondition, name: &str) -> String {
+    match condition {
+        CompactTransportCondition::Active => format!("self.__compact_indices_{name}.is_some()"),
+        CompactTransportCondition::CyclicComponent => "!component.internal.is_empty()".to_owned(),
+        CompactTransportCondition::Batch => "batch".to_owned(),
+        CompactTransportCondition::DifferentTarget => "morphism.cod != target".to_owned(),
+        CompactTransportCondition::SelfEdge => "morphism.dom == target".to_owned(),
+        CompactTransportCondition::PrimarySource => "Some(morphism.dom) == primary".to_owned(),
+        CompactTransportCondition::Adopted => {
+            format!("self.__compact_adopted_{name}.contains(&morphism.morph)")
+        }
+        CompactTransportCondition::And(left, right) => {
+            let left = transport_condition(left, name);
+            let right = transport_condition(right, name);
+            format!("({left}) && ({right})")
+        }
+        CompactTransportCondition::Or(left, right) => {
+            let left = transport_condition(left, name);
+            let right = transport_condition(right, name);
+            format!("({left}) || ({right})")
+        }
+    }
+}
+
+pub(super) fn transport_body<'a>(
+    body: &'a [CompactTransportInstruction],
+    model: TypeId,
+    ctx: &'a RustGenCtx<'a>,
+) -> impl Display + 'a {
     FmtFn(move |f| {
-        if supports_model(model, ctx) {
-            let name = model_name(model, ctx);
-            writedoc! {f, "
-                if let Some(changed) = self.__compact_transport_{name}(*morph, *dom, *cod) {{
-                    inserted.fill(changed);
-                    return changed;
-                }}
-            "}?;
+        let name = model_name(model, ctx);
+        for instruction in body {
+            match instruction {
+                CompactTransportInstruction::ForEach { iteration, labeled, body } => {
+                    let label = if *labeled { "'compact: " } else { "" };
+                    let head = match iteration {
+                        CompactTransportIteration::Components => "component in components.iter()",
+                        CompactTransportIteration::Objects => "object in &component.objects",
+                        CompactTransportIteration::Outgoing => "morphism in &component.outgoing",
+                        CompactTransportIteration::Morphisms => "morphism in morphisms",
+                        CompactTransportIteration::IncomingGroups => "(&target, morphisms) in &mut incoming",
+                        CompactTransportIteration::EnumeratedMorphisms => "(position, morphism) in morphisms.iter().enumerate()",
+                    };
+                    let body = transport_body(body, model, ctx);
+                    writeln!(f, "{label}for {head} {{ {body} }}")?;
+                }
+                CompactTransportInstruction::If { condition, then_body, else_body } => {
+                    let condition = transport_condition(condition, &name);
+                    let then_body = transport_body(then_body, model, ctx);
+                    writeln!(f, "if {condition} {{ {then_body}")?;
+                    if !else_body.is_empty() {
+                        let else_body = transport_body(else_body, model, ctx);
+                        writeln!(f, "}} else {{ {else_body}")?;
+                    }
+                    writeln!(f, "}}")?;
+                }
+                CompactTransportInstruction::IfSome { binding, source, then_body, else_body } => {
+                    let binding = binding_name(*binding);
+                    let source = optional_value(*source, &name);
+                    let then_body = transport_body(then_body, model, ctx);
+                    writeln!(f, "if let Some({binding}) = {source} {{ {then_body}")?;
+                    if !else_body.is_empty() {
+                        let else_body = transport_body(else_body, model, ctx);
+                        writeln!(f, "}} else {{ {else_body}")?;
+                    }
+                    writeln!(f, "}}")?;
+                }
+                CompactTransportInstruction::RequireSome { binding, source, else_body } => {
+                    let binding = binding_name(*binding);
+                    let source = optional_value(*source, &name);
+                    let else_body = transport_body(else_body, model, ctx);
+                    writeln!(f, "let Some({binding}) = {source} else {{ {else_body} }};")?;
+                }
+                CompactTransportInstruction::Initialize(local) => match local {
+                    CompactTransportLocal::Changed => writeln!(f, "let mut changed = false;")?,
+                    CompactTransportLocal::Batch => writeln!(f, "let mut batch = true;")?,
+                    CompactTransportLocal::Target => writeln!(f, "let target = morphisms[0].cod;")?,
+                    CompactTransportLocal::Incoming => writeln!(f, "let mut incoming = BTreeMap::<u32, Vec<MorphismWithSignature>>::new();")?,
+                    CompactTransportLocal::Primary => writeln!(f, "let primary = indices.has_owner(target).then(|| indices.source(target)).flatten();")?,
+                    CompactTransportLocal::Position => writeln!(f, "let mut primary_position = None;")?,
+                },
+                CompactTransportInstruction::AccumulateChanged => writeln!(f, "changed |= next;")?,
+                CompactTransportInstruction::RejectBatch => writeln!(f, "batch = false;")?,
+                CompactTransportInstruction::RecordIncoming => writeln!(f, "incoming.entry(morphism.cod).or_default().push(morphism.clone());")?,
+                CompactTransportInstruction::RememberPosition => writeln!(f, "primary_position = Some(position);")?,
+                CompactTransportInstruction::RotatePrimary => writeln!(f, "morphisms[..=position].rotate_right(1);")?,
+                CompactTransportInstruction::FillInserted => writeln!(f, "inserted.fill(changed);")?,
+                CompactTransportInstruction::Break { labeled } => {
+                    let label = if *labeled { " 'compact" } else { "" };
+                    writeln!(f, "break{label};")?;
+                }
+                CompactTransportInstruction::Return(result) => match result {
+                    CompactTransportReturn::None => writeln!(f, "return None;")?,
+                    CompactTransportReturn::Changed => writeln!(f, "return changed;")?,
+                    CompactTransportReturn::Incoming => writeln!(f, "return Some(incoming);")?,
+                },
+            }
         }
         Ok(())
     })
@@ -251,6 +342,8 @@ pub(super) fn methods<'a>(
                 let witnesses = witnesses(layout.rel, keys, "el0", ctx);
                 writeln!(f, "for [{args}] in self.{own}.iter() {{ let row = [{row}]; indices.record(el0, {relation}, &row, true); {witnesses} }}")?;
             }
+            let incoming_body =
+                transport_body(&ctx.transport().models[&model].compact.incoming, model, ctx);
             writedoc! {f, "
                     self.__compact_indices_{name} = Some(indices);
                     {clear_aliases}
@@ -267,23 +360,7 @@ pub(super) fn methods<'a>(
                 fn __compact_incoming_{name}(&self, components: &[MorphismComponent])
                     -> Option<BTreeMap<u32, Vec<MorphismWithSignature>>>
                 {{
-                    let indices = self.__compact_indices_{name}.as_ref()?;
-                    if components.iter().any(|component| !component.internal.is_empty()) {{ return None; }}
-                    let mut incoming = BTreeMap::<u32, Vec<MorphismWithSignature>>::new();
-                    for component in components {{
-                        for morphism in &component.outgoing {{
-                            incoming.entry(morphism.cod).or_default().push(morphism.clone());
-                        }}
-                    }}
-                    for (&target, morphisms) in &mut incoming {{
-                        let primary = indices.has_owner(target).then(|| indices.source(target)).flatten();
-                        if let Some(position) = morphisms.iter().position(|morphism| {{
-                            Some(morphism.dom) == primary && self.__compact_adopted_{name}.contains(&morphism.morph)
-                        }}) {{
-                            morphisms[..=position].rotate_right(1);
-                        }}
-                    }}
-                    Some(incoming)
+                    {incoming_body}
                 }}
 
                 fn __compact_publish_{name}(&mut self, owner: u32) {{

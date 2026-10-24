@@ -509,6 +509,7 @@ pub fn flat_rule_groups_to_ram(
             &preparations,
             &model_preparations,
             &native_indices,
+            &evaluation,
         ),
         compact,
         evaluation,
