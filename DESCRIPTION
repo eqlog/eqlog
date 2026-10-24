@@ -28,3 +28,12 @@ to RAM passes.
 
 Retain evaluator behavior and runtime operations while exposing their
 compiler decisions for independent review and execution-based checks.
+
+Share projection descriptions, closure operations, input-consumption
+rendering, and row bookkeeping so equivalent native and indexed paths
+cannot drift independently. Borrow existing plans directly and remove
+obsolete renderer wrappers, parameters, and commented-out fragments.
+
+Validate dynamic edits through a shared read-only storage interface
+instead of exporting and mutating a disposable model. Preserve checked
+errors and pending raw-result selection before applying the typed edit.

@@ -7,6 +7,8 @@ use eqlog_runtime::{
 };
 use std::sync::Arc;
 
+#[cfg(not(feature = "desugared"))]
+use crate::compact_member_views::CompactMemberViews;
 use crate::consts::Consts;
 use crate::diagonal_canonicalization::DiagonalCanonicalization;
 use crate::empty::Empty;
@@ -982,4 +984,300 @@ fn import_rebuilds_diagonals_before_pending_equalities_are_processed() {
         assert!(restored.pair(x, b, y, y));
         assert_eq!(restored.value(x, b, y), Some(y));
     }
+}
+
+fn rejected_edit<M: CompiledModel, T: std::fmt::Debug + PartialEq>(
+    model: &mut M,
+    expected: Error,
+    edit: impl FnOnce(&mut M) -> Result<T, Error>,
+) {
+    let before = format!("{:?}", model.to_dynamic());
+    assert_eq!(edit(model), Err(expected));
+    assert_eq!(format!("{:?}", model.to_dynamic()), before);
+}
+
+#[test]
+fn compiled_checked_edits_preserve_error_order_and_change_reports() {
+    let mut model = PartialMagma::new();
+    let signature = PartialMagma::dynamic_signature();
+    let type_ = signature.type_named("El").unwrap();
+    let mul = signature.relation_named("mul").unwrap();
+    let unknown_type = TypeId(signature.types().len());
+    let unknown_relation = RelationId(signature.relations().len());
+    let x = model.new_element(type_, &[]).unwrap();
+    let y = model.new_element(type_, &[]).unwrap();
+    let missing = Element { type_, index: 99 };
+    let wrong_type = Element {
+        type_: unknown_type,
+        index: 0,
+    };
+    rejected_edit(&mut model, Error::UnknownType(unknown_type), |model| {
+        model.new_element(unknown_type, &[missing])
+    });
+    rejected_edit(
+        &mut model,
+        Error::UnknownRelation(unknown_relation),
+        |model| model.insert(unknown_relation, &[missing]),
+    );
+    rejected_edit(
+        &mut model,
+        Error::ArityMismatch {
+            expected: 3,
+            actual: 1,
+        },
+        |model| model.insert(mul, &[missing]),
+    );
+    rejected_edit(
+        &mut model,
+        Error::TypeMismatch {
+            expected: type_,
+            actual: unknown_type,
+        },
+        |model| model.insert(mul, &[wrong_type, missing, x]),
+    );
+    rejected_edit(&mut model, Error::UnknownElement(missing), |model| {
+        model.equate(&[wrong_type], missing, wrong_type)
+    });
+    rejected_edit(&mut model, Error::UnknownElement(missing), |model| {
+        model.define(mul, &[x, missing])
+    });
+    assert!(model.insert(mul, &[x, x, y]).unwrap());
+    assert!(!model.insert(mul, &[x, x, y]).unwrap());
+    assert_eq!(model.define(mul, &[x, x]).unwrap(), y);
+    assert!(model.equate(&[], x, y).unwrap());
+    assert!(!model.equate(&[], x, y).unwrap());
+    let mut expected = model.to_dynamic();
+    assert_eq!(
+        model.insert(mul, &[x, x, y]),
+        expected.insert(mul, &[x, x, y])
+    );
+    let typed_result = model
+        .mul(
+            crate::partial_magma::El(y.index),
+            crate::partial_magma::El(y.index),
+        )
+        .unwrap();
+    assert_eq!(
+        model.define(mul, &[y, y]).unwrap(),
+        Element {
+            type_,
+            index: typed_result.0
+        }
+    );
+    assert_eq!(format!("{:?}", model.to_dynamic()), format!("{expected:?}"));
+    model.close();
+    assert_eq!(model.iter_el().count(), 1);
+    assert_eq!(model.iter_mul().count(), 1);
+}
+
+#[test]
+fn compiled_checked_edits_reject_foreign_owners_before_mutating() {
+    let mut model = MemberParents::new();
+    let a = model.new_outer();
+    let b = model.new_outer();
+    let i = model.new_inner(a);
+    let j = model.new_inner(b);
+    let x = model.new_el(a, i);
+    let y = model.new_el(b, j);
+    let a = handle::<MemberParents>("Outer", a.0);
+    let b = handle::<MemberParents>("Outer", b.0);
+    let i = handle::<MemberParents>("Outer::Inner", i.0);
+    let j = handle::<MemberParents>("Outer::Inner", j.0);
+    let x = handle::<MemberParents>("Outer::Inner::El", x.0);
+    let y = handle::<MemberParents>("Outer::Inner::El", y.0);
+    let signature = MemberParents::dynamic_signature();
+    let constructor = signature
+        .relation_named("Outer::Inner::LabelValue")
+        .unwrap();
+    let label_type = signature.type_named("Outer::Inner::Label").unwrap();
+    rejected_edit(
+        &mut model,
+        Error::ConstructorRequired(label_type),
+        |model| model.new_element(label_type, &[]),
+    );
+    rejected_edit(&mut model, Error::ParentMismatch, |model| {
+        model.new_element(x.type_, &[a, j])
+    });
+    rejected_edit(&mut model, Error::ParentMismatch, |model| {
+        model.define(constructor, &[b, i])
+    });
+    rejected_edit(&mut model, Error::ParentMismatch, |model| {
+        model.equate(&[a, i], x, y)
+    });
+    assert!(model.equate(&[], a, b).unwrap());
+    assert!(model.equate(&[a], i, j).unwrap());
+    assert!(model.equate(&[b, j], x, y).unwrap());
+    assert!(!model.equate(&[a, i], y, x).unwrap());
+    let added = model.new_element(x.type_, &[b, j]).unwrap();
+    let dynamic = model.to_dynamic();
+    let membership = signature
+        .relation_named("Outer::Inner::inner_member_el")
+        .unwrap();
+    assert!(dynamic.contains(membership, &[a, i, added]).unwrap());
+    let label = model.define(constructor, &[b, j]).unwrap();
+    assert_eq!(model.define(constructor, &[a, i]).unwrap(), label);
+    model.close();
+    assert_eq!(model.iter_label().count(), 1);
+}
+
+#[test]
+fn compiled_checked_morphism_edits_require_endpoints_and_create_codomain() {
+    let mut model = MorphismPreservation::new();
+    let a = model.new_world();
+    let b = model.new_world();
+    let x = model.new_el(a);
+    let y = model.new_el(b);
+    let h = model.new_world_mor();
+    let a = handle::<MorphismPreservation>("World", a.0);
+    let x = handle::<MorphismPreservation>("World::El", x.0);
+    let y = handle::<MorphismPreservation>("World::El", y.0);
+    let h = handle::<MorphismPreservation>("WorldMor", h.0);
+    let signature = MorphismPreservation::dynamic_signature();
+    let domain = signature.relation_named("world_mor_dom").unwrap();
+    let codomain = signature.relation_named("world_mor_cod").unwrap();
+    let application = signature.relation_named("el_mor_app").unwrap();
+    rejected_edit(&mut model, Error::UndefinedFunction(domain), |model| {
+        model.define(application, &[h, x])
+    });
+    assert!(model.insert(domain, &[h, a]).unwrap());
+    rejected_edit(&mut model, Error::ParentMismatch, |model| {
+        model.define(application, &[h, y])
+    });
+    rejected_edit(&mut model, Error::UndefinedFunction(codomain), |model| {
+        model.insert(application, &[h, x, y])
+    });
+    let mut expected = model.to_dynamic();
+    let image = model.define(application, &[h, x]).unwrap();
+    assert_eq!(image, expected.define(application, &[h, x]).unwrap());
+    assert_eq!(model.define(application, &[h, x]).unwrap(), image);
+    assert!(!model.insert(application, &[h, x, image]).unwrap());
+    rejected_edit(&mut model, Error::ParentMismatch, |model| {
+        model.insert(application, &[h, x, y])
+    });
+    assert_eq!(format!("{:?}", model.to_dynamic()), format!("{expected:?}"));
+}
+
+#[test]
+fn compiled_checked_nested_morphisms_require_parent_images_without_partial_edits() {
+    let mut model = NestedImageCreation::new();
+    let source = model.new_m();
+    let target = model.new_m();
+    let n = model.new_n(source);
+    let o = model.new_o(source, n);
+    let x = model.new_u(source, n, o);
+    let h = model.new_m_mor();
+    model.insert_m_mor_dom(h, source);
+    model.insert_m_mor_cod(h, target);
+    let signature = NestedImageCreation::dynamic_signature();
+    let n_app = signature.relation_named("n_mor_app").unwrap();
+    let o_app = signature.relation_named("m_o_mor_app").unwrap();
+    let u_app = signature.relation_named("m_u_mor_app").unwrap();
+    let h = handle::<NestedImageCreation>("MMor", h.0);
+    let n = handle::<NestedImageCreation>("M::N", n.0);
+    let o = handle::<NestedImageCreation>("M::N::O", o.0);
+    let x = handle::<NestedImageCreation>("M::N::O::U", x.0);
+    rejected_edit(&mut model, Error::UndefinedFunction(n_app), |model| {
+        model.define(u_app, &[h, x])
+    });
+    model.define(n_app, &[h, n]).unwrap();
+    rejected_edit(&mut model, Error::UndefinedFunction(o_app), |model| {
+        model.define(u_app, &[h, x])
+    });
+    model.define(o_app, &[h, o]).unwrap();
+    let mut expected = model.to_dynamic();
+    assert_eq!(
+        model.define(u_app, &[h, x]),
+        expected.define(u_app, &[h, x])
+    );
+    assert_eq!(format!("{:?}", model.to_dynamic()), format!("{expected:?}"));
+}
+
+#[cfg(not(feature = "desugared"))]
+#[test]
+fn compiled_checked_edits_preserve_compact_members_and_pending_aliases() {
+    let mut model = CompactMemberViews::new();
+    model.enable_compact_world();
+    let source = model.new_world();
+    let target = model.new_world();
+    let x = model.new_el(source);
+    let alias = model.new_el(source);
+    let label = model.new_label();
+    model.insert_tagged(source, x, label);
+    let h = model.new_world_mor();
+    model.insert_world_mor_dom(h, source);
+    model.insert_world_mor_cod(h, target);
+    model.inherit_total_world_members(h);
+    model.close();
+    let image = model.el_mor_app(h, x).unwrap();
+    let source = handle::<CompactMemberViews>("World", source.0);
+    let target = handle::<CompactMemberViews>("World", target.0);
+    let x = handle::<CompactMemberViews>("World::El", x.0);
+    let alias = handle::<CompactMemberViews>("World::El", alias.0);
+    let image = handle::<CompactMemberViews>("World::El", image.0);
+    let h = handle::<CompactMemberViews>("WorldMor", h.0);
+    let label = handle::<CompactMemberViews>("Label", label.0);
+    let signature = CompactMemberViews::dynamic_signature();
+    let tagged = signature.relation_named("World::tagged").unwrap();
+    let application = signature.relation_named("el_mor_app").unwrap();
+    let edge = signature.relation_named("World::class_image").unwrap();
+    let missing = Element {
+        type_: x.type_,
+        index: u32::MAX,
+    };
+    rejected_edit(&mut model, Error::UnknownElement(missing), |model| {
+        model.insert(tagged, &[source, missing, label])
+    });
+    rejected_edit(&mut model, Error::ParentMismatch, |model| {
+        model.insert(tagged, &[target, x, label])
+    });
+    assert!(!model.insert(tagged, &[target, image, label]).unwrap());
+    assert!(!model.insert(application, &[h, x, image]).unwrap());
+    let mut expected = model.to_dynamic();
+    assert_eq!(
+        model.new_element(x.type_, &[target]),
+        expected.new_element(x.type_, &[target])
+    );
+    let mut expected = model.to_dynamic();
+    assert_eq!(
+        model.define(edge, &[target, image]),
+        expected.define(edge, &[target, image])
+    );
+    assert!(model.equate(&[source], x, alias).unwrap());
+    let mut expected = model.to_dynamic();
+    assert_eq!(
+        model.insert(application, &[h, alias, image]),
+        expected.insert(application, &[h, alias, image])
+    );
+    assert_eq!(
+        model.define(application, &[h, alias]),
+        expected.define(application, &[h, alias])
+    );
+    model.close();
+    assert_eq!(
+        model.to_dynamic().eval(application, &[h, alias]).unwrap(),
+        Some(image)
+    );
+}
+
+#[test]
+fn compiled_checked_morphisms_validate_all_pending_endpoint_rows() {
+    let mut model = MorphismPreservation::new();
+    let a = model.new_world();
+    let b = model.new_world();
+    let x = model.new_el(b);
+    let h = model.new_world_mor();
+    model.insert_world_mor_dom(h, b);
+    model.insert_world_mor_dom(h, a);
+    let h = handle::<MorphismPreservation>("WorldMor", h.0);
+    let x = handle::<MorphismPreservation>("World::El", x.0);
+    let application = MorphismPreservation::dynamic_signature()
+        .relation_named("el_mor_app")
+        .unwrap();
+    assert_eq!(
+        model.to_dynamic().define(application, &[h, x]),
+        Err(Error::ParentMismatch)
+    );
+    rejected_edit(&mut model, Error::ParentMismatch, |model| {
+        model.define(application, &[h, x])
+    });
 }

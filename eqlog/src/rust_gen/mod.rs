@@ -1,3 +1,6 @@
+mod arguments;
+mod bookkeeping;
+mod close;
 mod compact_api;
 mod compact_eligibility;
 mod compact_indices;
@@ -28,7 +31,7 @@ use crate::ram::*;
 use convert_case::{Case, Casing};
 use indoc::{formatdoc, writedoc};
 use itertools::Itertools;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter, Result};
 use std::iter::once;
 
@@ -75,8 +78,6 @@ fn display_imports() -> impl Display {
     })
 }
 
-// #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-// pub struct TypeName(pub u32);
 fn display_type_struct<'a>(typ: TypeId, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
     FmtFn(move |f| {
         let type_name = display_type(typ, ctx).to_string().to_case(UpperCamel);
@@ -528,31 +529,18 @@ fn display_pub_predicate_holds_fn<'a>(
         let is_membership = membership_self_type(rel).is_some();
         let relation_snake = display_rel(rel, ctx).to_string().to_case(Snake);
         let arity_types = rel.arity(ctx.signature());
-        let arity_camel: Vec<String> = arity_types
-            .iter()
-            .map(|&typ| display_type(typ, ctx).to_string().to_case(UpperCamel))
-            .collect();
-
-        let rel_fn_args = arity_camel
-            .iter()
-            .enumerate()
-            .format_with("", |(i, s), f| f(&format_args!(", mut arg{i}: {s}")))
-            .to_string();
-
-        let canonicalize = arity_camel
-            .iter()
-            .enumerate()
-            .format_with("\n", |(i, s), f| {
-                let type_snake = s.to_case(Snake);
-                f(&format_args!("arg{i} = self.root_{type_snake}(arg{i});"))
-            })
-            .to_string();
-
         let rel_args: Vec<ElVar> = (0..arity_types.len())
             .map(|i| ElVar {
                 name: format!("arg{i}").into(),
             })
             .collect();
+        let parameters = arguments::declarations(&rel_args, &arity_types, ctx);
+        let rel_fn_args = if parameters.is_empty() {
+            parameters
+        } else {
+            format!(", {parameters}")
+        };
+        let canonicalize = arguments::canonicalize(&rel_args, &arity_types, ctx);
         let dependent_checks = display_dependent_type_checks(
             rel,
             &arity_types,
@@ -670,35 +658,13 @@ fn display_pub_function_eval_fn<'a>(
         let cod_camel = display_type(cod, ctx).to_string().to_case(UpperCamel);
         let cod_camel = &cod_camel;
 
-        let params = flat_dom
-            .iter()
-            .copied()
-            .enumerate()
-            .map(|(i, typ)| {
-                FmtFn(move |f| {
-                    let type_camel = display_type(typ, ctx).to_string().to_case(UpperCamel);
-                    write!(f, "mut arg{i}: {type_camel}, ")
-                })
-            })
-            .format("");
-
-        let canonicalize = flat_dom
-            .iter()
-            .copied()
-            .enumerate()
-            .map(|(i, typ)| {
-                FmtFn(move |f| {
-                    let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
-                    write!(f, "arg{i} = self.root_{type_snake}(arg{i});")
-                })
-            })
-            .format("\n");
-
         let rel_args: Vec<ElVar> = (0..=flat_dom_len)
             .map(|i| ElVar {
                 name: format!("arg{i}").into(),
             })
             .collect();
+        let params = arguments::declarations(&rel_args[..flat_dom_len], &flat_dom, ctx);
+        let canonicalize = arguments::canonicalize(&rel_args[..flat_dom_len], &flat_dom, ctx);
         let mut arity_types = flat_dom.clone();
         arity_types.push(cod);
         let dependent_checks = display_dependent_type_checks(
@@ -774,7 +740,6 @@ fn display_pub_iter_fn<'a>(
         };
 
         let docstring = match (is_function, arity.len()) {
-            //(false, 0) => todo!("Shouldn't generate an iter_...() function for truth values."),
             (false, 1) => {
                 formatdoc! {"
                     /// Returns an iterator over elements satisfying the `{relation}` predicate.
@@ -882,37 +847,10 @@ fn display_pub_insert_relation<'a>(
         let rel_snake = rel_snake.as_str();
 
         let arity_types = rel.arity(ctx.signature());
-        let arity_camel: Vec<String> = arity_types
-            .iter()
-            .map(|&typ| display_type(typ, ctx).to_string().to_case(UpperCamel))
-            .collect();
-
         let rel_args: Vec<ElVar> = (0..arity_types.len()).map(ElVar::from).collect();
         let rel_args = rel_args.as_slice();
-
-        let rel_fn_args = rel_args
-            .iter()
-            .cloned()
-            .zip(arity_camel.iter())
-            .map(|(arg, typ_camel)| {
-                FmtFn(move |f: &mut Formatter| -> Result { write!(f, "{arg}: {typ_camel}") })
-            })
-            .format(", ")
-            .to_string();
-
-        let canonicalize = rel_args
-            .iter()
-            .cloned()
-            .zip(arity_types.iter())
-            .map(|(arg, typ)| {
-                FmtFn(move |f: &mut Formatter| -> Result {
-                    let type_snake = display_type(*typ, ctx).to_string().to_case(Snake);
-                    write!(f, "let {arg} = self.root_{type_snake}({arg});")
-                })
-            })
-            .format("\n")
-            .to_string();
-
+        let rel_fn_args = arguments::declarations(rel_args, &arity_types, ctx);
+        let canonicalize = arguments::canonicalize(rel_args, &arity_types, ctx);
         let dependent_checks = display_dependent_type_checks(
             rel,
             &arity_types,
@@ -924,48 +862,24 @@ fn display_pub_insert_relation<'a>(
 
         let unwrap_args = rel_args
             .iter()
-            .cloned()
             .map(|arg| {
                 FmtFn(move |f: &mut Formatter| -> Result { write!(f, "let {arg}: u32 = {arg}.0;") })
             })
             .format("\n");
 
-        let weight_static_name = display_weight_static_name(rel, ctx).to_string();
-        let update_weights = rel_args
-            .iter()
-            .cloned()
-            .zip(arity_types.iter())
-            .enumerate()
-            .map(move |(i, (arg, typ))| {
-                let weight_static_name = weight_static_name.clone();
-                FmtFn(move |f: &mut Formatter| -> Result {
-                    let type_snake = display_type(*typ, ctx)
-                        .to_string()
-                        .to_case(Snake);
-                    writedoc! {f, "
-                        let weight{i}: &mut usize = &mut self.{type_snake}_weights[usize::try_from({arg}).unwrap()];
-                        *weight{i} = weight{i}.saturating_add({weight_static_name});
-                    "}
-                })
-            })
-            .format("\n");
+        let raw_args: Vec<_> = rel_args.iter().map(ToString::to_string).collect();
+        let row = format!("[{}]", raw_args.iter().join(", "));
+        let update_weights = bookkeeping::weights(rel, &raw_args, ctx);
 
         let docstring = if is_function {
             let dom_len = arity_types.len() - 1;
-            let func_args = rel_args[..dom_len]
-                .iter()
-                .cloned()
-                .map(display_var)
-                .format(", ");
-            let result = rel_args
-                .last()
-                .expect("func can't have empty arity")
-                .clone();
+            let func_args = rel_args[..dom_len].iter().format(", ");
+            let result = rel_args.last().expect("func can't have empty arity");
             formatdoc! {"
                 /// Makes the equation `{rel_snake}({func_args}) = {result}` hold.
             "}
         } else {
-            let rel_args = rel_args.iter().cloned().map(display_var).format(", ");
+            let rel_args = rel_args.iter().format(", ");
             formatdoc! {"
                 /// Makes `{rel_snake}({rel_args})` hold.
             "}
@@ -990,7 +904,7 @@ fn display_pub_insert_relation<'a>(
                 display_index_expr(flat_rel, index_spec, ctx).to_string()
             };
             let IndexSpec { order, age: _ } = index_spec;
-            let row_args = order.iter().map(|i| rel_args[*i].clone()).format(", ");
+            let row_args = order.iter().map(|i| &rel_args[*i]).format(", ");
             match ctx.model_mode() {
                 ModelMode::Native => formatdoc! {"
                     if {index_expr}.contains([{row_args}]) {{
@@ -1003,53 +917,7 @@ fn display_pub_insert_relation<'a>(
             }
         };
 
-        let mut type_positions: BTreeMap<TypeId, Vec<usize>> = BTreeMap::new();
-        for (i, typ) in arity_types.iter().copied().enumerate() {
-            type_positions.entry(typ).or_default().push(i);
-        }
-
-        let el_index_inserts = type_positions
-            .iter()
-            .map(move |(typ, positions)| {
-                (0..positions.len())
-                    .map(move |pos_index| {
-                        FmtFn(move |f| {
-                            let pos = positions[pos_index];
-                            let pos_arg = rel_args[pos].clone();
-                            let checks = (0..pos_index)
-                                .map(move |prev_pos_index| {
-                                    let prev_pos = positions[prev_pos_index];
-                                    let prev_pos_arg = rel_args[prev_pos].clone();
-                                    let pos_arg = pos_arg.clone();
-                                    FmtFn(move |f| write!(f, "&& {pos_arg} != {prev_pos_arg}"))
-                                })
-                                .format(" ");
-
-                            let pos_arg = rel_args[pos].clone();
-                            let rel_args = rel_args.iter().format(", ");
-                            let el_index_field =
-                                display_element_index_field_name(rel, *typ, ctx).to_string();
-                            match ctx.model_mode() {
-                                ModelMode::Native => {}
-                                ModelMode::Desugared => {
-                                    let occurrences = indexed::occurrences_field(*typ, ctx);
-                                    return writedoc! {f, "
-                                        if true {checks} {{
-                                        self.{occurrences}.push({pos_arg}, occurrence);
-                                        }}
-                                    "};
-                                }
-                            }
-                            writedoc! {f, "
-                            if true {checks} {{
-                            self.{el_index_field}.entry({pos_arg}).or_default().push([{rel_args}]);
-                            }}
-                        "}
-                        })
-                    })
-                    .format("\n")
-            })
-            .format("\n");
+        let el_index_inserts = bookkeeping::occurrences(rel, &raw_args, &row, false, ctx);
 
         let invalidate = match ctx.model_mode() {
             ModelMode::Native => indices::invalidate(rel, index_selection, ctx).to_string(),
@@ -1364,7 +1232,7 @@ fn display_enum_cases_fn<'a>(enum_decl: EnumDeclId, ctx: &'a RustGenCtx<'a>) -> 
                     let tuple_vars = ctor_arg_vars.clone().chain(once(result_var.clone()));
 
                     let ctor_arg_vars = ctor_arg_vars.format(", ");
-                    let tuple_vars = tuple_vars.map(display_var).format(", ");
+                    let tuple_vars = tuple_vars.format(", ");
 
                     // TODO: Use a lazy inverse index to avoid scanning constructor tuples.
                     writedoc! {f, "
@@ -1741,16 +1609,7 @@ fn display_canonicalize_fn<'a>(
             .chain(
                 iter_flat_rels(ctx.signature()).filter(|rel| !rel.is_model_membership_relation()),
             )
-            .map(|rel| {
-                FmtFn(move |f| {
-                    let block = display_canonicalize_rel_block(rel, ctx, index_selection);
-                    let rel = display_rel(rel, ctx);
-                    writedoc! {f, "
-                        // Canonicalize {rel}.
-                        {block}
-                    "}
-                })
-            })
+            .map(|rel| display_canonicalize_rel_block(rel, ctx, index_selection))
             .format("\n");
 
         let clear_uprooted_vecs = ctx
@@ -1768,7 +1627,7 @@ fn display_canonicalize_fn<'a>(
             ModelMode::Native => "self.recompute_model_indices();",
             ModelMode::Desugared => "",
         };
-        let prune_transport = transport::prune(ctx, index_selection);
+        let prune_transport = transport::prune(ctx);
         let canonicalize_inherited = FmtFn(|f| {
             if shared.is_empty() {
                 return Ok(());
@@ -1936,14 +1795,13 @@ fn display_model_delta_impl<'a>(
     FmtFn(move |f| {
         writedoc! {f, "
             impl ModelDelta {{
-        "}
-        .unwrap();
+        "}?;
 
         let new_fn = display_model_delta_new_fn(outputs, ctx);
-        write!(f, "{}", new_fn).unwrap();
+        write!(f, "{}", new_fn)?;
 
         let apply_def_fn = display_model_delta_apply_def_fn(outputs, ctx);
-        write!(f, "{}", apply_def_fn).unwrap();
+        write!(f, "{}", apply_def_fn)?;
 
         let pending = outputs
             .iter()
@@ -2006,10 +1864,7 @@ fn display_model_delta_apply_def_fn<'a>(
 
                 let domain = flat_domain(func, ctx.signature());
 
-                let args_destructure = (0..domain.len())
-                    .map(ElVar::from)
-                    .map(display_var)
-                    .format(", ");
+                let args_destructure = (0..domain.len()).map(ElVar::from).format(", ");
                 let define_args = (0..domain.len())
                     .map(|i| {
                         FmtFn(move |f| {
@@ -2043,11 +1898,6 @@ impl Display for ElVar {
         let ElVar { name } = self;
         write!(f, "{}", name)
     }
-}
-
-// TODO: Remove this legacy function.
-fn display_var(var: ElVar) -> impl Display {
-    var
 }
 
 fn display_prefix_tree_type(arity_len: usize) -> impl Display {
@@ -2629,19 +2479,19 @@ fn display_new_fn<'a>(
     native_plans: &'a [NativeIndexPreparation],
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        writeln!(f, "/// Creates an empty model.").unwrap();
-        writeln!(f, "#[allow(dead_code)]").unwrap();
-        writeln!(f, "pub fn new() -> Self {{").unwrap();
-        writeln!(f, "Self {{").unwrap();
+        writeln!(f, "/// Creates an empty model.")?;
+        writeln!(f, "#[allow(dead_code)]")?;
+        writeln!(f, "pub fn new() -> Self {{")?;
+        writeln!(f, "Self {{")?;
         writeln!(f, "__pending_delta: ModelDelta::new(),")?;
         write!(f, "{}", native_indices::init(native_plans))?;
         write!(f, "{}", compact_indices::fields(ctx, true))?;
         write!(f, "{}", compact_policy::fields(ctx, true))?;
-        write!(f, "{}", transport::fields(ctx, index_selection, true))?;
+        write!(f, "{}", transport::fields(ctx, true))?;
         write!(f, "{}", codegen.init(index_selection, ctx))?;
         for typ in ctx.signature().iter_types() {
             let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
-            writeln!(f, "{type_snake}_equalities: Unification::new(),").unwrap();
+            writeln!(f, "{type_snake}_equalities: Unification::new(),")?;
             if ctx.supports_compact_members(typ) {
                 writeln!(
                     f,
@@ -2651,7 +2501,7 @@ fn display_new_fn<'a>(
             } else {
                 writeln!(f, "{type_snake}_weights: Vec::new(),")?;
             }
-            writeln!(f, "{type_snake}_uprooted: Vec::new(),").unwrap();
+            writeln!(f, "{type_snake}_uprooted: Vec::new(),")?;
         }
         for (flat_rel, index) in index_selection.current_indices() {
             let field_name = display_current_index_field_name(&flat_rel, &index, ctx);
@@ -2662,24 +2512,24 @@ fn display_new_fn<'a>(
             };
             if ctx.has_shared_indices(&flat_rel) {
                 if index_selection.is_primary(flat_rel, index) {
-                    writeln!(f, "{field_name}_own: {index_type}::new(),").unwrap();
+                    writeln!(f, "{field_name}_own: {index_type}::new(),")?;
                 }
-                writeln!(f, "{field_name}_all: {index_type}::new(),").unwrap();
+                writeln!(f, "{field_name}_all: {index_type}::new(),")?;
             } else {
-                writeln!(f, "{field_name}: {index_type}::new(),").unwrap();
+                writeln!(f, "{field_name}: {index_type}::new(),")?;
             }
         }
         for rel in iter_flat_rels(ctx.signature()) {
             let type_set: BTreeSet<TypeId> = rel.arity(ctx.signature()).into_iter().collect();
             for typ in type_set {
                 let field_name = display_element_index_field_name(rel, typ, ctx);
-                writeln!(f, "{field_name}: BTreeMap::new(),").unwrap();
+                writeln!(f, "{field_name}: BTreeMap::new(),")?;
             }
         }
-        writeln!(f, "__allocated: false,").unwrap();
-        writeln!(f, "__closed: false,").unwrap();
-        writeln!(f, "}}").unwrap();
-        write!(f, "}}").unwrap();
+        writeln!(f, "__allocated: false,")?;
+        writeln!(f, "__closed: false,")?;
+        writeln!(f, "}}")?;
+        write!(f, "}}")?;
         Ok(())
     })
 }
@@ -2702,30 +2552,10 @@ fn display_define_fn<'a>(
         let func_arg_vars: Vec<ElVar> = (0..domain.len()).map(ElVar::from).collect();
         let result_var = ElVar::from(domain.len());
 
-        let fn_args = func_arg_vars
-            .iter()
-            .cloned()
-            .zip(domain.iter().copied())
-            .map(|(var, var_typ)| {
-                FmtFn(move |f: &mut Formatter| -> Result {
-                    let type_camel = format!("{}", display_type(var_typ, ctx)).to_case(UpperCamel);
-                    write!(f, "{var}: {type_camel}")
-                })
-            })
-            .format(", ");
+        let fn_args = arguments::declarations(&func_arg_vars, &domain, ctx);
 
-        let args = func_arg_vars
-            .iter()
-            .cloned()
-            .map(display_var)
-            .format(", ")
-            .to_string();
-        let rel_args = func_arg_vars
-            .iter()
-            .cloned()
-            .chain(once(result_var.clone()))
-            .map(display_var)
-            .format(", ");
+        let args = func_arg_vars.iter().format(", ").to_string();
+        let rel_args = func_arg_vars.iter().chain(once(&result_var)).format(", ");
 
         if let Some(types) = ctx.signature().types_for_mor_app_func(func) {
             let parent_model = types.model_type(ctx.signature());
@@ -2774,8 +2604,6 @@ fn display_define_fn<'a>(
         let mor_app_cod_args = if domain.len() >= 2 {
             func_arg_vars[..=domain.len() - 2]
                 .iter()
-                .cloned()
-                .map(display_var)
                 .format(", ")
                 .to_string()
         } else {
@@ -2800,8 +2628,6 @@ fn display_define_fn<'a>(
         } else if func_is_mor_app {
             let outer = func_arg_vars[..codomain_parents.len() - 1]
                 .iter()
-                .cloned()
-                .map(display_var)
                 .format(", ")
                 .to_string();
             if outer.is_empty() {
@@ -2817,7 +2643,7 @@ fn display_define_fn<'a>(
                 .unwrap_or_else(|| (0..codomain_parents.len()).collect());
             columns
                 .into_iter()
-                .map(|column| display_var(func_arg_vars[column].clone()))
+                .map(|column| &func_arg_vars[column])
                 .format(", ")
                 .to_string()
         };
@@ -3046,7 +2872,7 @@ fn display_theory_struct<'a>(
         let scheduler_fields = FmtFn(move |f| {
             write!(f, "{}", compact_policy::fields(ctx, false))?;
             write!(f, "{}", compact_indices::fields(ctx, false))?;
-            write!(f, "{}", transport::fields(ctx, index_selection, false))?;
+            write!(f, "{}", transport::fields(ctx, false))?;
             write!(f, "{}", native_indices::fields(native_plans, ctx))?;
             write!(f, "{}", codegen.fields(ctx, index_selection))?;
             Ok(())
@@ -3074,10 +2900,9 @@ fn display_theory_impl<'a>(
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
     codegen: &'a stratified::Codegen<'a>,
-    tables: &'a indexed::Tables,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let ram_modules = program.functions.as_slice();
+        let ram_functions = program.functions.as_slice();
         writeln!(f, "impl {} {{", name)?;
         write!(f, "{}", compact_api::methods(program, index_selection, ctx))?;
         write!(f, "{}", compact_policy::methods(ctx))?;
@@ -3090,7 +2915,7 @@ fn display_theory_impl<'a>(
                 writeln!(f, "")?;
             }
             ModelMode::Desugared => {
-                let new_fn = indexed::display_new_fn(ctx, tables, program);
+                let new_fn = indexed::display_new_fn(ctx);
                 write!(f, "{new_fn}")?;
             }
         }
@@ -3105,12 +2930,16 @@ fn display_theory_impl<'a>(
                     "{}",
                     compact_indices::methods(ctx, index_selection, program)
                 )?;
-                write!(f, "{}", codegen.methods(ram_modules, ctx, index_selection))?;
+                write!(
+                    f,
+                    "{}",
+                    codegen.methods(ram_functions, ctx, index_selection)
+                )?;
                 write!(f, "{}", codegen.close(ctx, index_selection))?;
             }
             ModelMode::Desugared => {
-                let strata = indexed::display_strata(program, tables, ctx);
-                let close = indexed::display_close(program, ctx);
+                let strata = indexed::display_strata(program, ctx);
+                let close = indexed::display_close(ctx);
                 write!(f, "{strata}{close}")?;
             }
         }
@@ -3134,7 +2963,7 @@ fn display_theory_impl<'a>(
                 display_new_element_fn_internal(typ, ctx, index_selection);
             writeln!(f, "{new_element_fn_internal}")?;
 
-            let track_merges = codegen.tracks_owner(typ, ctx);
+            let track_merges = codegen.tracks_owner(typ);
             let equate_elements = display_equate_elements(typ, ctx, index_selection, track_merges);
             write!(f, "{}", equate_elements)?;
         }
@@ -3269,19 +3098,19 @@ fn display_theory_impl<'a>(
     })
 }
 
-fn display_rule_modules<'a>(
-    ram_modules: &'a [RamFunction],
+fn display_rule_functions<'a>(
+    ram_functions: &'a [RamFunction],
     ctx: &'a RustGenCtx<'a>,
     symbol_prefix: &'a str,
 ) -> impl 'a + Display {
-    ram_modules
+    ram_functions
         .iter()
-        .map(move |ram_module| {
+        .map(move |ram_function| {
             FmtFn(move |f| {
-                let lib = display_ram_module(ram_module, ctx, symbol_prefix);
-                let ram_module_name = ram_module.name.as_str();
+                let lib = display_ram_function(ram_function, ctx, symbol_prefix);
+                let ram_function_name = ram_function.name.as_str();
                 writedoc! {f, "
-                    mod {ram_module_name} {{
+                    mod {ram_function_name} {{
                         {lib}
                     }}
                 "}
@@ -3298,7 +3127,7 @@ pub fn display_module<'a>(
     symbol_prefix: &'a str,
     build_type: BuildType,
 ) -> impl 'a + Display {
-    let ram_modules = program.functions.as_slice();
+    let ram_functions = program.functions.as_slice();
     FmtFn(move |f| {
         let imports = display_imports();
         write!(f, "{}", imports)?;
@@ -3307,19 +3136,19 @@ pub fn display_module<'a>(
         match build_type {
             BuildType::Component => {}
             BuildType::Module => {
-                display_rule_modules(ram_modules, ctx, symbol_prefix).fmt(f)?;
+                display_rule_functions(ram_functions, ctx, symbol_prefix).fmt(f)?;
             }
         }
 
-        let module_env_structs = ram_modules
+        let module_env_structs = ram_functions
             .iter()
-            .map(|ram_module| display_module_env_struct(ram_module, ctx))
+            .map(|ram_function| display_function_env(ram_function, ctx))
             .format("\n");
         writeln!(f, "{module_env_structs}")?;
 
-        let rule_eval_fns = ram_modules
+        let rule_eval_fns = ram_functions
             .iter()
-            .map(|ram_module| display_module_main_fn_decl(ram_module, symbol_prefix))
+            .map(|ram_function| display_function_declaration(ram_function, symbol_prefix))
             .format("\n");
         writedoc! {f, r#"
             unsafe extern "Rust" {{
@@ -3354,7 +3183,7 @@ pub fn display_module<'a>(
         let outputs = program
             .functions
             .iter()
-            .flat_map(module_env_out_rels)
+            .flat_map(|function| function.interface.outputs.iter().copied())
             .filter(|rel| match ctx.model_mode() {
                 ModelMode::Native => true,
                 ModelMode::Desugared => match rel {
@@ -3367,10 +3196,9 @@ pub fn display_module<'a>(
         write!(f, "{}", model_delta_struct)?;
 
         let codegen = stratified::Codegen::new(program);
-        let tables = indexed::Tables::new(program);
         match ctx.model_mode() {
             ModelMode::Native => {
-                write!(f, "{}", codegen.loop_input_types(index_selection, ctx))?;
+                write!(f, "{}", codegen.loop_input_types(ctx))?;
                 let theory_struct = display_theory_struct(
                     name,
                     ctx,
@@ -3381,7 +3209,7 @@ pub fn display_module<'a>(
                 write!(f, "{}", theory_struct)?;
             }
             ModelMode::Desugared => {
-                let theory_struct = indexed::display_struct(name, ctx, &tables, program);
+                let theory_struct = indexed::display_struct(name, ctx);
                 write!(f, "{theory_struct}")?;
             }
         }
@@ -3390,8 +3218,7 @@ pub fn display_module<'a>(
         write!(f, "{}", model_delta_impl)?;
         write!(f, "\n")?;
 
-        let theory_impl =
-            display_theory_impl(name, program, ctx, index_selection, &codegen, &tables);
+        let theory_impl = display_theory_impl(name, program, ctx, index_selection, &codegen);
         write!(f, "{}", theory_impl)?;
 
         let dynamic_impl = dynamic::display_dynamic_impl(name, ctx, index_selection);

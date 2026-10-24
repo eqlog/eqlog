@@ -5,34 +5,28 @@ use std::fmt::Display;
 
 use indoc::{formatdoc, writedoc};
 
-use super::compact_indices;
-use super::indices::source_relation;
+use super::indices::{display_projection, source_relation};
 use super::native_indices;
+use super::{close, compact_indices};
 use super::{
-    display_all_index_field_name, display_index_field_name, display_index_type,
-    display_module_env_struct_name, display_morphism_components, display_out_set_field_name,
-    display_type, module_env_out_rels, RustGenCtx,
+    display_all_index_field_name, display_function_env_name, display_index_field_name,
+    display_index_type, display_morphism_components, display_out_set_field_name, display_type,
+    RustGenCtx,
 };
 use crate::algebra::signature::TypeId;
-use crate::flat_eqlog::{FlatInRel, FlatOutRel, IndexAge, IndexSelection, IndexSpec};
+use crate::flat_eqlog::{FlatInRel, FlatOutRel, IndexAge, IndexSelection};
 use crate::fmt_util::FmtFn;
 use crate::ram::{
     BaselineRelation, CanonicalInput, Consumption, EvaluationCondition, EvaluationHelperCondition,
-    EvaluationHelperStmt, EvaluationIteration, EvaluationLifecycle, EvaluationPlan, EvaluationStmt,
-    IndexPreparation, InheritedEvidence, InheritedInput, InheritedInstruction, InheritedRows,
-    InputProjection, InputRead, InputReadSource, InputStorage, NativeIndexPreparation,
-    NativePreparation, NativeReadPreparation, ProofRows, RamFunction, RamProgram, RetainedOwners,
-    ScopedInput, StratumEvaluation, StratumInstruction, TransportBaseline, TransportEdges,
+    EvaluationHelperStmt, EvaluationIteration, EvaluationPlan, EvaluationStmt, IndexPreparation,
+    InheritedEvidence, InheritedInput, InheritedInstruction, InheritedRows, InputRead,
+    InputReadSource, InputStorage, NativeIndexPreparation, NativePreparation,
+    NativeReadPreparation, ProofRows, RamFunction, RamProgram, RetainedOwners, ScopedInput,
+    StratumInstruction, TransportBaseline, TransportEdges,
 };
 
 pub struct Codegen<'s> {
     evaluation: &'s EvaluationPlan,
-    strata: &'s [StratumEvaluation],
-    body: &'s [EvaluationStmt],
-    models: &'s BTreeMap<TypeId, usize>,
-    inputs: &'s BTreeMap<FlatInRel, usize>,
-    indices: &'s BTreeMap<(FlatInRel, IndexSpec), usize>,
-    old_indices: &'s BTreeSet<(FlatInRel, IndexSpec)>,
     preparations: &'s [IndexPreparation],
     native_indices: &'s [NativeIndexPreparation],
     model_preparations: &'s BTreeMap<TypeId, NativePreparation>,
@@ -59,7 +53,7 @@ impl<'s> Codegen<'s> {
         self.evaluation.transport_baselines.get(&model)
     }
 
-    pub fn tracks_owner(&self, typ: TypeId, _ctx: &RustGenCtx<'_>) -> bool {
+    pub fn tracks_owner(&self, typ: TypeId) -> bool {
         self.evaluation.tracked_owners.contains(&typ)
     }
 
@@ -114,13 +108,9 @@ impl<'s> Codegen<'s> {
         })
     }
 
-    pub fn loop_input_types<'a>(
-        &'a self,
-        _selection: &'a IndexSelection,
-        ctx: &'a RustGenCtx<'a>,
-    ) -> impl Display + 'a {
+    pub fn loop_input_types<'a>(&'a self, ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
         FmtFn(move |f| {
-            for (&model, &m) in self.models {
+            for (&model, &m) in &self.evaluation.models {
                 let Some(baseline) = self.transport_baseline(model) else {
                     continue;
                 };
@@ -140,25 +130,25 @@ impl<'s> Codegen<'s> {
                 }
                 writeln!(f, "}}")?;
             }
-            for (s, stratum) in self.strata.iter().enumerate() {
+            for (s, stratum) in self.evaluation.strata.iter().enumerate() {
                 let inherited = self.inherited_plan(s);
                 if let Some(model) = stratum.model {
                     writeln!(f, "struct __OwnerInputs{s} {{")?;
                     if inherited.is_some() {
-                        let members = compact_indices::members(model, ctx).len();
+                        let members = ctx.compact().members(model).len();
                         writeln!(f, "inherited: Option<(u32, u64, [u64; {members}])>,")?;
                         writeln!(f, "inherited_seen: std::rc::Rc<std::collections::BTreeMap<u32, (u64, [u64; {members}])>>,")?;
                         writeln!(f, "matching_proof: Option<__InheritedInputs{s}>,")?;
                     }
                     for rel in self.stratum_inputs(s) {
-                        let i = self.inputs[&rel];
+                        let i = self.evaluation.inputs[&rel];
                         let scope = &stratum.owner_inputs[&rel];
                         let arity = scope.arity - scope.prefix;
                         writeln!(f, "input_{i}: PrefixTree{arity},")?;
                     }
                     writeln!(f, "}}")?;
                     if let Some(fields) = inherited {
-                        let members = compact_indices::members(model, ctx).len();
+                        let members = ctx.compact().members(model).len();
                         writeln!(f, "#[derive(Clone)] struct __InheritedInputs{s} {{ revision: (u32, u64, [u64; {members}]),")?;
                         for (name, input) in fields {
                             let arity = input.arity;
@@ -203,15 +193,9 @@ impl<'s> Codegen<'s> {
         let evaluation = &program.evaluation;
         Self {
             evaluation,
-            strata: &evaluation.strata,
-            body: &evaluation.body,
-            models: &evaluation.models,
             preparations: &program.preparations,
             native_indices: &program.native_indices,
             model_preparations: &program.model_preparations,
-            old_indices: &evaluation.old_indices,
-            inputs: &evaluation.inputs,
-            indices: &evaluation.indices,
         }
     }
 
@@ -221,20 +205,20 @@ impl<'s> Codegen<'s> {
         selection: &'a IndexSelection,
     ) -> impl Display + 'a {
         FmtFn(move |f| {
-            let count = self.strata.len();
+            let count = self.evaluation.strata.len();
             writeln!(f, "__stratum_initialized: [bool; {count}],")?;
             writeln!(f, "__model_owners_changed: bool,")?;
             for (_, ids) in ctx
                 .signature()
                 .iter_model_decls()
-                .filter(|(_, ids)| self.tracks_owner(ids.type_, ctx))
+                .filter(|(_, ids)| self.tracks_owner(ids.type_))
             {
                 let name = display_type(ids.type_, ctx)
                     .to_string()
                     .to_case(Case::Snake);
                 writeln!(f, "__merged_{name}: std::collections::BTreeSet<u32>,")?;
             }
-            for (s, stratum) in self.strata.iter().enumerate() {
+            for (s, stratum) in self.evaluation.strata.iter().enumerate() {
                 if let Some(model) = stratum.model {
                     let count = ctx.signature().type_(model).parents.len() + 1;
                     writeln!(
@@ -247,14 +231,14 @@ impl<'s> Codegen<'s> {
                 let count = owners.len();
                 writeln!(f, "{field}: std::collections::BTreeMap<[u32; {count}], eqlog_runtime::__private::RelationVersions<PrefixTree{arity}, (usize, Vec<u32>)>>,")?;
             }
-            for (rel, i) in self.inputs {
+            for (rel, i) in &self.evaluation.inputs {
                 let typ = display_index_type(rel, ctx);
                 writeln!(
                     f,
                     "__rule_input_{i}: eqlog_runtime::__private::RelationVersions<{typ}, (usize, Vec<u32>)>,"
                 )?;
             }
-            for ((rel, index), i) in self.indices {
+            for ((rel, index), i) in &self.evaluation.indices {
                 if selection.is_primary(rel, index)
                     || native_indices::find(self.native_indices, rel, index).is_some()
                 {
@@ -264,7 +248,11 @@ impl<'s> Codegen<'s> {
                 let source_type = display_index_type(&source, ctx);
                 let target = display_index_type(rel, ctx);
                 writeln!(f, "__rule_index_{i}: eqlog_runtime::__private::IndexSeed<{source_type}, {target}>,")?;
-                if self.old_indices.contains(&(rel.clone(), index.clone())) {
+                if self
+                    .evaluation
+                    .old_indices
+                    .contains(&(rel.clone(), index.clone()))
+                {
                     writeln!(f, "__rule_index_{i}_versions: eqlog_runtime::__private::RelationVersions<{target}, (usize, Vec<u32>)>,")?;
                 }
             }
@@ -278,20 +266,20 @@ impl<'s> Codegen<'s> {
         ctx: &'a RustGenCtx<'a>,
     ) -> impl Display + 'a {
         FmtFn(move |f| {
-            let count = self.strata.len();
+            let count = self.evaluation.strata.len();
             writeln!(f, "__stratum_initialized: [false; {count}],")?;
             writeln!(f, "__model_owners_changed: false,")?;
             for (_, ids) in ctx
                 .signature()
                 .iter_model_decls()
-                .filter(|(_, ids)| self.tracks_owner(ids.type_, ctx))
+                .filter(|(_, ids)| self.tracks_owner(ids.type_))
             {
                 let name = display_type(ids.type_, ctx)
                     .to_string()
                     .to_case(Case::Snake);
                 writeln!(f, "__merged_{name}: std::collections::BTreeSet::new(),")?;
             }
-            for (s, stratum) in self.strata.iter().enumerate() {
+            for (s, stratum) in self.evaluation.strata.iter().enumerate() {
                 if stratum.model.is_some() {
                     writeln!(f, "__owner_inputs_{s}: std::collections::BTreeMap::new(),")?;
                 }
@@ -299,13 +287,13 @@ impl<'s> Codegen<'s> {
             for field in self.scoped_histories().keys() {
                 writeln!(f, "{field}: std::collections::BTreeMap::new(),")?;
             }
-            for i in self.inputs.values() {
+            for i in self.evaluation.inputs.values() {
                 writeln!(
                     f,
                     "__rule_input_{i}: eqlog_runtime::__private::RelationVersions::new(),"
                 )?;
             }
-            for ((rel, index), i) in self.indices {
+            for ((rel, index), i) in &self.evaluation.indices {
                 if selection.is_primary(rel, index)
                     || native_indices::find(self.native_indices, rel, index).is_some()
                 {
@@ -315,7 +303,11 @@ impl<'s> Codegen<'s> {
                     f,
                     "__rule_index_{i}: eqlog_runtime::__private::IndexSeed::new(),"
                 )?;
-                if self.old_indices.contains(&(rel.clone(), index.clone())) {
+                if self
+                    .evaluation
+                    .old_indices
+                    .contains(&(rel.clone(), index.clone()))
+                {
                     writeln!(
                         f,
                         "__rule_index_{i}_versions: eqlog_runtime::__private::RelationVersions::new(),"
@@ -466,7 +458,7 @@ impl<'s> Codegen<'s> {
                     let mut unchanged = vec!["true".to_owned()];
                     let mut snapshots = Vec::new();
                     for rel in inputs {
-                        let i = self.inputs[rel];
+                        let i = self.evaluation.inputs[rel];
                         let field =
                             display_all_index_field_name(rel, selection.current_primary(rel), ctx);
                         let source = scoped_tree(
@@ -566,7 +558,7 @@ impl<'s> Codegen<'s> {
                     let call = &evaluation.calls[*id];
                     let m = call.module;
                     let module = &modules[m];
-                    let env = display_module_env_struct_name(module);
+                    let env = display_function_env_name(module);
                     let name = &module.name;
                     if inherited_plan.is_some() {
                         writeln!(f, "let matching_proofs_{m}: Vec<Vec<eqlog_runtime::__private::Table>> = matching_proofs.iter().map(|proof| {{ vec![")?;
@@ -630,8 +622,8 @@ impl<'s> Codegen<'s> {
                         });
                         writeln!(f, "{field}: &{storage}{version},")?;
                     }
-                    for rel in module_env_out_rels(module) {
-                        let field = display_out_set_field_name(&rel, ctx);
+                    for rel in &module.interface.outputs {
+                        let field = display_out_set_field_name(rel, ctx);
                         writeln!(f, "{field}: &mut delta.{field},")?;
                     }
                     writeln!(f, "}}; {name}(env);")?;
@@ -700,14 +692,14 @@ impl<'s> Codegen<'s> {
         selection: &'a IndexSelection,
     ) -> impl Display + 'a {
         FmtFn(move |f| {
-            for (s, stratum) in self.strata.iter().enumerate() {
+            for (s, stratum) in self.evaluation.strata.iter().enumerate() {
                 let inherited_plan = self.inherited_plan(s);
                 if let Some(fields) = &inherited_plan {
                     // A matching checkpoint proves only its exact input roots.
                     // The source revision also covers transported conclusions.
                     let model = stratum.model.unwrap();
                     let name = display_type(model, ctx).to_string().to_case(Case::Snake);
-                    let members = compact_indices::members(model, ctx).len();
+                    let members = ctx.compact().members(model).len();
                     writedoc! {f, "
                         fn __matching_inputs_{s}(&self, owners: [u32; 1]) -> Option<__InheritedInputs{s}> {{
                             let indices = self.__compact_indices_{name}.as_ref()?;
@@ -781,7 +773,7 @@ impl<'s> Codegen<'s> {
             for (_, ids) in ctx
                 .signature()
                 .iter_model_decls()
-                .filter(|(_, ids)| self.tracks_owner(ids.type_, ctx))
+                .filter(|(_, ids)| self.tracks_owner(ids.type_))
             {
                 let name = display_type(ids.type_, ctx)
                     .to_string()
@@ -792,7 +784,7 @@ impl<'s> Codegen<'s> {
                 )?;
             }
             writeln!(f, "let retain_consumer = |(stratum, owners): &(usize, Vec<u32>)| {{ match *stratum {{")?;
-            for (s, stratum) in self.strata.iter().enumerate() {
+            for (s, stratum) in self.evaluation.strata.iter().enumerate() {
                 if let Some(model) = stratum.model {
                     let owners: Vec<_> = ctx
                         .signature()
@@ -807,7 +799,7 @@ impl<'s> Codegen<'s> {
                 }
             }
             writeln!(f, "_ => true, }} }};")?;
-            for (s, stratum) in self.strata.iter().enumerate() {
+            for (s, stratum) in self.evaluation.strata.iter().enumerate() {
                 if let Some(model) = stratum.model {
                     let owners: Vec<_> = ctx
                         .signature()
@@ -830,14 +822,17 @@ impl<'s> Codegen<'s> {
                     }});
                 "}?;
             }
-            for i in self.inputs.values() {
+            for i in self.evaluation.inputs.values() {
                 writeln!(
                     f,
                     "self.__rule_input_{i}.retain_consumers(&retain_consumer);"
                 )?;
             }
-            for ((rel, index), i) in self.indices {
-                if self.old_indices.contains(&(rel.clone(), index.clone()))
+            for ((rel, index), i) in &self.evaluation.indices {
+                if self
+                    .evaluation
+                    .old_indices
+                    .contains(&(rel.clone(), index.clone()))
                     && !selection.is_primary(rel, index)
                     && native_indices::find(self.native_indices, rel, index).is_none()
                 {
@@ -850,7 +845,7 @@ impl<'s> Codegen<'s> {
             for (_, ids) in ctx
                 .signature()
                 .iter_model_decls()
-                .filter(|(_, ids)| self.tracks_owner(ids.type_, ctx))
+                .filter(|(_, ids)| self.tracks_owner(ids.type_))
             {
                 let name = display_type(ids.type_, ctx)
                     .to_string()
@@ -878,7 +873,7 @@ impl<'s> Codegen<'s> {
 
                 fn __close_until(&mut self, condition: Option<&dyn Fn(&Self) -> bool>) -> bool {{
             "}?;
-            emit_schedule(f, self.body, self, ctx, selection)?;
+            emit_schedule(f, &self.evaluation.body, self, ctx, selection)?;
             writeln!(f, "}}")
         })
     }
@@ -1101,38 +1096,8 @@ fn consume_scoped(
     "}
 }
 
-fn display_projection(plan: &InputProjection) -> String {
-    let row = plan.source.iter().map(|i| format!("el{i}")).join(", ");
-    let result = plan.target.iter().map(|i| format!("el{i}")).join(", ");
-    let checks = plan
-        .equalities
-        .iter()
-        .map(|(i, j)| format!("el{i} == el{j}"))
-        .join(" && ");
-    if checks.is_empty() {
-        format!("|[{row}]| Some([{result}])")
-    } else {
-        format!("|[{row}]| ({checks}).then_some([{result}])")
-    }
-}
-
-fn emit_input_read(
-    f: &mut std::fmt::Formatter<'_>,
-    read: &InputRead,
-    s: usize,
-    ctx: &RustGenCtx<'_>,
-) -> std::fmt::Result {
-    let name = input_name(read.storage);
-    let consume = match read.consumption {
-        Consumption::Membership => "consume_membership",
-        Consumption::Required => "consume_required",
-    };
-    let old = read.old;
-    let new = read.new;
-    let inherited = read
-        .inherited
-        .then(|| format!("inherited_baseline.as_ref().map(|baseline| &baseline.{name})"));
-    let (global, scoped) = match read.storage {
+fn input_fields(storage: InputStorage) -> (String, String) {
+    match storage {
         InputStorage::Relation(id) => (format!("__rule_input_{id}"), format!("__scope_input_{id}")),
         InputStorage::Index(id) => (
             format!("__rule_index_{id}_versions"),
@@ -1142,7 +1107,75 @@ fn emit_input_read(
             format!("__native_input_{id}"),
             format!("__scope_native_{id}"),
         ),
+    }
+}
+
+fn emit_input_consumption(
+    f: &mut std::fmt::Formatter<'_>,
+    read: &InputRead,
+    stratum: usize,
+    source: &str,
+    ctx: &RustGenCtx<'_>,
+) -> std::fmt::Result {
+    let name = input_name(read.storage);
+    let (global, scoped) = input_fields(read.storage);
+    let consume = match read.consumption {
+        Consumption::Membership => "consume_membership",
+        Consumption::Required => "consume_required",
     };
+    let old = read.old;
+    let new = read.new;
+    let inherited = read
+        .inherited
+        .then(|| format!("inherited_baseline.as_ref().map(|baseline| &baseline.{name})"));
+    if let Some(scope) = &read.scope {
+        consume_scoped(
+            f,
+            &scoped,
+            source,
+            &global,
+            &name,
+            scope,
+            stratum,
+            old,
+            new,
+            consume,
+            inherited.as_deref(),
+            ctx,
+        )?;
+    } else {
+        let consumer = match read.storage {
+            InputStorage::Relation(_) | InputStorage::Index(_) => {
+                format!("({stratum}, Vec::new())")
+            }
+            InputStorage::Native(_) => stratum.to_string(),
+        };
+        writeln!(
+            f,
+            "let {name} = self.{global}.{consume}::<{old}, {new}>({consumer});"
+        )?;
+    }
+    if read.stable {
+        end_stable_input(
+            f,
+            &name,
+            &format!("self.{global}.current()"),
+            &read.rel,
+            read.scope.as_ref(),
+            ctx,
+        )?;
+    }
+    Ok(())
+}
+
+fn emit_input_read(
+    f: &mut std::fmt::Formatter<'_>,
+    read: &InputRead,
+    s: usize,
+    ctx: &RustGenCtx<'_>,
+) -> std::fmt::Result {
+    let name = input_name(read.storage);
+    let (global, _) = input_fields(read.storage);
     match &read.source {
         InputReadSource::Relation { diagonal } => {
             let stable_global = read.stable && read.scope.is_none();
@@ -1177,37 +1210,7 @@ fn emit_input_read(
                 writeln!(f, "}}")?;
                 begin_stable_input(f, &name, &read.rel, ctx)?;
             }
-            if let Some(scope) = &read.scope {
-                consume_scoped(
-                    f,
-                    &scoped,
-                    &format!("self.{global}.current()"),
-                    &global,
-                    &name,
-                    scope,
-                    s,
-                    old,
-                    new,
-                    consume,
-                    inherited.as_deref(),
-                    ctx,
-                )?;
-            } else {
-                writeln!(
-                    f,
-                    "let {name} = self.{global}.{consume}::<{old}, {new}>(({s}, Vec::new()));"
-                )?;
-            }
-            if read.stable {
-                end_stable_input(
-                    f,
-                    &name,
-                    &format!("self.{global}.current()"),
-                    &read.rel,
-                    read.scope.as_ref(),
-                    ctx,
-                )?;
-            }
+            emit_input_consumption(f, read, s, &format!("self.{global}.current()"), ctx)?;
             writeln!(f, "dirty |= !{name}.new.is_empty();")?;
         }
         InputReadSource::Native(preparation) => {
@@ -1227,37 +1230,7 @@ fn emit_input_read(
                 NativeReadPreparation::Extend => writeln!(f, "self.__extend_native_index_{id}();")?,
                 NativeReadPreparation::Full => writeln!(f, "self.__prepare_native_index_{id}();")?,
             }
-            if let Some(scope) = &read.scope {
-                consume_scoped(
-                    f,
-                    &scoped,
-                    &format!("self.{global}.current()"),
-                    &global,
-                    &name,
-                    scope,
-                    s,
-                    old,
-                    new,
-                    consume,
-                    inherited.as_deref(),
-                    ctx,
-                )?;
-            } else {
-                writeln!(
-                    f,
-                    "let {name} = self.{global}.{consume}::<{old}, {new}>({s});"
-                )?;
-            }
-            if read.stable {
-                end_stable_input(
-                    f,
-                    &name,
-                    &format!("self.{global}.current()"),
-                    &read.rel,
-                    read.scope.as_ref(),
-                    ctx,
-                )?;
-            }
+            emit_input_consumption(f, read, s, &format!("self.{global}.current()"), ctx)?;
         }
         InputReadSource::Projected {
             source,
@@ -1277,37 +1250,7 @@ fn emit_input_read(
                 }
                 writeln!(f,"let {name} = self.__rule_index_{id}.update(self.__rule_input_{source}.current(), {project});")?;
                 writeln!(f, "self.{global}.publish(&{name});")?;
-                if let Some(scope) = &read.scope {
-                    consume_scoped(
-                        f,
-                        &scoped,
-                        &format!("&{name}"),
-                        &global,
-                        &name,
-                        scope,
-                        s,
-                        old,
-                        new,
-                        consume,
-                        inherited.as_deref(),
-                        ctx,
-                    )?;
-                } else {
-                    writeln!(
-                        f,
-                        "let {name} = self.{global}.{consume}::<{old}, {new}>(({s}, Vec::new()));"
-                    )?;
-                }
-                if read.stable {
-                    end_stable_input(
-                        f,
-                        &name,
-                        &format!("self.{global}.current()"),
-                        &read.rel,
-                        read.scope.as_ref(),
-                        ctx,
-                    )?;
-                }
+                emit_input_consumption(f, read, s, &format!("&{name}"), ctx)?;
             } else if read.stable {
                 let typ = display_index_type(&read.rel, ctx);
                 writeln!(f,"let {name} = if input_{source}.new.is_empty() {{ {typ}::new() }} else {{ self.__rule_index_{id}.update(&input_{source}.new, {project}) }};")?;
@@ -1339,24 +1282,11 @@ fn emit_schedule(
 ) -> std::fmt::Result {
     for stmt in body {
         match stmt {
-            EvaluationStmt::Lifecycle(operation) => {
-                let source = match operation {
-                    EvaluationLifecycle::PreparePolicies => "self.__prepare_total_member_policies();",
-                    EvaluationLifecycle::CompletePolicies => "self.__complete_total_members();",
-                    EvaluationLifecycle::CanonicalizeRelations => "self.__canonicalize_relations();",
-                    EvaluationLifecycle::TakeDelta => "let mut delta = std::mem::replace(&mut self.__pending_delta, ModelDelta::new());",
-                    EvaluationLifecycle::ClearAllocated => "self.__allocated = false;",
-                    EvaluationLifecycle::ApplyDeferredFunctions => "delta.apply_func_defs(self);",
-                    EvaluationLifecycle::SaveDelta => "std::mem::swap(&mut self.__pending_delta, &mut delta);",
-                    EvaluationLifecycle::Canonicalize => "self.canonicalize();",
-                    EvaluationLifecycle::MarkClosed => "self.__closed = true;",
-                    EvaluationLifecycle::ReturnFalse => "return false;",
-                    EvaluationLifecycle::ReturnCondition => "return condition.is_some_and(|condition| condition(self));",
-                    EvaluationLifecycle::CheckConditionBeforeDelta => "if self.__check_condition(condition) { return true; }",
-                };
-                writeln!(f, "{source}")?;
+            EvaluationStmt::Close(operation) => close::emit_operation(f, operation)?,
+            EvaluationStmt::PreparePolicies => {
+                writeln!(f, "self.__prepare_total_member_policies();")?
             }
-
+            EvaluationStmt::CompletePolicies => writeln!(f, "self.__complete_total_members();")?,
             EvaluationStmt::Block(body) => {
                 writeln!(f, "{{")?;
                 emit_schedule(f, body, codegen, ctx, selection)?;
@@ -1423,30 +1353,14 @@ fn emit_schedule(
             EvaluationStmt::AllocateStable(id) => {
                 writeln!(f, "let mut stable_{id} = __StableInputs{id}::default();")?
             }
-            EvaluationStmt::InitializeChanges(id) => writeln!(f, "let mut active_{id} = false;")?,
-            EvaluationStmt::MarkChanged(id) => writeln!(f, "active_{id} = true;")?,
             EvaluationStmt::PropagateChanges { source, target } => {
                 writeln!(f, "active_{target} |= active_{source};")?
             }
-            EvaluationStmt::BreakUnlessChanged {
-                id,
-                require_internal,
-            } => {
-                let guard = if *require_internal {
-                    "component.internal.is_empty() || "
-                } else {
-                    ""
-                };
-                writeln!(f, "if {guard}!active_{id} {{ break; }}")?;
-            }
-            EvaluationStmt::CheckCondition => {
-                // Moving the delta at each exit grows debug stack frames with the number of strata.
-                writedoc! {f, "
-                    if self.__check_condition(condition) {{
-                        std::mem::swap(&mut self.__pending_delta, &mut delta);
-                        return true;
-                    }}
-                "}?;
+            EvaluationStmt::BreakUnlessInternalChanged(id) => {
+                writeln!(
+                    f,
+                    "if component.internal.is_empty() || !active_{id} {{ break; }}"
+                )?;
             }
             EvaluationStmt::SetParents { from_owners } => {
                 let value = if *from_owners { "owners" } else { "[]" };
@@ -1470,7 +1384,7 @@ fn emit_schedule(
                 writeln!(f, "self.__prepare_native_index_{id}();")?
             }
             EvaluationStmt::CaptureBaseline { model } => {
-                let id = codegen.models[model];
+                let id = codegen.evaluation.models[model];
                 let baseline = &codegen.evaluation.transport_baselines[model];
                 writeln!(f, "let mut baseline_{id} = __TransportBaseline{id} {{ work: std::array::from_fn(|_| eqlog_runtime::__private::TransportWork::default()),")?;
                 for (i, rel) in baseline.relations.iter().enumerate() {
@@ -1494,7 +1408,7 @@ fn emit_schedule(
                 root,
                 retain,
             } => {
-                let id = codegen.models[root];
+                let id = codegen.evaluation.models[root];
                 let baseline = &codegen.evaluation.transport_baselines[root];
                 let plan = &codegen.model_preparations[root];
                 let relations = baseline.relations.iter().collect_vec();
@@ -1531,7 +1445,7 @@ fn emit_schedule(
                 retain,
                 changed,
             } => {
-                let id = codegen.models[root];
+                let id = codegen.evaluation.models[root];
                 let name = display_type(*model, ctx).to_string().to_case(Case::Snake);
                 let baseline = if codegen.evaluation.transport_baselines.contains_key(root) {
                     format!("&baseline_{id}, ")

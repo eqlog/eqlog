@@ -6,16 +6,15 @@ use indoc::{formatdoc, writedoc};
 use itertools::Itertools;
 
 use crate::algebra::signature::{FuncId, TypeId, TypeKind};
-use crate::flat_eqlog::{iter_flat_rels, FlatInRel, FlatRel, IndexSelection};
+use crate::flat_eqlog::{iter_flat_rels, FlatInRel, FlatRel, IndexSelection, QuerySpec};
 use crate::fmt_util::FmtFn;
 use crate::options::ModelMode;
 
-use super::compact_views;
 use super::indexed::{self, table_field};
+use super::{bookkeeping, compact_views};
 use super::{
-    display_all_index_field_name, display_current_index_field_name,
-    display_element_index_field_name, display_index_expr, display_own_index_field_name,
-    display_weight_static_name, RustGenCtx,
+    display_all_index_field_name, display_current_index_field_name, display_index_expr,
+    display_own_index_field_name, display_weight_static_name, RustGenCtx,
 };
 
 struct DynamicContext<'a> {
@@ -400,7 +399,6 @@ impl DynamicContext<'_> {
                     continue;
                 }
                 let len = arity.len();
-                let weight = display_weight_static_name(rel, self.ctx);
                 let name = self.ctx.rel_name(rel).to_case(Case::Snake);
                 writedoc! {f, "
                     #[inline(never)]
@@ -420,60 +418,270 @@ impl DynamicContext<'_> {
                         "}?;
                     }
                 }
-                let mut positions: BTreeMap<TypeId, Vec<usize>> = BTreeMap::new();
-                for (i, &typ) in arity.iter().enumerate() {
-                    positions.entry(typ).or_default().push(i);
-                    let snake = self.ctx.type_name(typ).to_case(Case::Snake);
-                    writedoc! {f, "
-                        let weight = &mut self.{snake}_weights[row[{i}] as usize];
-                        *weight = weight.saturating_add({weight});
-                    "}?;
-                }
-                for (typ, positions) in positions {
-                    let field = display_element_index_field_name(rel, typ, self.ctx);
-                    let values = positions.iter().map(|i| format!("row[{i}]")).join(", ");
-                    let record = match self.ctx.model_mode() {
-                        ModelMode::Native => {
-                            format!("self.{field}.entry(element).or_default().push(row);")
-                        }
-                        ModelMode::Desugared => {
-                            let occurrences = indexed::occurrences_field(typ, self.ctx);
-                            format!("self.{occurrences}.push(element, occurrence);")
-                        }
-                    };
-                    writedoc! {f, "
-                        for element in [{values}].into_iter().collect::<std::collections::BTreeSet<_>>() {{
-                            {record}
-                    "}?;
-                    let is_member = match rel {
-                        FlatRel::ModelMember(member) => member == typ,
-                        FlatRel::Pred(_) | FlatRel::Func(_) => false,
-                    };
-                    if is_member {
-                        let camel = self.ctx.type_name(typ).to_case(Case::UpperCamel);
-                        let snake = self.ctx.type_name(typ).to_case(Case::Snake);
-                        // Imported membership may only be recorded under an alias.
-                        let record = match self.ctx.model_mode() {
-                            ModelMode::Native => {
-                                format!("self.{field}.entry(root).or_default().push(row);")
-                            }
-                            ModelMode::Desugared => {
-                                let occurrences = indexed::occurrences_field(typ, self.ctx);
-                                format!("self.{occurrences}.push(root, occurrence);")
-                            }
-                        };
-                        writedoc! {f, "
-                            let root = self.root_{snake}({camel}(element)).0;
-                            if root != element {{
-                                {record}
-                            }}
-                        "}?;
-                    }
-                    writeln!(f, "}}")?;
-                }
+                let raw_args: Vec<_> = (0..len).map(|i| format!("row[{i}]")).collect();
+                let weights = bookkeeping::weights(rel, &raw_args, self.ctx);
+                let occurrences = bookkeeping::occurrences(rel, &raw_args, "row", true, self.ctx);
+                write!(f, "{weights}{occurrences}")?;
                 writeln!(f, "}}}}")?;
             }
             writeln!(f, "}}")
+        })
+    }
+
+    fn view(&self, name: &str) -> impl Display + '_ {
+        let name = name.to_owned();
+        FmtFn(move |f| {
+            writedoc! {f, "
+                #[allow(unused_variables)]
+                impl eqlog_runtime::__private::ModelView for {name} {{
+                    fn signature(&self) -> &eqlog_runtime::Signature {{
+                        <Self as eqlog_runtime::CompiledModel>::dynamic_signature()
+                    }}
+                    fn root(&self, element: eqlog_runtime::Element) -> std::result::Result<eqlog_runtime::Element, eqlog_runtime::Error> {{
+                        match element.type_.0 {{
+            "}?;
+            for typ in self.ctx.signature().iter_types() {
+                let id = self.types[&typ];
+                let snake = self.ctx.type_name(typ).to_case(Case::Snake);
+                let camel = self.ctx.type_name(typ).to_case(Case::UpperCamel);
+                writeln!(f, "{id} => {{")?;
+                if self.ctx.supports_compact_members(typ) {
+                    writedoc! {f, "
+                        if let Some(spaces) = &self.__compact_members_{snake} {{
+                            return spaces.root(element.index).map(|index| eqlog_runtime::Element {{ type_: element.type_, index }})
+                                .ok_or(eqlog_runtime::Error::UnknownElement(element));
+                        }}
+                    "}?;
+                }
+                writedoc! {f, "
+                    if !self.{snake}_equalities.is_allocated({camel}(element.index)) {{
+                        return Err(eqlog_runtime::Error::UnknownElement(element));
+                    }}
+                    Ok(eqlog_runtime::Element {{ type_: element.type_, index: self.root_{snake}({camel}(element.index)).0 }})
+                    }},
+                "}?;
+            }
+            writedoc! {f, "
+                            _ => Err(eqlog_runtime::Error::UnknownType(element.type_)),
+                        }}
+                    }}
+                    fn element_bound(&self, type_: eqlog_runtime::TypeId) -> usize {{
+                        match type_.0 {{
+            "}?;
+            for typ in self.ctx.signature().iter_types() {
+                let id = self.types[&typ];
+                let snake = self.ctx.type_name(typ).to_case(Case::Snake);
+                writeln!(f, "{id} => {{")?;
+                if self.ctx.supports_compact_members(typ) {
+                    writedoc! {f, "
+                        if let Some(spaces) = &self.__compact_members_{snake} {{
+                            return usize::try_from(spaces.handle_bound()).unwrap();
+                        }}
+                    "}?;
+                }
+                writeln!(f, "self.{snake}_equalities.len() }},")?;
+            }
+            writedoc! {f, "
+                            _ => unreachable!(\"validated type\"),
+                        }}
+                    }}
+                    fn membership_rows(&self, relation: eqlog_runtime::RelationId)
+                        -> Box<dyn Iterator<Item = Vec<eqlog_runtime::Element>> + '_>
+                    {{
+                        match relation.0 {{
+            "}?;
+            for (id, rel) in iter_flat_rels(self.ctx.signature()).enumerate() {
+                match rel {
+                    FlatRel::ModelMember(_) => {}
+                    FlatRel::Pred(_) | FlatRel::Func(_) => continue,
+                }
+                let name = self.ctx.rel_name(rel).to_case(Case::Snake);
+                let arity = rel.arity(self.ctx.signature());
+                let values = arity
+                    .iter()
+                    .enumerate()
+                    .map(|(column, &typ)| {
+                        let type_ = self.type_(typ);
+                        let value = if arity.len() == 1 {
+                            "row.0".to_owned()
+                        } else {
+                            format!("row.{column}.0")
+                        };
+                        format!("eqlog_runtime::Element {{ type_: {type_}, index: {value} }}")
+                    })
+                    .join(", ");
+                writeln!(
+                    f,
+                    "{id} => Box::new(self.iter_{name}().map(|row| vec![{values}])),"
+                )?;
+            }
+            writedoc! {f, "
+                            _ => unreachable!(\"validated relation\"),
+                        }}
+                    }}
+                    fn contains_raw(&self, relation: eqlog_runtime::RelationId, tuple: &[eqlog_runtime::Element]) -> bool {{
+                        match relation.0 {{
+            "}?;
+            for (id, rel) in iter_flat_rels(self.ctx.signature()).enumerate() {
+                let arity = rel.arity(self.ctx.signature());
+                writeln!(f, "{id} => {{")?;
+                if compact_views::supports(rel, self.ctx) {
+                    let name = self.ctx.rel_name(rel).to_case(Case::Snake);
+                    let rows = match rel {
+                        FlatRel::Func(func) => {
+                            if self.ctx.signature().types_for_mor_app_func(func).is_some() {
+                                format!("self.__compact_all_{name}(false)")
+                            } else {
+                                format!("self.__compact_rows_{name}()")
+                            }
+                        }
+                        FlatRel::Pred(_) | FlatRel::ModelMember(_) => {
+                            format!("self.__compact_rows_{name}()")
+                        }
+                    };
+                    let explicit = match rel {
+                        FlatRel::Func(func) => {
+                            if self.ctx.signature().types_for_mor_app_func(func).is_some() {
+                                let checks = (0..arity.len())
+                                    .map(|column| {
+                                        format!("row.{column}.0 == tuple[{column}].index")
+                                    })
+                                    .join(" && ");
+                                format!(" || self.iter_{name}().any(|row| {checks})")
+                            } else {
+                                String::new()
+                            }
+                        }
+                        FlatRel::Pred(_) | FlatRel::ModelMember(_) => String::new(),
+                    };
+                    writedoc! {f, "
+                        if let Some(mut rows) = {rows} {{
+                            return rows.any(|row| row.iter().zip(tuple).all(|(&index, element)| index == element.index)){explicit};
+                        }}
+                    "}?;
+                }
+                let contains = match self.ctx.model_mode() {
+                    ModelMode::Native => {
+                        let flat = FlatInRel::Rel(rel);
+                        let index = self.indices.current_primary(&flat);
+                        let expression = display_index_expr(&flat, index, self.ctx);
+                        let row = index
+                            .order
+                            .iter()
+                            .map(|column| format!("tuple[{column}].index"))
+                            .join(", ");
+                        format!("{expression}.contains([{row}])")
+                    }
+                    ModelMode::Desugared => {
+                        let field = table_field(&FlatInRel::Rel(rel), self.ctx);
+                        let row = (0..arity.len())
+                            .map(|column| format!("tuple[{column}].index"))
+                            .join(", ");
+                        format!("self.{field}.contains([{row}])")
+                    }
+                };
+                writeln!(f, "{contains} }},")?;
+            }
+            writedoc! {f, "
+                            _ => unreachable!(\"validated relation\"),
+                        }}
+                    }}
+                    fn eval_raw(&self, function: eqlog_runtime::RelationId, arguments: &[eqlog_runtime::Element]) -> Option<eqlog_runtime::Element> {{
+                        match function.0 {{
+            "}?;
+            for (id, rel) in iter_flat_rels(self.ctx.signature()).enumerate() {
+                let func = match rel {
+                    FlatRel::Func(func) => func,
+                    FlatRel::Pred(_) | FlatRel::ModelMember(_) => continue,
+                };
+                let name = self.ctx.rel_name(rel).to_case(Case::Snake);
+                let arity = rel.arity(self.ctx.signature());
+                let output = arity.len() - 1;
+                let type_ = self.type_(self.ctx.signature().func(func).codomain);
+                writeln!(f, "{id} => {{")?;
+                if compact_views::supports(rel, self.ctx) {
+                    let morphism = self.ctx.signature().types_for_mor_app_func(func).is_some();
+                    let rows = if morphism {
+                        format!("self.__compact_all_{name}(false)")
+                    } else {
+                        format!("self.__compact_rows_{name}()")
+                    };
+                    writedoc! {f, "
+                        if let Some(rows) = {rows} {{
+                            let result = rows.filter(|row| row.iter().zip(arguments).all(|(&index, element)| index == element.index))
+                                .map(|row| row[{output}]).min();
+                    "}?;
+                    if morphism {
+                        let checks = (0..output)
+                            .map(|column| format!("row.{column}.0 == arguments[{column}].index"))
+                            .join(" && ");
+                        writedoc! {f, "
+                            let explicit = self.iter_{name}().filter(|row| {checks}).map(|row| row.{output}.0);
+                            let result = result.into_iter().chain(explicit).min();
+                        "}?;
+                    }
+                    writedoc! {f, "
+                            return result.map(|index| eqlog_runtime::Element {{ type_: {type_}, index }});
+                        }}
+                    "}?;
+                }
+                let flat = FlatInRel::Rel(rel);
+                let index = self
+                    .indices
+                    .current_query(&flat, QuerySpec::eval_func(func, self.ctx.signature()));
+                let gets = index.order[..output]
+                    .iter()
+                    .map(|column| format!("let set = set.get(arguments[{column}].index)?;"))
+                    .join("\n");
+                // Pending conflicts can make the typed lookup choose a different witness
+                // than the minimum result in the exported graph.
+                let lookup = match self.ctx.model_mode() {
+                    ModelMode::Native => {
+                        let expression = display_index_expr(&flat, index, self.ctx);
+                        formatdoc! {"
+                            let set = {expression};
+                            {gets}
+                            let [index] = set.iter().next()?;
+                        "}
+                    }
+                    ModelMode::Desugared => {
+                        let field = table_field(&flat, self.ctx);
+                        let position = self.ctx.indexed().position(&flat, &index.order);
+                        formatdoc! {"
+                            let set = self.{field}.view({position});
+                            {gets}
+                            let index = set.iter_restrictions().map(|(index, _)| index).min()?;
+                        "}
+                    }
+                };
+                writedoc! {f, "
+                    {lookup}
+                    Some(eqlog_runtime::Element {{ type_: {type_}, index }})
+                    }},
+                "}?;
+            }
+            writedoc! {f, "
+                            _ => unreachable!(\"validated function\"),
+                        }}
+                    }}
+                    fn contains_membership(&self, relation: eqlog_runtime::RelationId, tuple: &[eqlog_runtime::Element]) -> bool {{
+                        match relation.0 {{
+            "}?;
+            for (id, rel) in iter_flat_rels(self.ctx.signature()).enumerate() {
+                match rel {
+                    FlatRel::ModelMember(_) => {}
+                    FlatRel::Pred(_) | FlatRel::Func(_) => continue,
+                }
+                let name = self.ctx.rel_name(rel).to_case(Case::Snake);
+                let arguments = self.arguments(&rel.arity(self.ctx.signature()), "tuple");
+                writeln!(f, "{id} => self.__contains_{name}({arguments}),")?;
+            }
+            writedoc! {f, "
+                            _ => unreachable!(\"validated membership relation\"),
+                        }}
+                    }}
+                }}
+            "}
         })
     }
 
@@ -494,7 +702,7 @@ impl DynamicContext<'_> {
                 fn new_element(&mut self, type_: eqlog_runtime::TypeId, parents: &[eqlog_runtime::Element])
                     -> std::result::Result<eqlog_runtime::Element, eqlog_runtime::Error>
                 {{
-                    <Self as eqlog_runtime::CompiledModel>::to_dynamic(self).new_element(type_, parents)?;
+                    eqlog_runtime::__private::Validator(self).new_element(type_, parents)?;
                     match type_.0 {{
             "}?;
             for typ in self.ctx.signature().iter_types() {
@@ -515,7 +723,8 @@ impl DynamicContext<'_> {
                 fn insert(&mut self, relation: eqlog_runtime::RelationId, tuple: &[eqlog_runtime::Element])
                     -> std::result::Result<bool, eqlog_runtime::Error>
                 {{
-                    let _changed = <Self as eqlog_runtime::CompiledModel>::to_dynamic(self).insert(relation, tuple)?;
+                    let tuple = eqlog_runtime::__private::Validator(self).insert(relation, tuple)?;
+                    let _changed = !eqlog_runtime::__private::ModelView::contains_raw(self, relation, &tuple);
                     match relation.0 {{
             "}?;
             for (id, rel) in iter_flat_rels(self.ctx.signature()).enumerate() {
@@ -534,7 +743,7 @@ impl DynamicContext<'_> {
                 fn define(&mut self, function: eqlog_runtime::RelationId, arguments: &[eqlog_runtime::Element])
                     -> std::result::Result<eqlog_runtime::Element, eqlog_runtime::Error>
                 {{
-                    <Self as eqlog_runtime::CompiledModel>::to_dynamic(self).define(function, arguments)?;
+                    eqlog_runtime::__private::Validator(self).check_define(function, arguments)?;
                     match function.0 {{
             "}?;
             for (id, rel) in iter_flat_rels(self.ctx.signature()).enumerate() {
@@ -564,7 +773,8 @@ impl DynamicContext<'_> {
                 fn equate(&mut self, parents: &[eqlog_runtime::Element], lhs: eqlog_runtime::Element, rhs: eqlog_runtime::Element)
                     -> std::result::Result<bool, eqlog_runtime::Error>
                 {{
-                    let _changed = <Self as eqlog_runtime::CompiledModel>::to_dynamic(self).equate(parents, lhs, rhs)?;
+                    let (lhs, rhs) = eqlog_runtime::__private::Validator(self).equate(parents, lhs, rhs)?;
+                    let _changed = lhs != rhs;
                     match lhs.type_.0 {{
             "}?;
             for typ in self.ctx.signature().iter_types() {
@@ -608,6 +818,7 @@ pub(super) fn display_dynamic_impl<'a>(
         let import = dynamic.import();
         let edits = dynamic.edits();
         let import_helpers = dynamic.import_helpers(name);
+        let view = dynamic.view(name);
         writedoc! {f, "
             #[allow(unused_mut)]
             impl eqlog_runtime::CompiledModel for {name} {{
@@ -617,6 +828,7 @@ pub(super) fn display_dynamic_impl<'a>(
                 {edits}
             }}
             {import_helpers}
+            {view}
         "}
     })
 }

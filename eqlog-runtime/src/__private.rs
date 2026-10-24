@@ -17,6 +17,7 @@ pub use super::origin_relations::{OriginRelation, OriginRewriteStats};
 pub use super::table::Table;
 pub use super::toposort::{MorphismGraph, MorphismGraphCache};
 pub use super::transport::{TransportCheckpoint, TransportFrontier, TransportWork};
+pub use super::validation::{ModelView, Validator};
 pub use super::versions::{RelationVersions, RelationView, SnapshotSet};
 use super::{Error, Model, RelationId, Signature, TypeId};
 

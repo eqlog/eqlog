@@ -605,13 +605,14 @@ fn process_file(in_file: &Path, config: &Config, component_inputs: Option<&Diges
         .functions
         .iter()
         .par_bridge()
-        .try_for_each(|ram_module| -> Result<()> {
-            let module_name = &ram_module.name;
+        .try_for_each(|ram_function| -> Result<()> {
+            let module_name = &ram_function.name;
             let rule_out_file_name = format!("{symbol_prefix}_{module_name}.rs");
             let rule_out_file = component_out_dir.join(rule_out_file_name);
 
             let rule_lib =
-                display_ram_module(ram_module, &rust_gen_ctx, symbol_prefix.as_str()).to_string();
+                display_ram_function(ram_function, &rust_gen_ctx, symbol_prefix.as_str())
+                    .to_string();
 
             compile_component_rlib(
                 rule_out_file.as_path(),

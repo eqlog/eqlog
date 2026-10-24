@@ -64,6 +64,7 @@ mod origin_relations;
 mod parallel;
 mod signature;
 mod table;
+mod validation;
 mod versions;
 
 #[doc(hidden)]

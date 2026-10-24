@@ -13,11 +13,11 @@ use crate::ram::{
 
 pub(super) fn equality_guard<'a>(typ: TypeId, ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
     FmtFn(move |f| {
-        let models = models(ctx);
+        let models = ctx.compact().policy_models();
         if models.is_empty() {
             return Ok(());
         }
-        for model in models {
+        for &model in models {
             let name = display_type(model, ctx).to_string().to_case(Case::Snake);
             let ids = ctx.signature().ids_for_model_type(model).unwrap();
             if typ == model {
@@ -41,7 +41,7 @@ pub(super) fn insert_guard<'a>(
             FlatRel::Func(func) => func,
             FlatRel::ModelMember(_) | FlatRel::Pred(_) => return Ok(()),
         };
-        for model in models(ctx) {
+        for &model in ctx.compact().policy_models() {
             let ids = ctx.signature().ids_for_model_type(model).unwrap();
             if func == ids.dom || func == ids.cod {
                 let name = display_type(model, ctx).to_string().to_case(Case::Snake);
@@ -79,7 +79,7 @@ pub(super) fn endpoint_notice<'a>(
     FmtFn(move |f| {
         match rel {
             FlatRel::Func(func) => {
-                for model in models(ctx) {
+                for &model in ctx.compact().policy_models() {
                     let ids = ctx.signature().ids_for_model_type(model).unwrap();
                     if func == ids.dom || func == ids.cod {
                         let name = display_type(model, ctx).to_string().to_case(Case::Snake);
@@ -94,14 +94,6 @@ pub(super) fn endpoint_notice<'a>(
     })
 }
 
-pub(super) fn models(ctx: &RustGenCtx<'_>) -> Vec<TypeId> {
-    ctx.compact().policy_models().to_vec()
-}
-
-fn members(model: TypeId, ctx: &RustGenCtx<'_>) -> Vec<TypeId> {
-    ctx.compact().members(model).to_vec()
-}
-
 fn active(types: &[TypeId], ctx: &RustGenCtx<'_>) -> String {
     types
         .iter()
@@ -114,7 +106,7 @@ fn active(types: &[TypeId], ctx: &RustGenCtx<'_>) -> String {
 
 pub(super) fn fields<'a>(ctx: &'a RustGenCtx<'a>, initialize: bool) -> impl Display + 'a {
     FmtFn(move |f| {
-        for model in models(ctx) {
+        for &model in ctx.compact().policy_models() {
             let name = display_type(model, ctx).to_string().to_case(Case::Snake);
             if initialize {
                 writeln!(f, "__pending_total_edges_{name}: BTreeSet::new(),")?;
@@ -192,13 +184,13 @@ fn completion_body<'a>(
 
 pub(super) fn methods<'a>(ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
     FmtFn(move |f| {
-        let models = models(ctx);
+        let models = ctx.compact().policy_models();
         if models.is_empty() {
             return Ok(());
         }
         let types = models
             .iter()
-            .flat_map(|&model| members(model, ctx))
+            .flat_map(|&model| ctx.compact().members(model).iter().copied())
             .collect_vec();
         let any_active = active(&types, ctx);
         let names = models
@@ -239,7 +231,7 @@ pub(super) fn methods<'a>(ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
             let mor_name = mor.to_case(Case::Snake);
             let dom = display_func(ids.dom, ctx);
             let cod = display_func(ids.cod, ctx);
-            let compact = active(&members(model, ctx), ctx);
+            let compact = active(ctx.compact().members(model), ctx);
             let completion =
                 completion_body(&ctx.transport().models[&model].completion, model, ctx);
             writedoc! {f, "

@@ -8,6 +8,7 @@ use super::{
 };
 use crate::flat_eqlog::{FlatInRel, FlatRel, IndexSelection, IndexSpec};
 use crate::fmt_util::FmtFn;
+use crate::ram::InputProjection;
 
 pub(super) fn source_relation(rel: &FlatInRel) -> FlatInRel {
     match rel {
@@ -52,34 +53,21 @@ pub(super) fn prepare<'a>(
 }
 
 pub(super) fn projection(rel: &FlatInRel, index: &IndexSpec, source: &IndexSpec) -> String {
-    let columns: Vec<_> = match rel {
-        FlatInRel::RelWithDiagonals { equalities, .. } => equalities
-            .iter()
-            .enumerate()
-            .filter_map(|(i, &j)| (i == j).then_some(i))
-            .collect(),
-        FlatInRel::Rel(_) | FlatInRel::TypeSet(_) => (0..source.order.len()).collect(),
-        FlatInRel::Equality(_) => unreachable!("equalities have no tuple indices"),
-    };
-    let row = source.order.iter().map(|i| format!("el{i}")).join(", ");
-    let result = index
-        .order
+    display_projection(&InputProjection::new(
+        rel,
+        &index.order,
+        source.order.to_vec(),
+    ))
+}
+
+pub(super) fn display_projection(plan: &InputProjection) -> String {
+    let row = plan.source.iter().map(|i| format!("el{i}")).join(", ");
+    let result = plan.target.iter().map(|i| format!("el{i}")).join(", ");
+    let checks = plan
+        .equalities
         .iter()
-        .map(|&i| {
-            let column = columns[i];
-            format!("el{column}")
-        })
-        .join(", ");
-    let checks = match rel {
-        FlatInRel::RelWithDiagonals { equalities, .. } => equalities
-            .iter()
-            .enumerate()
-            .filter(|&(i, j)| i != *j)
-            .map(|(i, j)| format!("el{i} == el{j}"))
-            .join(" && "),
-        FlatInRel::Rel(_) | FlatInRel::TypeSet(_) => String::new(),
-        FlatInRel::Equality(_) => unreachable!("equalities have no tuple indices"),
-    };
+        .map(|(i, j)| format!("el{i} == el{j}"))
+        .join(" && ");
     if checks.is_empty() {
         format!("|[{row}]| Some([{result}])")
     } else {

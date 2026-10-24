@@ -8,22 +8,26 @@
 
 mod adaptive;
 mod ast;
+mod close;
 mod compact;
 mod evaluation;
 mod functions;
 mod indexed;
 mod prepare;
+mod projection;
 mod sort;
 mod strictness;
 mod transport;
 
 pub use adaptive::*;
 pub use ast::*;
+pub use close::*;
 pub use compact::*;
 pub use evaluation::*;
 pub use functions::*;
 pub use indexed::*;
 pub use prepare::*;
+pub use projection::*;
 pub use sort::*;
 pub use strictness::*;
 pub use transport::*;

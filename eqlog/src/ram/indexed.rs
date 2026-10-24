@@ -7,7 +7,7 @@ use crate::flat_eqlog::{
     Schedule,
 };
 
-use super::RamFunction;
+use super::{close_completion, CloseOperation, InputProjection, RamFunction};
 
 pub struct TableIndex {
     pub rel: FlatInRel,
@@ -92,18 +92,8 @@ pub enum IndexedLifecycle {
     SetDeferred(bool),
     CallDeferredClose,
     ReturnResult,
-    CanonicalizeRelations,
     NormalizeFunctions,
-    CheckConditionBeforeDelta,
-    TakeDelta,
-    ClearAllocated,
-    ApplyDeferredFunctions,
     RecordNormalized,
-    SaveDelta,
-    Canonicalize,
-    MarkClosed,
-    ReturnFalse,
-    ReturnCondition,
     InitializeNormalization,
     InitializePending,
     MarkNormalizationChanged,
@@ -122,6 +112,7 @@ pub enum IndexedStmt {
         condition: IndexedCondition,
         body: Vec<IndexedStmt>,
     },
+    Close(CloseOperation),
     Lifecycle(IndexedLifecycle),
     ApplyFunctionalEqualities(TypeId),
     Loop(Vec<IndexedStmt>),
@@ -129,10 +120,6 @@ pub enum IndexedStmt {
         stratum: usize,
         body: Vec<IndexedStmt>,
     },
-    InitializeChanges(usize),
-    MarkChanged(usize),
-    BreakUnlessChanged(usize),
-    CheckCondition,
 }
 
 pub struct IndexedPlan {
@@ -160,20 +147,22 @@ fn lower_schedule(schedule: &Schedule, active: Option<usize>, depth: usize) -> V
         Schedule::Rules(id) => {
             let mut body = Vec::new();
             if let Some(active) = active {
-                body.push(IndexedStmt::MarkChanged(active));
+                body.push(IndexedStmt::Close(CloseOperation::MarkChanged(active)));
             }
-            body.push(IndexedStmt::CheckCondition);
+            body.push(IndexedStmt::Close(CloseOperation::CheckCondition));
             vec![IndexedStmt::WhenChanged {
                 stratum: id.0,
                 body,
             }]
         }
         Schedule::Saturate(body) => {
-            let mut lowered = vec![IndexedStmt::InitializeChanges(depth)];
+            let mut lowered = vec![IndexedStmt::Close(CloseOperation::InitializeChanges(depth))];
             lowered.extend(lower_schedule(body, Some(depth), depth + 1));
-            lowered.push(IndexedStmt::BreakUnlessChanged(depth));
+            lowered.push(IndexedStmt::Close(CloseOperation::BreakUnlessChanged(
+                depth,
+            )));
             if let Some(active) = active {
-                lowered.push(IndexedStmt::MarkChanged(active));
+                lowered.push(IndexedStmt::Close(CloseOperation::MarkChanged(active)));
             }
             vec![IndexedStmt::Loop(lowered)]
         }
@@ -323,7 +312,7 @@ fn normalize_body(codomains: &BTreeSet<TypeId>) -> Vec<IndexedStmt> {
         condition: IndexedCondition::AnyUprooted(codomains.iter().copied().collect()),
         body: vec![
             IndexedStmt::Lifecycle(IndexedLifecycle::MarkNormalizationChanged),
-            IndexedStmt::Lifecycle(IndexedLifecycle::CanonicalizeRelations),
+            IndexedStmt::Close(CloseOperation::CanonicalizeRelations),
         ],
     });
     vec![
@@ -335,33 +324,31 @@ fn normalize_body(codomains: &BTreeSet<TypeId>) -> Vec<IndexedStmt> {
 fn close_body(schedule: Vec<IndexedStmt>) -> Vec<IndexedStmt> {
     let mut iteration = schedule;
     iteration.extend([
-        IndexedStmt::Lifecycle(IndexedLifecycle::ClearAllocated),
+        IndexedStmt::Close(CloseOperation::ClearAllocated),
         // Deferred function definitions evaluate through current table views.
         IndexedStmt::Lifecycle(IndexedLifecycle::SetDeferred(false)),
-        IndexedStmt::Lifecycle(IndexedLifecycle::ApplyDeferredFunctions),
+        IndexedStmt::Close(CloseOperation::ApplyDeferredFunctions),
         IndexedStmt::Lifecycle(IndexedLifecycle::SetDeferred(true)),
         IndexedStmt::Lifecycle(IndexedLifecycle::RecordNormalized),
         IndexedStmt::When {
             condition: IndexedCondition::NoAllocationOrNormalization,
-            body: vec![
-                IndexedStmt::Lifecycle(IndexedLifecycle::SaveDelta),
-                IndexedStmt::Lifecycle(IndexedLifecycle::Canonicalize),
-                IndexedStmt::Lifecycle(IndexedLifecycle::MarkClosed),
-                IndexedStmt::Lifecycle(IndexedLifecycle::ReturnFalse),
-            ],
+            body: close_completion()
+                .into_iter()
+                .map(IndexedStmt::Close)
+                .collect(),
         },
-        IndexedStmt::Lifecycle(IndexedLifecycle::CanonicalizeRelations),
+        IndexedStmt::Close(CloseOperation::CanonicalizeRelations),
         IndexedStmt::Lifecycle(IndexedLifecycle::NormalizeFunctions),
     ]);
     vec![
         IndexedStmt::When {
             condition: IndexedCondition::Closed,
-            body: vec![IndexedStmt::Lifecycle(IndexedLifecycle::ReturnCondition)],
+            body: vec![IndexedStmt::Close(CloseOperation::ReturnCondition)],
         },
-        IndexedStmt::Lifecycle(IndexedLifecycle::CanonicalizeRelations),
+        IndexedStmt::Close(CloseOperation::CanonicalizeRelations),
         IndexedStmt::Lifecycle(IndexedLifecycle::NormalizeFunctions),
-        IndexedStmt::Lifecycle(IndexedLifecycle::CheckConditionBeforeDelta),
-        IndexedStmt::Lifecycle(IndexedLifecycle::TakeDelta),
+        IndexedStmt::Close(CloseOperation::CheckConditionBeforeDelta),
+        IndexedStmt::Close(CloseOperation::TakeDelta),
         IndexedStmt::Loop(iteration),
     ]
 }
@@ -412,29 +399,12 @@ impl IndexedPlan {
             {
                 continue;
             }
-            let (columns, equalities) = match rel {
-                FlatInRel::Rel(_) | FlatInRel::TypeSet(_) => (index.order.to_vec(), Vec::new()),
-                FlatInRel::RelWithDiagonals { equalities, .. } => {
-                    let kept: Vec<_> = equalities
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(i, &j)| (i == j).then_some(i))
-                        .collect();
-                    let columns = index.order.iter().map(|&column| kept[column]).collect();
-                    let equalities = equalities
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(i, &j)| (i != j).then_some((i, j)))
-                        .collect();
-                    (columns, equalities)
-                }
-                FlatInRel::Equality(_) => unreachable!("equalities have no tuple indices"),
-            };
+            let projection = InputProjection::new(rel, &index.order, (0..arity).collect());
             table.indices.push(TableIndex {
                 rel: rel.clone(),
                 order: index.order.clone(),
-                columns,
-                equalities,
+                columns: projection.target,
+                equalities: projection.equalities,
                 viewed: viewed.contains(&(rel.clone(), index.order.clone())),
             });
         }

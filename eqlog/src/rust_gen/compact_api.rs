@@ -3,7 +3,7 @@ use std::fmt::Display;
 use convert_case::{Case, Casing};
 use indoc::writedoc;
 
-use super::{compact_eligibility, compact_indices, display_index_expr, RustGenCtx};
+use super::{compact_eligibility, display_index_expr, RustGenCtx};
 use crate::flat_eqlog::{FlatInRel, FlatRel, IndexSelection, QuerySpec};
 use crate::fmt_util::FmtFn;
 use crate::ram::RamProgram;
@@ -16,7 +16,7 @@ pub(super) fn methods<'a>(
     FmtFn(move |f| {
         for (_, ids) in ctx.signature().iter_model_decls() {
             let model = ids.type_;
-            if !compact_indices::supports_model(model, ctx) {
+            if !ctx.compact().supports_model(model) {
                 continue;
             }
             let name = ctx.type_name(model).to_case(Case::Snake);

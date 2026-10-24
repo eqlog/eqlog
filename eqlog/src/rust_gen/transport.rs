@@ -11,11 +11,7 @@ pub(super) fn field(rel: &FlatInRel, model: TypeId, ctx: &RustGenCtx<'_>) -> Str
     format!("__transport_{model}_{name}")
 }
 
-pub(super) fn fields<'a>(
-    ctx: &'a RustGenCtx<'a>,
-    _selection: &'a IndexSelection,
-    initialize: bool,
-) -> impl Display + 'a {
+pub(super) fn fields<'a>(ctx: &'a RustGenCtx<'a>, initialize: bool) -> impl Display + 'a {
     FmtFn(move |f| {
         for &model in &ctx.transport().model_order {
             let plan = &ctx.transport().models[&model];
@@ -183,10 +179,7 @@ pub(super) fn finish_frontier<'a>(
     })
 }
 
-pub(super) fn prune<'a>(
-    ctx: &'a RustGenCtx<'a>,
-    _selection: &'a IndexSelection,
-) -> impl Display + 'a {
+pub(super) fn prune<'a>(ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
     FmtFn(move |f| {
         if ctx.model_mode() != ModelMode::Native {
             return Ok(());
@@ -305,6 +298,23 @@ fn retention_name(retain: TransportRetention, driver: &Driver<'_>) -> &'static s
     }
 }
 
+fn frontier_inputs<'a>(
+    driver: &'a Driver<'a>,
+    ctx: &'a RustGenCtx<'a>,
+) -> (Option<&'a PropagationPlan>, Vec<&'a FlatInRel>) {
+    let plan = match &driver.kind {
+        DriverKind::Propagation { plan, .. } => *plan,
+        DriverKind::Native { .. } => {
+            unreachable!("secondary index traversal does not retain frontiers")
+        }
+    };
+    let relations = ctx.transport().group(plan).models[&driver.model]
+        .relations
+        .iter()
+        .collect();
+    (plan, relations)
+}
+
 pub(super) fn display_driver<'a>(
     body: &'a [TransportInstruction],
     driver: &'a Driver<'a>,
@@ -343,48 +353,21 @@ pub(super) fn display_driver<'a>(
                         compact_indices::transport_body(body, driver.model, ctx)
                     )?;
                 }
-                TransportInstruction::PrepareFrontier | TransportInstruction::FinishFrontier => {
-                    let plan = match &driver.kind {
-                        DriverKind::Propagation { plan, .. } => *plan,
-                        DriverKind::Native { .. } => {
-                            unreachable!("secondary index traversal does not retain frontiers")
-                        }
-                    };
-                    let relations = ctx.transport().group(plan).models[&driver.model]
-                        .relations
-                        .iter()
-                        .collect_vec();
-                    match instruction {
-                        TransportInstruction::PrepareFrontier => write!(
-                            f,
-                            "{}",
-                            prepare_frontier(driver.model, &relations, plan, ctx, selection)
-                        )?,
-                        TransportInstruction::FinishFrontier => write!(
-                            f,
-                            "{}",
-                            finish_frontier(driver.model, &relations, plan, ctx, selection)
-                        )?,
-                        TransportInstruction::PrepareGraph
-                        | TransportInstruction::ComputeComponents
-                        | TransportInstruction::CompactBlock(_)
-                        | TransportInstruction::ReturnUnlessWork
-                        | TransportInstruction::InitializeChanges(_)
-                        | TransportInstruction::ForEach { .. }
-                        | TransportInstruction::Loop(_)
-                        | TransportInstruction::RetainComponent
-                        | TransportInstruction::CallChild { .. }
-                        | TransportInstruction::SelectRelations
-                        | TransportInstruction::ContinueUnlessActive
-                        | TransportInstruction::InitializeInserted
-                        | TransportInstruction::CallMorphism { .. }
-                        | TransportInstruction::MarkWorkChanged
-                        | TransportInstruction::AccumulateChanges
-                        | TransportInstruction::BreakUnlessCyclicChanged
-                        | TransportInstruction::ReturnChanged => {
-                            unreachable!("frontier instruction was selected")
-                        }
-                    }
+                TransportInstruction::PrepareFrontier => {
+                    let (plan, relations) = frontier_inputs(driver, ctx);
+                    write!(
+                        f,
+                        "{}",
+                        prepare_frontier(driver.model, &relations, plan, ctx, selection)
+                    )?;
+                }
+                TransportInstruction::FinishFrontier => {
+                    let (plan, relations) = frontier_inputs(driver, ctx);
+                    write!(
+                        f,
+                        "{}",
+                        finish_frontier(driver.model, &relations, plan, ctx, selection)
+                    )?;
                 }
                 TransportInstruction::ReturnUnlessWork => writedoc! {f, "
                     if !transport_all && transport_work.iter().all(|work| work.is_empty()) {{

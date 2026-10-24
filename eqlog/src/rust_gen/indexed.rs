@@ -6,8 +6,9 @@ use indoc::{formatdoc, writedoc};
 use itertools::Itertools;
 use std::fmt::Display;
 
+use super::close;
 use super::{
-    display_index_field_name, display_module_env_struct_name, display_out_rows_field_name,
+    display_function_env_name, display_index_field_name, display_out_rows_field_name,
     display_out_set_field_name, display_out_set_type, display_rel, display_type,
     display_type_fields, display_weight_static_name, ElVar, RustGenCtx,
 };
@@ -17,48 +18,27 @@ use crate::flat_eqlog::{
 };
 use crate::fmt_util::FmtFn;
 use crate::ram::{
-    IndexedCondition, IndexedLifecycle, IndexedOperation, IndexedPlan, IndexedStmt, RamProgram,
+    IndexedCondition, IndexedLifecycle, IndexedOperation, IndexedStmt, IndexedTablePlan, RamProgram,
 };
 
-pub(super) struct Tables<'a> {
-    plan: Option<&'a IndexedPlan>,
-}
-
-impl<'a> Tables<'a> {
-    pub(super) fn new(program: &'a RamProgram) -> Self {
-        Self {
-            plan: program.indexed.as_ref(),
-        }
-    }
-
-    fn plan(&self) -> &IndexedPlan {
-        self.plan.expect("indexed storage has a RAM plan")
-    }
-
-    fn sources(&self) -> impl Iterator<Item = &FlatInRel> {
-        self.plan().tables.keys()
-    }
-
-    fn init(&self, source: &FlatInRel, _ctx: &RustGenCtx<'_>) -> String {
-        let table = &self.plan().tables[source];
-        let specs = table
-            .indices
-            .iter()
-            .map(|index| {
-                let columns = index.columns.iter().join(", ");
-                let equal = index
-                    .equalities
-                    .iter()
-                    .map(|(i, j)| format!("({i}, {j})"))
-                    .join(", ");
-                let viewed = index.viewed;
-                format!("(&[{columns}], &[{equal}], {viewed})")
-            })
-            .join(", ");
-        let arity = table.arity;
-        let constructor = if table.functional { "function" } else { "new" };
-        format!("eqlog_runtime::IndexedTable::<{arity}>::{constructor}(&[{specs}])")
-    }
+fn table_init(table: &IndexedTablePlan) -> String {
+    let specs = table
+        .indices
+        .iter()
+        .map(|index| {
+            let columns = index.columns.iter().join(", ");
+            let equal = index
+                .equalities
+                .iter()
+                .map(|(i, j)| format!("({i}, {j})"))
+                .join(", ");
+            let viewed = index.viewed;
+            format!("(&[{columns}], &[{equal}], {viewed})")
+        })
+        .join(", ");
+    let arity = table.arity;
+    let constructor = if table.functional { "function" } else { "new" };
+    format!("eqlog_runtime::IndexedTable::<{arity}>::{constructor}(&[{specs}])")
 }
 
 fn type_snake(typ: TypeId, ctx: &RustGenCtx<'_>) -> String {
@@ -81,15 +61,12 @@ pub(super) fn table_field(source: &FlatInRel, ctx: &RustGenCtx<'_>) -> String {
     }
 }
 
-pub(super) fn display_struct<'a>(
-    name: &'a str,
-    ctx: &'a RustGenCtx<'a>,
-    tables: &'a Tables,
-    _program: &'a RamProgram,
-) -> impl Display + 'a {
+pub(super) fn display_struct<'a>(name: &'a str, ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
     FmtFn(move |f| {
-        let table_fields = tables
-            .sources()
+        let table_fields = ctx
+            .indexed()
+            .tables
+            .keys()
             .map(|source| {
                 let field = table_field(source, ctx);
                 let arity = source.arity(ctx.signature()).len();
@@ -158,17 +135,15 @@ pub(super) fn display_struct<'a>(
     })
 }
 
-pub(super) fn display_new_fn<'a>(
-    ctx: &'a RustGenCtx<'a>,
-    tables: &'a Tables,
-    _program: &'a RamProgram,
-) -> impl Display + 'a {
+pub(super) fn display_new_fn<'a>(ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
     FmtFn(move |f| {
-        let tables_init = tables
-            .sources()
-            .map(|source| {
+        let tables_init = ctx
+            .indexed()
+            .tables
+            .iter()
+            .map(|(source, table)| {
                 let field = table_field(source, ctx);
-                let init = tables.init(source, ctx);
+                let init = table_init(table);
                 format!("{field}: {init},")
             })
             .join("\n");
@@ -244,12 +219,13 @@ pub(super) fn display_new_fn<'a>(
 
 pub(super) fn display_strata<'a>(
     program: &'a RamProgram,
-    tables: &'a Tables,
     ctx: &'a RustGenCtx<'a>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let fields: Vec<_> = tables
-            .sources()
+        let fields: Vec<_> = ctx
+            .indexed()
+            .tables
+            .keys()
             .map(|source| table_field(source, ctx))
             .collect();
         let sync_tasks = fields
@@ -343,7 +319,7 @@ fn emit_operations(
             }
             IndexedOperation::QueueCall(call) => {
                 let module=&program.functions[call.function];
-                let env=display_module_env_struct_name(module); let name=&module.name; let i=call.producer;
+                let env=display_function_env_name(module); let name=&module.name; let i=call.producer;
                 writeln!(f,"let env = {env} {{ phantom: std::marker::PhantomData,")?;
                 for &id in &call.inputs {
                     let read=&stratum.reads[id];
@@ -428,24 +404,25 @@ fn emit_schedule(
                 let name = type_snake(*typ, ctx);
                 writeln!(f,"for [lhs, rhs] in std::mem::take(&mut self.__functional_{name}) {{ pending = true; self.__equate_{name}(lhs.into(), rhs.into()); }}")?;
             }
+            IndexedStmt::Close(operation) => close::emit_operation(f, operation)?,
             IndexedStmt::Lifecycle(operation) => {
-                let value=match operation {
-                    IndexedLifecycle::SetDeferred(value) => format!("self.__set_tables_deferred({value});"),
-                    IndexedLifecycle::CallDeferredClose => "let result = self.__close_until_deferred(condition);".to_owned(),
+                let value = match operation {
+                    IndexedLifecycle::SetDeferred(value) => {
+                        format!("self.__set_tables_deferred({value});")
+                    }
+                    IndexedLifecycle::CallDeferredClose => {
+                        "let result = self.__close_until_deferred(condition);".to_owned()
+                    }
                     IndexedLifecycle::ReturnResult => "result".to_owned(),
-                    IndexedLifecycle::CanonicalizeRelations => "self.__canonicalize_relations();".to_owned(),
-                    IndexedLifecycle::NormalizeFunctions => "self.__normalize_functions();".to_owned(),
-                    IndexedLifecycle::CheckConditionBeforeDelta => "if self.__check_condition(condition) { return true; }".to_owned(),
-                    IndexedLifecycle::TakeDelta => "let mut delta = std::mem::replace(&mut self.__pending_delta, ModelDelta::new());".to_owned(),
-                    IndexedLifecycle::ClearAllocated => "self.__allocated = false;".to_owned(),
-                    IndexedLifecycle::ApplyDeferredFunctions => "delta.apply_func_defs(self);".to_owned(),
-                    IndexedLifecycle::RecordNormalized => "let normalized = self.__normalize_functions();".to_owned(),
-                    IndexedLifecycle::SaveDelta => "std::mem::swap(&mut self.__pending_delta, &mut delta);".to_owned(),
-                    IndexedLifecycle::Canonicalize => "self.canonicalize();".to_owned(),
-                    IndexedLifecycle::MarkClosed => "self.__closed = true;".to_owned(),
-                    IndexedLifecycle::ReturnFalse => "return false;".to_owned(),
-                    IndexedLifecycle::ReturnCondition => "return condition.is_some_and(|condition| condition(self));".to_owned(),
-                    IndexedLifecycle::InitializeNormalization => "let mut changed = false;".to_owned(),
+                    IndexedLifecycle::NormalizeFunctions => {
+                        "self.__normalize_functions();".to_owned()
+                    }
+                    IndexedLifecycle::RecordNormalized => {
+                        "let normalized = self.__normalize_functions();".to_owned()
+                    }
+                    IndexedLifecycle::InitializeNormalization => {
+                        "let mut changed = false;".to_owned()
+                    }
                     IndexedLifecycle::InitializePending => "let mut pending = false;".to_owned(),
                     IndexedLifecycle::MarkNormalizationChanged => "changed = true;".to_owned(),
                     IndexedLifecycle::ReturnNormalizationChanged => "return changed;".to_owned(),
@@ -463,24 +440,12 @@ fn emit_schedule(
                 emit_schedule(f, body, ctx)?;
                 writeln!(f, "}}")?;
             }
-            IndexedStmt::InitializeChanges(id) => writeln!(f, "let mut active_{id} = false;")?,
-            IndexedStmt::MarkChanged(id) => writeln!(f, "active_{id} = true;")?,
-            IndexedStmt::BreakUnlessChanged(id) => writeln!(f, "if !active_{id} {{ break; }}")?,
-            IndexedStmt::CheckCondition => writedoc! {f, "
-                if self.__check_condition(condition) {{
-                    std::mem::swap(&mut self.__pending_delta, &mut delta);
-                    return true;
-                }}
-            "}?,
         }
     }
     Ok(())
 }
 
-pub(super) fn display_close<'a>(
-    _program: &'a RamProgram,
-    ctx: &'a RustGenCtx<'a>,
-) -> impl Display + 'a {
+pub(super) fn display_close<'a>(ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
     FmtFn(move |f| {
         writedoc! {f, "
             #[allow(unused_mut)]

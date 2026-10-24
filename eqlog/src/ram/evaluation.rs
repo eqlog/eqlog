@@ -1,7 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
-    CompactPlan, IndexPreparation, NativeIndexPreparation, NativePreparation, RamFunction,
+    close_completion, CloseOperation, CompactPlan, IndexPreparation, InputProjection,
+    NativeIndexPreparation, NativePreparation, RamFunction,
 };
 use crate::algebra::signature::{Signature, TypeId};
 use crate::flat_eqlog::{
@@ -83,12 +84,6 @@ pub struct ScopedInput {
     pub prefix: usize,
     pub arity: usize,
     pub compact_domain: Option<TypeId>,
-}
-
-pub struct InputProjection {
-    pub source: Vec<usize>,
-    pub target: Vec<usize>,
-    pub equalities: Vec<(usize, usize)>,
 }
 
 pub enum NativeReadPreparation {
@@ -235,23 +230,10 @@ pub enum TransportEdges {
     Outgoing,
 }
 
-pub enum EvaluationLifecycle {
+pub enum EvaluationStmt {
+    Close(CloseOperation),
     PreparePolicies,
     CompletePolicies,
-    CanonicalizeRelations,
-    TakeDelta,
-    ClearAllocated,
-    ApplyDeferredFunctions,
-    SaveDelta,
-    Canonicalize,
-    MarkClosed,
-    ReturnFalse,
-    ReturnCondition,
-    CheckConditionBeforeDelta,
-}
-
-pub enum EvaluationStmt {
-    Lifecycle(EvaluationLifecycle),
     Block(Vec<EvaluationStmt>),
     Loop(Vec<EvaluationStmt>),
     ForEach {
@@ -263,17 +245,11 @@ pub enum EvaluationStmt {
         body: Vec<EvaluationStmt>,
     },
     AllocateStable(usize),
-    InitializeChanges(usize),
-    MarkChanged(usize),
     PropagateChanges {
         source: usize,
         target: usize,
     },
-    BreakUnlessChanged {
-        id: usize,
-        require_internal: bool,
-    },
-    CheckCondition,
+    BreakUnlessInternalChanged(usize),
     SetParents {
         from_owners: bool,
     },
@@ -877,32 +853,6 @@ fn scoped_input(
     }
 }
 
-fn input_projection(rel: &FlatInRel, index: &IndexSpec, source: &IndexSpec) -> InputProjection {
-    let (columns, equalities): (Vec<_>, Vec<_>) = match rel {
-        FlatInRel::RelWithDiagonals { equalities, .. } => (
-            equalities
-                .iter()
-                .enumerate()
-                .filter_map(|(i, &j)| (i == j).then_some(i))
-                .collect(),
-            equalities
-                .iter()
-                .enumerate()
-                .filter_map(|(i, &j)| (i != j).then_some((i, j)))
-                .collect(),
-        ),
-        FlatInRel::Rel(_) | FlatInRel::TypeSet(_) => {
-            ((0..source.order.len()).collect(), Vec::new())
-        }
-        FlatInRel::Equality(_) => unreachable!("equalities have no tuple indices"),
-    };
-    InputProjection {
-        source: source.order.to_vec(),
-        target: index.order.iter().map(|&i| columns[i]).collect(),
-        equalities,
-    }
-}
-
 struct StratumLowering<'a> {
     preparation: &'a IndexPreparation,
     native_indices: &'a [NativeIndexPreparation],
@@ -1085,8 +1035,11 @@ impl StratumLowering<'_> {
                     order: index.order.clone(),
                 },
             ));
-            let projection =
-                input_projection(&rel, &index, self.selection.current_primary(&source));
+            let projection = InputProjection::new(
+                &rel,
+                &index.order,
+                self.selection.current_primary(&source).order.to_vec(),
+            );
             calls.push(self.input(
                 stratum,
                 InputStorage::Index(self.indices[&key]),
@@ -1177,9 +1130,9 @@ impl ScheduleLowering<'_> {
             Schedule::Rules(id) => {
                 let mut body = Vec::new();
                 if let Some(target) = active {
-                    body.push(EvaluationStmt::MarkChanged(target));
+                    body.push(EvaluationStmt::Close(CloseOperation::MarkChanged(target)));
                 }
-                body.push(EvaluationStmt::CheckCondition);
+                body.push(EvaluationStmt::Close(CloseOperation::CheckCondition));
                 vec![EvaluationStmt::When {
                     condition: EvaluationCondition::StratumChanged {
                         stratum: id.0,
@@ -1199,14 +1152,15 @@ impl ScheduleLowering<'_> {
                     .into_iter()
                     .map(EvaluationStmt::AllocateStable)
                     .collect();
-                let mut loop_body = vec![EvaluationStmt::InitializeChanges(depth)];
+                let mut loop_body = vec![EvaluationStmt::Close(CloseOperation::InitializeChanges(
+                    depth,
+                ))];
                 loop_body.extend(self.lower(body, Some(depth), depth + 1, root, retain));
-                loop_body.push(EvaluationStmt::BreakUnlessChanged {
-                    id: depth,
-                    require_internal: false,
-                });
+                loop_body.push(EvaluationStmt::Close(CloseOperation::BreakUnlessChanged(
+                    depth,
+                )));
                 if let Some(target) = active {
-                    loop_body.push(EvaluationStmt::MarkChanged(target));
+                    loop_body.push(EvaluationStmt::Close(CloseOperation::MarkChanged(target)));
                 }
                 block.push(EvaluationStmt::Loop(loop_body));
                 vec![EvaluationStmt::Block(block)]
@@ -1323,7 +1277,7 @@ impl ScheduleLowering<'_> {
             RetainedOwners::Component(depth),
         ));
         let mut component_loop = vec![
-            EvaluationStmt::InitializeChanges(depth),
+            EvaluationStmt::Close(CloseOperation::InitializeChanges(depth)),
             EvaluationStmt::ForEach {
                 iteration: EvaluationIteration::ComponentObjects,
                 body: object_body,
@@ -1342,10 +1296,7 @@ impl ScheduleLowering<'_> {
                 target,
             });
         }
-        component_loop.push(EvaluationStmt::BreakUnlessChanged {
-            id: depth,
-            require_internal: true,
-        });
+        component_loop.push(EvaluationStmt::BreakUnlessInternalChanged(depth));
         component_body.push(EvaluationStmt::Loop(component_loop));
         let outgoing = EvaluationStmt::Transport {
             model,
@@ -1556,48 +1507,36 @@ fn descendant_helpers(
 fn close_body(schedule: Vec<EvaluationStmt>, policies: bool) -> Vec<EvaluationStmt> {
     let mut body = vec![EvaluationStmt::When {
         condition: EvaluationCondition::Closed,
-        body: vec![EvaluationStmt::Lifecycle(
-            EvaluationLifecycle::ReturnCondition,
-        )],
+        body: vec![EvaluationStmt::Close(CloseOperation::ReturnCondition)],
     }];
     if policies {
-        body.push(EvaluationStmt::Lifecycle(
-            EvaluationLifecycle::PreparePolicies,
-        ));
+        body.push(EvaluationStmt::PreparePolicies);
     }
     body.extend([
-        EvaluationStmt::Lifecycle(EvaluationLifecycle::CanonicalizeRelations),
-        EvaluationStmt::Lifecycle(EvaluationLifecycle::CheckConditionBeforeDelta),
-        EvaluationStmt::Lifecycle(EvaluationLifecycle::TakeDelta),
+        EvaluationStmt::Close(CloseOperation::CanonicalizeRelations),
+        EvaluationStmt::Close(CloseOperation::CheckConditionBeforeDelta),
+        EvaluationStmt::Close(CloseOperation::TakeDelta),
     ]);
     let mut loop_body = Vec::new();
     if policies {
-        loop_body.push(EvaluationStmt::Lifecycle(
-            EvaluationLifecycle::PreparePolicies,
-        ));
+        loop_body.push(EvaluationStmt::PreparePolicies);
     }
     loop_body.extend(schedule);
     loop_body.extend([
-        EvaluationStmt::Lifecycle(EvaluationLifecycle::ClearAllocated),
-        EvaluationStmt::Lifecycle(EvaluationLifecycle::ApplyDeferredFunctions),
+        EvaluationStmt::Close(CloseOperation::ClearAllocated),
+        EvaluationStmt::Close(CloseOperation::ApplyDeferredFunctions),
     ]);
     if policies {
-        loop_body.push(EvaluationStmt::Lifecycle(
-            EvaluationLifecycle::CompletePolicies,
-        ));
+        loop_body.push(EvaluationStmt::CompletePolicies);
     }
     loop_body.push(EvaluationStmt::When {
         condition: EvaluationCondition::NoAllocations,
-        body: vec![
-            EvaluationStmt::Lifecycle(EvaluationLifecycle::SaveDelta),
-            EvaluationStmt::Lifecycle(EvaluationLifecycle::Canonicalize),
-            EvaluationStmt::Lifecycle(EvaluationLifecycle::MarkClosed),
-            EvaluationStmt::Lifecycle(EvaluationLifecycle::ReturnFalse),
-        ],
+        body: close_completion()
+            .into_iter()
+            .map(EvaluationStmt::Close)
+            .collect(),
     });
-    loop_body.push(EvaluationStmt::Lifecycle(
-        EvaluationLifecycle::CanonicalizeRelations,
-    ));
+    loop_body.push(EvaluationStmt::Close(CloseOperation::CanonicalizeRelations));
     body.push(EvaluationStmt::Loop(loop_body));
     body
 }

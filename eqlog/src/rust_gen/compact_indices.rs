@@ -17,18 +17,6 @@ use crate::ram::{
     CompactTransportOptional, CompactTransportReturn, RamProgram,
 };
 
-pub(super) fn members(model: TypeId, ctx: &RustGenCtx<'_>) -> Vec<TypeId> {
-    ctx.compact().members(model).to_vec()
-}
-
-pub(super) fn supports_model(model: TypeId, ctx: &RustGenCtx<'_>) -> bool {
-    ctx.compact().supports_model(model)
-}
-
-pub(super) fn owner(rel: &FlatInRel, ctx: &RustGenCtx<'_>) -> Option<TypeId> {
-    ctx.compact().owner(rel)
-}
-
 fn model_name(model: TypeId, ctx: &RustGenCtx<'_>) -> String {
     display_type(model, ctx).to_string().to_case(Case::Snake)
 }
@@ -46,7 +34,7 @@ pub(super) fn fields<'a>(ctx: &'a RustGenCtx<'a>, initialize: bool) -> impl Disp
     FmtFn(move |f| {
         for (_, ids) in ctx.signature().iter_model_decls() {
             let model = ids.type_;
-            if !supports_model(model, ctx) {
+            if !ctx.compact().supports_model(model) {
                 continue;
             }
             let name = model_name(model, ctx);
@@ -59,7 +47,7 @@ pub(super) fn fields<'a>(ctx: &'a RustGenCtx<'a>, initialize: bool) -> impl Disp
                 writeln!(f, "__total_members_{name}: BTreeSet<u32>,")?;
                 writeln!(f, "__compact_adopted_{name}: BTreeSet<u32>,")?;
             }
-            for typ in members(model, ctx) {
+            for &typ in ctx.compact().members(model) {
                 let name = model_name(typ, ctx);
                 if initialize {
                     writeln!(f, "__compact_domain_{name}: PrefixTree2::new(),")?;
@@ -85,7 +73,7 @@ fn publish_tree(field: &str, dim: usize) -> String {
 
 pub(super) fn insert_hook<'a>(rel: FlatRel, ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
     FmtFn(move |f| {
-        if owner(&FlatInRel::Rel(rel), ctx).is_none() {
+        if ctx.compact().owner(&FlatInRel::Rel(rel)).is_none() {
             return Ok(());
         }
         let name = display_rel(rel, ctx).to_case(Case::Snake);
@@ -101,7 +89,7 @@ pub(super) fn insert_hook<'a>(rel: FlatRel, ctx: &'a RustGenCtx<'a>) -> impl Dis
 
 pub(super) fn native_guard<'a>(rel: &'a FlatInRel, ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
     FmtFn(move |f| {
-        if let Some(model) = owner(rel, ctx) {
+        if let Some(model) = ctx.compact().owner(rel) {
             let name = model_name(model, ctx);
             writeln!(
                 f,
@@ -268,11 +256,11 @@ pub(super) fn methods<'a>(
         let native = &program.native_indices;
         for (_, ids) in ctx.signature().iter_model_decls() {
             let model = ids.type_;
-            if !supports_model(model, ctx) {
+            if !ctx.compact().supports_model(model) {
                 continue;
             }
             let name = model_name(model, ctx);
-            let members = members(model, ctx);
+            let members = ctx.compact().members(model);
             let plan = ctx.compact().model(model).unwrap();
             let layouts = &plan.layouts;
             let keys = &plan.keys;
@@ -408,7 +396,7 @@ pub(super) fn methods<'a>(
                     "}?;
                 }
             }
-            for &typ in &members {
+            for &typ in members {
                 let member = model_name(typ, ctx);
                 let update = publish_tree(&format!("self.__compact_domain_{member}"), 1);
                 writedoc! {f, "
@@ -496,24 +484,19 @@ pub(super) fn methods<'a>(
                 let member = model_name(typ, ctx);
                 format!("self.__compact_members_{member}.as_mut().unwrap().install_shared_inheritance(shared_{member}); self.__sync_compact_{member}_weights();")
             }).join("\n");
-            let prepare_shared = members.iter().map(|&typ| {
-                let member = model_name(typ, ctx);
-                formatdoc!("
-                    let Some(shared_{member}) = self.__compact_members_{member}.as_ref().unwrap().prepare_shared_inheritance(source, target) else {{
-                        self.__materialize_compact_members();
-                        self.__complete_total_members();
-                        return None;
-                    }};")
-            }).join("\n");
-            let prepare_shared_many = members.iter().map(|&typ| {
-                let member = model_name(typ, ctx);
-                formatdoc!("
-                    let Some(shared_{member}) = self.__compact_members_{member}.as_ref().unwrap().prepare_shared_inheritance_many(&sources, target) else {{
-                        self.__materialize_compact_members();
-                        self.__complete_total_members();
-                        return None;
-                    }};")
-            }).join("\n");
+            let prepare = |method: &str, arguments: &str| {
+                members.iter().map(|&typ| {
+                    let member = model_name(typ, ctx);
+                    formatdoc!("
+                        let Some(shared_{member}) = self.__compact_members_{member}.as_ref().unwrap().{method}({arguments}, target) else {{
+                            self.__materialize_compact_members();
+                            self.__complete_total_members();
+                            return None;
+                        }};")
+                }).join("\n")
+            };
+            let prepare_shared = prepare("prepare_shared_inheritance", "source");
+            let prepare_shared_many = prepare("prepare_shared_inheritance_many", "&sources");
             let can_refresh = members
                 .iter()
                 .map(|&typ| {
@@ -522,6 +505,15 @@ pub(super) fn methods<'a>(
                 })
                 .join(" && ");
             let first_member = model_name(members[0], ctx);
+            let refresh = formatdoc! {"
+                if !({can_refresh}) {{
+                    self.__materialize_compact_members();
+                    self.__complete_total_members();
+                    return None;
+                }}
+                let source = self.__compact_members_{first_member}.as_ref().unwrap().source(target).unwrap();
+                Some(self.__compact_refresh_{name}_impl(source, target, false))
+            "};
             writedoc! {f, "
                 fn __compact_refresh_{name}_impl(&mut self, source: u32, target: u32, mut force: bool) -> bool {{
                     self.__compact_ensure_{name}_owner(source);
@@ -565,13 +557,7 @@ pub(super) fn methods<'a>(
                         self.__compact_publish_{name}(target);
                         return Some(true);
                     }}
-                    if !({can_refresh}) {{
-                        self.__materialize_compact_members();
-                        self.__complete_total_members();
-                        return None;
-                    }}
-                    let source = self.__compact_members_{first_member}.as_ref().unwrap().source(target).unwrap();
-                    Some(self.__compact_refresh_{name}_impl(source, target, false))
+                    {refresh}
                 }}
 
                 fn __compact_transport_batch_{name}(&mut self, morphisms: &[MorphismWithSignature]) -> Option<bool> {{
@@ -591,13 +577,7 @@ pub(super) fn methods<'a>(
                         self.__compact_publish_{name}(target);
                         return Some(true);
                     }}
-                    if !({can_refresh}) {{
-                        self.__materialize_compact_members();
-                        self.__complete_total_members();
-                        return None;
-                    }}
-                    let source = self.__compact_members_{first_member}.as_ref().unwrap().source(target).unwrap();
-                    Some(self.__compact_refresh_{name}_impl(source, target, false))
+                    {refresh}
                 }}
             "}?;
         }

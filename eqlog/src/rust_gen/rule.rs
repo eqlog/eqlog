@@ -1,4 +1,3 @@
-use crate::algebra::signature::{Signature, TypeId};
 use crate::flat_eqlog::*;
 use crate::fmt_util::*;
 use crate::options::ModelMode;
@@ -22,27 +21,15 @@ fn display_imports<'a>() -> impl 'a + Display {
     })
 }
 
-pub fn display_module_env_struct_name<'a>(ram_module: &'a RamFunction) -> impl 'a + Display {
+pub fn display_function_env_name<'a>(ram_function: &'a RamFunction) -> impl 'a + Display {
     FmtFn(move |f| {
         // Keep internal environments distinct from user rules after case conversion.
-        if ram_module.name.starts_with("__") {
+        if ram_function.name.starts_with("__") {
             write!(f, "__")?;
         }
-        let name_camel = &ram_module.name.to_case(UpperCamel);
+        let name_camel = &ram_function.name.to_case(UpperCamel);
         write!(f, "{name_camel}Env")
     })
-}
-
-pub fn module_env_in_rels(ram_module: &RamFunction) -> BTreeSet<(FlatInRel, IndexSpec)> {
-    ram_module.input_indices()
-}
-
-pub fn module_env_iter_types(ram_module: &RamFunction, _signature: &Signature) -> BTreeSet<TypeId> {
-    ram_module.interface.canonical_types.clone()
-}
-
-pub fn module_env_out_rels(ram_module: &RamFunction) -> BTreeSet<FlatOutRel> {
-    ram_module.interface.outputs.clone()
 }
 
 pub fn display_out_rows_field_name<'a>(rel: FlatRel, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
@@ -52,13 +39,15 @@ pub fn display_out_rows_field_name<'a>(rel: FlatRel, ctx: &'a RustGenCtx<'a>) ->
     })
 }
 
-pub fn display_module_env_struct<'a>(
-    ram_module: &'a RamFunction,
+pub fn display_function_env<'a>(
+    ram_function: &'a RamFunction,
     ctx: &'a RustGenCtx<'a>,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
-        let in_rels = module_env_in_rels(ram_module)
-            .into_iter()
+        let in_rels = ram_function
+            .interface
+            .inputs
+            .iter()
             .map(|(rel, index_spec)| {
                 FmtFn(move |f| {
                     let name = display_index_field_name(&rel, &index_spec, ctx);
@@ -84,8 +73,10 @@ pub fn display_module_env_struct<'a>(
             })
             .format("\n");
 
-        let out_rels = module_env_out_rels(ram_module)
-            .into_iter()
+        let out_rels = ram_function
+            .interface
+            .outputs
+            .iter()
             .map(|rel| {
                 FmtFn(move |f| {
                     let name = display_out_set_field_name(&rel, ctx);
@@ -106,8 +97,8 @@ pub fn display_module_env_struct<'a>(
             })
             .format("\n");
 
-        let name = display_module_env_struct_name(ram_module);
-        let canonical_types = module_env_iter_types(ram_module, ctx.signature());
+        let name = display_function_env_name(ram_function);
+        let canonical_types = &ram_function.interface.canonical_types;
         let canonical = canonical_types
             .iter()
             .map(|&typ| {
@@ -119,13 +110,13 @@ pub fn display_module_env_struct<'a>(
                 }
             })
             .join("\n");
-        let proofs = if ram_module.interface.matching_proofs {
+        let proofs = if ram_function.interface.matching_proofs {
             "__proofs: &'a [Vec<eqlog_runtime::__private::Table>],"
         } else {
             ""
         };
-        let owners = if ram_module.owner_count() > 0 {
-            let count = ram_module.owner_count();
+        let owners = if ram_function.owner_count() > 0 {
+            let count = ram_function.owner_count();
             format!("__owners: [u32; {count}],")
         } else {
             String::new()
@@ -623,7 +614,7 @@ fn display_begin_proof<'a>(
     ctx: &'a RustGenCtx<'a>,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
-        let inputs: Vec<_> = module_env_in_rels(module).into_iter().collect();
+        let inputs: Vec<_> = module.interface.inputs.iter().collect();
         let current = plan
             .atoms
             .iter()
@@ -679,7 +670,7 @@ fn display_procedure<'a>(
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let name = &procedure.name;
-        let env_type = display_module_env_struct_name(module);
+        let env_type = display_function_env_name(module);
         let owners = procedure
             .owners
             .iter()
@@ -707,17 +698,17 @@ fn display_procedure<'a>(
     })
 }
 
-pub fn display_module_main_fn_name<'a>(ram_module: &'a RamFunction) -> impl 'a + Display {
-    ram_module.name.to_case(Snake)
+pub fn display_function_name<'a>(ram_function: &'a RamFunction) -> impl 'a + Display {
+    ram_function.name.to_case(Snake)
 }
 
-pub fn display_module_main_fn_decl<'a>(
-    ram_module: &'a RamFunction,
+pub fn display_function_declaration<'a>(
+    ram_function: &'a RamFunction,
     symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
-        let fn_name = display_module_main_fn_name(ram_module);
-        let env_name = display_module_env_struct_name(ram_module);
+        let fn_name = display_function_name(ram_function);
+        let env_name = display_function_env_name(ram_function);
         writedoc! {f, r#"
             #[link_name = "{symbol_prefix}_{fn_name}"]
             safe fn {fn_name}(env: {env_name});
@@ -725,15 +716,15 @@ pub fn display_module_main_fn_decl<'a>(
     })
 }
 
-fn display_module_main_fn<'a>(
-    ram_module: &'a RamFunction,
+fn display_function_entry<'a>(
+    ram_function: &'a RamFunction,
     ctx: &'a RustGenCtx<'a>,
     symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
-        let fn_name = display_module_main_fn_name(ram_module);
-        let env_name = display_module_env_struct_name(ram_module);
-        let calls = display_block(&ram_module.body, ram_module, ctx);
+        let fn_name = display_function_name(ram_function);
+        let env_name = display_function_env_name(ram_function);
+        let calls = display_block(&ram_function.body, ram_function, ctx);
         writedoc! {f, r#"
             #[allow(non_snake_case)]
             #[unsafe(no_mangle)]
@@ -744,19 +735,19 @@ fn display_module_main_fn<'a>(
     })
 }
 
-pub fn display_ram_module<'a>(
-    ram_module: &'a RamFunction,
+pub fn display_ram_function<'a>(
+    ram_function: &'a RamFunction,
     ctx: &'a RustGenCtx<'a>,
     symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
         let imports = display_imports();
-        let env_struct = display_module_env_struct(ram_module, ctx);
-        let main_fn = display_module_main_fn(ram_module, ctx, symbol_prefix);
-        let routines = ram_module
+        let env_struct = display_function_env(ram_function, ctx);
+        let main_fn = display_function_entry(ram_function, ctx, symbol_prefix);
+        let routines = ram_function
             .procedures
             .iter()
-            .map(|procedure| display_procedure(procedure, ram_module, ctx))
+            .map(|procedure| display_procedure(procedure, ram_function, ctx))
             .format("\n");
 
         writedoc! {f, r#"
