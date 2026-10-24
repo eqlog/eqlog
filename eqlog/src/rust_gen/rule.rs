@@ -638,6 +638,31 @@ fn display_shared_stmts<'a>(
     })
 }
 
+pub(super) fn proof_owner_prefix(module: &RamModule) -> bool {
+    if module.owner_count() != 1 {
+        return false;
+    }
+    module.routines.iter().all(|routine| {
+        let owner = &routine.flat_rule.scope.owners()[0];
+        !routine.flat_rule.premise.is_empty()
+            && routine
+                .flat_rule
+                .premise
+                .iter()
+                .all(|stmt| stmt.args.first() == Some(owner))
+            && routine.stmts.iter().all(|stmt| match stmt {
+                RamStmt::DefineSet(stmt) => match &stmt.expr {
+                    InSetExpr::GetIndex(index) => index.index_spec.order.first() == Some(&0),
+                    InSetExpr::Restrict(_) => true,
+                },
+                RamStmt::Iter(_)
+                | RamStmt::Insert(_)
+                | RamStmt::GuardInhabited(_)
+                | RamStmt::GuardPlan(_) => true,
+            })
+    })
+}
+
 struct ProofAtom {
     inputs: Vec<usize>,
     columns: Vec<usize>,
@@ -647,6 +672,7 @@ struct ProofPlan {
     atoms: Vec<ProofAtom>,
     variables: BTreeMap<String, usize>,
     relevant: BTreeSet<usize>,
+    owner_prefix: bool,
 }
 
 fn proof_plan(routine: &RamRoutine, module: &RamModule) -> Option<ProofPlan> {
@@ -656,6 +682,7 @@ fn proof_plan(routine: &RamRoutine, module: &RamModule) -> Option<ProofPlan> {
         let next = variables.len();
         variables.entry(var.name.to_string()).or_insert(next);
     }
+    let owner_prefix = proof_owner_prefix(module);
     let mut atoms = Vec::new();
     for (position, premise) in routine.flat_rule.premise.iter().enumerate() {
         let mut reads = Vec::new();
@@ -695,6 +722,7 @@ fn proof_plan(routine: &RamRoutine, module: &RamModule) -> Option<ProofPlan> {
                 .index_spec
                 .order
                 .iter()
+                .skip(usize::from(owner_prefix))
                 .map(|&column| variables[premise.args[column].name.as_ref()])
                 .collect(),
         });
@@ -720,6 +748,7 @@ fn proof_plan(routine: &RamRoutine, module: &RamModule) -> Option<ProofPlan> {
         atoms,
         variables,
         relevant,
+        owner_prefix,
     })
 }
 
@@ -735,7 +764,7 @@ fn display_proved_routine<'a>(
             .atoms
             .iter()
             .map(|atom| {
-                atom.inputs
+                let rows = atom.inputs
                     .iter()
                     .map(|&input| {
                         let (rel, index) = &inputs[input];
@@ -743,7 +772,14 @@ fn display_proved_routine<'a>(
                         format!("eqlog_runtime::__private::Table::from((*env.{name}).clone())")
                     })
                     .reduce(|left, right| format!("{left}.union(&{right})"))
-                    .unwrap()
+                    .unwrap();
+                if plan.owner_prefix {
+                    let owner = &routine.flat_rule.scope.owners()[0].name;
+                    let arity = atom.columns.len();
+                    format!("({rows}).first_column({owner}).unwrap_or_else(|| eqlog_runtime::__private::Table::new({arity}))")
+                } else {
+                    rows
+                }
             })
             .join(", ");
         let proofs = plan
@@ -770,7 +806,13 @@ fn display_proved_routine<'a>(
                 vec![{columns}],
             ).map(|proofs| proofs.with_relevant_variables(&[{relevant}]));
         "}?;
-        for owner in routine.flat_rule.scope.owners() {
+        for owner in routine
+            .flat_rule
+            .scope
+            .owners()
+            .iter()
+            .filter(|_| !plan.owner_prefix)
+        {
             if let Some(variable) = plan.variables.get(owner.name.as_ref()) {
                 let owner = &owner.name;
                 writedoc! {f, "

@@ -1147,9 +1147,17 @@ impl<'s> Codegen<'s> {
                             let field = self.inherited_field(&rel, &index, selection);
                             let arity = rel.arity(ctx.signature()).len();
                             writeln!(f, "{{ let rows = proof.{field}.clone();")?;
-                            for i in (0..scope_prefix(&rel, model, ctx)).rev() {
-                                let dim = arity - i;
-                                writeln!(f, "let rows = {{ let mut tree = PrefixTree{dim}::new(); tree.insert_restriction(owners[{i}], rows); tree }};")?;
+                            let prefix = scope_prefix(&rel, model, ctx);
+                            if super::rule::proof_owner_prefix(module) {
+                                if prefix == 0 {
+                                    let suffix = arity - 1;
+                                    writeln!(f, "let rows = rows.get(owners[0]).cloned().unwrap_or_else(PrefixTree{suffix}::new);")?;
+                                }
+                            } else {
+                                for i in (0..prefix).rev() {
+                                    let dim = arity - i;
+                                    writeln!(f, "let rows = {{ let mut tree = PrefixTree{dim}::new(); tree.insert_restriction(owners[{i}], rows); tree }};")?;
+                                }
                             }
                             writeln!(f, "eqlog_runtime::__private::Table::from(rows) }},")?;
                         }

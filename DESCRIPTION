@@ -84,6 +84,8 @@ in overlapping parents. Prune covered suffixes and subtract the union of
 eligible source suffixes before enumerating the last matching variable.
 Project private witnesses by existence without expanding their products.
 Keep ordinary matching unchanged when no extra certificate is available.
+Strip a known owner prefix from proof inputs once, avoiding a temporary
+owner tree and repeated owner restriction for every incoming snapshot.
 
 Use the same mechanism for predicates and functionality. Keep
 owner-dependent global premises and owner-valued data on the ordinary
