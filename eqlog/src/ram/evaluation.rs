@@ -73,7 +73,123 @@ pub struct EvaluationCall {
     pub canonical: BTreeMap<TypeId, CanonicalInput>,
 }
 
+#[derive(Clone, Copy)]
+pub enum Consumption {
+    Membership,
+    Required,
+}
+
+pub struct ScopedInput {
+    pub prefix: usize,
+    pub arity: usize,
+    pub compact_domain: Option<TypeId>,
+}
+
+pub struct InputProjection {
+    pub source: Vec<usize>,
+    pub target: Vec<usize>,
+    pub equalities: Vec<(usize, usize)>,
+}
+
+pub enum NativeReadPreparation {
+    Primary,
+    Extend,
+    Full,
+}
+
+pub enum InputReadSource {
+    Relation {
+        diagonal: bool,
+    },
+    Native(NativeReadPreparation),
+    Projected {
+        source: usize,
+        projection: InputProjection,
+        history: bool,
+    },
+}
+
+pub struct InputRead {
+    pub storage: InputStorage,
+    pub rel: FlatInRel,
+    pub index: IndexSpec,
+    pub source: InputReadSource,
+    pub stable: bool,
+    pub old: bool,
+    pub new: bool,
+    pub consumption: Consumption,
+    pub scope: Option<ScopedInput>,
+    pub inherited: bool,
+}
+
+pub enum StratumInstruction {
+    InitializeDirty,
+    RecordPendingOutput(FlatOutRel),
+    WhenUnpropagated(Vec<StratumInstruction>),
+    MarkPropagated,
+    PrepareDescendants { stable: bool },
+    RecomputeIndices { stable: bool },
+    PrepareIndex { rel: FlatInRel, index: IndexSpec },
+    OwnerCheckpoint,
+    PossibleInputGuard,
+    LoadInheritedInputs,
+    RecordInheritedProofs,
+    WhenInheritedBaseline(Vec<StratumInstruction>),
+    SaveInheritedRevision,
+    RemoveBaselineProof,
+    RetainPreviousProof,
+    MarkDirty,
+    ResetStable,
+    ReadInput(InputRead),
+    ReturnUnlessDirty,
+    MarkInitialized,
+    Block(Vec<StratumInstruction>),
+    Call(usize),
+    ConvertOutput(usize),
+    ApplyEqualities(TypeId),
+    CanonicalizeEqualities(Vec<TypeId>),
+    Insert(FlatRel),
+    PreparePolicies,
+    ReturnChanged,
+}
+
+pub enum InheritedEvidence {
+    OwnersPresent,
+    CheckpointRoot,
+}
+
+pub enum InheritedInstruction {
+    RequireTarget(TypeId),
+    LoadMemberInheritance(TypeId),
+    InitializeCandidates,
+    ForCandidates(Vec<InheritedInstruction>),
+    Candidate(Vec<InheritedInstruction>),
+    CheckSourceRevision,
+    InitializeScore,
+    LoadMemberSource(TypeId),
+    AddMemberScore(TypeId),
+    BuildRevision(Vec<TypeId>),
+    LoadSourceCheckpoint,
+    LoadInputs,
+    VerifyInput {
+        input: usize,
+        evidence: InheritedEvidence,
+    },
+    ReturnCandidate,
+    SkipUncertified,
+    ChooseLargest,
+    SaveCandidate,
+    RequireBest,
+    LoadPreviousTarget,
+    SelectChangedBaseline,
+    RetainUnseenProofs,
+    ReturnProofs,
+}
+
 pub struct StratumEvaluation {
+    pub inheritance: Vec<InheritedInstruction>,
+    pub body: Vec<StratumInstruction>,
+    pub owner_inputs: BTreeMap<FlatInRel, ScopedInput>,
     pub model: Option<TypeId>,
     pub stable_inputs: BTreeSet<FlatInRel>,
     pub inputs: BTreeSet<FlatInRel>,
@@ -100,6 +216,8 @@ pub enum EvaluationIteration {
 }
 
 pub enum EvaluationCondition {
+    Closed,
+    NoAllocations,
     StratumChanged {
         stratum: usize,
         scoped: bool,
@@ -117,7 +235,23 @@ pub enum TransportEdges {
     Outgoing,
 }
 
+pub enum EvaluationLifecycle {
+    PreparePolicies,
+    CompletePolicies,
+    CanonicalizeRelations,
+    TakeDelta,
+    ClearAllocated,
+    ApplyDeferredFunctions,
+    SaveDelta,
+    Canonicalize,
+    MarkClosed,
+    ReturnFalse,
+    ReturnCondition,
+    CheckConditionBeforeDelta,
+}
+
 pub enum EvaluationStmt {
+    Lifecycle(EvaluationLifecycle),
     Block(Vec<EvaluationStmt>),
     Loop(Vec<EvaluationStmt>),
     ForEach {
@@ -576,6 +710,346 @@ fn evaluation_calls(
         .collect()
 }
 
+fn inherited_body(
+    stratum: &StratumEvaluation,
+    inputs: &BTreeMap<FlatInRel, usize>,
+    compact: &CompactPlan,
+) -> Vec<InheritedInstruction> {
+    if stratum.inherited.is_none() {
+        return Vec::new();
+    }
+    let model = stratum.model.unwrap();
+    let members = compact.members(model);
+    let mut body = vec![InheritedInstruction::RequireTarget(model)];
+    body.extend(
+        members
+            .iter()
+            .copied()
+            .map(InheritedInstruction::LoadMemberInheritance),
+    );
+    body.push(InheritedInstruction::InitializeCandidates);
+    let mut candidate = vec![
+        InheritedInstruction::CheckSourceRevision,
+        InheritedInstruction::InitializeScore,
+    ];
+    for &typ in members {
+        candidate.extend([
+            InheritedInstruction::LoadMemberSource(typ),
+            InheritedInstruction::AddMemberScore(typ),
+        ]);
+    }
+    candidate.extend([
+        InheritedInstruction::BuildRevision(members.to_vec()),
+        InheritedInstruction::LoadSourceCheckpoint,
+        InheritedInstruction::LoadInputs,
+    ]);
+    candidate.extend(stratum.inputs.iter().map(|rel| {
+        let evidence = match rel {
+            FlatInRel::TypeSet(_) => InheritedEvidence::OwnersPresent,
+            FlatInRel::Rel(_) | FlatInRel::RelWithDiagonals { .. } | FlatInRel::Equality(_) => {
+                InheritedEvidence::CheckpointRoot
+            }
+        };
+        InheritedInstruction::VerifyInput {
+            input: inputs[rel],
+            evidence,
+        }
+    }));
+    candidate.push(InheritedInstruction::ReturnCandidate);
+    body.push(InheritedInstruction::ForCandidates(vec![
+        InheritedInstruction::Candidate(candidate),
+        InheritedInstruction::SkipUncertified,
+        InheritedInstruction::ChooseLargest,
+        InheritedInstruction::SaveCandidate,
+    ]));
+    body.extend([
+        InheritedInstruction::RequireBest,
+        InheritedInstruction::LoadPreviousTarget,
+        InheritedInstruction::SelectChangedBaseline,
+        InheritedInstruction::RetainUnseenProofs,
+        InheritedInstruction::ReturnProofs,
+    ]);
+    body
+}
+
+fn scoped_input(
+    rel: &FlatInRel,
+    model: TypeId,
+    signature: &Signature,
+    compact: &CompactPlan,
+) -> ScopedInput {
+    let compact_domain = match rel {
+        FlatInRel::Rel(FlatRel::ModelMember(typ)) => (compact.supports_member(*typ)
+            && signature.type_(*typ).parents.as_slice() == [model])
+        .then_some(*typ),
+        FlatInRel::Rel(FlatRel::Pred(_) | FlatRel::Func(_))
+        | FlatInRel::RelWithDiagonals { .. }
+        | FlatInRel::TypeSet(_)
+        | FlatInRel::Equality(_) => None,
+    };
+    ScopedInput {
+        prefix: scope_prefix(rel, model, signature),
+        arity: rel.arity(signature).len(),
+        compact_domain,
+    }
+}
+
+fn input_projection(rel: &FlatInRel, index: &IndexSpec, source: &IndexSpec) -> InputProjection {
+    let (columns, equalities): (Vec<_>, Vec<_>) = match rel {
+        FlatInRel::RelWithDiagonals { equalities, .. } => (
+            equalities
+                .iter()
+                .enumerate()
+                .filter_map(|(i, &j)| (i == j).then_some(i))
+                .collect(),
+            equalities
+                .iter()
+                .enumerate()
+                .filter_map(|(i, &j)| (i != j).then_some((i, j)))
+                .collect(),
+        ),
+        FlatInRel::Rel(_) | FlatInRel::TypeSet(_) => {
+            ((0..source.order.len()).collect(), Vec::new())
+        }
+        FlatInRel::Equality(_) => unreachable!("equalities have no tuple indices"),
+    };
+    InputProjection {
+        source: source.order.to_vec(),
+        target: index.order.iter().map(|&i| columns[i]).collect(),
+        equalities,
+    }
+}
+
+struct StratumLowering<'a> {
+    preparation: &'a IndexPreparation,
+    native_indices: &'a [NativeIndexPreparation],
+    inputs: &'a BTreeMap<FlatInRel, usize>,
+    indices: &'a BTreeMap<(FlatInRel, IndexSpec), usize>,
+    old_indices: &'a BTreeSet<(FlatInRel, IndexSpec)>,
+    selection: &'a IndexSelection,
+    signature: &'a Signature,
+    compact: &'a CompactPlan,
+}
+
+impl StratumLowering<'_> {
+    fn input(
+        &self,
+        stratum: &StratumEvaluation,
+        storage: InputStorage,
+        rel: &FlatInRel,
+        index: &IndexSpec,
+        source: InputReadSource,
+        old: bool,
+        new: bool,
+    ) -> StratumInstruction {
+        StratumInstruction::ReadInput(InputRead {
+            storage,
+            rel: rel.clone(),
+            index: index.clone(),
+            source,
+            old,
+            new,
+            stable: stratum.stable_inputs.contains(&source_relation(rel)),
+            consumption: if self
+                .preparation
+                .membership_only
+                .contains(&input_key(rel.clone(), index.clone()))
+            {
+                Consumption::Membership
+            } else {
+                Consumption::Required
+            },
+            scope: stratum
+                .model
+                .map(|model| scoped_input(rel, model, self.signature, self.compact)),
+            inherited: stratum.inherited.is_some(),
+        })
+    }
+
+    fn lower(&self, stratum: &StratumEvaluation) -> Vec<StratumInstruction> {
+        let mut body = Vec::new();
+        if stratum.model.is_none() {
+            body.push(StratumInstruction::InitializeDirty);
+        }
+        body.extend(
+            stratum
+                .output_conversions
+                .iter()
+                .filter(|conversion| conversion.pending)
+                .map(|conversion| {
+                    StratumInstruction::RecordPendingOutput(conversion.output.clone())
+                }),
+        );
+        if let Some(plan) = &self.preparation.stable {
+            let mut stable = Vec::new();
+            if stratum.model.is_none() {
+                stable.push(StratumInstruction::RecomputeIndices { stable: true });
+            } else if !plan.descendants.is_empty() {
+                stable.push(StratumInstruction::PrepareDescendants { stable: true });
+            }
+            if plan.descendants.is_empty() {
+                stable.extend(plan.support_indices.iter().map(|(rel, index)| {
+                    StratumInstruction::PrepareIndex {
+                        rel: rel.clone(),
+                        index: index.clone(),
+                    }
+                }));
+            }
+            stable.push(StratumInstruction::MarkPropagated);
+            body.push(StratumInstruction::WhenUnpropagated(stable));
+        }
+        let native = &self.preparation.native;
+        if !native.descendants.is_empty() {
+            body.push(StratumInstruction::PrepareDescendants { stable: false });
+        }
+        if stratum.model.is_none() && !native.propagation.relations.is_empty() {
+            body.push(StratumInstruction::RecomputeIndices { stable: false });
+        }
+        if stratum.model.is_some() {
+            body.push(StratumInstruction::OwnerCheckpoint);
+            if stratum.possible_inputs.is_some() {
+                body.push(StratumInstruction::PossibleInputGuard);
+            }
+        }
+        if stratum.inherited.is_some() {
+            body.extend([
+                StratumInstruction::LoadInheritedInputs,
+                StratumInstruction::RecordInheritedProofs,
+            ]);
+            let mut baseline = vec![
+                StratumInstruction::SaveInheritedRevision,
+                StratumInstruction::RemoveBaselineProof,
+                StratumInstruction::RetainPreviousProof,
+                StratumInstruction::MarkDirty,
+            ];
+            if !stratum.stable_fields.is_empty() {
+                baseline.push(StratumInstruction::ResetStable);
+            }
+            body.push(StratumInstruction::WhenInheritedBaseline(baseline));
+        }
+        for rel in &stratum.inputs {
+            let index = self.selection.current_primary(rel);
+            let old = self.preparation.indices.iter().any(|(input, index)| {
+                input == rel
+                    && index.age == IndexAge::Old
+                    && self.selection.is_primary(input, index)
+            });
+            body.push(self.input(
+                stratum,
+                InputStorage::Relation(self.inputs[rel]),
+                rel,
+                index,
+                InputReadSource::Relation {
+                    diagonal: stratum.diagonal_inputs.contains(rel),
+                },
+                old,
+                true,
+            ));
+        }
+        body.push(StratumInstruction::ReturnUnlessDirty);
+        if stratum.model.is_none() {
+            body.push(StratumInstruction::MarkInitialized);
+        }
+        let mut calls = Vec::new();
+        if native.descendants.is_empty() {
+            calls.extend(native.support_indices.iter().map(|(rel, index)| {
+                StratumInstruction::PrepareIndex {
+                    rel: rel.clone(),
+                    index: index.clone(),
+                }
+            }));
+        }
+        for &id in self.preparation.native_indices() {
+            let plan = &self.native_indices[id];
+            let kind = if plan.from_primary {
+                NativeReadPreparation::Primary
+            } else if stratum.model.is_some() {
+                NativeReadPreparation::Extend
+            } else {
+                NativeReadPreparation::Full
+            };
+            calls.push(self.input(
+                stratum,
+                InputStorage::Native(id),
+                &plan.rel,
+                &plan.index,
+                InputReadSource::Native(kind),
+                true,
+                true,
+            ));
+        }
+        let required_indices: BTreeSet<_> = self
+            .preparation
+            .indices
+            .iter()
+            .cloned()
+            .map(|(rel, index)| input_key(rel, index))
+            .collect();
+        for (rel, index) in required_indices {
+            if native_index(self.native_indices, &rel, &index).is_some()
+                || self.selection.is_primary(&rel, &index)
+            {
+                continue;
+            }
+            let source = source_relation(&rel);
+            let key = input_key(rel.clone(), index.clone());
+            let history = self.old_indices.contains(&key);
+            let old = self.preparation.indices.contains(&key);
+            let new = self.preparation.indices.contains(&(
+                rel.clone(),
+                IndexSpec {
+                    age: IndexAge::New,
+                    order: index.order.clone(),
+                },
+            ));
+            let projection =
+                input_projection(&rel, &index, self.selection.current_primary(&source));
+            calls.push(self.input(
+                stratum,
+                InputStorage::Index(self.indices[&key]),
+                &rel,
+                &index,
+                InputReadSource::Projected {
+                    source: self.inputs[&source],
+                    projection,
+                    history,
+                },
+                old,
+                new,
+            ));
+        }
+        calls.extend((0..stratum.calls.len()).map(StratumInstruction::Call));
+        body.push(StratumInstruction::Block(calls));
+        body.extend((0..stratum.output_conversions.len()).map(StratumInstruction::ConvertOutput));
+        let equalities: Vec<_> = stratum
+            .outputs
+            .iter()
+            .filter_map(|output| match output {
+                FlatOutRel::Equality(typ) => Some(*typ),
+                FlatOutRel::Rel(_) | FlatOutRel::FuncDomain(_) => None,
+            })
+            .collect();
+        body.extend(
+            equalities
+                .iter()
+                .copied()
+                .map(StratumInstruction::ApplyEqualities),
+        );
+        if !equalities.is_empty() {
+            body.push(StratumInstruction::CanonicalizeEqualities(equalities));
+        }
+        body.extend(stratum.outputs.iter().filter_map(|output| match output {
+            FlatOutRel::Rel(rel) => Some(StratumInstruction::Insert(*rel)),
+            FlatOutRel::Equality(_) | FlatOutRel::FuncDomain(_) => None,
+        }));
+        if stratum.model.is_none() && !self.compact.policy_models().is_empty() {
+            body.push(StratumInstruction::PreparePolicies);
+        }
+        body.push(StratumInstruction::ReturnChanged);
+        body
+    }
+}
+
 fn loop_inputs(schedule: &Schedule, strata: &[StratumEvaluation], result: &mut Vec<usize>) {
     match schedule {
         Schedule::Rules(id) => {
@@ -817,6 +1291,55 @@ impl ScheduleLowering<'_> {
     }
 }
 
+fn close_body(schedule: Vec<EvaluationStmt>, policies: bool) -> Vec<EvaluationStmt> {
+    let mut body = vec![EvaluationStmt::When {
+        condition: EvaluationCondition::Closed,
+        body: vec![EvaluationStmt::Lifecycle(
+            EvaluationLifecycle::ReturnCondition,
+        )],
+    }];
+    if policies {
+        body.push(EvaluationStmt::Lifecycle(
+            EvaluationLifecycle::PreparePolicies,
+        ));
+    }
+    body.extend([
+        EvaluationStmt::Lifecycle(EvaluationLifecycle::CanonicalizeRelations),
+        EvaluationStmt::Lifecycle(EvaluationLifecycle::CheckConditionBeforeDelta),
+        EvaluationStmt::Lifecycle(EvaluationLifecycle::TakeDelta),
+    ]);
+    let mut loop_body = Vec::new();
+    if policies {
+        loop_body.push(EvaluationStmt::Lifecycle(
+            EvaluationLifecycle::PreparePolicies,
+        ));
+    }
+    loop_body.extend(schedule);
+    loop_body.extend([
+        EvaluationStmt::Lifecycle(EvaluationLifecycle::ClearAllocated),
+        EvaluationStmt::Lifecycle(EvaluationLifecycle::ApplyDeferredFunctions),
+    ]);
+    if policies {
+        loop_body.push(EvaluationStmt::Lifecycle(
+            EvaluationLifecycle::CompletePolicies,
+        ));
+    }
+    loop_body.push(EvaluationStmt::When {
+        condition: EvaluationCondition::NoAllocations,
+        body: vec![
+            EvaluationStmt::Lifecycle(EvaluationLifecycle::SaveDelta),
+            EvaluationStmt::Lifecycle(EvaluationLifecycle::Canonicalize),
+            EvaluationStmt::Lifecycle(EvaluationLifecycle::MarkClosed),
+            EvaluationStmt::Lifecycle(EvaluationLifecycle::ReturnFalse),
+        ],
+    });
+    loop_body.push(EvaluationStmt::Lifecycle(
+        EvaluationLifecycle::CanonicalizeRelations,
+    ));
+    body.push(EvaluationStmt::Loop(loop_body));
+    body
+}
+
 pub fn plan_evaluation(
     modules: &[RamFunction],
     schedule: &RuleSchedule,
@@ -965,7 +1488,15 @@ pub fn plan_evaluation(
                 signature,
                 compact,
             );
-            StratumEvaluation {
+            let mut evaluation = StratumEvaluation {
+                inheritance: Vec::new(),
+                body: Vec::new(),
+                owner_inputs: stratum.model.map_or_else(BTreeMap::new, |model| {
+                    stratum_inputs
+                        .iter()
+                        .map(|rel| (rel.clone(), scoped_input(rel, model, signature, compact)))
+                        .collect()
+                }),
                 model: stratum.model,
                 stable_inputs: stratum.stable_inputs.clone(),
                 inputs: stratum_inputs,
@@ -976,7 +1507,20 @@ pub fn plan_evaluation(
                 diagonal_inputs,
                 stable_fields,
                 inherited,
+            };
+            evaluation.inheritance = inherited_body(&evaluation, &inputs, compact);
+            evaluation.body = StratumLowering {
+                preparation,
+                native_indices,
+                inputs: &inputs,
+                indices: &indices,
+                old_indices: &old_indices,
+                selection,
+                signature,
+                compact,
             }
+            .lower(&evaluation);
+            evaluation
         })
         .collect();
     let transport_baselines = model_preparations
@@ -996,6 +1540,7 @@ pub fn plan_evaluation(
         compact,
     }
     .lower(&schedule.body, None, 0, None, RetainedOwners::None);
+    let body = close_body(body, !compact.policy_models().is_empty());
     EvaluationPlan {
         models: model_preparations
             .keys()

@@ -4,10 +4,10 @@ use indoc::writedoc;
 use itertools::Itertools;
 
 use super::indices::projection;
+use super::transport::{display_driver, Driver, DriverKind};
 use super::{
     display_all_index_field_name, display_index_type, display_mor_app_map_expr,
-    display_morphism_components, display_morphism_index_prefix_walk, display_own_index_field_name,
-    morphism_index_column_kind, parent_prefix_len, MorphismIndexColumnKind, RustGenCtx,
+    display_own_index_field_name, display_transport_walk, RustGenCtx,
 };
 use crate::algebra::signature::TypeId;
 use crate::flat_eqlog::{FlatInRel, IndexSelection, IndexSpec};
@@ -88,47 +88,24 @@ pub(super) fn methods<'a>(
             "}?;
             for (level, &model) in plan.models.iter().enumerate() {
                 let model_id = level;
-                let parent_len = ctx.signature().type_(model).parents.len();
-                let components = display_morphism_components(model, ctx, indices, true);
-                let children = if level + 1 < plan.models.len() {
-                    let child_id = level + 1;
-                    let parents = (0..parent_len)
-                        .map(|i| format!("parents[{i}]"))
-                        .chain(std::iter::once("object".to_string()))
-                        .join(", ");
-                    format!("component_changed |= self.__native_{id}_model_{child_id}([{parents}], index, track_component);")
-                } else {
-                    String::new()
+                let parent_len = ctx.transport().models[&model].parents.len();
+                let driver = Driver {
+                    model,
+                    kind: DriverKind::Native { id, level },
                 };
+                let body = display_driver(
+                    &ctx.transport().native_bodies[&(id, level)],
+                    &driver,
+                    ctx,
+                    indices,
+                );
                 let remap = remap(id, plan, model, level, indices, ctx);
                 writedoc! {f, "
                     #[allow(unused_variables)]
                     fn __native_{id}_model_{model_id}(
                         &self, parents: [u32; {parent_len}], index: &mut {typ}, track_changes: bool,
                     ) -> bool {{
-                        {components}
-                        let mut changed = false;
-                        for component in components.iter() {{
-                            let cyclic = !component.internal.is_empty();
-                            let track_component = track_changes || cyclic;
-                            loop {{
-                                let mut component_changed = false;
-                                for &object in &component.objects {{ {children} }}
-                                for morphism in &component.internal {{
-                                    component_changed |= self.__native_{id}_morphism_{model_id}(
-                                        parents, morphism, index, track_component,
-                                    );
-                                }}
-                                changed |= component_changed;
-                                if !cyclic || !component_changed {{ break; }}
-                            }}
-                            for morphism in &component.outgoing {{
-                                changed |= self.__native_{id}_morphism_{model_id}(
-                                    parents, morphism, index, track_changes,
-                                );
-                            }}
-                        }}
-                        changed
+                        {body}
                     }}
                     {remap}
                 "}?;
@@ -147,49 +124,23 @@ fn remap<'a>(
     ctx: &'a RustGenCtx<'a>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let parent_len = ctx.signature().type_(model).parents.len();
-        let arity = plan.rel.arity(ctx.signature());
-        let parent_cols = parent_prefix_len(&plan.rel, ctx);
-        let columns: Vec<_> = plan
-            .index
-            .order
-            .iter()
-            .map(|&column| {
-                morphism_index_column_kind(
-                    &plan.rel,
-                    model,
-                    column,
-                    parent_cols,
-                    arity[column],
-                    ctx,
-                )
-            })
-            .collect();
-        let prefix_len = columns
-            .iter()
-            .rposition(|column| column.needs_prefix_walk())
-            .unwrap()
-            + 1;
-        let suffix_len = arity.len() - prefix_len;
+        let parent_len = ctx.transport().models[&model].parents.len();
+        let remap = ctx.transport().index(&plan.rel, &plan.index, model);
+        let prefix_len = remap.prefix;
+        let suffix_len = remap.suffix;
         let typ = display_index_type(&plan.rel, ctx);
-        let maps = columns
+        let maps = remap
+            .maps
             .iter()
-            .enumerate()
-            .filter_map(|(i, column)| match column {
-                MorphismIndexColumnKind::Member(member) => {
-                    let expr = display_mor_app_map_expr(model, *member, ctx, indices, true);
-                    Some(format!("let map_el{i} = {expr};"))
-                }
-                MorphismIndexColumnKind::OuterParent(_)
-                | MorphismIndexColumnKind::Parent
-                | MorphismIndexColumnKind::Copy => None,
+            .map(|(i, read)| {
+                let expr = display_mor_app_map_expr(read, ctx, indices, true);
+                format!("let map_el{i} = {expr};")
             })
             .join("\n");
-        let collect =
-            display_morphism_index_prefix_walk(&columns, arity.len(), "source".to_string(), false);
+        let collect = display_transport_walk(&remap.walk, remap.arity, "source".to_owned(), false);
         let prefix = (0..prefix_len).map(|i| format!("el{i}")).join(", ");
         let wrap = (1..prefix_len).rev().map(|i| {
-            let dim = arity.len() - i;
+            let dim = remap.arity - i;
             format!("let mapped = {{ let mut tree = PrefixTree{dim}::new(); tree.insert_restriction(el{i}, mapped); tree }};")
         }).join("\n");
         writedoc! {f, "

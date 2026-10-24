@@ -1692,33 +1692,6 @@ fn display_canonicalize_rel_block<'a>(
     })
 }
 
-fn inherited_rewrite_scopes(
-    rel: FlatRel,
-    index: &IndexSpec,
-    ctx: &RustGenCtx<'_>,
-) -> Option<(BTreeSet<TypeId>, BTreeSet<TypeId>)> {
-    if index.order.first() != Some(&0) {
-        return None;
-    }
-    let arity = rel.arity(ctx.signature());
-    let owner = *arity.first()?;
-    if ctx.signature().type_(owner).kind != TypeKind::Model
-        || !ctx.signature().type_(owner).parents.is_empty()
-    {
-        return None;
-    }
-    let mut members = BTreeSet::new();
-    let mut unrestricted = BTreeSet::from([owner]);
-    for (column, &typ) in arity.iter().enumerate().skip(1) {
-        if rel.column_maps_under(ctx.signature(), column, owner) {
-            members.insert(typ);
-        } else {
-            unrestricted.insert(typ);
-        }
-    }
-    (!members.is_empty()).then_some((members, unrestricted))
-}
-
 fn display_canonicalize_fn<'a>(
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
@@ -1738,7 +1711,11 @@ fn display_canonicalize_fn<'a>(
                         unreachable!("only relations have shared primary indices")
                     }
                 };
-                (rel, index, inherited_rewrite_scopes(relation, index, ctx))
+                (
+                    rel,
+                    index,
+                    ctx.transport().rewrite_scopes(relation).cloned(),
+                )
             })
             .collect();
         let affected_owners = FmtFn(|f| {
@@ -2073,68 +2050,6 @@ fn display_var(var: ElVar) -> impl Display {
     var
 }
 
-#[derive(Copy, Clone)]
-enum MorphismIndexColumnKind {
-    OuterParent(usize),
-    Parent,
-    Member(TypeId),
-    Copy,
-}
-
-impl MorphismIndexColumnKind {
-    fn needs_prefix_walk(self) -> bool {
-        match self {
-            MorphismIndexColumnKind::OuterParent(_) | MorphismIndexColumnKind::Parent => true,
-            MorphismIndexColumnKind::Member(_) | MorphismIndexColumnKind::Copy => false,
-        }
-    }
-}
-
-fn parent_prefix_len(rel: &FlatInRel, ctx: &RustGenCtx<'_>) -> usize {
-    match rel {
-        FlatInRel::Rel(rel) | FlatInRel::RelWithDiagonals { rel, .. } => match rel {
-            FlatRel::Pred(pred) => ctx.signature().pred(*pred).parents.len(),
-            FlatRel::Func(func) => ctx.signature().func(*func).parents.len(),
-            FlatRel::ModelMember(typ) => ctx.signature().type_(*typ).parents.len(),
-        },
-        FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => 0,
-    }
-}
-
-fn morphism_index_column_kind(
-    rel: &FlatInRel,
-    parent_model_type: TypeId,
-    column_index: usize,
-    prefix_len: usize,
-    typ: TypeId,
-    ctx: &RustGenCtx<'_>,
-) -> MorphismIndexColumnKind {
-    if column_index < ctx.signature().type_(parent_model_type).parents.len() {
-        return MorphismIndexColumnKind::OuterParent(column_index);
-    }
-
-    // Only the flattened enclosing-model prefix is rewritten from dom to
-    // cod. An argument that happens to have the same type as a parent
-    // model (e.g. tagged_by(Set, S)) must be copied.
-    if column_index < prefix_len && typ == parent_model_type {
-        return MorphismIndexColumnKind::Parent;
-    }
-
-    let maps = match rel {
-        FlatInRel::Rel(rel) => {
-            rel.column_maps_under(ctx.signature(), column_index, parent_model_type)
-        }
-        FlatInRel::RelWithDiagonals { .. } | FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => {
-            unreachable!("morphism indices use full member relations")
-        }
-    };
-    if maps {
-        return MorphismIndexColumnKind::Member(typ);
-    }
-
-    MorphismIndexColumnKind::Copy
-}
-
 fn display_prefix_tree_type(arity_len: usize) -> impl Display {
     FmtFn(move |f| write!(f, "PrefixTree{arity_len}"))
 }
@@ -2162,177 +2077,94 @@ fn display_tree_prefix_slice(field: &str, parent_len: usize, leaf_dim: usize) ->
 }
 
 fn display_mor_app_map_expr<'a>(
-    parent_model_type: TypeId,
-    typ: TypeId,
+    read: &'a TransportRead,
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
     prepared: bool,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let morphism_type = ctx
-            .signature()
-            .ids_for_model_type(parent_model_type)
-            .expect("morphism application requires a parent model type")
-            .mor;
-        let mor_app_func = ctx
-            .signature()
-            .mor_app_func(MorphismMemberTypes {
-                morphism_type,
-                member_type: typ,
-            })
-            .expect("mor_app_func should be defined for member types");
-        let mor_app_rel = FlatInRel::Rel(FlatRel::Func(mor_app_func));
-        let parent_len = ctx.signature().func(mor_app_func).parents.len();
-        let order: Vec<usize> = (0..parent_len + 3).collect();
-
-        let mor_app_indices = index_selection
-            .indices
-            .get(&mor_app_rel)
-            .expect("mor_app rel should have indices");
-        let index = index_with_order(mor_app_indices, order.as_slice());
-        let name = indices::read_method(&mor_app_rel, index, index_selection, ctx, prepared);
-        let gets = display_parent_then_morph_gets(format!("self.{name}()"), parent_len);
+        let name = indices::read_method(&read.rel, &read.index, index_selection, ctx, prepared);
+        let gets = display_parent_then_morph_gets(format!("self.{name}()"), read.parents);
         write!(f, "{gets}.clone()")
     })
 }
 
-fn display_morphism_index_prefix_walk<'a>(
-    columns: &'a [MorphismIndexColumnKind],
-    arity_len: usize,
-    source_tree: String,
-    source_tree_is_ref: bool,
-) -> impl Display + 'a {
-    FmtFn(move |f| {
-        let body = display_morphism_index_prefix_walk_from(
-            columns,
-            0,
-            arity_len,
-            source_tree.clone(),
-            source_tree_is_ref,
-            Vec::new(),
-        );
-        write!(f, "{body}")
-    })
+fn display_transport_value(value: &TransportValue) -> String {
+    match value {
+        TransportValue::Parent(i) => format!("parents[{i}]"),
+        TransportValue::Domain => "*dom".to_owned(),
+        TransportValue::Codomain => "*cod".to_owned(),
+        TransportValue::Column(i) => format!("el{i}"),
+        TransportValue::Image(i) => format!("mapped_el{i}"),
+    }
 }
 
-fn display_morphism_index_prefix_walk_from(
-    columns: &[MorphismIndexColumnKind],
-    pos: usize,
+fn display_transport_walk(
+    walk: &TransportWalk,
     current_dim: usize,
     source_tree: String,
     source_tree_is_ref: bool,
-    target_prefix: Vec<String>,
 ) -> String {
-    let prefix_len = columns
-        .iter()
-        .rposition(|column| column.needs_prefix_walk())
-        .unwrap()
-        + 1;
-    if pos == prefix_len {
-        let maps = columns[pos..]
-            .iter()
-            .enumerate()
-            .map(|(i, column)| {
-                let i = pos + i;
-                match column {
-                    MorphismIndexColumnKind::Member(_) => format!("Some(map_el{i}.clone())"),
-                    MorphismIndexColumnKind::Copy => "None".to_owned(),
-                    MorphismIndexColumnKind::OuterParent(_) | MorphismIndexColumnKind::Parent => {
-                        unreachable!("parents belong to the prefix")
+    match walk {
+        TransportWalk::Emit { target, suffix } => {
+            let suffix = match suffix {
+                TransportSuffix::Mapped(maps) => {
+                    let maps = maps
+                        .iter()
+                        .map(|map| match map {
+                            Some(i) => format!("Some(map_el{i}.clone())"),
+                            None => "None".to_owned(),
+                        })
+                        .join(", ");
+                    format!("{source_tree}.mapped({maps})")
+                }
+                TransportSuffix::Copy => {
+                    if source_tree_is_ref {
+                        format!("(*{source_tree}).clone()")
+                    } else {
+                        format!("{source_tree}.clone()")
                     }
                 }
-            })
-            .join(", ");
-        let suffix = if columns[pos..].iter().any(|column| match column {
-            MorphismIndexColumnKind::Member(_) => true,
-            MorphismIndexColumnKind::Copy => false,
-            MorphismIndexColumnKind::OuterParent(_) | MorphismIndexColumnKind::Parent => {
-                unreachable!("parents belong to the prefix")
-            }
-        }) {
-            format!("{source_tree}.mapped({maps})")
-        } else if source_tree_is_ref {
-            format!("(*{source_tree}).clone()")
-        } else {
-            format!("{source_tree}.clone()")
-        };
-        let target_prefix = target_prefix[..prefix_len].iter().format(", ");
-        return formatdoc! {"
-            {{
-                let mapped = {suffix};
-                propagated.push(([{target_prefix}], mapped));
-            }}
-        "};
-    }
-
-    let el = format!("el{pos}");
-    let subtree = format!("{source_tree}_{pos}");
-    let subtree_is_ref = current_dim > 1;
-
-    match columns[pos] {
-        MorphismIndexColumnKind::OuterParent(_) | MorphismIndexColumnKind::Parent => {
-            let (source, target) = match columns[pos] {
-                MorphismIndexColumnKind::OuterParent(i) => {
-                    let parent = format!("parents[{i}]");
-                    (parent.clone(), parent)
-                }
-                MorphismIndexColumnKind::Parent => ("*dom".to_string(), "*cod".to_string()),
-                MorphismIndexColumnKind::Member(_) | MorphismIndexColumnKind::Copy => {
-                    unreachable!("only parent columns restrict the source model")
-                }
             };
-            let mut target_prefix = target_prefix;
-            target_prefix.push(target);
-            let body = display_morphism_index_prefix_walk_from(
-                columns,
-                pos + 1,
-                current_dim - 1,
-                subtree.clone(),
-                true,
-                target_prefix,
-            );
+            let target = target.iter().map(display_transport_value).join(", ");
+            formatdoc! {"
+                {{
+                    let mapped = {suffix};
+                    propagated.push(([{target}], mapped));
+                }}
+            "}
+        }
+        TransportWalk::Restrict {
+            position,
+            source,
+            body,
+        } => {
+            let subtree = format!("{source_tree}_{position}");
+            let source = display_transport_value(source);
+            let body = display_transport_walk(body, current_dim - 1, subtree.clone(), true);
             formatdoc! {"
                 if let Some({subtree}) = {source_tree}.get({source}) {{
                     {body}
                 }}
             "}
         }
-        MorphismIndexColumnKind::Member(_) => {
-            let mut target_prefix = target_prefix;
-            target_prefix.push(format!("mapped_{el}"));
-            let body = display_morphism_index_prefix_walk_from(
-                columns,
-                pos + 1,
-                current_dim - 1,
-                subtree.clone(),
-                subtree_is_ref,
-                target_prefix,
-            );
-
+        TransportWalk::ForEachSource { position, body } => {
+            let subtree = format!("{source_tree}_{position}");
+            let body =
+                display_transport_walk(body, current_dim - 1, subtree.clone(), current_dim > 1);
             formatdoc! {"
-                for ({el}, {subtree}) in {source_tree}.iter_restrictions() {{
-                    let Some(images) = map_{el}.get({el}) else {{
-                        continue;
-                    }};
-                    for [mapped_{el}] in images.iter() {{
-                        {body}
-                    }}
+                for (el{position}, {subtree}) in {source_tree}.iter_restrictions() {{
+                    {body}
                 }}
             "}
         }
-        MorphismIndexColumnKind::Copy => {
-            let mut target_prefix = target_prefix;
-            target_prefix.push(el.clone());
-            let body = display_morphism_index_prefix_walk_from(
-                columns,
-                pos + 1,
-                current_dim - 1,
-                subtree.clone(),
-                subtree_is_ref,
-                target_prefix,
-            );
+        TransportWalk::ForEachImage { position, body } => {
+            let body = display_transport_walk(body, current_dim, source_tree, source_tree_is_ref);
             formatdoc! {"
-                for ({el}, {subtree}) in {source_tree}.iter_restrictions() {{
+                let Some(images) = map_el{position}.get(el{position}) else {{
+                    continue;
+                }};
+                for [mapped_el{position}] in images.iter() {{
                     {body}
                 }}
             "}
@@ -2345,11 +2177,13 @@ fn display_apply_morphism_index_propagated<'a>(
     arity_len: usize,
     prefix_len: usize,
     suffix_len: usize,
+    application: &'a TransportApplication,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        if suffix_len == 0 {
-            assert_eq!(prefix_len, arity_len);
-            return writedoc! {f, "
+        match application {
+            TransportApplication::Rows => {
+                assert_eq!(prefix_len, arity_len);
+                return writedoc! {f, "
                 for (row, mapped_dom_set) in propagated {{
                     if mapped_dom_set.is_empty() {{ continue; }}
                     if !retain_own && {index_field_name}_own.contains(row) {{
@@ -2361,6 +2195,8 @@ fn display_apply_morphism_index_propagated<'a>(
                     relation_changed |= inserted;
                 }}
             "};
+            }
+            TransportApplication::SinglePrefix | TransportApplication::NestedPrefix => {}
         }
         let prefix_vars = (0..prefix_len)
             .map(|i| FmtFn(move |f| write!(f, "el{i}")))
@@ -2393,18 +2229,18 @@ fn display_apply_morphism_index_propagated<'a>(
         let target_contains =
             format!("{target_slice}.is_some_and(|existing| mapped_dom_set.is_subset(existing))");
         // With one prefix column, both checks inspect the same immutable target slice.
-        let (cache_subset, initial_subset, final_subset) = if prefix_len == 1 {
-            (
+        let (cache_subset, initial_subset, final_subset) = match application {
+            TransportApplication::SinglePrefix => (
                 format!("let already_present = {target_contains};"),
                 "already_present".to_owned(),
                 "already_present".to_owned(),
-            )
-        } else {
-            (
+            ),
+            TransportApplication::NestedPrefix => (
                 String::new(),
                 target_contains,
                 format!("{index_field_name}_all.get(el0).is_some_and(|existing| mapped_dom_set.is_subset(existing))"),
-            )
+            ),
+            TransportApplication::Rows => unreachable!("row transport was emitted separately"),
         };
         writedoc! {f, "
             for ([{prefix_vars}], mapped_dom_set) in propagated {{
@@ -2430,13 +2266,6 @@ fn display_apply_morphism_index_propagated<'a>(
     })
 }
 
-fn index_with_order<'a>(indices: &'a [IndexSpec], order: &'a [usize]) -> &'a IndexSpec {
-    indices
-        .iter()
-        .find(|index| index.order.as_ref() == order)
-        .unwrap_or_else(|| panic!("missing index with order {order:?}"))
-}
-
 fn display_morphism_components<'a>(
     typ: TypeId,
     ctx: &'a RustGenCtx<'a>,
@@ -2445,56 +2274,25 @@ fn display_morphism_components<'a>(
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
-        let ids = ctx
-            .signature()
-            .ids_for_model_type(typ)
-            .expect("typ is model type");
-        let parent_len = ctx.signature().type_(typ).parents.len();
-
-        let dom_rel = FlatInRel::Rel(FlatRel::Func(ids.dom));
-        let cod_rel = FlatInRel::Rel(FlatRel::Func(ids.cod));
-        let obj_rel = if parent_len == 0 {
-            FlatInRel::TypeSet(typ)
-        } else {
-            FlatInRel::Rel(FlatRel::ModelMember(typ))
-        };
-
-        let dom_indices = index_selection
-            .indices
-            .get(&dom_rel)
-            .expect("dom rel should have indices");
-        let cod_indices = index_selection
-            .indices
-            .get(&cod_rel)
-            .expect("cod rel should have indices");
-        let obj_indices = index_selection
-            .indices
-            .get(&obj_rel)
-            .expect("object rel should have indices");
-
-        let mut dom_order: Vec<usize> = (0..parent_len).collect();
-        dom_order.push(parent_len + 1);
-        dom_order.push(parent_len);
-        let cod_order: Vec<usize> = (0..parent_len + 2).collect();
-        let obj_order: Vec<usize> = (0..parent_len + 1).collect();
-
+        let plan = &ctx.transport().models[&typ];
+        let parent_len = plan.parents.len();
         let dom = indices::read_method(
-            &dom_rel,
-            index_with_order(dom_indices, &dom_order),
+            &plan.graph.dom.rel,
+            &plan.graph.dom.index,
             index_selection,
             ctx,
             prepared,
         );
         let cod = indices::read_method(
-            &cod_rel,
-            index_with_order(cod_indices, &cod_order),
+            &plan.graph.cod.rel,
+            &plan.graph.cod.index,
             index_selection,
             ctx,
             prepared,
         );
         let obj = indices::read_method(
-            &obj_rel,
-            index_with_order(obj_indices, &obj_order),
+            &plan.graph.objects.rel,
+            &plan.graph.objects.index,
             index_selection,
             ctx,
             prepared,
@@ -2528,103 +2326,51 @@ fn display_remap_parented_index<'a>(
     prepare_maps: Option<&'a BTreeSet<(FlatInRel, IndexSpec)>>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let flat_arity = flat_in_rel.arity(ctx.signature());
+        let remap = ctx
+            .transport()
+            .index(&flat_in_rel, &index_spec, parent_model_type);
         let preparation = FmtFn(|f| {
             for (rel, index) in prepare_maps.into_iter().flatten() {
                 write!(f, "{}", indices::prepare(rel, index, index_selection, ctx))?;
             }
             Ok(())
         });
-        let arity: Vec<_> = index_spec
-            .order
-            .iter()
-            .copied()
-            .map(|i| flat_arity[i])
-            .collect();
-        let arity = arity.as_slice();
-
         let index_field_name =
             display_current_index_field_name(&flat_in_rel, &index_spec, ctx).to_string();
         let index_field_name = index_field_name.as_str();
-        let parent_cols = parent_prefix_len(&flat_in_rel, ctx);
-        let columns: Vec<_> = index_spec
-            .order
+        let prefix_len = remap.prefix;
+        let suffix_len = remap.suffix;
+        let member_maps = remap
+            .maps
             .iter()
-            .copied()
-            .map(|column_index| {
-                morphism_index_column_kind(
-                    &flat_in_rel,
-                    parent_model_type,
-                    column_index,
-                    parent_cols,
-                    flat_arity[column_index],
-                    ctx,
-                )
+            .map(|(i, read)| {
+                let map =
+                    display_mor_app_map_expr(read, ctx, index_selection, prepare_maps.is_some());
+                format!("let map_el{i} = {map};")
             })
-            .collect();
-        let prefix_len = columns
-            .iter()
-            .rposition(|column| column.needs_prefix_walk())
-            .expect("index over a parented relation should contain the parent")
-            + 1;
-        let suffix_len = arity.len() - prefix_len;
-        let member_maps = columns
-            .iter()
-            .copied()
-            .enumerate()
-            .filter_map(|(i, column)| match column {
-                MorphismIndexColumnKind::Member(typ) => Some(FmtFn(move |f| {
-                    let map = display_mor_app_map_expr(
-                        parent_model_type,
-                        typ,
-                        ctx,
-                        index_selection,
-                        prepare_maps.is_some(),
-                    );
-                    writedoc! {f, "
-                        let map_el{i} = {map};
-                    "}
-                })),
-                MorphismIndexColumnKind::OuterParent(_)
-                | MorphismIndexColumnKind::Parent
-                | MorphismIndexColumnKind::Copy => None,
-            })
-            .format("\n");
-
-        let owner_len = ctx.signature().type_(parent_model_type).parents.len() + 1;
-        let checkpointed = index_spec
-            .order
-            .iter()
-            .take(owner_len)
-            .copied()
-            .eq(0..owner_len);
-        let target_prefix: Vec<_> = (0..owner_len - 1)
-            .map(|i| format!("parents[{i}]"))
-            .chain(once("*cod".to_string()))
-            .collect();
-        let collect_propagated = if checkpointed {
-            display_morphism_index_prefix_walk_from(
-                &columns,
-                owner_len,
-                arity.len() - owner_len,
-                "source_delta".to_string(),
+            .join("\n");
+        let owner_len = remap.owners;
+        let collect_propagated = if let Some(walk) = &remap.checkpoint {
+            display_transport_walk(
+                walk,
+                remap.arity - owner_len,
+                "source_delta".to_owned(),
                 true,
-                target_prefix.clone(),
             )
         } else {
-            display_morphism_index_prefix_walk(
-                &columns,
-                arity.len(),
+            display_transport_walk(
+                &remap.walk,
+                remap.arity,
                 format!("{index_field_name}_all"),
                 true,
             )
-            .to_string()
         };
         let apply_propagated = display_apply_morphism_index_propagated(
             index_field_name,
-            arity.len(),
+            remap.arity,
             prefix_len,
             suffix_len,
+            &remap.application,
         );
         let suffix_type = display_prefix_tree_type(suffix_len);
 
@@ -2635,7 +2381,7 @@ fn display_remap_parented_index<'a>(
             }
         };
         let invalidate = indices::invalidate(relation, index_selection, ctx);
-        if !checkpointed {
+        if remap.checkpoint.is_none() {
             return writedoc! {f, r#"
                 {{
                 {preparation}
@@ -2664,62 +2410,44 @@ fn display_remap_parented_index<'a>(
                 format!("{tree}.and_then(|tree| tree.get({el}))")
             })
         };
-        let dim = arity.len() - owner_len;
+        let dim = remap.arity - owner_len;
         let source_slice = format!(
             "{}.unwrap_or_else(|| PrefixTree{dim}::empty())",
             source_slice("*dom")
         );
-        let maps = columns
+        let maps = remap
+            .maps
             .iter()
-            .enumerate()
-            .filter_map(|(i, column)| match column {
-                MorphismIndexColumnKind::Member(_) => Some(format!("map_el{i}.clone()")),
-                MorphismIndexColumnKind::OuterParent(_)
-                | MorphismIndexColumnKind::Parent
-                | MorphismIndexColumnKind::Copy => None,
-            })
+            .map(|(i, _)| format!("map_el{i}.clone()"))
             .join(", ");
-        let map_columns: Vec<_> = columns
+        let collect_map_deltas = remap
+            .map_deltas
             .iter()
-            .enumerate()
-            .filter_map(|(column, kind)| match kind {
-                MorphismIndexColumnKind::Member(_) => Some(column),
-                MorphismIndexColumnKind::OuterParent(_)
-                | MorphismIndexColumnKind::Parent
-                | MorphismIndexColumnKind::Copy => None,
-            })
-            .collect();
-        let collect_map_deltas = map_columns
-            .iter()
-            .enumerate()
-            .map(|(map, &column)| {
-                // Keep each changed-column case together so destination paths
-                // are merged once instead of rebuilt for individual image rows.
-                let collect = display_morphism_index_prefix_walk_from(
-                    &columns,
-                    owner_len,
-                    arity.len() - owner_len,
+            .map(|delta| {
+                let map = delta.map;
+                let column = delta.column;
+                let walk = remap.checkpoint.as_ref().unwrap();
+                let collect = display_transport_walk(
+                    walk,
+                    remap.arity - owner_len,
                     "source".to_owned(),
                     true,
-                    target_prefix.clone(),
                 );
-                let stable = if map + 1 < map_columns.len() {
-                    // Attribute a combination to its first changed map column,
-                    // so simultaneous image changes do not repeat its suffix.
+                let stable = if delta.subtract {
                     formatdoc! {"
-                        let stable_map_el{column} = map_el{column}.difference(&map_deltas[{map}]);
-                        let map_el{column} = &stable_map_el{column};
-                    "}
+                    let stable_map_el{column} = map_el{column}.difference(&map_deltas[{map}]);
+                    let map_el{column} = &stable_map_el{column};
+                "}
                 } else {
                     String::new()
                 };
                 formatdoc! {"
-                    if !map_deltas[{map}].is_empty() {{
-                        let map_el{column} = &map_deltas[{map}];
-                        {collect}
-                    }}
-                    {stable}
-                "}
+                if !map_deltas[{map}].is_empty() {{
+                    let map_el{column} = &map_deltas[{map}];
+                    {collect}
+                }}
+                {stable}
+            "}
             })
             .join("\n");
         writedoc! {f, r#"
@@ -2760,38 +2488,15 @@ fn display_propagate_model_morphisms_fn<'a>(
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let type_snake = display_type(typ, ctx).to_string().to_case(Snake);
-        let parent_len = ctx.signature().type_(typ).parents.len();
-        let components = display_morphism_components(typ, ctx, index_selection, plan.is_some());
-        let prepare_graph = FmtFn(|f| {
-            if let Some(plan) = plan {
-                for (rel, index) in plan.graph_indices.get(&typ).into_iter().flatten() {
-                    write!(f, "{}", indices::prepare(rel, index, index_selection, ctx))?;
-                }
-            }
-            Ok(())
-        });
-        let relations: Vec<_> = index_selection
-            .indices
-            .iter()
-            .filter(|(rel, _)| ctx.has_shared_indices(rel))
-            .filter(|(rel, _)| propagation_includes(plan, rel))
-            .filter(|(rel, _)| match rel {
-                FlatInRel::Rel(rel) => {
-                    rel.parent_model_type(ctx.signature())
-                        .is_some_and(|parent| {
-                            parent == typ || ctx.signature().type_(parent).parents.contains(&typ)
-                        })
-                }
-                FlatInRel::RelWithDiagonals { .. }
-                | FlatInRel::Equality(_)
-                | FlatInRel::TypeSet(_) => false,
-            })
-            .map(|(rel, _)| rel)
-            .collect();
+        let parent_len = ctx.transport().models[&typ].parents.len();
+        let group = &ctx.transport().group(plan).models[&typ];
+        let relations: Vec<_> = group.relations.iter().collect();
         let relation_count = relations.len();
-        let frontier = transport::prepare_frontier(typ, &relations, plan, ctx, index_selection);
-        let finish_frontier = transport::finish_frontier(typ, &relations, ctx, index_selection);
-        let compact_graph = compact_indices::graph_guard(typ, ctx);
+        let driver = transport::Driver {
+            model: typ,
+            kind: transport::DriverKind::Propagation { suffix, plan },
+        };
+        let body = transport::display_driver(&group.body, &driver, ctx, index_selection);
         let compact_selected = compact_indices::selected_guard(typ, ctx);
         let remaps = relations
             .iter()
@@ -2816,84 +2521,12 @@ fn display_propagate_model_morphisms_fn<'a>(
             })
             .format("\n");
 
-        let child_parents = (0..parent_len)
-            .map(|i| format!("parents[{i}]"))
-            .chain(once("object".to_string()))
-            .format(", ")
-            .to_string();
-        let children = ctx
-            .signature()
-            .iter_model_decls()
-            .filter(|(_, ids)| ctx.signature().type_(ids.type_).parents.last() == Some(&typ))
-            .filter(|(_, ids)| plan.is_none_or(|plan| plan.models.contains(&ids.type_)))
-            .map(|(_, ids)| {
-                let child_snake = display_type(ids.type_, ctx).to_string().to_case(Snake);
-                format!("component_changed |= self.__propagate_{child_snake}_morphisms{suffix}([{child_parents}], retain_component_own);")
-            })
-            .format("\n")
-            .to_string();
-        // Cyclic inheritance cannot replace owned facts: every copy might
-        // otherwise depend on another copy in the same cycle. This applies
-        // to nested graphs too, since outer maps can close an inner path.
         writedoc! {f, "
             #[allow(unused_variables, unused_mut)]
             fn __propagate_{type_snake}_morphisms{suffix}(
                 &mut self, parents: [u32; {parent_len}], retain_own: bool,
             ) -> bool {{
-                {prepare_graph}
-                {components}
-                {compact_graph}
-                {frontier}
-                if !transport_all && transport_work.iter().all(|work| work.is_empty()) {{
-                    return false;
-                }}
-                let mut changed = false;
-                for component in components.iter() {{
-                    let cyclic = !component.internal.is_empty();
-                    let retain_component_own = retain_own || cyclic;
-                    loop {{
-                        let mut component_changed = false;
-                        for &object in &component.objects {{
-                            {children}
-                        }}
-                        for morphism in &component.internal {{
-                            let active: [bool; {relation_count}] = std::array::from_fn(
-                                |i| transport_all || transport_work[i].needs_visit(morphism),
-                            );
-                            if !active.iter().any(|&active| active) {{ continue; }}
-                            let mut inserted = [false; {relation_count}];
-                            component_changed |= self.__propagate_{type_snake}_morphism_selected{suffix}(
-                                parents, morphism, retain_component_own, &active, &mut inserted,
-                            );
-                            if !transport_all {{
-                                for (work, inserted) in transport_work.iter_mut().zip(inserted) {{
-                                    if inserted {{ work.mark_changed(morphism.cod); }}
-                                }}
-                            }}
-                        }}
-                        changed |= component_changed;
-                        if !cyclic || !component_changed {{
-                            break;
-                        }}
-                    }}
-                    for morphism in &component.outgoing {{
-                        let active: [bool; {relation_count}] = std::array::from_fn(
-                            |i| transport_all || transport_work[i].needs_visit(morphism),
-                        );
-                        if !active.iter().any(|&active| active) {{ continue; }}
-                        let mut inserted = [false; {relation_count}];
-                        changed |= self.__propagate_{type_snake}_morphism_selected{suffix}(
-                            parents, morphism, retain_own, &active, &mut inserted,
-                        );
-                        if !transport_all {{
-                            for (work, inserted) in transport_work.iter_mut().zip(inserted) {{
-                                if inserted {{ work.mark_changed(morphism.cod); }}
-                            }}
-                        }}
-                    }}
-                }}
-                {finish_frontier}
-                changed
+                {body}
             }}
 
             #[allow(unused_variables, unused_mut)]
@@ -2926,15 +2559,6 @@ fn display_propagate_model_morphisms_fn<'a>(
     })
 }
 
-fn propagation_includes(plan: Option<&PropagationPlan>, rel: &FlatInRel) -> bool {
-    plan.is_none_or(|plan| match rel {
-        FlatInRel::Rel(rel) => plan.relations.contains(rel),
-        FlatInRel::RelWithDiagonals { .. } | FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => {
-            false
-        }
-    })
-}
-
 fn display_recompute_model_indices_fn<'a>(
     ctx: &'a RustGenCtx<'a>,
     index_selection: &'a IndexSelection,
@@ -2942,28 +2566,26 @@ fn display_recompute_model_indices_fn<'a>(
     suffix: &'a str,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let propagation_functions = ctx
-            .signature()
-            .iter_model_decls()
-            .filter(|(_, ids)| plan.is_none_or(|plan| plan.models.contains(&ids.type_)))
-            .map(|(_, ids)| {
-                display_propagate_model_morphisms_fn(ids.type_, ctx, index_selection, plan, suffix)
+        let group = ctx.transport().group(plan);
+        let propagation_functions = group
+            .order
+            .iter()
+            .map(|&model| {
+                display_propagate_model_morphisms_fn(model, ctx, index_selection, plan, suffix)
             })
             .format("\n");
-        let propagate = ctx
-            .signature()
-            .iter_model_decls()
-            .filter(|(_, ids)| ctx.signature().type_(ids.type_).parents.is_empty())
-            .filter(|(_, ids)| plan.is_none_or(|plan| plan.models.contains(&ids.type_)))
-            .map(|(_, ids)| {
-                let type_snake = display_type(ids.type_, ctx).to_string().to_case(Snake);
+        let propagate = group
+            .roots
+            .iter()
+            .map(|&model| {
+                let type_snake = display_type(model, ctx).to_string().to_case(Snake);
                 format!("self.__propagate_{type_snake}_morphisms{suffix}([], false);")
             })
             .format("\n");
-        let invalidate = iter_flat_rels(ctx.signature())
-            .filter(|rel| ctx.has_shared_indices(&FlatInRel::Rel(*rel)))
-            .filter(|rel| propagation_includes(plan, &FlatInRel::Rel(*rel)))
-            .map(|rel| indices::invalidate(rel, index_selection, ctx))
+        let invalidate = group
+            .invalidated
+            .iter()
+            .map(|&rel| indices::invalidate(rel, index_selection, ctx))
             .format("\n")
             .to_string();
         writedoc! {f, "

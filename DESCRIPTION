@@ -17,5 +17,10 @@ owner loops, transport operations, history bindings, and change checks.
 Plan indexed storage views and desugared schedule control flow before
 selecting their Rust representations.
 
+Preserve the equality barrier, deferred function phases, and read-borrow
+lifetimes through explicit stratum and closure bodies in both backends.
+Expose inherited candidate scoring and proof retention, model traversal,
+and mapped-prefix walks as RAM operations instead of emitter decisions.
+
 Retain evaluator behavior and runtime operations while exposing their
 compiler decisions for independent review and execution-based checks.

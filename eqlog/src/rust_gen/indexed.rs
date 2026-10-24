@@ -9,15 +9,16 @@ use std::fmt::Display;
 use super::{
     display_index_field_name, display_module_env_struct_name, display_out_rows_field_name,
     display_out_set_field_name, display_out_set_type, display_rel, display_type,
-    display_type_fields, display_weight_static_name, module_env_in_rels, module_env_out_rels,
-    ElVar, RustGenCtx,
+    display_type_fields, display_weight_static_name, ElVar, RustGenCtx,
 };
 use crate::algebra::signature::{FuncId, TypeId};
 use crate::flat_eqlog::{
     iter_flat_rels, FlatInRel, FlatOutRel, FlatRel, IndexAge, IndexSelection, QuerySpec,
 };
 use crate::fmt_util::FmtFn;
-use crate::ram::{IndexedPlan, IndexedStmt, RamProgram};
+use crate::ram::{
+    IndexedCondition, IndexedLifecycle, IndexedOperation, IndexedPlan, IndexedStmt, RamProgram,
+};
 
 pub(super) struct Tables<'a> {
     plan: Option<&'a IndexedPlan>,
@@ -36,10 +37,6 @@ impl<'a> Tables<'a> {
 
     fn sources(&self) -> impl Iterator<Item = &FlatInRel> {
         self.plan().tables.keys()
-    }
-
-    fn position(&self, rel: &FlatInRel, order: &[usize]) -> usize {
-        self.plan().position(rel, order)
     }
 
     fn init(&self, source: &FlatInRel, _ctx: &RustGenCtx<'_>) -> String {
@@ -285,200 +282,185 @@ pub(super) fn display_strata<'a>(
                 {set_deferred}
             }}
         "}?;
-        let modules = &program.functions;
         for (s, stratum) in ctx.indexed().strata.iter().enumerate() {
-            let inputs = stratum;
             writedoc! {f, "
                 #[allow(unused_variables)]
                 #[inline(never)]
                 fn __run_stratum_{s}(&mut self, delta: &mut ModelDelta) -> bool {{
-                    let since = self.__since_{s};
             "}?;
-            let now = inputs
-                .sources
-                .iter()
-                .map(|source| {
-                    let field = table_field(source, ctx);
-                    format!("self.{field}.log_len()")
-                })
-                .join(", ");
-            let len = inputs.sources.len();
-            writeln!(f, "let now: [u32; {len}] = [{now}];")?;
-            let changed = inputs
-                .sources
-                .iter()
-                .enumerate()
-                .map(|(i, source)| {
-                    let field = table_field(source, ctx);
-                    format!("|| (since[{i}] < now[{i}] && self.{field}.changed_since(since[{i}]))")
-                })
-                .join(" ");
-            writedoc! {f, "
-                if !(!self.__stratum_initialized[{s}] {changed}) {{
-                    return false;
-                }}
-                self.__stratum_initialized[{s}] = true;
-                self.__since_{s} = now;
-                self.__sync_tables();
-                let work: usize = now.iter().zip(&since).map(|(now, since)| (now - since) as usize).sum();
-            "}?;
-            let deltas: Vec<_> = stratum
-                .deltas
-                .iter()
-                .map(|&k| (k, &stratum.reads[k]))
-                .collect();
-            for (k, ((_, index), _)) in &deltas {
-                let width = index.order.len();
-                writeln!(f, "let mut delta_{k}: Vec<[u32; {width}]> = Vec::new();")?;
-            }
-            if !deltas.is_empty() {
-                writeln!(
-                    f,
-                    "{{ let mut tasks: Vec<eqlog_runtime::Task<'_>> = Vec::new();"
-                )?;
-                for (k, ((rel, index), source)) in &deltas {
-                    let field = table_field(&inputs.sources[*source], ctx);
-                    let position = tables.position(rel, &index.order);
-                    let width = index.order.len();
-                    writedoc! {f, "
-                        if since[{source}] < now[{source}] {{
-                            let (table, delta, since) = (&self.{field}, &mut delta_{k}, since[{source}]);
-                            tasks.push(Box::new(move || *delta = table.delta::<{width}>({position}, since)));
-                        }}
-                    "}?;
-                }
-                writeln!(f, "eqlog_runtime::run_tasks(work, tasks); }}")?;
-            }
-            let buffers = &stratum.buffers;
-            for (i, rel) in buffers {
-                let field = display_out_set_field_name(rel, ctx);
-                writeln!(
-                    f,
-                    "let mut __out_{i}_{field} = std::mem::take(&mut self.__out_{s}_{i}_{field});"
-                )?;
-            }
-            let count = stratum.groups.len();
-            writedoc! {f, "
-                {{
-                let mut tasks: Vec<eqlog_runtime::Task<'_>> = Vec::with_capacity({count});
-            "}?;
-            for (i, &m) in stratum.groups.iter().enumerate() {
-                let module = &modules[m];
-                let env = display_module_env_struct_name(module);
-                let name = &module.name;
-                writeln!(f, "let env = {env} {{ phantom: std::marker::PhantomData,")?;
-                for (rel, index) in module_env_in_rels(module) {
-                    let env_field = display_index_field_name(&rel, &index, ctx);
-                    let k = inputs
-                        .reads
-                        .iter()
-                        .position(|(read, _)| read.0 == rel && read.1 == index)
-                        .expect("stratum inputs contain module inputs");
-                    let source = inputs.reads[k].1;
-                    let field = table_field(&inputs.sources[source], ctx);
-                    let position = tables.position(&rel, &index.order);
-                    match index.age {
-                        IndexAge::Old => writeln!(
-                            f,
-                            "{env_field}: self.{field}.view_before({position}, since[{source}]),"
-                        )?,
-                        IndexAge::All => {
-                            writeln!(f, "{env_field}: self.{field}.view({position}),")?
-                        }
-                        IndexAge::New => {
-                            writeln!(f, "{env_field}: eqlog_runtime::RowsView::new(&delta_{k}),")?
-                        }
-                    }
-                }
-                for rel in module_env_out_rels(module) {
-                    let field = display_out_set_field_name(&rel, ctx);
-                    writeln!(f, "{field}: &mut __out_{i}_{field},")?;
-                    match rel {
-                        FlatOutRel::Rel(out_rel) => {
-                            let rows = display_out_rows_field_name(out_rel, ctx);
-                            let table = table_field(&FlatInRel::Rel(out_rel), ctx);
-                            writeln!(f, "{rows}: &self.{table},")?;
-                        }
-                        FlatOutRel::Equality(_) | FlatOutRel::FuncDomain(_) => {}
-                    }
-                }
-                writeln!(f, "}}; tasks.push(Box::new(move || {name}(env)));")?;
-            }
-            writeln!(f, "eqlog_runtime::run_tasks(work, tasks);")?;
+            emit_operations(f, &stratum.body, s, program, ctx)?;
             writeln!(f, "}}")?;
-            let outputs: Vec<_> = stratum.producers.keys().collect();
-            let producers = |output: &FlatOutRel| stratum.producers[output].iter().copied();
-            let mut equalities = Vec::new();
-            for &output in &outputs {
-                match output {
-                    FlatOutRel::Equality(typ) => {
-                        let name = display_type(*typ, ctx).to_string().to_case(Case::Snake);
-                        let field = display_out_set_field_name(output, ctx);
-                        for i in producers(output) {
-                            writedoc! {f, "
-                                for [lhs, rhs] in __out_{i}_{field}.drain(..) {{
-                                    self.__equate_{name}(lhs.into(), rhs.into());
-                                }}
-                            "}?;
-                        }
-                        equalities.push(format!("!self.{name}_uprooted.is_empty()"));
-                    }
-                    FlatOutRel::Rel(_) | FlatOutRel::FuncDomain(_) => {}
-                }
-            }
-            if !equalities.is_empty() {
-                let changed = equalities.join(" || ");
-                writeln!(f, "if {changed} {{ self.__canonicalize_relations(); }}")?;
-            }
-            for &output in &outputs {
-                let field = display_out_set_field_name(output, ctx);
-                match output {
-                    FlatOutRel::Rel(rel) => {
-                        let insert = ctx.internal_insert_name(*rel);
-                        let args = (0..rel.arity(ctx.signature()).len())
-                            .map(|i| format!("arg{i}"))
-                            .collect::<Vec<_>>();
-                        let converted = args.iter().map(|arg| format!("{arg}.into()")).join(", ");
-                        let args = args.join(", ");
-                        let table = table_field(&FlatInRel::Rel(*rel), ctx);
-                        for i in producers(output) {
-                            writedoc! {f, "
-                                for [{args}] in __out_{i}_{field}.drain(..) {{
-                                    if !self.{table}.contains([{args}]) {{ self.{insert}({converted}); }}
-                                }}
-                            "}?;
-                        }
-                    }
-                    FlatOutRel::FuncDomain(_) => {
-                        for i in producers(output) {
-                            writeln!(f, "delta.{field}.append(&mut __out_{i}_{field});")?;
-                        }
-                    }
-                    FlatOutRel::Equality(_) => {}
-                }
-            }
-            for (i, rel) in buffers {
-                let field = display_out_set_field_name(rel, ctx);
-                writeln!(f, "self.__out_{s}_{i}_{field} = __out_{i}_{field};")?;
-            }
-            writeln!(f, "self.__normalize_functions();")?;
-            writeln!(f, "true }}")?;
         }
         Ok(())
     })
 }
 
-fn emit_schedule(f: &mut std::fmt::Formatter<'_>, body: &[IndexedStmt]) -> std::fmt::Result {
+fn emit_operations(
+    f: &mut std::fmt::Formatter<'_>,
+    body: &[IndexedOperation],
+    s: usize,
+    program: &RamProgram,
+    ctx: &RustGenCtx<'_>,
+) -> std::fmt::Result {
+    let stratum = &ctx.indexed().strata[s];
+    for operation in body {
+        match operation {
+            IndexedOperation::SnapshotCursors => {
+                let now = stratum.sources.iter().map(|source| { let field=table_field(source,ctx); format!("self.{field}.log_len()") }).join(", ");
+                let len=stratum.sources.len();
+                writeln!(f,"let since = self.__since_{s}; let now: [u32; {len}] = [{now}];")?;
+            }
+            IndexedOperation::ReturnUnlessChanged => {
+                let changed=stratum.sources.iter().enumerate().map(|(i,source)| {let field=table_field(source,ctx); format!("|| (since[{i}] < now[{i}] && self.{field}.changed_since(since[{i}]))")}).join(" ");
+                writeln!(f,"if !(!self.__stratum_initialized[{s}] {changed}) {{ return false; }}")?;
+            }
+            IndexedOperation::SaveCursors => writeln!(f,"self.__stratum_initialized[{s}] = true; self.__since_{s} = now;")?,
+            IndexedOperation::SyncTables => writeln!(f,"self.__sync_tables();")?,
+            IndexedOperation::ComputeWork => writeln!(f,"let work: usize = now.iter().zip(&since).map(|(now, since)| (now - since) as usize).sum();")?,
+            IndexedOperation::AllocateDelta(id) => { let width=stratum.reads[*id].index.order.len(); writeln!(f,"let mut delta_{id}: Vec<[u32; {width}]> = Vec::new();")?; }
+            IndexedOperation::Block(body) => { writeln!(f,"{{")?; emit_operations(f,body,s,program,ctx)?; writeln!(f,"}}")?; }
+            IndexedOperation::InitializeTasks { capacity } => {
+                let value=capacity.map_or_else(|| "new()".to_owned(),|capacity| format!("with_capacity({capacity})"));
+                writeln!(f,"let mut tasks: Vec<eqlog_runtime::Task<'_>> = Vec::{value};")?;
+            }
+            IndexedOperation::WhenAdvanced { source,body } => {
+                writeln!(f,"if since[{source}] < now[{source}] {{")?;
+                emit_operations(f,body,s,program,ctx)?;
+                writeln!(f,"}}")?;
+            }
+            IndexedOperation::QueueDelta(id) => {
+                let read=&stratum.reads[*id];
+                let source=read.source; let position=read.position; let width=read.index.order.len(); let field=table_field(&stratum.sources[source],ctx);
+                writedoc! {f, "
+                    let (table, delta, since) = (&self.{field}, &mut delta_{id}, since[{source}]);
+                    tasks.push(Box::new(move || *delta = table.delta::<{width}>({position}, since)));
+                "}?;
+            }
+            IndexedOperation::RunTasks => writeln!(f,"eqlog_runtime::run_tasks(work, tasks);")?,
+            IndexedOperation::TakeOutput { producer,rel } => {
+                let field=display_out_set_field_name(rel,ctx);
+                writeln!(f,"let mut __out_{producer}_{field} = std::mem::take(&mut self.__out_{s}_{producer}_{field});")?;
+            }
+            IndexedOperation::QueueCall(call) => {
+                let module=&program.functions[call.function];
+                let env=display_module_env_struct_name(module); let name=&module.name; let i=call.producer;
+                writeln!(f,"let env = {env} {{ phantom: std::marker::PhantomData,")?;
+                for &id in &call.inputs {
+                    let read=&stratum.reads[id];
+                    let env_field=display_index_field_name(&read.rel,&read.index,ctx);
+                    let source=read.source; let position=read.position; let field=table_field(&stratum.sources[source],ctx);
+                    match read.index.age {
+                        IndexAge::Old => writeln!(f,"{env_field}: self.{field}.view_before({position}, since[{source}]),")?,
+                        IndexAge::All => writeln!(f,"{env_field}: self.{field}.view({position}),")?,
+                        IndexAge::New => writeln!(f,"{env_field}: eqlog_runtime::RowsView::new(&delta_{id}),")?,
+                    }
+                }
+                for rel in &call.outputs {
+                    let field=display_out_set_field_name(rel,ctx);
+                    writeln!(f,"{field}: &mut __out_{i}_{field},")?;
+                    match rel {
+                        FlatOutRel::Rel(rel) => { let rows=display_out_rows_field_name(*rel,ctx); let table=table_field(&FlatInRel::Rel(*rel),ctx); writeln!(f,"{rows}: &self.{table},")?; }
+                        FlatOutRel::Equality(_) | FlatOutRel::FuncDomain(_) => {}
+                    }
+                }
+                writeln!(f,"}}; tasks.push(Box::new(move || {name}(env)));")?;
+            }
+            IndexedOperation::ApplyEquality { producer,typ } => {
+                let name=type_snake(*typ,ctx); let rel=FlatOutRel::Equality(*typ); let field=display_out_set_field_name(&rel,ctx);
+                writedoc! {f, "
+                    for [lhs, rhs] in __out_{producer}_{field}.drain(..) {{
+                        self.__equate_{name}(lhs.into(), rhs.into());
+                    }}
+                "}?;
+            }
+            IndexedOperation::CanonicalizeEqualities(types) => {
+                let changed=types.iter().map(|&typ| { let name=type_snake(typ,ctx); format!("!self.{name}_uprooted.is_empty()") }).join(" || ");
+                writeln!(f,"if {changed} {{ self.__canonicalize_relations(); }}")?;
+            }
+            IndexedOperation::Insert { producer,rel,arity } => {
+                let output=FlatOutRel::Rel(*rel); let field=display_out_set_field_name(&output,ctx); let insert=ctx.internal_insert_name(*rel); let table=table_field(&FlatInRel::Rel(*rel),ctx);
+                let args=(0..*arity).map(|i|format!("arg{i}")).collect::<Vec<_>>(); let converted=args.iter().map(|arg|format!("{arg}.into()")).join(", "); let args=args.join(", ");
+                writedoc! {f, "
+                    for [{args}] in __out_{producer}_{field}.drain(..) {{
+                        if !self.{table}.contains([{args}]) {{ self.{insert}({converted}); }}
+                    }}
+                "}?;
+            }
+            IndexedOperation::AppendPending { producer,rel } => { let field=display_out_set_field_name(rel,ctx); writeln!(f,"delta.{field}.append(&mut __out_{producer}_{field});")?; }
+            IndexedOperation::RestoreOutput { producer,rel } => { let field=display_out_set_field_name(rel,ctx); writeln!(f,"self.__out_{s}_{producer}_{field} = __out_{producer}_{field};")?; }
+            IndexedOperation::NormalizeFunctions => writeln!(f,"self.__normalize_functions();")?,
+            IndexedOperation::ReturnChanged => writeln!(f,"true")?,
+        }
+    }
+    Ok(())
+}
+
+fn emit_schedule(
+    f: &mut std::fmt::Formatter<'_>,
+    body: &[IndexedStmt],
+    ctx: &RustGenCtx<'_>,
+) -> std::fmt::Result {
     for stmt in body {
         match stmt {
+            IndexedStmt::When { condition, body } => {
+                let condition = match condition {
+                    IndexedCondition::Closed => "self.__closed".to_owned(),
+                    IndexedCondition::NoAllocationOrNormalization => {
+                        "!self.__allocated && !normalized".to_owned()
+                    }
+                    IndexedCondition::NoPendingEqualities => "!pending".to_owned(),
+                    IndexedCondition::AnyUprooted(types) => {
+                        let checks = types
+                            .iter()
+                            .map(|&typ| {
+                                let name = type_snake(typ, ctx);
+                                format!("|| !self.{name}_uprooted.is_empty()")
+                            })
+                            .join(" ");
+                        format!("false {checks}")
+                    }
+                };
+                writeln!(f, "if {condition} {{")?;
+                emit_schedule(f, body, ctx)?;
+                writeln!(f, "}}")?;
+            }
+            IndexedStmt::ApplyFunctionalEqualities(typ) => {
+                let name = type_snake(*typ, ctx);
+                writeln!(f,"for [lhs, rhs] in std::mem::take(&mut self.__functional_{name}) {{ pending = true; self.__equate_{name}(lhs.into(), rhs.into()); }}")?;
+            }
+            IndexedStmt::Lifecycle(operation) => {
+                let value=match operation {
+                    IndexedLifecycle::SetDeferred(value) => format!("self.__set_tables_deferred({value});"),
+                    IndexedLifecycle::CallDeferredClose => "let result = self.__close_until_deferred(condition);".to_owned(),
+                    IndexedLifecycle::ReturnResult => "result".to_owned(),
+                    IndexedLifecycle::CanonicalizeRelations => "self.__canonicalize_relations();".to_owned(),
+                    IndexedLifecycle::NormalizeFunctions => "self.__normalize_functions();".to_owned(),
+                    IndexedLifecycle::CheckConditionBeforeDelta => "if self.__check_condition(condition) { return true; }".to_owned(),
+                    IndexedLifecycle::TakeDelta => "let mut delta = std::mem::replace(&mut self.__pending_delta, ModelDelta::new());".to_owned(),
+                    IndexedLifecycle::ClearAllocated => "self.__allocated = false;".to_owned(),
+                    IndexedLifecycle::ApplyDeferredFunctions => "delta.apply_func_defs(self);".to_owned(),
+                    IndexedLifecycle::RecordNormalized => "let normalized = self.__normalize_functions();".to_owned(),
+                    IndexedLifecycle::SaveDelta => "std::mem::swap(&mut self.__pending_delta, &mut delta);".to_owned(),
+                    IndexedLifecycle::Canonicalize => "self.canonicalize();".to_owned(),
+                    IndexedLifecycle::MarkClosed => "self.__closed = true;".to_owned(),
+                    IndexedLifecycle::ReturnFalse => "return false;".to_owned(),
+                    IndexedLifecycle::ReturnCondition => "return condition.is_some_and(|condition| condition(self));".to_owned(),
+                    IndexedLifecycle::InitializeNormalization => "let mut changed = false;".to_owned(),
+                    IndexedLifecycle::InitializePending => "let mut pending = false;".to_owned(),
+                    IndexedLifecycle::MarkNormalizationChanged => "changed = true;".to_owned(),
+                    IndexedLifecycle::ReturnNormalizationChanged => "return changed;".to_owned(),
+                };
+                writeln!(f, "{value}")?;
+            }
+
             IndexedStmt::Loop(body) => {
                 writeln!(f, "loop {{")?;
-                emit_schedule(f, body)?;
+                emit_schedule(f, body, ctx)?;
                 writeln!(f, "}}")?;
             }
             IndexedStmt::WhenChanged { stratum, body } => {
                 writeln!(f, "if self.__run_stratum_{stratum}(&mut delta) {{")?;
-                emit_schedule(f, body)?;
+                emit_schedule(f, body, ctx)?;
                 writeln!(f, "}}")?;
             }
             IndexedStmt::InitializeChanges(id) => writeln!(f, "let mut active_{id} = false;")?,
@@ -500,40 +482,12 @@ pub(super) fn display_close<'a>(
     ctx: &'a RustGenCtx<'a>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let codomains = &ctx.indexed().function_codomains;
-        let equate = codomains
-            .iter()
-            .map(|&typ| {
-                let name = type_snake(typ, ctx);
-                format!(
-                    "for [lhs, rhs] in std::mem::take(&mut self.__functional_{name}) {{ pending = true; self.__equate_{name}(lhs.into(), rhs.into()); }}"
-                )
-            })
-            .join("\n");
-        let uprooted = codomains
-            .iter()
-            .map(|&typ| {
-                let name = type_snake(typ, ctx);
-                format!("|| !self.{name}_uprooted.is_empty()")
-            })
-            .join(" ");
         writedoc! {f, "
             #[allow(unused_mut)]
             fn __normalize_functions(&mut self) -> bool {{
-                let mut changed = false;
-                loop {{
-                    let mut pending = false;
-                    {equate}
-                    if !pending {{
-                        return changed;
-                    }}
-                    if false {uprooted} {{
-                        changed = true;
-                        self.__canonicalize_relations();
-                    }}
-                }}
-            }}
         "}?;
+        emit_schedule(f, &ctx.indexed().normalize, ctx)?;
+        writeln!(f, "}}")?;
         writedoc! {f, "
             /// Closes the model until the condition holds or all rules are satisfied.
             /// Depending on the axioms, this may run indefinitely.
@@ -543,41 +497,14 @@ pub(super) fn display_close<'a>(
             }}
 
             fn __close_until(&mut self, condition: Option<&dyn Fn(&Self) -> bool>) -> bool {{
-                self.__set_tables_deferred(true);
-                let result = self.__close_until_deferred(condition);
-                self.__set_tables_deferred(false);
-                result
-            }}
-
-            fn __close_until_deferred(&mut self, condition: Option<&dyn Fn(&Self) -> bool>) -> bool {{
-                if self.__closed {{
-                    return condition.is_some_and(|condition| condition(self));
-                }}
-                self.__canonicalize_relations();
-                self.__normalize_functions();
-                if self.__check_condition(condition) {{ return true; }}
-                let mut delta = std::mem::replace(&mut self.__pending_delta, ModelDelta::new());
-                loop {{
         "}?;
-        emit_schedule(f, &ctx.indexed().body)?;
+        emit_schedule(f, &ctx.indexed().wrapper, ctx)?;
         writedoc! {f, "
-                    self.__allocated = false;
-                    // Defining functions evaluates them through the tries.
-                    self.__set_tables_deferred(false);
-                    delta.apply_func_defs(self);
-                    self.__set_tables_deferred(true);
-                    let normalized = self.__normalize_functions();
-                    if !self.__allocated && !normalized {{
-                        std::mem::swap(&mut self.__pending_delta, &mut delta);
-                        self.canonicalize();
-                        self.__closed = true;
-                        return false;
-                    }}
-                    self.__canonicalize_relations();
-                    self.__normalize_functions();
-                }}
             }}
-        "}
+            fn __close_until_deferred(&mut self, condition: Option<&dyn Fn(&Self) -> bool>) -> bool {{
+        "}?;
+        emit_schedule(f, &ctx.indexed().body, ctx)?;
+        writeln!(f, "}}")
     })
 }
 

@@ -501,6 +501,15 @@ pub fn flat_rule_groups_to_ram(
         ModelMode::Desugared => EvaluationPlan::default(),
     };
     RamProgram {
+        transport: TransportPlan::new(
+            signature,
+            index_selection,
+            mode,
+            &compact,
+            &preparations,
+            &model_preparations,
+            &native_indices,
+        ),
         compact,
         evaluation,
         indexed: match mode {

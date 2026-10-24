@@ -4,7 +4,7 @@ use crate::algebra::signature::{FuncId, Signature, TypeId, TypeKind};
 use crate::ast::Ast;
 use crate::flat_eqlog::{FlatInRel, FlatRel};
 use crate::options::ModelMode;
-use crate::ram::{CompactPlan, IndexedPlan};
+use crate::ram::{CompactPlan, IndexedPlan, TransportPlan};
 
 pub(crate) struct RustGenCtx<'a> {
     ast: &'a Ast,
@@ -12,6 +12,7 @@ pub(crate) struct RustGenCtx<'a> {
     model_mode: ModelMode,
     compact: &'a CompactPlan,
     indexed: Option<&'a IndexedPlan>,
+    transport: &'a TransportPlan,
 }
 
 impl<'a> RustGenCtx<'a> {
@@ -21,6 +22,7 @@ impl<'a> RustGenCtx<'a> {
         model_mode: ModelMode,
         compact: &'a CompactPlan,
         indexed: Option<&'a IndexedPlan>,
+        transport: &'a TransportPlan,
     ) -> Self {
         Self {
             ast,
@@ -28,6 +30,7 @@ impl<'a> RustGenCtx<'a> {
             model_mode,
             compact,
             indexed,
+            transport,
         }
     }
 
@@ -41,6 +44,10 @@ impl<'a> RustGenCtx<'a> {
 
     pub(crate) fn indexed(&self) -> &IndexedPlan {
         self.indexed.expect("indexed storage has a RAM plan")
+    }
+
+    pub(crate) fn transport(&self) -> &TransportPlan {
+        self.transport
     }
 
     pub(crate) fn supports_compact_members(&self, typ: TypeId) -> bool {

@@ -3,7 +3,7 @@ use crate::flat_eqlog::{FlatInRel, FlatOutRel, FlatRel, FlatRule, IndexSpec};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use super::{CompactPlan, EvaluationPlan, IndexedPlan};
+use super::{CompactPlan, EvaluationPlan, IndexedPlan, TransportPlan};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub enum Strictness {
@@ -260,6 +260,7 @@ pub struct ProofPlan {
 }
 
 pub struct RamProgram {
+    pub transport: TransportPlan,
     pub compact: CompactPlan,
     pub evaluation: EvaluationPlan,
     pub indexed: Option<IndexedPlan>,

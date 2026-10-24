@@ -11,86 +11,15 @@ pub(super) fn field(rel: &FlatInRel, model: TypeId, ctx: &RustGenCtx<'_>) -> Str
     format!("__transport_{model}_{name}")
 }
 
-fn is_leaf(model: TypeId, ctx: &RustGenCtx<'_>) -> bool {
-    !ctx.signature()
-        .iter_model_decls()
-        .any(|(_, ids)| ctx.signature().type_(ids.type_).parents.last() == Some(&model))
-}
-
-fn member_maps(
-    rel: &FlatInRel,
-    index: &IndexSpec,
-    model: TypeId,
-    ctx: &RustGenCtx<'_>,
-) -> Vec<TypeId> {
-    let arity = rel.arity(ctx.signature());
-    index
-        .order
-        .iter()
-        .filter_map(|&column| {
-            match morphism_index_column_kind(
-                rel,
-                model,
-                column,
-                parent_prefix_len(rel, ctx),
-                arity[column],
-                ctx,
-            ) {
-                MorphismIndexColumnKind::Member(member) => Some(member),
-                MorphismIndexColumnKind::Parent
-                | MorphismIndexColumnKind::OuterParent(_)
-                | MorphismIndexColumnKind::Copy => None,
-            }
-        })
-        .collect()
-}
-
-fn checkpoint_indices<'a>(
-    ctx: &'a RustGenCtx<'a>,
-    selection: &'a IndexSelection,
-    model: TypeId,
-) -> Vec<(&'a FlatInRel, &'a IndexSpec)> {
-    let parent_len = ctx.signature().type_(model).parents.len();
-    let mut result = Vec::new();
-    for (rel, index) in selection.current_indices() {
-        if !ctx.has_shared_indices(rel) || !selection.is_primary(rel, index) {
-            continue;
-        }
-        if !index
-            .order
-            .iter()
-            .take(parent_len + 1)
-            .copied()
-            .eq(0..parent_len + 1)
-        {
-            continue;
-        }
-        let relation = match rel {
-            FlatInRel::Rel(rel) => *rel,
-            FlatInRel::RelWithDiagonals { .. } | FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => {
-                continue
-            }
-        };
-        let Some(owner) = relation.parent_model_type(ctx.signature()) else {
-            continue;
-        };
-        if owner != model && !ctx.signature().type_(owner).parents.contains(&model) {
-            continue;
-        }
-        result.push((rel, index));
-    }
-    result
-}
-
 pub(super) fn fields<'a>(
     ctx: &'a RustGenCtx<'a>,
-    selection: &'a IndexSelection,
+    _selection: &'a IndexSelection,
     initialize: bool,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        for (_, ids) in ctx.signature().iter_model_decls() {
-            let model = ids.type_;
-            let parent_len = ctx.signature().type_(model).parents.len();
+        for &model in &ctx.transport().model_order {
+            let plan = &ctx.transport().models[&model];
+            let parent_len = plan.parents.len();
             let name = display_type(model, ctx).to_string().to_case(Snake);
             if ctx.model_mode() == ModelMode::Native {
                 if initialize {
@@ -99,21 +28,21 @@ pub(super) fn fields<'a>(
                     writeln!(f, "__morphism_graph_{name}: eqlog_runtime::__private::MorphismGraphCache<{parent_len}>,")?;
                 }
             }
-            for (rel, index) in checkpoint_indices(ctx, selection, model) {
+            for checkpoint in &plan.checkpoints {
+                let rel = &checkpoint.rel;
                 let name = field(rel, model, ctx);
                 if initialize {
                     writeln!(f, "{name}: BTreeMap::new(),")?;
-                    if is_leaf(model, ctx) {
+                    if plan.frontier {
                         writeln!(f, "{name}_frontier: BTreeMap::new(),")?;
                     }
                     continue;
                 }
-                let arity = rel.arity(ctx.signature());
-                let map_count = member_maps(rel, index, model, ctx).len();
-                let dim = arity.len() - parent_len - 1;
+                let map_count = checkpoint.maps.len();
+                let dim = checkpoint.suffix;
                 let key_len = parent_len + 3;
                 writeln!(f, "{name}: BTreeMap<[u32; {key_len}], eqlog_runtime::__private::TransportCheckpoint<PrefixTree{dim}, {map_count}>>,")?;
-                if is_leaf(model, ctx) {
+                if plan.frontier {
                     let dim = dim + 1;
                     writeln!(f, "{name}_frontier: BTreeMap<[u32; {parent_len}], eqlog_runtime::__private::TransportFrontier<PrefixTree{dim}, {map_count}>>,")?;
                 }
@@ -154,29 +83,18 @@ fn prepare_frontier_impl<'a>(
     FmtFn(move |f| {
         let relation_count = relations.len();
         writeln!(f, "let mut transport_work: [eqlog_runtime::__private::TransportWork; {relation_count}] = std::array::from_fn(|_| eqlog_runtime::__private::TransportWork::default());")?;
-        let checkpoints = checkpoint_indices(ctx, selection, model);
-        if !is_leaf(model, ctx)
-            || relations
-                .iter()
-                .any(|rel| !checkpoints.iter().any(|(candidate, _)| candidate == rel))
-        {
+        let propagation = &ctx.transport().group(plan).models[&model];
+        let Some(frontier) = &propagation.frontier else {
             assert!(!staged, "staged frontiers require checkpointed leaf models");
             return writeln!(f, "let transport_all = true;");
-        }
-        if let Some(plan) = plan {
-            let maps: BTreeSet<_> = relations
-                .iter()
-                .flat_map(|rel| plan.map_indices.get(&(model, (*rel).clone())))
-                .flatten()
-                .collect();
-            for (rel, index) in maps {
-                write!(f, "{}", indices::prepare(rel, index, selection, ctx))?;
-            }
+        };
+        for (rel, index) in &frontier.prepare_maps {
+            write!(f, "{}", indices::prepare(rel, index, selection, ctx))?;
         }
         if !staged {
             writeln!(f, "let transport_all = false;")?;
         }
-        let parent_len = ctx.signature().type_(model).parents.len();
+        let parent_len = ctx.transport().models[&model].parents.len();
         for (relation_index, &rel) in relations.iter().enumerate() {
             let index = selection.current_primary(rel);
             let field = field(rel, model, ctx);
@@ -190,22 +108,18 @@ fn prepare_frontier_impl<'a>(
                     display_tree_prefix_slice(&source, parent_len, dim)
                 )
             };
-            let maps = member_maps(rel, index, model, ctx)
-                .into_iter()
-                .map(|member| {
-                    let morphism_type = ctx.signature().ids_for_model_type(model).unwrap().mor;
-                    let app = ctx
-                        .signature()
-                        .mor_app_func(MorphismMemberTypes {
-                            morphism_type,
-                            member_type: member,
-                        })
-                        .unwrap();
-                    let app_rel = FlatInRel::Rel(FlatRel::Func(app));
-                    let order: Vec<_> = (0..parent_len + 3).collect();
-                    let app_index = index_with_order(&selection.indices[&app_rel], &order);
-                    let name =
-                        indices::read_method(&app_rel, app_index, selection, ctx, plan.is_some());
+            let remap = ctx.transport().index(rel, index, model);
+            let maps = remap
+                .maps
+                .iter()
+                .map(|(_, read)| {
+                    let name = indices::read_method(
+                        &read.rel,
+                        &read.index,
+                        selection,
+                        ctx,
+                        plan.is_some(),
+                    );
                     if parent_len == 0 {
                         format!("self.{name}().clone()")
                     } else {
@@ -235,19 +149,18 @@ fn prepare_frontier_impl<'a>(
 pub(super) fn finish_frontier<'a>(
     model: TypeId,
     relations: &'a [&'a FlatInRel],
+    plan: Option<&'a PropagationPlan>,
     ctx: &'a RustGenCtx<'a>,
     selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let checkpoints = checkpoint_indices(ctx, selection, model);
-        if !is_leaf(model, ctx)
-            || relations
-                .iter()
-                .any(|rel| !checkpoints.iter().any(|(candidate, _)| candidate == rel))
+        if ctx.transport().group(plan).models[&model]
+            .frontier
+            .is_none()
         {
             return Ok(());
         }
-        let parent_len = ctx.signature().type_(model).parents.len();
+        let parent_len = ctx.transport().models[&model].parents.len();
         for &rel in relations {
             let index = selection.current_primary(rel);
             let field = field(rel, model, ctx);
@@ -272,30 +185,21 @@ pub(super) fn finish_frontier<'a>(
 
 pub(super) fn prune<'a>(
     ctx: &'a RustGenCtx<'a>,
-    selection: &'a IndexSelection,
+    _selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         if ctx.model_mode() != ModelMode::Native {
             return Ok(());
         }
-        for (_, ids) in ctx.signature().iter_model_decls() {
-            let model = ids.type_;
-            let parents = &ctx.signature().type_(model).parents;
+        for &model in &ctx.transport().model_order {
+            let plan = &ctx.transport().models[&model];
+            let parents = &plan.parents;
             let name = display_type(model, ctx).to_string().to_case(Snake);
-            let checkpoints = checkpoint_indices(ctx, selection, model);
+            let checkpoints = &plan.checkpoints;
             if checkpoints.is_empty() && parents.is_empty() {
                 continue;
             }
-            let key_types: Vec<_> = parents
-                .iter()
-                .copied()
-                .chain(
-                    checkpoints
-                        .first()
-                        .into_iter()
-                        .flat_map(|_| [ids.mor, model, model]),
-                )
-                .collect();
+            let key_types = &plan.key_types;
             let changed = key_types
                 .iter()
                 .map(|&typ| {
@@ -334,8 +238,8 @@ pub(super) fn prune<'a>(
                     "self.__morphism_graph_{name}.retain_owners(|key| {canonical});"
                 )?;
             }
-            for (rel, _) in checkpoints {
-                let checkpoint = field(rel, model, ctx);
+            for checkpoint in checkpoints {
+                let checkpoint = field(&checkpoint.rel, model, ctx);
                 let first = display_type(key_types[0], ctx).to_string().to_case(Snake);
                 let key_len = key_types.len();
                 writedoc! {f, "
@@ -353,7 +257,7 @@ pub(super) fn prune<'a>(
                         self.{checkpoint}.retain(|key, _| {canonical});
                     }}
                 "}?;
-                if is_leaf(model, ctx) && !parents.is_empty() {
+                if plan.frontier && !parents.is_empty() {
                     let canonical = (0..parents.len())
                         .map(|i| format!("root_{i}.root_const(key[{i}].into()).0 == key[{i}]"))
                         .join(" && ");
@@ -364,6 +268,225 @@ pub(super) fn prune<'a>(
                 }
             }
             writeln!(f, "}}")?;
+        }
+        Ok(())
+    })
+}
+
+pub(super) enum DriverKind<'a> {
+    Propagation {
+        suffix: &'a str,
+        plan: Option<&'a PropagationPlan>,
+    },
+    Native {
+        id: usize,
+        level: usize,
+    },
+}
+
+pub(super) struct Driver<'a> {
+    pub model: TypeId,
+    pub kind: DriverKind<'a>,
+}
+
+fn changed_name(changes: TransportChanges) -> &'static str {
+    match changes {
+        TransportChanges::All => "changed",
+        TransportChanges::Component => "component_changed",
+    }
+}
+
+fn retention_name(retain: TransportRetention, driver: &Driver<'_>) -> &'static str {
+    match (&driver.kind, retain) {
+        (DriverKind::Propagation { .. }, TransportRetention::Outer) => "retain_own",
+        (DriverKind::Propagation { .. }, TransportRetention::Component) => "retain_component_own",
+        (DriverKind::Native { .. }, TransportRetention::Outer) => "track_changes",
+        (DriverKind::Native { .. }, TransportRetention::Component) => "track_component",
+    }
+}
+
+pub(super) fn display_driver<'a>(
+    body: &'a [TransportInstruction],
+    driver: &'a Driver<'a>,
+    ctx: &'a RustGenCtx<'a>,
+    selection: &'a IndexSelection,
+) -> impl Display + 'a {
+    FmtFn(move |f| {
+        for instruction in body {
+            match instruction {
+                TransportInstruction::PrepareGraph => match &driver.kind {
+                    DriverKind::Propagation { plan, .. } => {
+                        let group = &ctx.transport().group(*plan).models[&driver.model];
+                        for (rel, index) in &group.graph_indices {
+                            write!(f, "{}", indices::prepare(rel, index, selection, ctx))?;
+                        }
+                    }
+                    DriverKind::Native { .. } => {
+                        unreachable!("native inputs prepare graph indices before traversal")
+                    }
+                },
+                TransportInstruction::ComputeComponents => {
+                    let prepared = match &driver.kind {
+                        DriverKind::Propagation { plan, .. } => plan.is_some(),
+                        DriverKind::Native { .. } => true,
+                    };
+                    write!(
+                        f,
+                        "{}",
+                        display_morphism_components(driver.model, ctx, selection, prepared)
+                    )?;
+                }
+                TransportInstruction::CompactGraph => {
+                    write!(f, "{}", compact_indices::graph_guard(driver.model, ctx))?;
+                }
+                TransportInstruction::PrepareFrontier | TransportInstruction::FinishFrontier => {
+                    let plan = match &driver.kind {
+                        DriverKind::Propagation { plan, .. } => *plan,
+                        DriverKind::Native { .. } => {
+                            unreachable!("secondary index traversal does not retain frontiers")
+                        }
+                    };
+                    let relations = ctx.transport().group(plan).models[&driver.model]
+                        .relations
+                        .iter()
+                        .collect_vec();
+                    match instruction {
+                        TransportInstruction::PrepareFrontier => write!(
+                            f,
+                            "{}",
+                            prepare_frontier(driver.model, &relations, plan, ctx, selection)
+                        )?,
+                        TransportInstruction::FinishFrontier => write!(
+                            f,
+                            "{}",
+                            finish_frontier(driver.model, &relations, plan, ctx, selection)
+                        )?,
+                        TransportInstruction::PrepareGraph
+                        | TransportInstruction::ComputeComponents
+                        | TransportInstruction::CompactGraph
+                        | TransportInstruction::ReturnUnlessWork
+                        | TransportInstruction::InitializeChanges(_)
+                        | TransportInstruction::ForEach { .. }
+                        | TransportInstruction::Loop(_)
+                        | TransportInstruction::RetainComponent
+                        | TransportInstruction::CallChild { .. }
+                        | TransportInstruction::SelectRelations
+                        | TransportInstruction::ContinueUnlessActive
+                        | TransportInstruction::InitializeInserted
+                        | TransportInstruction::CallMorphism { .. }
+                        | TransportInstruction::MarkWorkChanged
+                        | TransportInstruction::AccumulateChanges
+                        | TransportInstruction::BreakUnlessCyclicChanged
+                        | TransportInstruction::ReturnChanged => {
+                            unreachable!("frontier instruction was selected")
+                        }
+                    }
+                }
+                TransportInstruction::ReturnUnlessWork => writedoc! {f, "
+                    if !transport_all && transport_work.iter().all(|work| work.is_empty()) {{
+                        return false;
+                    }}
+                "}?,
+                TransportInstruction::InitializeChanges(changes) => {
+                    let name = changed_name(*changes);
+                    writeln!(f, "let mut {name} = false;")?;
+                }
+                TransportInstruction::ForEach { iteration, body } => {
+                    let head = match iteration {
+                        TransportIteration::Components => "component in components.iter()",
+                        TransportIteration::Objects => "&object in &component.objects",
+                        TransportIteration::Internal => "morphism in &component.internal",
+                        TransportIteration::Outgoing => "morphism in &component.outgoing",
+                    };
+                    let body = display_driver(body, driver, ctx, selection);
+                    writeln!(f, "for {head} {{ {body} }}")?;
+                }
+                TransportInstruction::Loop(body) => {
+                    let body = display_driver(body, driver, ctx, selection);
+                    writeln!(f, "loop {{ {body} }}")?;
+                }
+                TransportInstruction::RetainComponent => {
+                    let outer = retention_name(TransportRetention::Outer, driver);
+                    let component = retention_name(TransportRetention::Component, driver);
+                    writedoc! {f, "
+                        let cyclic = !component.internal.is_empty();
+                        let {component} = {outer} || cyclic;
+                    "}?;
+                }
+                TransportInstruction::CallChild { model } => {
+                    let parents = (0..ctx.transport().models[&driver.model].parents.len())
+                        .map(|i| format!("parents[{i}]"))
+                        .chain(once("object".to_owned()))
+                        .join(", ");
+                    let retain = retention_name(TransportRetention::Component, driver);
+                    match &driver.kind {
+                        DriverKind::Propagation { suffix, .. } => {
+                            let name = display_type(*model, ctx).to_string().to_case(Snake);
+                            writeln!(f, "component_changed |= self.__propagate_{name}_morphisms{suffix}([{parents}], {retain});")?;
+                        }
+                        DriverKind::Native { id, level } => {
+                            let child = level + 1;
+                            writeln!(f, "component_changed |= self.__native_{id}_model_{child}([{parents}], index, {retain});")?;
+                        }
+                    }
+                }
+                TransportInstruction::SelectRelations => {
+                    let count = match &driver.kind {
+                        DriverKind::Propagation { plan, .. } => ctx.transport().group(*plan).models
+                            [&driver.model]
+                            .relations
+                            .len(),
+                        DriverKind::Native { .. } => {
+                            unreachable!("native traversal remaps one index")
+                        }
+                    };
+                    writedoc! {f, "
+                        let active: [bool; {count}] = std::array::from_fn(
+                            |i| transport_all || transport_work[i].needs_visit(morphism),
+                        );
+                    "}?;
+                }
+                TransportInstruction::ContinueUnlessActive => {
+                    writeln!(f, "if !active.iter().any(|&active| active) {{ continue; }}")?
+                }
+                TransportInstruction::InitializeInserted => {
+                    let count = match &driver.kind {
+                        DriverKind::Propagation { plan, .. } => ctx.transport().group(*plan).models
+                            [&driver.model]
+                            .relations
+                            .len(),
+                        DriverKind::Native { .. } => {
+                            unreachable!("native traversal remaps one index")
+                        }
+                    };
+                    writeln!(f, "let mut inserted = [false; {count}];")?;
+                }
+                TransportInstruction::CallMorphism { changes, retain } => {
+                    let changed = changed_name(*changes);
+                    let retain = retention_name(*retain, driver);
+                    match &driver.kind {
+                        DriverKind::Propagation { suffix, .. } => {
+                            let name = display_type(driver.model, ctx).to_string().to_case(Snake);
+                            writeln!(f, "{changed} |= self.__propagate_{name}_morphism_selected{suffix}(parents, morphism, {retain}, &active, &mut inserted);")?;
+                        }
+                        DriverKind::Native { id, level } => writeln!(f, "{changed} |= self.__native_{id}_morphism_{level}(parents, morphism, index, {retain});")?,
+                    }
+                }
+                TransportInstruction::MarkWorkChanged => writedoc! {f, "
+                    if !transport_all {{
+                        for (work, inserted) in transport_work.iter_mut().zip(inserted) {{
+                            if inserted {{ work.mark_changed(morphism.cod); }}
+                        }}
+                    }}
+                "}?,
+                TransportInstruction::AccumulateChanges => {
+                    writeln!(f, "changed |= component_changed;")?
+                }
+                TransportInstruction::BreakUnlessCyclicChanged => {
+                    writeln!(f, "if !cyclic || !component_changed {{ break; }}")?
+                }
+                TransportInstruction::ReturnChanged => writeln!(f, "changed")?,
+            }
         }
         Ok(())
     })

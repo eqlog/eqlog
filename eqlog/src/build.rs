@@ -582,6 +582,7 @@ fn process_file(in_file: &Path, config: &Config, component_inputs: Option<&Diges
         config.options.model_mode,
         &ram_program.compact,
         ram_program.indexed.as_ref(),
+        &ram_program.transport,
     );
 
     let module_contents = display_module(

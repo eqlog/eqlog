@@ -5,22 +5,24 @@ use std::fmt::Display;
 
 use indoc::{formatdoc, writedoc};
 
-use super::indices::{projection, source_relation};
+use super::compact_indices;
+use super::indices::source_relation;
 use super::native_indices;
-use super::{compact_indices, compact_policy};
 use super::{
     display_all_index_field_name, display_index_field_name, display_index_type,
     display_module_env_struct_name, display_morphism_components, display_out_set_field_name,
     display_type, module_env_out_rels, RustGenCtx,
 };
 use crate::algebra::signature::TypeId;
-use crate::flat_eqlog::{FlatInRel, FlatOutRel, FlatRel, IndexAge, IndexSelection, IndexSpec};
+use crate::flat_eqlog::{FlatInRel, FlatOutRel, IndexAge, IndexSelection, IndexSpec};
 use crate::fmt_util::FmtFn;
 use crate::ram::{
-    input_key, CanonicalInput, EvaluationCondition, EvaluationIteration, EvaluationPlan,
-    EvaluationStmt, IndexPreparation, InheritedInput, InheritedRows, InputStorage,
-    NativeIndexPreparation, NativePreparation, ProofRows, RamFunction, RamProgram, RetainedOwners,
-    StratumEvaluation, TransportBaseline, TransportEdges,
+    CanonicalInput, Consumption, EvaluationCondition, EvaluationIteration, EvaluationLifecycle,
+    EvaluationPlan, EvaluationStmt, IndexPreparation, InheritedEvidence, InheritedInput,
+    InheritedInstruction, InheritedRows, InputProjection, InputRead, InputReadSource, InputStorage,
+    NativeIndexPreparation, NativePreparation, NativeReadPreparation, ProofRows, RamFunction,
+    RamProgram, RetainedOwners, ScopedInput, StratumEvaluation, StratumInstruction,
+    TransportBaseline, TransportEdges,
 };
 
 pub struct Codegen<'s> {
@@ -53,38 +55,6 @@ fn history_name(storage: InputStorage, count: usize) -> String {
 }
 
 impl<'s> Codegen<'s> {
-    fn diagonal_input(
-        &self,
-        stratum: usize,
-        source: &FlatInRel,
-        selection: &IndexSelection,
-        ctx: &RustGenCtx<'_>,
-    ) -> Option<String> {
-        if !self.evaluation.strata[stratum]
-            .diagonal_inputs
-            .contains(source)
-        {
-            return None;
-        }
-        let primary = selection.current_primary(source);
-        let field = display_all_index_field_name(source, primary, ctx);
-        let arity = primary.order.len();
-        let suffix = arity - 1;
-        Some(formatdoc! {"
-            {{
-                let mut filtered = PrefixTree{arity}::new();
-                for (key, rows) in self.{field}.map.iter() {{
-                    if let Some(rows) = rows.get(key) {{
-                        let mut suffix = PrefixTree{suffix}::new();
-                        suffix.insert_restriction(key, rows.clone());
-                        filtered.insert_restriction(key, suffix);
-                    }}
-                }}
-                filtered
-            }}
-        "})
-    }
-
     fn transport_baseline(&self, model: TypeId) -> Option<&TransportBaseline> {
         self.evaluation.transport_baselines.get(&model)
     }
@@ -99,17 +69,6 @@ impl<'s> Codegen<'s> {
 
     fn has_stable_inputs(&self, s: usize) -> bool {
         !self.evaluation.strata[s].stable_fields.is_empty()
-    }
-
-    fn consume_method(&self, s: usize, rel: &FlatInRel, index: &IndexSpec) -> &'static str {
-        if self.preparations[s]
-            .membership_only
-            .contains(&input_key(rel.clone(), index.clone()))
-        {
-            "consume_membership"
-        } else {
-            "consume_required"
-        }
     }
 
     fn inherited_rows(&self, input: &InheritedInput, ctx: &RustGenCtx<'_>) -> String {
@@ -193,8 +152,8 @@ impl<'s> Codegen<'s> {
                     }
                     for rel in self.stratum_inputs(s) {
                         let i = self.inputs[&rel];
-                        let arity =
-                            rel.arity(ctx.signature()).len() - scope_prefix(&rel, model, ctx);
+                        let scope = &stratum.owner_inputs[&rel];
+                        let arity = scope.arity - scope.prefix;
                         writeln!(f, "input_{i}: PrefixTree{arity},")?;
                     }
                     writeln!(f, "}}")?;
@@ -367,178 +326,154 @@ impl<'s> Codegen<'s> {
         })
     }
 
-    pub fn methods<'a>(
-        &'a self,
-        modules: &'a [RamFunction],
-        ctx: &'a RustGenCtx<'a>,
-        selection: &'a IndexSelection,
-    ) -> impl Display + 'a {
-        FmtFn(move |f| {
-            for (s, stratum) in self.strata.iter().enumerate() {
-                let inputs = self.stratum_inputs(s);
-                let inherited_plan = self.inherited_plan(s);
-                if let Some(fields) = &inherited_plan {
-                    // A matching checkpoint proves only its exact input roots.
-                    // The source revision also covers transported conclusions.
-                    let model = stratum.model.unwrap();
-                    let name = display_type(model, ctx).to_string().to_case(Case::Snake);
-                    let members = compact_indices::members(model, ctx).len();
+    fn emit_inherited(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+        body: &[InheritedInstruction],
+        s: usize,
+        ctx: &RustGenCtx<'_>,
+    ) -> std::fmt::Result {
+        let fields = self.inherited_plan(s).unwrap();
+        for instruction in body {
+            match instruction {
+                InheritedInstruction::RequireTarget(model) => {
+                    let name=display_type(*model,ctx).to_string().to_case(Case::Snake);
+                    writeln!(f,"let indices = self.__compact_indices_{name}.as_ref()?; if !indices.has_owner(owners[0]) {{ return None; }}")?;
+                }
+                InheritedInstruction::LoadMemberInheritance(typ) => {
+                    let name=display_type(*typ,ctx).to_string().to_case(Case::Snake);
+                    writeln!(f,"let spaces_{name} = self.__compact_members_{name}.as_ref()?; let inputs_{name} = spaces_{name}.inherited_inputs(owners[0])?;")?;
+                }
+                InheritedInstruction::InitializeCandidates => writeln!(f,"let mut best: Option<(u64, usize)> = None; let mut certified = Vec::new();")?,
+                InheritedInstruction::ForCandidates(body) => {
+                    writeln!(f,"for (position, (source, revision, rows)) in indices.inherited_inputs(owners[0]).enumerate() {{")?;
+                    self.emit_inherited(f,body,s,ctx)?;
+                    writeln!(f,"}}")?;
+                }
+                InheritedInstruction::Candidate(body) => {
+                    writeln!(f,"let candidate = (|| {{")?;
+                    self.emit_inherited(f,body,s,ctx)?;
+                    writeln!(f,"}})();")?;
+                }
+                InheritedInstruction::CheckSourceRevision => writeln!(f,"if indices.revision(source) != revision {{ return None; }}")?,
+                InheritedInstruction::InitializeScore => writeln!(f,"let mut score = 0u64;")?,
+                InheritedInstruction::LoadMemberSource(typ) => {
+                    let name=display_type(*typ,ctx).to_string().to_case(Case::Snake);
                     writedoc! {f, "
-                        fn __matching_inputs_{s}(&self, owners: [u32; 1]) -> Option<__InheritedInputs{s}> {{
-                            let indices = self.__compact_indices_{name}.as_ref()?;
-                            if !indices.has_owner(owners[0]) {{ return None; }}
-                            let revision = (owners[0], 0, [0; {members}]);
+                        let (member_source, revision_{name}, domain_{name}) = inputs_{name}.get(position)?;
+                        if member_source != source {{ return None; }}
+                        let source_{name} = spaces_{name}.get_snapshot(source)?;
+                        if source_{name}.revision() != revision_{name} {{ return None; }}
                     "}?;
-                    for (field, input) in fields {
-                        let rows = self.matching_rows(input, ctx);
-                        writeln!(f, "let {field} = {rows};")?;
-                    }
-                    let names = fields.keys().join(", ");
-                    writeln!(f, "Some(__InheritedInputs{s} {{ revision, {names} }}) }}")?;
+                }
+                InheritedInstruction::AddMemberScore(typ) => {
+                    let name=display_type(*typ,ctx).to_string().to_case(Case::Snake);
                     writedoc! {f, "
-                        fn __inherited_inputs_{s}(&self, owners: [u32; 1]) -> Option<(Option<__InheritedInputs{s}>, Vec<__InheritedInputs{s}>)> {{
-                            let indices = self.__compact_indices_{name}.as_ref()?;
-                            if !indices.has_owner(owners[0]) {{ return None; }}
+                        score = score.checked_add(u64::try_from(domain_{name}.len()).unwrap())
+                            .expect(\"inherited matching score overflow\");
                     "}?;
-                    let member_types = compact_indices::members(model, ctx);
-                    for &typ in &member_types {
-                        let name = display_type(typ, ctx).to_string().to_case(Case::Snake);
-                        writedoc! {f, "
-                            let spaces_{name} = self.__compact_members_{name}.as_ref()?;
-                            let inputs_{name} = spaces_{name}.inherited_inputs(owners[0])?;
-                        "}?;
+                }
+                InheritedInstruction::BuildRevision(types) => {
+                    let revisions=types.iter().map(|&typ| { let name=display_type(typ,ctx).to_string().to_case(Case::Snake); format!("revision_{name}") }).join(", ");
+                    writeln!(f,"let revision = (source, revision, [{revisions}]);")?;
+                }
+                InheritedInstruction::LoadSourceCheckpoint => writeln!(f,"let proved = self.__owner_inputs_{s}.get(&[source])?;")?,
+                InheritedInstruction::LoadInputs => {
+                    for (name,input) in &fields {
+                        let arity=input.arity; let rows=self.inherited_rows(input,ctx);
+                        writeln!(f,"let {name}: PrefixTree{arity} = {rows};")?;
                     }
-                    writedoc! {f, "
-                        let mut best: Option<(u64, usize)> = None;
-                        let mut certified = Vec::new();
-                        for (position, (source, revision, rows)) in indices.inherited_inputs(owners[0]).enumerate() {{
-                            let candidate = (|| {{
-                                if indices.revision(source) != revision {{ return None; }}
-                                let mut score = 0u64;
-                    "}?;
-                    let mut revisions = Vec::new();
-                    for &typ in &member_types {
-                        let name = display_type(typ, ctx).to_string().to_case(Case::Snake);
-                        writedoc! {f, "
-                            let (member_source, revision_{name}, domain_{name}) = inputs_{name}.get(position)?;
-                            if member_source != source {{ return None; }}
-                            let source_{name} = spaces_{name}.get_snapshot(source)?;
-                            if source_{name}.revision() != revision_{name} {{ return None; }}
-                            score = score.checked_add(u64::try_from(domain_{name}.len()).unwrap())
-                                .expect(\"inherited matching score overflow\");
-                        "}?;
-                        revisions.push(format!("revision_{name}"));
-                    }
-                    let revisions = revisions.join(", ");
-                    writedoc! {f, "
-                        let revision = (source, revision, [{revisions}]);
-                        let proved = self.__owner_inputs_{s}.get(&[source])?;
-                    "}?;
-                    for (name, input) in fields {
-                        let arity = input.arity;
-                        let rows = self.inherited_rows(input, ctx);
-                        writeln!(f, "let {name}: PrefixTree{arity} = {rows};")?;
-                    }
-                    for rel in &inputs {
-                        let i = self.inputs[rel];
-                        match rel {
-                            FlatInRel::TypeSet(_) => {
-                                writeln!(f, "if !input_{i}.contains([source]) || !input_{i}.contains([owners[0]]) {{ return None; }}")?;
-                            }
-                            FlatInRel::Rel(_)
-                            | FlatInRel::RelWithDiagonals { .. }
-                            | FlatInRel::Equality(_) => {
-                                writeln!(f, "if !eqlog_runtime::__private::SnapshotSet::shares_root(&input_{i}, &proved.input_{i}) {{ return None; }}")?;
-                            }
-                        }
-                    }
-                    let names = fields.keys().join(", ");
-                    writedoc! {f, "
-                                Some((score, __InheritedInputs{s} {{ revision, {names} }}))
-                            }})();
-                            let Some((score, candidate)) = candidate else {{ continue; }};
-                            if best.as_ref().is_none_or(|(previous, _)| score > *previous) {{
-                                best = Some((score, certified.len()));
-                            }}
-                            certified.push(candidate);
-                        }}
-                        let (_, best) = best?;
-                        let previous = self.__owner_inputs_{s}.get(&owners)?;
-                        let baseline = (previous.inherited != Some(certified[best].revision))
-                            .then(|| certified[best].clone());
-                        certified.retain(|proof| {{
-                            let (source, revision, members) = proof.revision;
-                            previous.inherited_seen.get(&source) != Some(&(revision, members))
-                        }});
-                        Some((baseline, certified))
+                }
+                InheritedInstruction::VerifyInput { input,evidence } => match evidence {
+                    InheritedEvidence::OwnersPresent => writeln!(f,"if !input_{input}.contains([source]) || !input_{input}.contains([owners[0]]) {{ return None; }}")?,
+                    InheritedEvidence::CheckpointRoot => writeln!(f,"if !eqlog_runtime::__private::SnapshotSet::shares_root(&input_{input}, &proved.input_{input}) {{ return None; }}")?,
+                },
+                InheritedInstruction::ReturnCandidate => {
+                    let names=fields.keys().join(", ");
+                    writeln!(f,"Some((score, __InheritedInputs{s} {{ revision, {names} }}))")?;
+                }
+                InheritedInstruction::SkipUncertified => writeln!(f,"let Some((score, candidate)) = candidate else {{ continue; }};")?,
+                InheritedInstruction::ChooseLargest => writedoc! {f, "
+                    if best.as_ref().is_none_or(|(previous, _)| score > *previous) {{
+                        best = Some((score, certified.len()));
                     }}
-                    "}?;
+                "}?,
+                InheritedInstruction::SaveCandidate => writeln!(f,"certified.push(candidate);")?,
+                InheritedInstruction::RequireBest => writeln!(f,"let (_, best) = best?;")?,
+                InheritedInstruction::LoadPreviousTarget => writeln!(f,"let previous = self.__owner_inputs_{s}.get(&owners)?;")?,
+                InheritedInstruction::SelectChangedBaseline => writedoc! {f, "
+                    let baseline = (previous.inherited != Some(certified[best].revision))
+                        .then(|| certified[best].clone());
+                "}?,
+                InheritedInstruction::RetainUnseenProofs => writedoc! {f, "
+                    certified.retain(|proof| {{
+                        let (source, revision, members) = proof.revision;
+                        previous.inherited_seen.get(&source) != Some(&(revision, members))
+                    }});
+                "}?,
+                InheritedInstruction::ReturnProofs => writeln!(f,"Some((baseline, certified))")?,
+            }
+        }
+        Ok(())
+    }
+
+    fn emit_stratum(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+        body: &[StratumInstruction],
+        s: usize,
+        modules: &[RamFunction],
+        ctx: &RustGenCtx<'_>,
+        selection: &IndexSelection,
+    ) -> std::fmt::Result {
+        let evaluation = &self.evaluation.strata[s];
+        let stratum = evaluation;
+        let inputs = &evaluation.inputs;
+        let inherited_plan = self.inherited_plan(s);
+        for instruction in body {
+            match instruction {
+                StratumInstruction::InitializeDirty => writeln!(
+                    f,
+                    "#[allow(unused_mut)] let mut dirty = !self.__stratum_initialized[{s}];"
+                )?,
+                StratumInstruction::RecordPendingOutput(output) => {
+                    let field = display_out_set_field_name(output, ctx);
+                    writeln!(f, "let __compact_start_{field} = delta.{field}.len();")?;
                 }
-                let evaluation = &self.evaluation.strata[s];
-                let outputs = &evaluation.outputs;
-                let stable = if self.has_stable_inputs(s) {
-                    format!("stable: &mut __StableInputs{s}, ")
-                } else {
-                    String::new()
-                };
-                writeln!(f, "#[allow(unused_variables)]")?;
-                if let Some(model) = stratum.model {
-                    let count = ctx.signature().type_(model).parents.len() + 1;
-                    let retain = if !self.preparations[s].reads_descendants() {
-                        ""
-                    } else {
-                        "retain_own: bool, "
-                    };
-                    writedoc! {f, "
-                        fn __run_stratum_{s}_at(&mut self, owners: [u32; {count}], {retain}{stable}delta: &mut ModelDelta) -> bool {{
-                    "}?;
-                } else {
-                    writedoc! {f, "
-                        fn __run_stratum_{s}(&mut self, {stable}delta: &mut ModelDelta) -> bool {{
-                            #[allow(unused_mut)]
-                            let mut dirty = !self.__stratum_initialized[{s}];
-                    "}?;
-                }
-                for conversion in &evaluation.output_conversions {
-                    if conversion.pending {
-                        let field = display_out_set_field_name(&conversion.output, ctx);
-                        writeln!(f, "let __compact_start_{field} = delta.{field}.len();")?;
-                    }
-                }
-                if let Some(plan) = &self.preparations[s].stable {
+                StratumInstruction::WhenUnpropagated(body) => {
                     writeln!(f, "if !stable.propagated {{")?;
-                    if stratum.model.is_none() {
-                        writeln!(f, "self.recompute_model_indices_stratum_stable_{s}();")?;
-                    } else if !plan.descendants.is_empty() {
-                        writeln!(
-                            f,
-                            "self.__prepare_descendants_stable_{s}(owners, retain_own);"
-                        )?;
-                    }
-                    if plan.descendants.is_empty() {
-                        for (rel, index) in &plan.support_indices {
-                            write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
-                        }
-                    }
-                    writeln!(f, "stable.propagated = true; }}")?;
+                    self.emit_stratum(f, body, s, modules, ctx, selection)?;
+                    writeln!(f, "}}")?;
                 }
-                let native = &self.preparations[s].native;
-                if !native.descendants.is_empty() {
-                    writeln!(f, "self.__prepare_descendants_{s}(owners, retain_own);")?;
+                StratumInstruction::MarkPropagated => writeln!(f, "stable.propagated = true;")?,
+                StratumInstruction::PrepareDescendants { stable } => {
+                    let suffix = if *stable { "_stable" } else { "" };
+                    writeln!(
+                        f,
+                        "self.__prepare_descendants{suffix}_{s}(owners, retain_own);"
+                    )?;
                 }
-                if stratum.model.is_none() && !native.propagation.relations.is_empty() {
-                    writeln!(f, "self.recompute_model_indices_stratum_{s}();")?;
+                StratumInstruction::RecomputeIndices { stable } => {
+                    let suffix = if *stable { "_stable" } else { "" };
+                    writeln!(f, "self.recompute_model_indices_stratum{suffix}_{s}();")?;
                 }
-                if let Some(model) = stratum.model {
+                StratumInstruction::PrepareIndex { rel, index } => {
+                    write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?
+                }
+                StratumInstruction::OwnerCheckpoint => {
                     // Most owners have no new input on an incremental visit.
                     // Comparing roots avoids constructing their consumer views.
                     let mut unchanged = vec!["true".to_owned()];
                     let mut snapshots = Vec::new();
-                    for rel in &inputs {
+                    for rel in inputs {
                         let i = self.inputs[rel];
                         let field =
                             display_all_index_field_name(rel, selection.current_primary(rel), ctx);
-                        let source = scoped_tree(&format!("&self.{field}"), rel, model, ctx);
+                        let source = scoped_tree(
+                            &format!("&self.{field}"),
+                            &evaluation.owner_inputs[rel],
+                            ctx,
+                        );
                         writeln!(f, "let input_{i} = {source};")?;
                         unchanged.push(format!("eqlog_runtime::__private::SnapshotSet::shares_root(input_{i}, &_previous.input_{i})"));
                         snapshots.push(format!("input_{i}: input_{i}.clone()"));
@@ -571,253 +506,64 @@ impl<'s> Codegen<'s> {
                         let checkpoint = __OwnerInputs{s} {{ {snapshots} }};
                         self.__owner_inputs_{s}.insert(owners, checkpoint);
                     "}?;
-                    if let Some(possible) = &evaluation.possible_inputs {
-                        let terms: BTreeSet<_> = possible
-                            .iter()
-                            .map(|sources| {
-                                sources
-                                    .iter()
-                                    .map(|i| format!("!input_{i}.is_empty()"))
-                                    .join(" && ")
-                            })
-                            .collect();
-                        let possible = if terms.is_empty() {
-                            "false".to_owned()
-                        } else {
-                            terms.iter().map(|expr| format!("({expr})")).join(" || ")
-                        };
-                        writeln!(f, "if !({possible}) {{ return false; }}")?;
-                    }
                 }
-                if inherited_plan.is_some() {
-                    // New inherited facts can join local facts matched earlier.
-                    // Reset every index together, then resume temporal deltas.
-                    writedoc! {f, "
-                        let (inherited_baseline, mut matching_proofs) = if delta.has_pending_func_defs() {{
-                            (None, Vec::new())
-                        }} else {{ self.__inherited_inputs_{s}(owners).unwrap_or_default() }};
-                        if !matching_proofs.is_empty() {{
-                            let seen = &mut self.__owner_inputs_{s}.get_mut(&owners).unwrap().inherited_seen;
-                            let seen = std::rc::Rc::make_mut(seen);
-                            for proof in &matching_proofs {{
-                                let (source, revision, members) = proof.revision;
-                                seen.insert(source, (revision, members));
-                            }}
+                StratumInstruction::PossibleInputGuard => {
+                    let possible = evaluation.possible_inputs.as_ref().unwrap();
+                    let terms: BTreeSet<_> = possible
+                        .iter()
+                        .map(|sources| {
+                            sources
+                                .iter()
+                                .map(|i| format!("!input_{i}.is_empty()"))
+                                .join(" && ")
+                        })
+                        .collect();
+                    let possible = if terms.is_empty() {
+                        "false".to_owned()
+                    } else {
+                        terms.iter().map(|expr| format!("({expr})")).join(" || ")
+                    };
+                    writeln!(f, "if !({possible}) {{ return false; }}")?;
+                }
+                StratumInstruction::LoadInheritedInputs => writedoc! {f, "
+                    let (inherited_baseline, mut matching_proofs) = if delta.has_pending_func_defs() {{
+                        (None, Vec::new())
+                    }} else {{ self.__inherited_inputs_{s}(owners).unwrap_or_default() }};
+                "}?,
+                StratumInstruction::RecordInheritedProofs => writedoc! {f, "
+                    if !matching_proofs.is_empty() {{
+                        let seen = &mut self.__owner_inputs_{s}.get_mut(&owners).unwrap().inherited_seen;
+                        let seen = std::rc::Rc::make_mut(seen);
+                        for proof in &matching_proofs {{
+                            let (source, revision, members) = proof.revision;
+                            seen.insert(source, (revision, members));
                         }}
-                        if let Some(baseline) = &inherited_baseline {{
-                            self.__owner_inputs_{s}.get_mut(&owners).unwrap().inherited = Some(baseline.revision);
-                            matching_proofs.retain(|proof| proof.revision != baseline.revision);
-                            if let Some(previous) = previous_matching_proof {{ matching_proofs.push(previous); }}
-                            dirty = true;
-                    "}?;
-                    if self.has_stable_inputs(s) {
-                        writeln!(f, "*stable = __StableInputs{s}::default();")?;
-                    }
+                    }}
+                "}?,
+                StratumInstruction::WhenInheritedBaseline(body) => {
+                    writeln!(f,"if let Some(baseline) = &inherited_baseline {{")?;
+                    self.emit_stratum(f,body,s,modules,ctx,selection)?;
+                    writeln!(f,"}}")?;
+                }
+                StratumInstruction::SaveInheritedRevision => writeln!(f,"self.__owner_inputs_{s}.get_mut(&owners).unwrap().inherited = Some(baseline.revision);")?,
+                StratumInstruction::RemoveBaselineProof => writeln!(f,"matching_proofs.retain(|proof| proof.revision != baseline.revision);")?,
+                StratumInstruction::RetainPreviousProof => writeln!(f,"if let Some(previous) = previous_matching_proof {{ matching_proofs.push(previous); }}")?,
+                StratumInstruction::MarkDirty => writeln!(f,"dirty = true;")?,
+                StratumInstruction::ResetStable => writeln!(f,"*stable = __StableInputs{s}::default();")?,
+                StratumInstruction::ReadInput(read) => emit_input_read(f, read, s, ctx)?,
+                StratumInstruction::ReturnUnlessDirty => {
+                    writeln!(f, "if !dirty {{ return false; }}")?
+                }
+                StratumInstruction::MarkInitialized => {
+                    writeln!(f, "self.__stratum_initialized[{s}] = true;")?
+                }
+                StratumInstruction::Block(body) => {
+                    writeln!(f, "{{")?;
+                    self.emit_stratum(f, body, s, modules, ctx, selection)?;
                     writeln!(f, "}}")?;
                 }
-                for rel in inputs {
-                    let i = self.inputs[&rel];
-                    let consume = self.consume_method(s, &rel, selection.current_primary(&rel));
-                    let old = self.preparations[s].indices.iter().any(|(input, index)| {
-                        input == &rel
-                            && index.age == IndexAge::Old
-                            && selection.is_primary(input, index)
-                    });
-                    let stable = stratum.stable_inputs.contains(&rel);
-                    let stable_global = stable && stratum.model.is_none();
-                    if stable && !stable_global {
-                        begin_stable_input(f, &format!("input_{i}"), &rel, ctx)?;
-                    }
-                    if stable_global {
-                        writedoc! {f, "
-                            if let Some(current) = &stable.input_{i} {{
-                                self.__rule_input_{i}.publish(current);
-                            }} else {{
-                        "}?;
-                    }
-                    let current =
-                        display_all_index_field_name(&rel, selection.current_primary(&rel), ctx);
-                    if let Some(filtered) = self.diagonal_input(s, &rel, selection, ctx) {
-                        // Every consumer in this stratum requires this diagonal.
-                        // Restrict before computing differences or projecting rows.
-                        writeln!(f, "let filtered_input_{i} = {filtered};")?;
-                        writeln!(f, "self.__rule_input_{i}.publish(&filtered_input_{i});")?;
-                    } else {
-                        writeln!(f, "self.__rule_input_{i}.publish(&self.{current});")?;
-                    }
-                    if stable_global {
-                        writeln!(f, "}}")?;
-                        begin_stable_input(f, &format!("input_{i}"), &rel, ctx)?;
-                    }
-                    if let Some(model) = stratum.model {
-                        consume_scoped(
-                            f,
-                            &format!("__scope_input_{i}"),
-                            &format!("self.__rule_input_{i}.current()"),
-                            &format!("__rule_input_{i}"),
-                            &format!("input_{i}"),
-                            &rel,
-                            model,
-                            s,
-                            old,
-                            true,
-                            consume,
-                            inherited_plan.as_ref().map(|_| format!("inherited_baseline.as_ref().map(|baseline| &baseline.input_{i})")).as_deref(),
-                            ctx,
-                        )?;
-                    } else {
-                        writeln!(
-                            f,
-                            "let input_{i} = self.__rule_input_{i}.{consume}::<{old}, true>(({s}, Vec::new()));"
-                        )?;
-                    }
-                    if stable {
-                        end_stable_input(
-                            f,
-                            &format!("input_{i}"),
-                            &format!("self.__rule_input_{i}.current()"),
-                            &rel,
-                            stratum.model,
-                            ctx,
-                        )?;
-                    }
-                    writeln!(f, "dirty |= !input_{i}.new.is_empty();")?;
-                }
-                writeln!(f, "if !dirty {{ return false; }}")?;
-                if stratum.model.is_none() {
-                    writeln!(f, "self.__stratum_initialized[{s}] = true;")?;
-                }
-                writeln!(f, "{{")?;
-                if native.descendants.is_empty() {
-                    for (rel, index) in &native.support_indices {
-                        write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
-                    }
-                }
-                for id in self.preparations[s].native_indices() {
-                    let rel = &self.native_indices[*id].rel;
-                    let consume = self.consume_method(s, rel, &self.native_indices[*id].index);
-                    let stable = stratum.stable_inputs.contains(&source_relation(rel));
-                    if stable {
-                        begin_stable_input(f, &format!("native_input_{id}"), rel, ctx)?;
-                    }
-                    if self.native_indices[*id].from_primary {
-                        writeln!(f, "self.__prepare_native_index_from_primary_{id}();")?;
-                    } else if stratum.model.is_some() {
-                        writeln!(f, "self.__extend_native_index_{id}();")?;
-                    } else {
-                        writeln!(f, "self.__prepare_native_index_{id}();")?;
-                    }
-                    if let Some(model) = stratum.model {
-                        consume_scoped(
-                            f,
-                            &format!("__scope_native_{id}"),
-                            &format!("self.__native_input_{id}.current()"),
-                            &format!("__native_input_{id}"),
-                            &format!("native_input_{id}"),
-                            &self.native_indices[*id].rel,
-                            model,
-                            s,
-                            true,
-                            true,
-                            consume,
-                            inherited_plan.as_ref().map(|_| format!("inherited_baseline.as_ref().map(|baseline| &baseline.native_input_{id})")).as_deref(),
-                            ctx,
-                        )?;
-                    } else {
-                        writeln!(
-                            f,
-                            "let native_input_{id} = self.__native_input_{id}.{consume}::<true, true>({s});"
-                        )?;
-                    }
-                    if stable {
-                        end_stable_input(
-                            f,
-                            &format!("native_input_{id}"),
-                            &format!("self.__native_input_{id}.current()"),
-                            rel,
-                            stratum.model,
-                            ctx,
-                        )?;
-                    }
-                }
-                let required_indices: BTreeSet<_> = self.preparations[s]
-                    .indices
-                    .iter()
-                    .cloned()
-                    .map(|(rel, index)| input_key(rel, index))
-                    .collect();
-                for (rel, index) in &required_indices {
-                    let consume = self.consume_method(s, rel, index);
-                    if native_indices::find(self.native_indices, rel, index).is_some() {
-                        continue;
-                    }
-                    if selection.is_primary(rel, index) {
-                        continue;
-                    }
-                    let source = source_relation(rel);
-                    let i = self.inputs[&source];
-                    let j = self.indices[&input_key(rel.clone(), index.clone())];
-                    let primary = selection.current_primary(&source);
-                    let project = projection(rel, index, primary);
-                    let stable = stratum.stable_inputs.contains(&source);
-                    if self.old_indices.contains(&(rel.clone(), index.clone())) {
-                        if stable {
-                            begin_stable_input(f, &format!("index_{j}"), rel, ctx)?;
-                        }
-                        let old = self.preparations[s]
-                            .indices
-                            .contains(&(rel.clone(), index.clone()));
-                        let new = self.preparations[s].indices.contains(&(
-                            rel.clone(),
-                            IndexSpec {
-                                age: IndexAge::New,
-                                order: index.order.clone(),
-                            },
-                        ));
-                        writedoc! {f, "
-                            let index_{j} = self.__rule_index_{j}.update(self.__rule_input_{i}.current(), {project});
-                            self.__rule_index_{j}_versions.publish(&index_{j});
-                        "}?;
-                        if let Some(model) = stratum.model {
-                            consume_scoped(
-                                f,
-                                &format!("__scope_index_{j}"),
-                                &format!("&index_{j}"),
-                                &format!("__rule_index_{j}_versions"),
-                                &format!("index_{j}"),
-                                rel,
-                                model,
-                                s,
-                                old,
-                                new,
-                                consume,
-                                inherited_plan.as_ref().map(|_| format!("inherited_baseline.as_ref().map(|baseline| &baseline.index_{j})")).as_deref(),
-                                ctx,
-                            )?;
-                        } else {
-                            writeln!(f, "let index_{j} = self.__rule_index_{j}_versions.{consume}::<{old}, {new}>(({s}, Vec::new()));")?;
-                        }
-                        if stable {
-                            end_stable_input(
-                                f,
-                                &format!("index_{j}"),
-                                &format!("self.__rule_index_{j}_versions.current()"),
-                                rel,
-                                stratum.model,
-                                ctx,
-                            )?;
-                        }
-                    } else {
-                        // A delta-only reader does not need the full relation reordered.
-                        if stable {
-                            let typ = display_index_type(rel, ctx);
-                            writeln!(f, "let index_{j} = if input_{i}.new.is_empty() {{ {typ}::new() }} else {{ self.__rule_index_{j}.update(&input_{i}.new, {project}) }};")?;
-                        } else {
-                            writeln!(f, "let index_{j} = self.__rule_index_{j}.update(&input_{i}.new, {project});")?;
-                        }
-                    }
-                }
-                for call in &evaluation.calls {
+                StratumInstruction::Call(id) => {
+                    let call = &evaluation.calls[*id];
                     let m = call.module;
                     let module = &modules[m];
                     let env = display_module_env_struct_name(module);
@@ -890,8 +636,8 @@ impl<'s> Codegen<'s> {
                     }
                     writeln!(f, "}}; {name}(env);")?;
                 }
-                writeln!(f, "}}")?;
-                for conversion in &evaluation.output_conversions {
+                StratumInstruction::ConvertOutput(id) => {
+                    let conversion = &evaluation.output_conversions[*id];
                     let field = display_out_set_field_name(&conversion.output, ctx);
                     let suffix = if conversion.pending {
                         format!("[__compact_start_{field}..]")
@@ -905,49 +651,103 @@ impl<'s> Codegen<'s> {
                     }
                     writeln!(f, "}}")?;
                 }
-                let mut equalities = Vec::new();
-                for output in outputs {
-                    match output {
-                        FlatOutRel::Equality(typ) => {
-                            let name = display_type(*typ, ctx).to_string().to_case(Case::Snake);
-                            writedoc! {f, "
-                                for [lhs, rhs] in delta.new_{name}_equalities.drain(..) {{
-                                    self.__equate_{name}(lhs.into(), rhs.into());
-                                }}
-                            "}?;
-                            equalities.push(format!("!self.{name}_uprooted.is_empty()"));
-                        }
-                        FlatOutRel::Rel(_) | FlatOutRel::FuncDomain(_) => {}
-                    }
+                StratumInstruction::ApplyEqualities(typ) => {
+                    let name = display_type(*typ, ctx).to_string().to_case(Case::Snake);
+                    writedoc! {f, "
+                        for [lhs, rhs] in delta.new_{name}_equalities.drain(..) {{
+                            self.__equate_{name}(lhs.into(), rhs.into());
+                        }}
+                    "}?;
                 }
-                if !equalities.is_empty() {
-                    let changed = equalities.join(" || ");
+                StratumInstruction::CanonicalizeEqualities(types) => {
+                    let changed = types
+                        .iter()
+                        .map(|&typ| {
+                            let name = display_type(typ, ctx).to_string().to_case(Case::Snake);
+                            format!("!self.{name}_uprooted.is_empty()")
+                        })
+                        .join(" || ");
                     writeln!(f, "if {changed} {{ self.__canonicalize_relations(); }}")?;
                 }
-                for output in outputs {
-                    match output {
-                        FlatOutRel::Rel(rel) => {
-                            let field = display_out_set_field_name(output, ctx);
-                            let insert = ctx.internal_insert_name(*rel);
-                            let args = (0..rel.arity(ctx.signature()).len())
-                                .map(|i| format!("arg{i}"))
-                                .collect::<Vec<_>>();
-                            let converted =
-                                args.iter().map(|arg| format!("{arg}.into()")).join(", ");
-                            let args = args.join(", ");
-                            writedoc! {f, "
-                                delta.{field}.sort_unstable();
-                                delta.{field}.dedup();
-                                for [{args}] in delta.{field}.drain(..) {{ self.{insert}({converted}); }}
-                            "}?;
-                        }
-                        FlatOutRel::Equality(_) | FlatOutRel::FuncDomain(_) => {}
+                StratumInstruction::Insert(rel) => {
+                    let output = FlatOutRel::Rel(*rel);
+                    let field = display_out_set_field_name(&output, ctx);
+                    let insert = ctx.internal_insert_name(*rel);
+                    let args = (0..rel.arity(ctx.signature()).len())
+                        .map(|i| format!("arg{i}"))
+                        .collect::<Vec<_>>();
+                    let converted = args.iter().map(|arg| format!("{arg}.into()")).join(", ");
+                    let args = args.join(", ");
+                    writedoc! {f, "
+                        delta.{field}.sort_unstable();
+                        delta.{field}.dedup();
+                        for [{args}] in delta.{field}.drain(..) {{ self.{insert}({converted}); }}
+                    "}?;
+                }
+                StratumInstruction::PreparePolicies => {
+                    writeln!(f, "self.__prepare_total_member_policies();")?
+                }
+                StratumInstruction::ReturnChanged => writeln!(f, "true")?,
+            }
+        }
+        Ok(())
+    }
+
+    pub fn methods<'a>(
+        &'a self,
+        modules: &'a [RamFunction],
+        ctx: &'a RustGenCtx<'a>,
+        selection: &'a IndexSelection,
+    ) -> impl Display + 'a {
+        FmtFn(move |f| {
+            for (s, stratum) in self.strata.iter().enumerate() {
+                let inherited_plan = self.inherited_plan(s);
+                if let Some(fields) = &inherited_plan {
+                    // A matching checkpoint proves only its exact input roots.
+                    // The source revision also covers transported conclusions.
+                    let model = stratum.model.unwrap();
+                    let name = display_type(model, ctx).to_string().to_case(Case::Snake);
+                    let members = compact_indices::members(model, ctx).len();
+                    writedoc! {f, "
+                        fn __matching_inputs_{s}(&self, owners: [u32; 1]) -> Option<__InheritedInputs{s}> {{
+                            let indices = self.__compact_indices_{name}.as_ref()?;
+                            if !indices.has_owner(owners[0]) {{ return None; }}
+                            let revision = (owners[0], 0, [0; {members}]);
+                    "}?;
+                    for (field, input) in fields {
+                        let rows = self.matching_rows(input, ctx);
+                        writeln!(f, "let {field} = {rows};")?;
                     }
+                    let names = fields.keys().join(", ");
+                    writeln!(f, "Some(__InheritedInputs{s} {{ revision, {names} }}) }}")?;
+                    writeln!(f,"fn __inherited_inputs_{s}(&self, owners: [u32; 1]) -> Option<(Option<__InheritedInputs{s}>, Vec<__InheritedInputs{s}>)> {{")?;
+                    self.emit_inherited(f, &stratum.inheritance, s, ctx)?;
+                    writeln!(f, "}}")?;
                 }
-                if stratum.model.is_none() && !compact_policy::models(ctx).is_empty() {
-                    writeln!(f, "self.__prepare_total_member_policies();")?;
+                let evaluation = &self.evaluation.strata[s];
+                let stable = if self.has_stable_inputs(s) {
+                    format!("stable: &mut __StableInputs{s}, ")
+                } else {
+                    String::new()
+                };
+                writeln!(f, "#[allow(unused_variables)]")?;
+                if let Some(model) = stratum.model {
+                    let count = ctx.signature().type_(model).parents.len() + 1;
+                    let retain = if !self.preparations[s].reads_descendants() {
+                        ""
+                    } else {
+                        "retain_own: bool, "
+                    };
+                    writedoc! {f, "
+                        fn __run_stratum_{s}_at(&mut self, owners: [u32; {count}], {retain}{stable}delta: &mut ModelDelta) -> bool {{
+                    "}?;
+                } else {
+                    writedoc! {f, "
+                        fn __run_stratum_{s}(&mut self, {stable}delta: &mut ModelDelta) -> bool {{
+                    "}?;
                 }
-                writeln!(f, "true }}")?;
+                self.emit_stratum(f, &evaluation.body, s, modules, ctx, selection)?;
+                writeln!(f, "}}")?;
             }
             for (&root, &m) in self.models {
                 let plan = &self.model_preparations[&root];
@@ -1136,14 +936,6 @@ impl<'s> Codegen<'s> {
         selection: &'a IndexSelection,
     ) -> impl Display + 'a {
         FmtFn(move |f| {
-            let (prepare_policy, complete_policy) = if compact_policy::models(ctx).is_empty() {
-                ("", "")
-            } else {
-                (
-                    "self.__prepare_total_member_policies();",
-                    "self.__complete_total_members();",
-                )
-            };
             writedoc! {f, "
                 /// Closes the model until the condition holds or all rules are satisfied.
                 /// Depending on the axioms, this may run indefinitely.
@@ -1153,31 +945,9 @@ impl<'s> Codegen<'s> {
                 }}
 
                 fn __close_until(&mut self, condition: Option<&dyn Fn(&Self) -> bool>) -> bool {{
-                    if self.__closed {{
-                        return condition.is_some_and(|condition| condition(self));
-                    }}
-                    {prepare_policy}
-                    self.__canonicalize_relations();
-                    if self.__check_condition(condition) {{ return true; }}
-                    let mut delta = std::mem::replace(&mut self.__pending_delta, ModelDelta::new());
-                    loop {{
-                        {prepare_policy}
             "}?;
             emit_schedule(f, self.body, self, ctx, selection)?;
-            writedoc! {f, "
-                        self.__allocated = false;
-                        delta.apply_func_defs(self);
-                        {complete_policy}
-                        if !self.__allocated {{
-                            std::mem::swap(&mut self.__pending_delta, &mut delta);
-                            self.canonicalize();
-                            self.__closed = true;
-                            return false;
-                        }}
-                        self.__canonicalize_relations();
-                    }}
-                }}
-            "}
+            writeln!(f, "}}")
         })
     }
 }
@@ -1286,14 +1056,14 @@ fn end_stable_input(
     name: &str,
     source: &str,
     rel: &FlatInRel,
-    model: Option<TypeId>,
+    scope: Option<&ScopedInput>,
     ctx: &RustGenCtx<'_>,
 ) -> std::fmt::Result {
-    let prefix = model.map_or(0, |model| scope_prefix(rel, model, ctx));
+    let prefix = scope.map_or(0, |scope| scope.prefix);
     let arity = rel.arity(ctx.signature()).len();
-    let current = model.map_or_else(
+    let current = scope.map_or_else(
         || source.to_owned(),
-        |model| scoped_tree(source, rel, model, ctx),
+        |scope| scoped_tree(source, scope, ctx),
     );
     writeln!(f, "let full = ({current}).clone();")?;
     for i in (0..prefix).rev() {
@@ -1303,33 +1073,18 @@ fn end_stable_input(
     writeln!(f, "stable.{name} = Some(full); {name} }};")
 }
 
-fn scope_prefix(rel: &FlatInRel, model: TypeId, ctx: &RustGenCtx<'_>) -> usize {
-    crate::ram::scope_prefix(rel, model, ctx.signature())
-}
-
-fn scoped_tree(source: &str, rel: &FlatInRel, model: TypeId, ctx: &RustGenCtx<'_>) -> String {
-    let arity = rel.arity(ctx.signature()).len();
-    if scope_prefix(rel, model, ctx) == 0 {
+fn scoped_tree(source: &str, scope: &ScopedInput, ctx: &RustGenCtx<'_>) -> String {
+    if scope.prefix == 0 {
         return source.to_owned();
     }
     let mut current = format!("({source})");
-    for i in 0..scope_prefix(rel, model, ctx) {
-        let dim = arity - i - 1;
+    for i in 0..scope.prefix {
+        let dim = scope.arity - i - 1;
         current = format!("{current}.get(owners[{i}]).unwrap_or_else(|| PrefixTree{dim}::empty())");
     }
-    match rel {
-        FlatInRel::Rel(FlatRel::ModelMember(typ)) => {
-            if ctx.supports_compact_members(*typ)
-                && ctx.signature().type_(*typ).parents.as_slice() == [model]
-            {
-                let name = display_type(*typ, ctx).to_string().to_case(Case::Snake);
-                return format!("if self.__compact_members_{name}.is_some() {{ self.__compact_domain_{name}.get(owners[0]).unwrap_or_else(|| PrefixTree1::empty()) }} else {{ {current} }}");
-            }
-        }
-        FlatInRel::Rel(FlatRel::Pred(_) | FlatRel::Func(_))
-        | FlatInRel::RelWithDiagonals { .. }
-        | FlatInRel::TypeSet(_)
-        | FlatInRel::Equality(_) => {}
+    if let Some(typ) = scope.compact_domain {
+        let name = display_type(typ, ctx).to_string().to_case(Case::Snake);
+        return format!("if self.__compact_members_{name}.is_some() {{ self.__compact_domain_{name}.get(owners[0]).unwrap_or_else(|| PrefixTree1::empty()) }} else {{ {current} }}");
     }
     current
 }
@@ -1340,8 +1095,7 @@ fn consume_scoped(
     source: &str,
     global: &str,
     name: &str,
-    rel: &FlatInRel,
-    model: TypeId,
+    scope: &ScopedInput,
     stratum: usize,
     old: bool,
     new: bool,
@@ -1349,8 +1103,8 @@ fn consume_scoped(
     inherited: Option<&str>,
     ctx: &RustGenCtx<'_>,
 ) -> std::fmt::Result {
-    let arity = rel.arity(ctx.signature()).len();
-    let prefix = scope_prefix(rel, model, ctx);
+    let arity = scope.arity;
+    let prefix = scope.prefix;
     if prefix == 0 {
         if let Some(inherited) = inherited {
             let suffix = consume.strip_prefix("consume_").unwrap();
@@ -1369,7 +1123,7 @@ fn consume_scoped(
     }
     let field = format!("{field}_{prefix}");
     let key = (0..prefix).map(|i| format!("owners[{i}]")).join(", ");
-    let current = scoped_tree(source, rel, model, ctx);
+    let current = scoped_tree(source, scope, ctx);
     writedoc! {f, "
         let {name} = {{
             let current = {current};
@@ -1404,6 +1158,227 @@ fn consume_scoped(
     "}
 }
 
+fn display_projection(plan: &InputProjection) -> String {
+    let row = plan.source.iter().map(|i| format!("el{i}")).join(", ");
+    let result = plan.target.iter().map(|i| format!("el{i}")).join(", ");
+    let checks = plan
+        .equalities
+        .iter()
+        .map(|(i, j)| format!("el{i} == el{j}"))
+        .join(" && ");
+    if checks.is_empty() {
+        format!("|[{row}]| Some([{result}])")
+    } else {
+        format!("|[{row}]| ({checks}).then_some([{result}])")
+    }
+}
+
+fn emit_input_read(
+    f: &mut std::fmt::Formatter<'_>,
+    read: &InputRead,
+    s: usize,
+    ctx: &RustGenCtx<'_>,
+) -> std::fmt::Result {
+    let name = input_name(read.storage);
+    let consume = match read.consumption {
+        Consumption::Membership => "consume_membership",
+        Consumption::Required => "consume_required",
+    };
+    let old = read.old;
+    let new = read.new;
+    let inherited = read
+        .inherited
+        .then(|| format!("inherited_baseline.as_ref().map(|baseline| &baseline.{name})"));
+    let (global, scoped) = match read.storage {
+        InputStorage::Relation(id) => (format!("__rule_input_{id}"), format!("__scope_input_{id}")),
+        InputStorage::Index(id) => (
+            format!("__rule_index_{id}_versions"),
+            format!("__scope_index_{id}"),
+        ),
+        InputStorage::Native(id) => (
+            format!("__native_input_{id}"),
+            format!("__scope_native_{id}"),
+        ),
+    };
+    match &read.source {
+        InputReadSource::Relation { diagonal } => {
+            let stable_global = read.stable && read.scope.is_none();
+            if read.stable && !stable_global {
+                begin_stable_input(f, &name, &read.rel, ctx)?;
+            }
+            if stable_global {
+                writeln!(f, "if let Some(current) = &stable.{name} {{ self.{global}.publish(current); }} else {{")?;
+            }
+            let current = display_all_index_field_name(&read.rel, &read.index, ctx);
+            if *diagonal {
+                let arity = read.index.order.len();
+                let suffix = arity - 1;
+                writedoc! {f, "
+                    let filtered_{name} = {{
+                        let mut filtered = PrefixTree{arity}::new();
+                        for (key, rows) in self.{current}.map.iter() {{
+                            if let Some(rows) = rows.get(key) {{
+                                let mut suffix = PrefixTree{suffix}::new();
+                                suffix.insert_restriction(key, rows.clone());
+                                filtered.insert_restriction(key, suffix);
+                            }}
+                        }}
+                        filtered
+                    }};
+                    self.{global}.publish(&filtered_{name});
+                "}?;
+            } else {
+                writeln!(f, "self.{global}.publish(&self.{current});")?;
+            }
+            if stable_global {
+                writeln!(f, "}}")?;
+                begin_stable_input(f, &name, &read.rel, ctx)?;
+            }
+            if let Some(scope) = &read.scope {
+                consume_scoped(
+                    f,
+                    &scoped,
+                    &format!("self.{global}.current()"),
+                    &global,
+                    &name,
+                    scope,
+                    s,
+                    old,
+                    new,
+                    consume,
+                    inherited.as_deref(),
+                    ctx,
+                )?;
+            } else {
+                writeln!(
+                    f,
+                    "let {name} = self.{global}.{consume}::<{old}, {new}>(({s}, Vec::new()));"
+                )?;
+            }
+            if read.stable {
+                end_stable_input(
+                    f,
+                    &name,
+                    &format!("self.{global}.current()"),
+                    &read.rel,
+                    read.scope.as_ref(),
+                    ctx,
+                )?;
+            }
+            writeln!(f, "dirty |= !{name}.new.is_empty();")?;
+        }
+        InputReadSource::Native(preparation) => {
+            let id = match read.storage {
+                InputStorage::Native(id) => id,
+                InputStorage::Relation(_) | InputStorage::Index(_) => {
+                    unreachable!("native reads use native storage")
+                }
+            };
+            if read.stable {
+                begin_stable_input(f, &name, &read.rel, ctx)?;
+            }
+            match preparation {
+                NativeReadPreparation::Primary => {
+                    writeln!(f, "self.__prepare_native_index_from_primary_{id}();")?
+                }
+                NativeReadPreparation::Extend => writeln!(f, "self.__extend_native_index_{id}();")?,
+                NativeReadPreparation::Full => writeln!(f, "self.__prepare_native_index_{id}();")?,
+            }
+            if let Some(scope) = &read.scope {
+                consume_scoped(
+                    f,
+                    &scoped,
+                    &format!("self.{global}.current()"),
+                    &global,
+                    &name,
+                    scope,
+                    s,
+                    old,
+                    new,
+                    consume,
+                    inherited.as_deref(),
+                    ctx,
+                )?;
+            } else {
+                writeln!(
+                    f,
+                    "let {name} = self.{global}.{consume}::<{old}, {new}>({s});"
+                )?;
+            }
+            if read.stable {
+                end_stable_input(
+                    f,
+                    &name,
+                    &format!("self.{global}.current()"),
+                    &read.rel,
+                    read.scope.as_ref(),
+                    ctx,
+                )?;
+            }
+        }
+        InputReadSource::Projected {
+            source,
+            projection,
+            history,
+        } => {
+            let id = match read.storage {
+                InputStorage::Index(id) => id,
+                InputStorage::Relation(_) | InputStorage::Native(_) => {
+                    unreachable!("projected reads use index storage")
+                }
+            };
+            let project = display_projection(projection);
+            if *history {
+                if read.stable {
+                    begin_stable_input(f, &name, &read.rel, ctx)?;
+                }
+                writeln!(f,"let {name} = self.__rule_index_{id}.update(self.__rule_input_{source}.current(), {project});")?;
+                writeln!(f, "self.{global}.publish(&{name});")?;
+                if let Some(scope) = &read.scope {
+                    consume_scoped(
+                        f,
+                        &scoped,
+                        &format!("&{name}"),
+                        &global,
+                        &name,
+                        scope,
+                        s,
+                        old,
+                        new,
+                        consume,
+                        inherited.as_deref(),
+                        ctx,
+                    )?;
+                } else {
+                    writeln!(
+                        f,
+                        "let {name} = self.{global}.{consume}::<{old}, {new}>(({s}, Vec::new()));"
+                    )?;
+                }
+                if read.stable {
+                    end_stable_input(
+                        f,
+                        &name,
+                        &format!("self.{global}.current()"),
+                        &read.rel,
+                        read.scope.as_ref(),
+                        ctx,
+                    )?;
+                }
+            } else if read.stable {
+                let typ = display_index_type(&read.rel, ctx);
+                writeln!(f,"let {name} = if input_{source}.new.is_empty() {{ {typ}::new() }} else {{ self.__rule_index_{id}.update(&input_{source}.new, {project}) }};")?;
+            } else {
+                writeln!(
+                    f,
+                    "let {name} = self.__rule_index_{id}.update(&input_{source}.new, {project});"
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
 fn retained_owners(retain: RetainedOwners) -> String {
     match retain {
         RetainedOwners::None => "false".to_owned(),
@@ -1421,6 +1396,24 @@ fn emit_schedule(
 ) -> std::fmt::Result {
     for stmt in body {
         match stmt {
+            EvaluationStmt::Lifecycle(operation) => {
+                let source = match operation {
+                    EvaluationLifecycle::PreparePolicies => "self.__prepare_total_member_policies();",
+                    EvaluationLifecycle::CompletePolicies => "self.__complete_total_members();",
+                    EvaluationLifecycle::CanonicalizeRelations => "self.__canonicalize_relations();",
+                    EvaluationLifecycle::TakeDelta => "let mut delta = std::mem::replace(&mut self.__pending_delta, ModelDelta::new());",
+                    EvaluationLifecycle::ClearAllocated => "self.__allocated = false;",
+                    EvaluationLifecycle::ApplyDeferredFunctions => "delta.apply_func_defs(self);",
+                    EvaluationLifecycle::SaveDelta => "std::mem::swap(&mut self.__pending_delta, &mut delta);",
+                    EvaluationLifecycle::Canonicalize => "self.canonicalize();",
+                    EvaluationLifecycle::MarkClosed => "self.__closed = true;",
+                    EvaluationLifecycle::ReturnFalse => "return false;",
+                    EvaluationLifecycle::ReturnCondition => "return condition.is_some_and(|condition| condition(self));",
+                    EvaluationLifecycle::CheckConditionBeforeDelta => "if self.__check_condition(condition) { return true; }",
+                };
+                writeln!(f, "{source}")?;
+            }
+
             EvaluationStmt::Block(body) => {
                 writeln!(f, "{{")?;
                 emit_schedule(f, body, codegen, ctx, selection)?;
@@ -1448,6 +1441,9 @@ fn emit_schedule(
             }
             EvaluationStmt::When { condition, body } => {
                 match condition {
+                    EvaluationCondition::Closed => writeln!(f, "if self.__closed {{")?,
+                    EvaluationCondition::NoAllocations => writeln!(f, "if !self.__allocated {{")?,
+
                     EvaluationCondition::StratumChanged {
                         stratum,
                         scoped,
