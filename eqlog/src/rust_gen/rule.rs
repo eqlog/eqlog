@@ -162,6 +162,12 @@ pub fn display_module_env_struct<'a>(
                 }
             })
             .join("\n");
+        let proofs = match ctx.model_mode() {
+            ModelMode::Native if ram_module.owner_count() > 0 => {
+                "__proofs: &'a [Vec<eqlog_runtime::__private::Table>],"
+            }
+            ModelMode::Native | ModelMode::Desugared => "",
+        };
         let owners = if ram_module.owner_count() > 0 {
             let count = ram_module.owner_count();
             format!("__owners: [u32; {count}],")
@@ -173,6 +179,7 @@ pub fn display_module_env_struct<'a>(
             #[allow(unused)]
             pub struct {name}<'a> {{
             phantom: std::marker::PhantomData<&'a ()>,
+            {proofs}
             {owners}
             {canonical}
 
@@ -318,7 +325,11 @@ fn display_iter_expr<'a>(stmt: &'a IterStmt, ctx: &'a RustGenCtx<'a>) -> impl 'a
     })
 }
 
-fn display_stmt_pre<'a>(ram_stmt: &'a RamStmt, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
+fn display_stmt_pre<'a>(
+    ram_stmt: &'a RamStmt,
+    ctx: &'a RustGenCtx<'a>,
+    proof_variable: Option<usize>,
+) -> impl 'a + Display {
     FmtFn(move |f| match ram_stmt {
         RamStmt::DefineSet(DefineSetStmt { defined_var, expr }) => {
             let expr = display_in_set_expr(expr, ctx);
@@ -383,6 +394,28 @@ fn display_stmt_pre<'a>(ram_stmt: &'a RamStmt, ctx: &'a RustGenCtx<'a>) -> impl 
             }
             assert!(sets.len() >= 1, "Expected at least one set in IterStmt");
             let iterator = display_iter_expr(iter, ctx);
+            let iterator = if let Some(variable) = proof_variable {
+                writedoc! {f, "
+                    let __proof_keys = __match_proofs.as_ref()
+                        .and_then(|proofs| proofs.uncovered_keys({variable}));
+                "}?;
+                let copy = if sets[0].arity == 1 { ".cloned()" } else { "" };
+                let lookups = sets
+                    .iter()
+                    .map(|set| {
+                        let name = display_set_var(set, ctx);
+                        format!(
+                            "{name}.get(key).into_iter(){copy}.map(move |suffix| (key, suffix))"
+                        )
+                    })
+                    .reduce(|left, right| format!("{left}.chain({right})"))
+                    .unwrap();
+                format!(
+                    "__proof_keys.as_ref().into_iter().flat_map(|keys| keys.iter_restrictions().flat_map(|(key, _)| {{ {lookups} }})).chain(__proof_keys.is_none().then(|| {iterator}).into_iter().flatten())"
+                )
+            } else {
+                iterator.to_string()
+            };
             if !lookup_drivers.is_empty() {
                 let direct_count = display_key_count(sets, ctx);
                 let inverse_count = display_key_count(lookup_drivers, ctx);
@@ -550,7 +583,7 @@ fn display_shared_stmts<'a>(
         let first = routines[0];
         if routines.len() == 1 {
             for stmt in first {
-                write!(f, "{}", display_stmt_pre(stmt, ctx))?;
+                write!(f, "{}", display_stmt_pre(stmt, ctx, None))?;
             }
             for stmt in first.iter().rev() {
                 write!(f, "{}", display_stmt_post(stmt))?;
@@ -571,7 +604,7 @@ fn display_shared_stmts<'a>(
             })
             .count();
         for stmt in &first[..shared] {
-            write!(f, "{}", display_stmt_pre(stmt, ctx))?;
+            write!(f, "{}", display_stmt_pre(stmt, ctx, None))?;
         }
 
         let mut branches: BTreeMap<&RamStmt, Vec<&[RamStmt]>> = BTreeMap::new();
@@ -602,6 +635,192 @@ fn display_shared_stmts<'a>(
             write!(f, "{}", display_stmt_post(stmt))?;
         }
         Ok(())
+    })
+}
+
+struct ProofAtom {
+    inputs: Vec<usize>,
+    columns: Vec<usize>,
+}
+
+struct ProofPlan {
+    atoms: Vec<ProofAtom>,
+    variables: BTreeMap<String, usize>,
+    relevant: BTreeSet<usize>,
+}
+
+fn proof_plan(routine: &RamRoutine, module: &RamModule) -> Option<ProofPlan> {
+    let inputs: Vec<_> = module_env_in_rels(module).into_iter().collect();
+    let mut variables = BTreeMap::new();
+    for var in routine.flat_rule.premise.iter().flat_map(|stmt| &stmt.args) {
+        let next = variables.len();
+        variables.entry(var.name.to_string()).or_insert(next);
+    }
+    let mut atoms = Vec::new();
+    for (position, premise) in routine.flat_rule.premise.iter().enumerate() {
+        let mut reads = Vec::new();
+        for stmt in &routine.stmts {
+            match stmt {
+                RamStmt::DefineSet(stmt) => match &stmt.expr {
+                    InSetExpr::GetIndex(index) => {
+                        if stmt.defined_var.name.stmt_index == position {
+                            reads.push(index);
+                        }
+                    }
+                    InSetExpr::Restrict(_) => {}
+                },
+                RamStmt::Iter(_)
+                | RamStmt::Insert(_)
+                | RamStmt::GuardInhabited(_)
+                | RamStmt::GuardPlan(_) => {}
+            }
+        }
+        let first = reads.first()?;
+        if reads
+            .iter()
+            .any(|read| read.rel != premise.rel || read.index_spec.order != first.index_spec.order)
+        {
+            return None;
+        }
+        atoms.push(ProofAtom {
+            inputs: reads
+                .iter()
+                .map(|read| {
+                    inputs
+                        .binary_search(&(read.rel.clone(), read.index_spec.clone()))
+                        .unwrap()
+                })
+                .collect(),
+            columns: first
+                .index_spec
+                .order
+                .iter()
+                .map(|&column| variables[premise.args[column].name.as_ref()])
+                .collect(),
+        });
+    }
+    let mut relevant = BTreeSet::new();
+    for owner in routine.flat_rule.scope.owners() {
+        if let Some(&variable) = variables.get(owner.name.as_ref()) {
+            relevant.insert(variable);
+        }
+    }
+    for stmt in &routine.stmts {
+        match stmt {
+            RamStmt::Iter(iter) => {
+                relevant.insert(variables[iter.loop_var_el.name.as_ref()]);
+            }
+            RamStmt::DefineSet(_)
+            | RamStmt::Insert(_)
+            | RamStmt::GuardInhabited(_)
+            | RamStmt::GuardPlan(_) => {}
+        }
+    }
+    (!atoms.is_empty()).then_some(ProofPlan {
+        atoms,
+        variables,
+        relevant,
+    })
+}
+
+fn display_proved_routine<'a>(
+    routine: &'a RamRoutine,
+    module: &'a RamModule,
+    plan: &'a ProofPlan,
+    ctx: &'a RustGenCtx<'a>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let inputs: Vec<_> = module_env_in_rels(module).into_iter().collect();
+        let current = plan
+            .atoms
+            .iter()
+            .map(|atom| {
+                atom.inputs
+                    .iter()
+                    .map(|&input| {
+                        let (rel, index) = &inputs[input];
+                        let name = display_index_field_name(rel, index, ctx);
+                        format!("eqlog_runtime::__private::Table::from((*env.{name}).clone())")
+                    })
+                    .reduce(|left, right| format!("{left}.union(&{right})"))
+                    .unwrap()
+            })
+            .join(", ");
+        let proofs = plan
+            .atoms
+            .iter()
+            .map(|atom| {
+                let input = atom.inputs[0];
+                format!("proof[{input}].clone()")
+            })
+            .join(", ");
+        let columns = plan
+            .atoms
+            .iter()
+            .map(|atom| {
+                let columns = atom.columns.iter().join(", ");
+                format!("vec![{columns}]")
+            })
+            .join(", ");
+        let relevant = plan.relevant.iter().join(", ");
+        writedoc! {f, "
+            let __match_proofs = eqlog_runtime::__private::MatchProofState::new(
+                vec![{current}],
+                env.__proofs.iter().map(|proof| vec![{proofs}]).collect(),
+                vec![{columns}],
+            ).map(|proofs| proofs.with_relevant_variables(&[{relevant}]));
+        "}?;
+        for owner in routine.flat_rule.scope.owners() {
+            if let Some(variable) = plan.variables.get(owner.name.as_ref()) {
+                let owner = &owner.name;
+                writedoc! {f, "
+                    let __match_proofs = __match_proofs
+                        .and_then(|proofs| proofs.restrict({variable}, {owner}));
+                "}?;
+            }
+        }
+        writeln!(
+            f,
+            "if !__match_proofs.as_ref().is_some_and(|proofs| proofs.is_covered()) {{"
+        )?;
+        for stmt in &routine.stmts {
+            match stmt {
+                RamStmt::Iter(iter) => {
+                    let variable = plan.variables[iter.loop_var_el.name.as_ref()];
+                    write!(f, "{}", display_stmt_pre(stmt, ctx, Some(variable)))?;
+                    let value = &iter.loop_var_el;
+                    writedoc! {f, "
+                        let __match_proofs = __match_proofs.as_ref()
+                            .and_then(|proofs| proofs.restrict({variable}, {value}));
+                        if !__match_proofs.as_ref().is_some_and(|proofs| proofs.is_covered()) {{
+                    "}?;
+                }
+                RamStmt::Insert(_) => {
+                    // Unbound private suffixes only witness existence. A source
+                    // containing all those witnesses has already proved this head.
+                    writeln!(
+                        f,
+                        "if !__match_proofs.as_ref().is_some_and(|proofs| proofs.is_covered()) {{"
+                    )?;
+                    write!(f, "{}", display_stmt_pre(stmt, ctx, None))?;
+                    writeln!(f, "}}")?;
+                }
+                RamStmt::DefineSet(_) | RamStmt::GuardInhabited(_) | RamStmt::GuardPlan(_) => {
+                    write!(f, "{}", display_stmt_pre(stmt, ctx, None))?;
+                }
+            }
+        }
+        for stmt in routine.stmts.iter().rev() {
+            match stmt {
+                RamStmt::Iter(_) => writeln!(f, "}}")?,
+                RamStmt::DefineSet(_)
+                | RamStmt::Insert(_)
+                | RamStmt::GuardInhabited(_)
+                | RamStmt::GuardPlan(_) => {}
+            }
+            write!(f, "{}", display_stmt_post(stmt))?;
+        }
+        writeln!(f, "}}")
     })
 }
 
@@ -645,9 +864,28 @@ fn display_routine_group<'a>(
             {flat_rule_comment}
             fn {name}(env: &mut {env_type}) {{
             {owners}
-            {body}
-            }}
-        "}
+        "}?;
+        let plans: Option<Vec<_>> = match ctx.model_mode() {
+            ModelMode::Native if ram_module.owner_count() > 0 => routines
+                .iter()
+                .map(|routine| proof_plan(routine, ram_module))
+                .collect(),
+            ModelMode::Native | ModelMode::Desugared => None,
+        };
+        if let Some(plans) = plans {
+            writeln!(f, "if env.__proofs.is_empty() {{ {body} }} else {{")?;
+            for (routine, plan) in routines.iter().zip(&plans) {
+                writeln!(
+                    f,
+                    "{{ {} }}",
+                    display_proved_routine(routine, ram_module, plan, ctx)
+                )?;
+            }
+            writeln!(f, "}}")?;
+        } else {
+            write!(f, "{body}")?;
+        }
+        writeln!(f, "}}")
     })
 }
 

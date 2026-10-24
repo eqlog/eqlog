@@ -73,6 +73,18 @@ processed rule inputs before reuse. Preserve primary mapping identities
 and raw rows, and keep tied choices stable so local closure does not
 rotate between already consumed proofs.
 
+Reuse every certified incoming proof when evaluating a merged model.
+Keep the largest source as a cheap delta baseline, then exclude matches
+covered by other completed parents before expanding their join products.
+Retain the target's previous processed snapshots when resetting that
+baseline, so older mixed-parent matches are not repeated either.
+
+Carry source certificates through bound prefixes, preserving membership
+in overlapping parents. Prune covered suffixes and subtract the union of
+eligible source suffixes before enumerating the last matching variable.
+Project private witnesses by existence without expanding their products.
+Keep ordinary matching unchanged when no extra certificate is available.
+
 Use the same mechanism for predicates and functionality. Keep
 owner-dependent global premises and owner-valued data on the ordinary
 path when their matches do not transport. Prefer selective owner-bound

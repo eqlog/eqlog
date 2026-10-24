@@ -236,6 +236,52 @@ impl<'s> Codegen<'s> {
         }
     }
 
+    fn matching_rows(
+        &self,
+        rel: &FlatInRel,
+        index: &IndexSpec,
+        model: TypeId,
+        selection: &IndexSelection,
+        ctx: &RustGenCtx<'_>,
+    ) -> String {
+        match rel {
+            FlatInRel::Rel(FlatRel::ModelMember(typ)) => {
+                let name = display_type(*typ, ctx).to_string().to_case(Case::Snake);
+                format!("PrefixTree1 {{ set: self.__compact_members_{name}.as_ref()?.get_snapshot(owners[0])?.canonical_domain().clone() }}")
+            }
+            FlatInRel::Rel(FlatRel::Pred(_) | FlatRel::Func(_)) => {
+                let slot =
+                    compact_indices::inherited_slot(rel, index, model, ctx, selection).unwrap();
+                let arity = rel.arity(ctx.signature()).len() - scope_prefix(rel, model, ctx);
+                format!("<&PrefixTree{arity}>::try_from(indices.rows(owners[0], {slot})).expect(\"matching index arity\").clone()")
+            }
+            FlatInRel::TypeSet(_) => {
+                let field = display_all_index_field_name(rel, index, ctx);
+                format!("self.{field}.clone()")
+            }
+            FlatInRel::RelWithDiagonals { .. } | FlatInRel::Equality(_) => {
+                unreachable!("only certified inputs have matching snapshots")
+            }
+        }
+    }
+
+    fn inherited_field(
+        &self,
+        rel: &FlatInRel,
+        index: &IndexSpec,
+        selection: &IndexSelection,
+    ) -> String {
+        if let Some(id) = native_indices::find(self.native_indices, rel, index) {
+            format!("native_input_{id}")
+        } else if selection.is_primary(rel, index) {
+            let i = self.inputs[&source_relation(rel)];
+            format!("input_{i}")
+        } else {
+            let j = self.indices[&input_key(rel.clone(), index.clone())];
+            format!("index_{j}")
+        }
+    }
+
     fn inherited_plan(
         &self,
         s: usize,
@@ -294,10 +340,8 @@ impl<'s> Codegen<'s> {
                 Some(format!("native_input_{id}"))
             } else if !selection.is_primary(rel, index) {
                 let key = input_key(rel.clone(), index.clone());
-                self.old_indices.contains(&key).then(|| {
-                    let j = self.indices[&key];
-                    format!("index_{j}")
-                })
+                let j = self.indices[&key];
+                Some(format!("index_{j}"))
             } else {
                 None
             };
@@ -345,6 +389,8 @@ impl<'s> Codegen<'s> {
                     if inherited.is_some() {
                         let members = compact_indices::members(model, ctx).len();
                         writeln!(f, "inherited: Option<(u32, u64, [u64; {members}])>,")?;
+                        writeln!(f, "inherited_seen: std::rc::Rc<std::collections::BTreeMap<u32, (u64, [u64; {members}])>>,")?;
+                        writeln!(f, "matching_proof: Option<__InheritedInputs{s}>,")?;
                     }
                     for rel in self.stratum_inputs(s) {
                         let i = self.inputs[&rel];
@@ -355,7 +401,7 @@ impl<'s> Codegen<'s> {
                     writeln!(f, "}}")?;
                     if let Some(fields) = inherited {
                         let members = compact_indices::members(model, ctx).len();
-                        writeln!(f, "struct __InheritedInputs{s} {{ revision: (u32, u64, [u64; {members}]),")?;
+                        writeln!(f, "#[derive(Clone)] struct __InheritedInputs{s} {{ revision: (u32, u64, [u64; {members}]),")?;
                         for (name, (rel, _)) in fields {
                             let arity =
                                 rel.arity(ctx.signature()).len() - scope_prefix(&rel, model, ctx);
@@ -623,8 +669,21 @@ impl<'s> Codegen<'s> {
                     // The source revision also covers transported conclusions.
                     let model = stratum.model.unwrap();
                     let name = display_type(model, ctx).to_string().to_case(Case::Snake);
+                    let members = compact_indices::members(model, ctx).len();
                     writedoc! {f, "
-                        fn __inherited_inputs_{s}(&self, owners: [u32; 1]) -> Option<__InheritedInputs{s}> {{
+                        fn __matching_inputs_{s}(&self, owners: [u32; 1]) -> Option<__InheritedInputs{s}> {{
+                            let indices = self.__compact_indices_{name}.as_ref()?;
+                            if !indices.has_owner(owners[0]) {{ return None; }}
+                            let revision = (owners[0], 0, [0; {members}]);
+                    "}?;
+                    for (field, (rel, index)) in fields {
+                        let rows = self.matching_rows(rel, index, model, selection, ctx);
+                        writeln!(f, "let {field} = {rows};")?;
+                    }
+                    let names = fields.keys().join(", ");
+                    writeln!(f, "Some(__InheritedInputs{s} {{ revision, {names} }}) }}")?;
+                    writedoc! {f, "
+                        fn __inherited_inputs_{s}(&self, owners: [u32; 1]) -> Option<(Option<__InheritedInputs{s}>, Vec<__InheritedInputs{s}>)> {{
                             let indices = self.__compact_indices_{name}.as_ref()?;
                             if !indices.has_owner(owners[0]) {{ return None; }}
                     "}?;
@@ -637,7 +696,8 @@ impl<'s> Codegen<'s> {
                         "}?;
                     }
                     writedoc! {f, "
-                        let mut best: Option<(u64, __InheritedInputs{s})> = None;
+                        let mut best: Option<(u64, usize)> = None;
+                        let mut certified = Vec::new();
                         for (position, (source, revision, rows)) in indices.inherited_inputs(owners[0]).enumerate() {{
                             let candidate = (|| {{
                                 if indices.revision(source) != revision {{ return None; }}
@@ -688,12 +748,19 @@ impl<'s> Codegen<'s> {
                             }})();
                             let Some((score, candidate)) = candidate else {{ continue; }};
                             if best.as_ref().is_none_or(|(previous, _)| score > *previous) {{
-                                best = Some((score, candidate));
+                                best = Some((score, certified.len()));
                             }}
+                            certified.push(candidate);
                         }}
                         let (_, best) = best?;
-                        if self.__owner_inputs_{s}.get(&owners).is_some_and(|previous| previous.inherited == Some(best.revision)) {{ return None; }}
-                        Some(best)
+                        let previous = self.__owner_inputs_{s}.get(&owners)?;
+                        let baseline = (previous.inherited != Some(certified[best].revision))
+                            .then(|| certified[best].clone());
+                        certified.retain(|proof| {{
+                            let (source, revision, members) = proof.revision;
+                            previous.inherited_seen.get(&source) != Some(&(revision, members))
+                        }});
+                        Some((baseline, certified))
                     }}
                     "}?;
                 }
@@ -790,8 +857,17 @@ impl<'s> Codegen<'s> {
                             "inherited: previous.and_then(|previous| previous.inherited)"
                                 .to_owned(),
                         );
+                        snapshots.push("inherited_seen: previous.map(|previous| previous.inherited_seen.clone()).unwrap_or_default()".to_owned());
+                        snapshots.push(format!(
+                            "matching_proof: self.__matching_inputs_{s}(owners)"
+                        ));
                     }
                     let snapshots = snapshots.join(", ");
+                    let previous_proof = if inherited_plan.is_some() {
+                        "let previous_matching_proof = previous.and_then(|previous| previous.matching_proof.clone());"
+                    } else {
+                        ""
+                    };
                     writedoc! {f, "
                         let previous = self.__owner_inputs_{s}.get(&owners);
                         #[allow(unused_mut)]
@@ -799,6 +875,7 @@ impl<'s> Codegen<'s> {
                         if previous.is_some_and(|_previous| {unchanged}) {{
                             return false;
                         }}
+                        {previous_proof}
                         let checkpoint = __OwnerInputs{s} {{ {snapshots} }};
                         self.__owner_inputs_{s}.insert(owners, checkpoint);
                     "}?;
@@ -835,9 +912,21 @@ impl<'s> Codegen<'s> {
                     // New inherited facts can join local facts matched earlier.
                     // Reset every index together, then resume temporal deltas.
                     writedoc! {f, "
-                        let inherited_baseline = if delta.has_pending_func_defs() {{ None }} else {{ self.__inherited_inputs_{s}(owners) }};
+                        let (inherited_baseline, mut matching_proofs) = if delta.has_pending_func_defs() {{
+                            (None, Vec::new())
+                        }} else {{ self.__inherited_inputs_{s}(owners).unwrap_or_default() }};
+                        if !matching_proofs.is_empty() {{
+                            let seen = &mut self.__owner_inputs_{s}.get_mut(&owners).unwrap().inherited_seen;
+                            let seen = std::rc::Rc::make_mut(seen);
+                            for proof in &matching_proofs {{
+                                let (source, revision, members) = proof.revision;
+                                seen.insert(source, (revision, members));
+                            }}
+                        }}
                         if let Some(baseline) = &inherited_baseline {{
                             self.__owner_inputs_{s}.get_mut(&owners).unwrap().inherited = Some(baseline.revision);
+                            matching_proofs.retain(|proof| proof.revision != baseline.revision);
+                            if let Some(previous) = previous_matching_proof {{ matching_proofs.push(previous); }}
                             dirty = true;
                     "}?;
                     if self.has_stable_inputs(s) {
@@ -1051,7 +1140,29 @@ impl<'s> Codegen<'s> {
                     let module = &modules[m];
                     let env = display_module_env_struct_name(module);
                     let name = &module.name;
+                    if inherited_plan.is_some() {
+                        let model = stratum.model.unwrap();
+                        writeln!(f, "let matching_proofs_{m}: Vec<Vec<eqlog_runtime::__private::Table>> = matching_proofs.iter().map(|proof| {{ vec![")?;
+                        for (rel, index) in module_env_in_rels(module) {
+                            let field = self.inherited_field(&rel, &index, selection);
+                            let arity = rel.arity(ctx.signature()).len();
+                            writeln!(f, "{{ let rows = proof.{field}.clone();")?;
+                            for i in (0..scope_prefix(&rel, model, ctx)).rev() {
+                                let dim = arity - i;
+                                writeln!(f, "let rows = {{ let mut tree = PrefixTree{dim}::new(); tree.insert_restriction(owners[{i}], rows); tree }};")?;
+                            }
+                            writeln!(f, "eqlog_runtime::__private::Table::from(rows) }},")?;
+                        }
+                        writeln!(f, "] }}).collect();")?;
+                    }
                     writeln!(f, "let env = {env} {{ phantom: std::marker::PhantomData,")?;
+                    if module.owner_count() > 0 {
+                        if inherited_plan.is_some() {
+                            writeln!(f, "__proofs: &matching_proofs_{m},")?;
+                        } else {
+                            writeln!(f, "__proofs: &[],")?;
+                        }
+                    }
                     if stratum.model.is_some() {
                         writeln!(f, "__owners: owners,")?;
                     }

@@ -8,6 +8,7 @@ pub use super::compact_owner_indices::{
 pub use super::data::{RelationData, RelationIndex, TypeData};
 pub use super::element_weights::ElementWeights;
 pub use super::lazy_index::{IndexSeed, LazyIndex};
+pub use super::match_proofs::MatchProofState;
 pub use super::member_spaces::{
     MemberBlock, MemberInheritedInputs, MemberMerge, MemberRefresh, MemberSnapshot,
     MemberSpaceStats, MemberSpaces, SharedInheritance,

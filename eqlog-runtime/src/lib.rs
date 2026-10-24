@@ -57,6 +57,7 @@ mod compact_owner_indices;
 mod data;
 mod indexed;
 mod lazy_index;
+mod match_proofs;
 mod model;
 mod model_hom;
 mod origin_relations;

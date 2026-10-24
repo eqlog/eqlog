@@ -231,6 +231,81 @@ macro_rules! table {
                     }
                 })
             }
+
+            /// Set operations retain shared subtrees in inherited matching proofs.
+            pub fn intersection(&self, other: &Self) -> Self {
+                assert_eq!(self.arity(), other.arity());
+                Self(match &self.0 {
+                    $(Rows::$variant(tree) => {
+                        let other = <&$tree>::try_from(other).expect("equal arities");
+                        Rows::$variant(tree.intersection(other))
+                    },)*
+                    Rows::Long { arity, rows } => {
+                        let other_rows = match &other.0 {
+                            $(Rows::$variant(_) => unreachable!("equal arities"),)*
+                            Rows::Long { arity: _, rows } => rows,
+                        };
+                        Rows::Long {
+                            arity: *arity,
+                            rows: rows.intersection_shared(
+                                other_rows,
+                                |_, left, right| {
+                                    let result = left.intersection(right);
+                                    (!result.is_empty()).then_some(result)
+                                },
+                                Table::shares_storage_with,
+                            ),
+                        }
+                    }
+                })
+            }
+
+            pub fn difference(&self, other: &Self) -> Self {
+                assert_eq!(self.arity(), other.arity());
+                Self(match &self.0 {
+                    $(Rows::$variant(tree) => {
+                        let other = <&$tree>::try_from(other).expect("equal arities");
+                        Rows::$variant(tree.difference(other))
+                    },)*
+                    Rows::Long { arity, rows } => {
+                        let other_rows = match &other.0 {
+                            $(Rows::$variant(_) => unreachable!("equal arities"),)*
+                            Rows::Long { arity: _, rows } => rows,
+                        };
+                        Rows::Long {
+                            arity: *arity,
+                            rows: rows.difference_shared(
+                                other_rows,
+                                |_, left, right| {
+                                    let result = left.difference(&right);
+                                    (!result.is_empty()).then_some(result)
+                                },
+                                Table::shares_storage_with,
+                            ),
+                        }
+                    }
+                })
+            }
+
+            pub fn is_subset(&self, other: &Self) -> bool {
+                assert_eq!(self.arity(), other.arity());
+                match &self.0 {
+                    $(Rows::$variant(tree) => {
+                        let other = <&$tree>::try_from(other).expect("equal arities");
+                        tree.is_subset(other)
+                    },)*
+                    Rows::Long { arity: _, rows } => {
+                        let other_rows = match &other.0 {
+                            $(Rows::$variant(_) => unreachable!("equal arities"),)*
+                            Rows::Long { arity: _, rows } => rows,
+                        };
+                        rows.all_difference_entries(other_rows, |_, left, right| match right {
+                            Some(right) => left.is_subset(right),
+                            None => left.is_empty(),
+                        })
+                    }
+                }
+            }
         }
 
         conversions!([]; $($variant($tree, $arity),)*);
@@ -251,6 +326,51 @@ table! {
 }
 
 impl Table {
+    pub fn first_columns(&self) -> Box<dyn Iterator<Item = (u32, Self)> + '_> {
+        match &self.0 {
+            Rows::Rows0(_) => Box::new(std::iter::empty()),
+            Rows::Rows1(tree) => Box::new(
+                tree.iter_restrictions()
+                    .map(|(key, rows)| (key, Self::from(rows))),
+            ),
+            Rows::Rows2(tree) => Box::new(
+                tree.iter_restrictions()
+                    .map(|(key, rows)| (key, Self::from(rows.clone()))),
+            ),
+            Rows::Rows3(tree) => Box::new(
+                tree.iter_restrictions()
+                    .map(|(key, rows)| (key, Self::from(rows.clone()))),
+            ),
+            Rows::Rows4(tree) => Box::new(
+                tree.iter_restrictions()
+                    .map(|(key, rows)| (key, Self::from(rows.clone()))),
+            ),
+            Rows::Rows5(tree) => Box::new(
+                tree.iter_restrictions()
+                    .map(|(key, rows)| (key, Self::from(rows.clone()))),
+            ),
+            Rows::Rows6(tree) => Box::new(
+                tree.iter_restrictions()
+                    .map(|(key, rows)| (key, Self::from(rows.clone()))),
+            ),
+            Rows::Rows7(tree) => Box::new(
+                tree.iter_restrictions()
+                    .map(|(key, rows)| (key, Self::from(rows.clone()))),
+            ),
+            Rows::Rows8(tree) => Box::new(
+                tree.iter_restrictions()
+                    .map(|(key, rows)| (key, Self::from(rows.clone()))),
+            ),
+            Rows::Rows9(tree) => Box::new(
+                tree.iter_restrictions()
+                    .map(|(key, rows)| (key, Self::from(rows.clone()))),
+            ),
+            Rows::Long { arity: _, rows } => {
+                Box::new(rows.iter().map(|(key, rows)| (key, rows.clone())))
+            }
+        }
+    }
+
     /// A shared suffix snapshot lets equality visit only one first-column bucket.
     pub fn first_column(&self, first: u32) -> Option<Self> {
         match &self.0 {

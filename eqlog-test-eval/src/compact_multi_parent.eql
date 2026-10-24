@@ -1,0 +1,78 @@
+type Key;
+
+model World {
+    type El;
+    pred named(El, Key);
+    pred p(El);
+    pred q(El);
+    pred r(El);
+    pred pq(El);
+    pred pqr(El);
+    pred triple(El, El, El);
+    pred edge(El, El);
+    pred tail(El, El);
+    pred path(El, El);
+    pred two_step(El, El);
+    pred support(El, El);
+    pred supported_pair(El, El);
+    pred request(El);
+    pred ready(El);
+    pred witnessed(El, El);
+    func witness(El) -> El;
+    func value(Key) -> El;
+
+    rule uniqueness {
+        if named(first, key);
+        if named(second, key);
+        then first = second;
+    }
+
+    rule pair {
+        if p(x);
+        if q(x);
+        then pq(x);
+    }
+
+    rule third {
+        if pq(x);
+        if r(x);
+        then pqr(x);
+    }
+
+    rule product {
+        if p(x);
+        if q(y);
+        if r(z);
+        then triple(x, y, z);
+    }
+
+    rule compose {
+        if edge(x, y);
+        if tail(y, z);
+        then path(x, z);
+    }
+
+    rule repeated_edge {
+        if edge(x, y);
+        if edge(y, z);
+        then two_step(x, z);
+    }
+
+    rule projected_product {
+        if support(x, _);
+        if q(y);
+        then supported_pair(x, y);
+    }
+
+    rule fulfill {
+        if p(x);
+        if request(x);
+        then ready(x);
+        then witness(x)!;
+    }
+
+    rule observe {
+        if witness(x) = y;
+        then witnessed(x, y);
+    }
+}
