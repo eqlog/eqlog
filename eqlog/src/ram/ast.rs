@@ -260,6 +260,7 @@ pub struct ProofPlan {
 }
 
 pub struct RamProgram {
+    pub relation_weights: BTreeMap<FlatRel, usize>,
     pub transport: TransportPlan,
     pub compact: CompactPlan,
     pub evaluation: EvaluationPlan,

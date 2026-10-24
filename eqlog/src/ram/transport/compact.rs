@@ -1,3 +1,5 @@
+use crate::algebra::signature::TypeId;
+
 #[derive(Clone, Copy)]
 pub enum CompactTransportIteration {
     Components,
@@ -292,4 +294,53 @@ impl CompactTransportPlan {
             incoming,
         }
     }
+}
+
+pub enum TotalCompletionIteration {
+    Components,
+    Outgoing,
+    Members,
+}
+
+pub enum TotalCompletionCondition {
+    CompactMembers(Vec<TypeId>),
+    EmptyPolicy,
+}
+
+pub enum TotalCompletionInstruction {
+    ReturnWhenAny(Vec<TotalCompletionCondition>),
+    ForEach {
+        iteration: TotalCompletionIteration,
+        body: Vec<TotalCompletionInstruction>,
+    },
+    BindMorphism,
+    CollectSourceMembers(TypeId),
+    DefineImage(TypeId),
+}
+
+pub fn total_completion(members: &[TypeId]) -> Vec<TotalCompletionInstruction> {
+    if members.is_empty() {
+        return Vec::new();
+    }
+    let mut edge_body = vec![TotalCompletionInstruction::BindMorphism];
+    for &member in members {
+        edge_body.push(TotalCompletionInstruction::CollectSourceMembers(member));
+        edge_body.push(TotalCompletionInstruction::ForEach {
+            iteration: TotalCompletionIteration::Members,
+            body: vec![TotalCompletionInstruction::DefineImage(member)],
+        });
+    }
+    vec![
+        TotalCompletionInstruction::ReturnWhenAny(vec![
+            TotalCompletionCondition::CompactMembers(members.to_vec()),
+            TotalCompletionCondition::EmptyPolicy,
+        ]),
+        TotalCompletionInstruction::ForEach {
+            iteration: TotalCompletionIteration::Components,
+            body: vec![TotalCompletionInstruction::ForEach {
+                iteration: TotalCompletionIteration::Outgoing,
+                body: edge_body,
+            }],
+        },
+    ]
 }

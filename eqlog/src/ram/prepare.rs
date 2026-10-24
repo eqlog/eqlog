@@ -455,3 +455,25 @@ fn descendants(
     }
     result
 }
+
+/// Representative choice must account for every maintained index before emission.
+pub fn relation_weights(
+    signature: &Signature,
+    selection: &IndexSelection,
+) -> BTreeMap<FlatRel, usize> {
+    crate::flat_eqlog::iter_flat_rels(signature)
+        .map(|rel| {
+            let indices: usize = selection
+                .current_indices()
+                .filter(|(source, _)| match source {
+                    FlatInRel::Rel(source) | FlatInRel::RelWithDiagonals { rel: source, .. } => {
+                        *source == rel
+                    }
+                    FlatInRel::Equality(_) | FlatInRel::TypeSet(_) => false,
+                })
+                .map(|(_, index)| index.order.len())
+                .sum();
+            (rel, rel.arity(signature).len() + indices)
+        })
+        .collect()
+}

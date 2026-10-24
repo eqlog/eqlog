@@ -7,7 +7,9 @@ use super::{display_func, display_rel, display_type, RustGenCtx};
 use crate::algebra::signature::TypeId;
 use crate::flat_eqlog::FlatRel;
 use crate::fmt_util::FmtFn;
-use crate::ram::ElVar;
+use crate::ram::{
+    ElVar, TotalCompletionCondition, TotalCompletionInstruction, TotalCompletionIteration,
+};
 
 pub(super) fn equality_guard<'a>(typ: TypeId, ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
     FmtFn(move |f| {
@@ -124,6 +126,70 @@ pub(super) fn fields<'a>(ctx: &'a RustGenCtx<'a>, initialize: bool) -> impl Disp
     })
 }
 
+fn completion_body<'a>(
+    body: &'a [TotalCompletionInstruction],
+    model: TypeId,
+    ctx: &'a RustGenCtx<'a>,
+) -> impl Display + 'a {
+    FmtFn(move |f| {
+        let name = display_type(model, ctx).to_string().to_case(Case::Snake);
+        for instruction in body {
+            match instruction {
+                TotalCompletionInstruction::ReturnWhenAny(conditions) => {
+                    let condition = conditions
+                        .iter()
+                        .map(|condition| match condition {
+                            TotalCompletionCondition::CompactMembers(members) => {
+                                let active = active(members, ctx);
+                                format!("({active})")
+                            }
+                            TotalCompletionCondition::EmptyPolicy => {
+                                format!("self.__total_members_{name}.is_empty()")
+                            }
+                        })
+                        .join(" || ");
+                    writeln!(f, "if {condition} {{ return; }}")?;
+                }
+                TotalCompletionInstruction::ForEach { iteration, body } => {
+                    let head = match iteration {
+                        TotalCompletionIteration::Components => {
+                            format!("component in self.__total_{name}_components(&[], None)")
+                        }
+                        TotalCompletionIteration::Outgoing => {
+                            "edge in component.outgoing".to_owned()
+                        }
+                        TotalCompletionIteration::Members => "member in members".to_owned(),
+                    };
+                    let body = completion_body(body, model, ctx);
+                    writeln!(f, "for {head} {{ {body} }}")?;
+                }
+                TotalCompletionInstruction::BindMorphism => {
+                    let ids = ctx.signature().ids_for_model_type(model).unwrap();
+                    let mor = display_type(ids.mor, ctx)
+                        .to_string()
+                        .to_case(Case::UpperCamel);
+                    writeln!(f, "let morphism = {mor}(edge.morph);")?;
+                }
+                TotalCompletionInstruction::CollectSourceMembers(member) => {
+                    let member_name = display_type(*member, ctx).to_string().to_case(Case::Snake);
+                    let membership =
+                        display_rel(FlatRel::ModelMember(*member), ctx).to_case(Case::Snake);
+                    writedoc! {f, "
+                        let members: BTreeSet<_> = self.iter_{membership}()
+                            .filter(|(owner, _)| self.root_{name}(*owner).0 == edge.dom)
+                            .map(|(_, member)| self.root_{member_name}(member)).collect();
+                    "}?;
+                }
+                TotalCompletionInstruction::DefineImage(member) => {
+                    let member_name = display_type(*member, ctx).to_string().to_case(Case::Snake);
+                    writeln!(f, "self.define_{member_name}_mor_app(morphism, member);")?;
+                }
+            }
+        }
+        Ok(())
+    })
+}
+
 pub(super) fn methods<'a>(ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
     FmtFn(move |f| {
         let models = models(ctx);
@@ -174,6 +240,8 @@ pub(super) fn methods<'a>(ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
             let dom = display_func(ids.dom, ctx);
             let cod = display_func(ids.cod, ctx);
             let compact = active(&members(model, ctx), ctx);
+            let completion =
+                completion_body(&ctx.transport().models[&model].completion, model, ctx);
             writedoc! {f, "
                 fn __is_total_{name}_morphism(&self, morphism: u32) -> bool {{
                     let morphism = self.root_{mor_name}({mor}(morphism)).0;
@@ -306,25 +374,7 @@ pub(super) fn methods<'a>(ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
                 }}
 
                 fn __complete_total_{name}_members(&mut self) {{
-                    if ({compact}) || self.__total_members_{name}.is_empty() {{ return; }}
-                    for component in self.__total_{name}_components(&[], None) {{
-                        for edge in component.outgoing {{
-                            let morphism = {mor}(edge.morph);
-            "}?;
-            for member in members(model, ctx) {
-                let member_name = display_type(member, ctx).to_string().to_case(Case::Snake);
-                let membership =
-                    display_rel(FlatRel::ModelMember(member), ctx).to_case(Case::Snake);
-                writedoc! {f, "
-                    let members: BTreeSet<_> = self.iter_{membership}()
-                        .filter(|(owner, _)| self.root_{name}(*owner).0 == edge.dom)
-                        .map(|(_, member)| self.root_{member_name}(member)).collect();
-                    for member in members {{ self.define_{member_name}_mor_app(morphism, member); }}
-                "}?;
-            }
-            writedoc! {f, "
-                        }}
-                    }}
+                    {completion}
                 }}
             "}?;
         }

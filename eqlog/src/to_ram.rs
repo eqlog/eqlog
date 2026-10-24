@@ -501,6 +501,7 @@ pub fn flat_rule_groups_to_ram(
         ModelMode::Desugared => EvaluationPlan::default(),
     };
     RamProgram {
+        relation_weights: relation_weights(signature, index_selection),
         transport: TransportPlan::new(
             signature,
             index_selection,

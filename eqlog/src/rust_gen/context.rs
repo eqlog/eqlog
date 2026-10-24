@@ -4,15 +4,13 @@ use crate::algebra::signature::{FuncId, Signature, TypeId, TypeKind};
 use crate::ast::Ast;
 use crate::flat_eqlog::{FlatInRel, FlatRel};
 use crate::options::ModelMode;
-use crate::ram::{CompactPlan, IndexedPlan, TransportPlan};
+use crate::ram::{CompactPlan, IndexedPlan, RamProgram, TransportPlan};
 
 pub(crate) struct RustGenCtx<'a> {
     ast: &'a Ast,
     signature: &'a Signature,
     model_mode: ModelMode,
-    compact: &'a CompactPlan,
-    indexed: Option<&'a IndexedPlan>,
-    transport: &'a TransportPlan,
+    program: &'a RamProgram,
 }
 
 impl<'a> RustGenCtx<'a> {
@@ -20,17 +18,13 @@ impl<'a> RustGenCtx<'a> {
         ast: &'a Ast,
         signature: &'a Signature,
         model_mode: ModelMode,
-        compact: &'a CompactPlan,
-        indexed: Option<&'a IndexedPlan>,
-        transport: &'a TransportPlan,
+        program: &'a RamProgram,
     ) -> Self {
         Self {
             ast,
             signature,
             model_mode,
-            compact,
-            indexed,
-            transport,
+            program,
         }
     }
 
@@ -39,23 +33,30 @@ impl<'a> RustGenCtx<'a> {
     }
 
     pub(crate) fn compact(&self) -> &CompactPlan {
-        self.compact
+        &self.program.compact
     }
 
     pub(crate) fn indexed(&self) -> &IndexedPlan {
-        self.indexed.expect("indexed storage has a RAM plan")
+        self.program
+            .indexed
+            .as_ref()
+            .expect("indexed storage has a RAM plan")
     }
 
     pub(crate) fn transport(&self) -> &TransportPlan {
-        self.transport
+        &self.program.transport
     }
 
     pub(crate) fn supports_compact_members(&self, typ: TypeId) -> bool {
-        self.compact.supports_member(typ)
+        self.program.compact.supports_member(typ)
     }
 
     pub(crate) fn has_shared_indices(&self, rel: &FlatInRel) -> bool {
-        self.compact.shared_indices(rel)
+        self.program.compact.shared_indices(rel)
+    }
+
+    pub(crate) fn relation_weight(&self, rel: FlatRel) -> usize {
+        self.program.relation_weights[&rel]
     }
 
     pub(crate) fn internal_insert_name(&self, rel: FlatRel) -> String {

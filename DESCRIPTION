@@ -22,5 +22,9 @@ lifetimes through explicit stratum and closure bodies in both backends.
 Expose inherited candidate scoring and proof retention, model traversal,
 and mapped-prefix walks as RAM operations instead of emitter decisions.
 
+Plan total-member completion loops and relation weights before emission
+so fallback materialization and representative choices remain visible
+to RAM passes.
+
 Retain evaluator behavior and runtime operations while exposing their
 compiler decisions for independent review and execution-based checks.

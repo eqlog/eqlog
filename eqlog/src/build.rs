@@ -576,14 +576,7 @@ fn process_file(in_file: &Path, config: &Config, component_inputs: Option<&Diges
 
     let theory_name_len = theory_name.len();
     let symbol_prefix = format!("eql_{theory_name_len}_{theory_name}");
-    let rust_gen_ctx = RustGenCtx::new(
-        &ast,
-        &signature,
-        config.options.model_mode,
-        &ram_program.compact,
-        ram_program.indexed.as_ref(),
-        &ram_program.transport,
-    );
+    let rust_gen_ctx = RustGenCtx::new(&ast, &signature, config.options.model_mode, &ram_program);
 
     let module_contents = display_module(
         &theory_name.to_case(Case::UpperCamel),

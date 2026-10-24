@@ -2979,22 +2979,11 @@ fn display_weight_static_name<'a>(rel: FlatRel, ctx: &'a RustGenCtx<'a>) -> impl
     })
 }
 
-fn display_weight_static<'a>(
-    rel: FlatRel,
-    index_selection: &'a IndexSelection,
-    ctx: &'a RustGenCtx<'a>,
-) -> impl 'a + Display {
+fn display_weight_static<'a>(rel: FlatRel, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
     FmtFn(move |f| {
         let static_name = display_weight_static_name(rel, ctx);
 
-        let el_lookup_weight = rel.arity(ctx.signature()).len();
-
-        let index_weight: usize = index_selection
-            .current_indices()
-            .filter(|(source, _)| indices::source_relation(source) == FlatInRel::Rel(rel))
-            .map(|(_, index)| index.order.len())
-            .sum();
-        let weight = el_lookup_weight + index_weight;
+        let weight = ctx.relation_weight(rel);
 
         writedoc! {f, r#"
             #[allow(unused)]
@@ -3339,7 +3328,7 @@ pub fn display_module<'a>(
         "#}?;
 
         for rel in iter_flat_rels(ctx.signature()) {
-            let weight_static = display_weight_static(rel, index_selection, ctx);
+            let weight_static = display_weight_static(rel, ctx);
             write!(f, "{weight_static}")?;
         }
 

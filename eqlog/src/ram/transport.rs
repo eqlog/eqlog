@@ -104,6 +104,7 @@ pub struct TransportModelPlan {
     pub frontier: bool,
     pub key_types: Vec<TypeId>,
     pub compact: CompactTransportPlan,
+    pub completion: Vec<TotalCompletionInstruction>,
 }
 
 pub enum TransportIteration {
@@ -613,6 +614,7 @@ impl TransportPlan {
                     frontier,
                     key_types,
                     compact: CompactTransportPlan::new(compact.supports_model(model)),
+                    completion: total_completion(compact.members(model)),
                 },
             );
         }
