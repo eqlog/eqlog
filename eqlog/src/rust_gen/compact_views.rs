@@ -4,41 +4,14 @@ use convert_case::{Case, Casing};
 use indoc::{formatdoc, writedoc};
 use itertools::Itertools;
 
-use super::{compact_indices, display_rel, RustGenCtx};
+use super::{display_rel, RustGenCtx};
 use crate::algebra::signature::TypeId;
-use crate::flat_eqlog::{iter_flat_rels, FlatInRel, FlatRel};
+use crate::flat_eqlog::{iter_flat_rels, FlatRel};
 use crate::fmt_util::FmtFn;
-
-#[derive(Clone, Copy)]
-enum View {
-    Owned(TypeId),
-    Membership(TypeId),
-    Morphism { model: TypeId, member: TypeId },
-}
-
-fn view(rel: FlatRel, ctx: &RustGenCtx<'_>) -> Option<View> {
-    match rel {
-        FlatRel::ModelMember(member) => ctx
-            .supports_compact_members(member)
-            .then_some(View::Membership(member)),
-        FlatRel::Func(func) => {
-            if let Some(types) = ctx.signature().types_for_mor_app_func(func) {
-                let model = types.model_type(ctx.signature());
-                return (ctx.supports_compact_members(types.member_type)
-                    && compact_indices::supports_model(model, ctx))
-                .then_some(View::Morphism {
-                    model,
-                    member: types.member_type,
-                });
-            }
-            compact_indices::owner(&FlatInRel::Rel(rel), ctx).map(View::Owned)
-        }
-        FlatRel::Pred(_) => compact_indices::owner(&FlatInRel::Rel(rel), ctx).map(View::Owned),
-    }
-}
+use crate::ram::CompactView;
 
 pub(super) fn supports(rel: FlatRel, ctx: &RustGenCtx<'_>) -> bool {
-    view(rel, ctx).is_some()
+    ctx.compact().view(rel).is_some()
 }
 
 fn snake(typ: TypeId, ctx: &RustGenCtx<'_>) -> String {
@@ -49,10 +22,10 @@ fn camel(typ: TypeId, ctx: &RustGenCtx<'_>) -> String {
     ctx.type_name(typ).to_case(Case::UpperCamel)
 }
 
-fn uid_value(rel: FlatRel, model: TypeId, column: usize, ctx: &RustGenCtx<'_>) -> String {
+fn uid_value(rel: FlatRel, column: usize, ctx: &RustGenCtx<'_>) -> String {
     let typ = rel.arity(ctx.signature())[column];
     let name = snake(typ, ctx);
-    if ctx.supports_compact_members(typ) && rel.column_maps_under(ctx.signature(), column, model) {
+    if ctx.compact().member_column(rel, column).is_some() {
         format!("self.__compact_{name}_uid(owner, row[{}]).0", column - 1)
     } else {
         format!("row[{}]", column - 1)
@@ -62,16 +35,16 @@ fn uid_value(rel: FlatRel, model: TypeId, column: usize, ctx: &RustGenCtx<'_>) -
 pub(super) fn methods<'a>(ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
     FmtFn(move |f| {
         for rel in iter_flat_rels(ctx.signature()) {
-            let Some(view) = view(rel, ctx) else {
+            let Some(view) = ctx.compact().view(rel) else {
                 continue;
             };
             let name = display_rel(rel, ctx).to_case(Case::Snake);
             let arity = rel.arity(ctx.signature()).len();
             let rows = match view {
-                View::Owned(model) => {
+                CompactView::Owned(model) => {
                     let owner_name = snake(model, ctx);
                     let values = (1..arity)
-                        .map(|column| uid_value(rel, model, column, ctx))
+                        .map(|column| uid_value(rel, column, ctx))
                         .join(", ");
                     let suffix_arity = arity - 1;
                     formatdoc! {"
@@ -85,7 +58,7 @@ pub(super) fn methods<'a>(ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
                         }})
                     "}
                 }
-                View::Membership(member) => {
+                CompactView::Membership(member) => {
                     let member_name = snake(member, ctx);
                     formatdoc! {"
                         self.__compact_members_{member_name}.as_ref().map(move |spaces| {{
@@ -95,7 +68,7 @@ pub(super) fn methods<'a>(ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
                         }})
                     "}
                 }
-                View::Morphism { model, member } => {
+                CompactView::Morphism { model, member } => {
                     let owner_name = snake(model, ctx);
                     let mor_camel = format!("{}Mor", camel(model, ctx));
                     let member_name = snake(member, ctx);
@@ -128,12 +101,14 @@ pub(super) fn methods<'a>(ctx: &'a RustGenCtx<'a>) -> impl Display + 'a {
                 }
             };
             let export_rows = match view {
-                View::Owned(_) | View::Membership(_) => format!("self.__compact_rows_{name}()?"),
-                View::Morphism { .. } => format!("self.__compact_all_{name}(false)?"),
+                CompactView::Owned(_) | CompactView::Membership(_) => {
+                    format!("self.__compact_rows_{name}()?")
+                }
+                CompactView::Morphism { .. } => format!("self.__compact_all_{name}(false)?"),
             };
             let explicit_rows = match view {
-                View::Owned(_) | View::Membership(_) => String::new(),
-                View::Morphism { .. } => formatdoc! {"
+                CompactView::Owned(_) | CompactView::Membership(_) => String::new(),
+                CompactView::Morphism { .. } => formatdoc! {"
                     for (morphism, source, target) in self.iter_{name}() {{
                         table.insert(&[morphism.0, source.0, target.0]);
                     }}
@@ -165,11 +140,11 @@ pub(super) fn lookup<'a>(
     ctx: &'a RustGenCtx<'a>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let Some(view) = view(rel, ctx) else {
+        let Some(view) = ctx.compact().view(rel) else {
             return Ok(());
         };
         match view {
-            View::Membership(member) => {
+            CompactView::Membership(member) => {
                 let member_name = snake(member, ctx);
                 let model = ctx.signature().type_(member).parents[0];
                 let owner_name = snake(model, ctx);
@@ -179,7 +154,7 @@ pub(super) fn lookup<'a>(
                     }}
                 "}
             }
-            View::Morphism { model, member } => {
+            CompactView::Morphism { model, member } => {
                 let owner_name = snake(model, ctx);
                 let member_name = snake(member, ctx);
                 let member_camel = camel(member, ctx);
@@ -195,7 +170,7 @@ pub(super) fn lookup<'a>(
                     }}
                 "}
             }
-            View::Owned(model) => {
+            CompactView::Owned(model) => {
                 let name = display_rel(rel, ctx).to_case(Case::Snake);
                 let owner_name = snake(model, ctx);
                 let arity = rel.arity(ctx.signature());
@@ -209,9 +184,7 @@ pub(super) fn lookup<'a>(
                 "}?;
                 for (column, &typ) in arity.iter().enumerate().take(input_len).skip(1) {
                     let type_name = snake(typ, ctx);
-                    if ctx.supports_compact_members(typ)
-                        && rel.column_maps_under(ctx.signature(), column, model)
-                    {
+                    if ctx.compact().member_column(rel, column).is_some() {
                         writedoc! {f, "
                             let Some(snapshot) = self.__compact_{type_name}_snapshot(owner) else {{ return {missing}; }};
                             let Some(value) = snapshot.root(arg{column}.0)
@@ -238,9 +211,7 @@ pub(super) fn lookup<'a>(
                     let typ = arity[output];
                     let output_name = snake(typ, ctx);
                     let output_camel = camel(typ, ctx);
-                    if ctx.supports_compact_members(typ)
-                        && rel.column_maps_under(ctx.signature(), output, model)
-                    {
+                    if ctx.compact().member_column(rel, output).is_some() {
                         writeln!(
                             f,
                             "return Some(self.__compact_{output_name}_uid(owner, result));"
@@ -261,7 +232,7 @@ pub(super) fn lookup<'a>(
 }
 
 pub(super) fn iter_expr(rel: FlatRel, legacy: String, row: &str, ctx: &RustGenCtx<'_>) -> String {
-    let Some(view) = view(rel, ctx) else {
+    let Some(view) = ctx.compact().view(rel) else {
         return legacy;
     };
     let name = display_rel(rel, ctx).to_case(Case::Snake);
@@ -269,10 +240,10 @@ pub(super) fn iter_expr(rel: FlatRel, legacy: String, row: &str, ctx: &RustGenCt
         .map(|column| format!("arg{column}"))
         .join(", ");
     let legacy = match view {
-        View::Owned(_) | View::Membership(_) => {
+        CompactView::Owned(_) | CompactView::Membership(_) => {
             format!("(!compact_active).then(|| {legacy}).into_iter().flatten()")
         }
-        View::Morphism { model, .. } => {
+        CompactView::Morphism { model, .. } => {
             let owner_name = snake(model, ctx);
             format!("{legacy}.filter(move |row| !compact_active || !self.__total_members_{owner_name}.contains(&row.0.0))")
         }

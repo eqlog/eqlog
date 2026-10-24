@@ -576,7 +576,13 @@ fn process_file(in_file: &Path, config: &Config, component_inputs: Option<&Diges
 
     let theory_name_len = theory_name.len();
     let symbol_prefix = format!("eql_{theory_name_len}_{theory_name}");
-    let rust_gen_ctx = RustGenCtx::new(&ast, &signature, config.options.model_mode);
+    let rust_gen_ctx = RustGenCtx::new(
+        &ast,
+        &signature,
+        config.options.model_mode,
+        &ram_program.compact,
+        ram_program.indexed.as_ref(),
+    );
 
     let module_contents = display_module(
         &theory_name.to_case(Case::UpperCamel),
@@ -602,7 +608,7 @@ fn process_file(in_file: &Path, config: &Config, component_inputs: Option<&Diges
         .with_context(|| format!("Creating component out dir {}", component_out_dir.display()))?;
 
     ram_program
-        .modules
+        .functions
         .iter()
         .par_bridge()
         .try_for_each(|ram_module| -> Result<()> {

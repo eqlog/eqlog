@@ -5,10 +5,10 @@ use std::{
 
 use crate::ram::*;
 
-use super::RamStmt;
+use super::QueryOp;
 
 fn collect_stmt_dependencies(
-    stmts: &[RamStmt],
+    stmts: &[QueryOp],
     parameters: &BTreeSet<Arc<str>>,
 ) -> Vec<BTreeSet<usize>> {
     let mut set_var_def_sites: BTreeMap<SetVarName, usize> = BTreeMap::new();
@@ -19,7 +19,7 @@ fn collect_stmt_dependencies(
     for (i, stmt) in stmts.iter().enumerate() {
         let dependencies = &mut dependencies[i];
         match stmt {
-            RamStmt::DefineSet(DefineSetStmt { defined_var, expr }) => {
+            QueryOp::DefineSet(DefineSetStmt { defined_var, expr }) => {
                 let prev_def_site = set_var_def_sites.insert(defined_var.name.clone(), i);
                 assert!(
                     prev_def_site.is_none(),
@@ -48,7 +48,7 @@ fn collect_stmt_dependencies(
                     }
                 }
             }
-            RamStmt::Iter(IterStmt {
+            QueryOp::Iter(IterStmt {
                 sets,
                 lookup_drivers,
                 loop_var_el,
@@ -66,25 +66,25 @@ fn collect_stmt_dependencies(
                 el_var_def_sites.insert(loop_var_el.name.clone(), i);
                 set_var_def_sites.insert(loop_var_set.name.clone(), i);
             }
-            RamStmt::Insert(InsertStmt { rel: _, args: _ }) => {
+            QueryOp::Insert(InsertStmt { rel: _, args: _ }) => {
                 for (j, prev_stmt) in stmts[..i].iter().enumerate() {
                     let depends_on_j = match prev_stmt {
-                        RamStmt::DefineSet(_) => true,
-                        RamStmt::Iter(_) => true,
-                        RamStmt::Insert(_) => false,
-                        RamStmt::GuardInhabited(_) | RamStmt::GuardPlan(_) => true,
+                        QueryOp::DefineSet(_) => true,
+                        QueryOp::Iter(_) => true,
+                        QueryOp::Insert(_) => false,
+                        QueryOp::GuardInhabited(_) | QueryOp::GuardPlan(_) => true,
                     };
                     if depends_on_j {
                         dependencies.insert(j);
                     }
                 }
             }
-            RamStmt::GuardPlan(stmt) => {
+            QueryOp::GuardPlan(stmt) => {
                 for set in stmt.original.iter().chain(&stmt.alternative) {
                     dependencies.insert(set_var_def_sites[&set.name]);
                 }
             }
-            RamStmt::GuardInhabited(GuardInhabitedStmt { sets }) => {
+            QueryOp::GuardInhabited(GuardInhabitedStmt { sets }) => {
                 for set in sets {
                     let set_def_site = *set_var_def_sites
                         .get(&set.name)
@@ -98,18 +98,18 @@ fn collect_stmt_dependencies(
     dependencies
 }
 
-fn ram_stmt_cost(stmt: &RamStmt) -> usize {
+fn ram_stmt_cost(stmt: &QueryOp) -> usize {
     match stmt {
-        RamStmt::GuardInhabited(_) | RamStmt::GuardPlan(_) => 1,
-        RamStmt::Insert(_) => 2,
-        RamStmt::DefineSet(DefineSetStmt { defined_var, expr }) => match expr {
+        QueryOp::GuardInhabited(_) | QueryOp::GuardPlan(_) => 1,
+        QueryOp::Insert(_) => 2,
+        QueryOp::DefineSet(DefineSetStmt { defined_var, expr }) => match expr {
             InSetExpr::GetIndex(_) => 0,
             InSetExpr::Restrict(_) => match defined_var.strictness {
                 Strictness::Lazy => 3,
                 Strictness::Strict => 4,
             },
         },
-        RamStmt::Iter(stmt) => {
+        QueryOp::Iter(stmt) => {
             if stmt.first_only {
                 4
             } else {
@@ -119,7 +119,7 @@ fn ram_stmt_cost(stmt: &RamStmt) -> usize {
     }
 }
 
-pub fn sort_ram_stmts(stmts: &[RamStmt], parameters: &BTreeSet<Arc<str>>) -> Vec<RamStmt> {
+pub fn sort_ram_stmts(stmts: &[QueryOp], parameters: &BTreeSet<Arc<str>>) -> Vec<QueryOp> {
     let mut dependencies = collect_stmt_dependencies(stmts, parameters);
 
     let mut reverse_dependencies = vec![Vec::new(); stmts.len()];
@@ -135,7 +135,7 @@ pub fn sort_ram_stmts(stmts: &[RamStmt], parameters: &BTreeSet<Arc<str>>) -> Vec
         .filter_map(|(i, deps)| deps.is_empty().then(|| (ram_stmt_cost(&stmts[i]), i)))
         .collect();
 
-    let mut result_stmts: Vec<RamStmt> = Vec::new();
+    let mut result_stmts: Vec<QueryOp> = Vec::new();
 
     while result_stmts.len() != stmts.len() {
         let (_, i) = open_stmts

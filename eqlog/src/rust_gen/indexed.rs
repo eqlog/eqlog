@@ -4,134 +4,64 @@
 use convert_case::{Case, Casing};
 use indoc::{formatdoc, writedoc};
 use itertools::Itertools;
-use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Display;
-use std::sync::Arc;
 
-use super::indices::source_relation;
 use super::{
     display_index_field_name, display_module_env_struct_name, display_out_rows_field_name,
     display_out_set_field_name, display_out_set_type, display_rel, display_type,
     display_type_fields, display_weight_static_name, module_env_in_rels, module_env_out_rels,
     ElVar, RustGenCtx,
 };
-use crate::algebra::signature::{FuncId, Signature, TypeId};
+use crate::algebra::signature::{FuncId, TypeId};
 use crate::flat_eqlog::{
-    iter_flat_rels, FlatInRel, FlatOutRel, FlatRel, IndexAge, IndexSelection, IndexSpec, QuerySpec,
-    Schedule,
+    iter_flat_rels, FlatInRel, FlatOutRel, FlatRel, IndexAge, IndexSelection, QuerySpec,
 };
 use crate::fmt_util::FmtFn;
-use crate::ram::{RamModule, RamProgram};
+use crate::ram::{IndexedPlan, IndexedStmt, RamProgram};
 
-fn table_indices(
-    selection: &IndexSelection,
-) -> BTreeMap<FlatInRel, Vec<(FlatInRel, Arc<[usize]>)>> {
-    let mut indices: BTreeMap<FlatInRel, Vec<(FlatInRel, Arc<[usize]>)>> = BTreeMap::new();
-    for (rel, index) in selection.current_indices() {
-        let entry = indices.entry(source_relation(rel)).or_default();
-        let key = (rel.clone(), index.order.clone());
-        if !entry.contains(&key) {
-            entry.push(key);
+pub(super) struct Tables<'a> {
+    plan: Option<&'a IndexedPlan>,
+}
+
+impl<'a> Tables<'a> {
+    pub(super) fn new(program: &'a RamProgram) -> Self {
+        Self {
+            plan: program.indexed.as_ref(),
         }
     }
-    indices
-}
 
-fn index_position(
-    indices: &BTreeMap<FlatInRel, Vec<(FlatInRel, Arc<[usize]>)>>,
-    rel: &FlatInRel,
-    order: &[usize],
-) -> usize {
-    indices[&source_relation(rel)]
-        .iter()
-        .position(|(other, other_order)| other == rel && &other_order[..] == order)
-        .expect("every selected index belongs to a table")
-}
-
-pub(super) struct Tables {
-    indices: BTreeMap<FlatInRel, Vec<(FlatInRel, Arc<[usize]>)>>,
-    viewed: BTreeSet<(FlatInRel, Arc<[usize]>)>,
-}
-
-impl Tables {
-    pub(super) fn new(
-        selection: &IndexSelection,
-        program: &RamProgram,
-        signature: &Signature,
-    ) -> Self {
-        let indices = table_indices(selection);
-        let viewed = program
-            .modules
-            .iter()
-            .flat_map(module_env_in_rels)
-            .filter(|(_, index)| match index.age {
-                IndexAge::Old | IndexAge::All => true,
-                IndexAge::New => false,
-            })
-            .map(|(rel, index)| (rel, index.order))
-            .chain(signature.iter_funcs().map(|func| {
-                let rel = FlatInRel::Rel(FlatRel::Func(func));
-                let query = QuerySpec::eval_func(func, signature);
-                let order = selection.current_query(&rel, query).order.clone();
-                (rel, order)
-            }))
-            .collect();
-        Tables { indices, viewed }
+    fn plan(&self) -> &IndexedPlan {
+        self.plan.expect("indexed storage has a RAM plan")
     }
 
     fn sources(&self) -> impl Iterator<Item = &FlatInRel> {
-        self.indices.keys()
+        self.plan().tables.keys()
     }
 
     fn position(&self, rel: &FlatInRel, order: &[usize]) -> usize {
-        index_position(&self.indices, rel, order)
+        self.plan().position(rel, order)
     }
 
-    fn init(&self, source: &FlatInRel, ctx: &RustGenCtx<'_>) -> String {
-        let specs = self.indices[source]
+    fn init(&self, source: &FlatInRel, _ctx: &RustGenCtx<'_>) -> String {
+        let table = &self.plan().tables[source];
+        let specs = table
+            .indices
             .iter()
-            .map(|(rel, order)| {
-                let (columns, equal): (Vec<usize>, Vec<(usize, usize)>) = match rel {
-                    FlatInRel::Rel(_) | FlatInRel::TypeSet(_) => (order.to_vec(), Vec::new()),
-                    FlatInRel::RelWithDiagonals { equalities, .. } => {
-                        let kept: Vec<usize> = equalities
-                            .iter()
-                            .enumerate()
-                            .filter_map(|(i, &j)| (i == j).then_some(i))
-                            .collect();
-                        let columns = order.iter().map(|&column| kept[column]).collect();
-                        let equal = equalities
-                            .iter()
-                            .enumerate()
-                            .filter_map(|(i, &j)| (i != j).then_some((i, j)))
-                            .collect();
-                        (columns, equal)
-                    }
-                    FlatInRel::Equality(_) => unreachable!("equalities have no tuple indices"),
-                };
-                let columns = columns.iter().join(", ");
-                let equal = equal.iter().map(|(i, j)| format!("({i}, {j})")).join(", ");
-                let viewed = self.viewed.contains(&(rel.clone(), order.clone()));
+            .map(|index| {
+                let columns = index.columns.iter().join(", ");
+                let equal = index
+                    .equalities
+                    .iter()
+                    .map(|(i, j)| format!("({i}, {j})"))
+                    .join(", ");
+                let viewed = index.viewed;
                 format!("(&[{columns}], &[{equal}], {viewed})")
             })
             .join(", ");
-        let arity = source.arity(ctx.signature()).len();
-        let constructor = match source {
-            FlatInRel::Rel(FlatRel::Func(_)) => "function",
-            FlatInRel::Rel(FlatRel::Pred(_) | FlatRel::ModelMember(_))
-            | FlatInRel::TypeSet(_)
-            | FlatInRel::RelWithDiagonals { .. }
-            | FlatInRel::Equality(_) => "new",
-        };
+        let arity = table.arity;
+        let constructor = if table.functional { "function" } else { "new" };
         format!("eqlog_runtime::IndexedTable::<{arity}>::{constructor}(&[{specs}])")
     }
-}
-
-fn function_codomains(ctx: &RustGenCtx<'_>) -> BTreeSet<TypeId> {
-    ctx.signature()
-        .iter_funcs()
-        .map(|func| ctx.signature().func(func).codomain)
-        .collect()
 }
 
 fn type_snake(typ: TypeId, ctx: &RustGenCtx<'_>) -> String {
@@ -154,52 +84,11 @@ pub(super) fn table_field(source: &FlatInRel, ctx: &RustGenCtx<'_>) -> String {
     }
 }
 
-struct StratumInputs {
-    sources: Vec<FlatInRel>,
-    reads: Vec<((FlatInRel, IndexSpec), usize)>,
-}
-
-fn output_buffers(groups: &[usize], modules: &[RamModule]) -> Vec<(usize, FlatOutRel)> {
-    groups
-        .iter()
-        .enumerate()
-        .flat_map(|(i, &m)| {
-            module_env_out_rels(&modules[m])
-                .into_iter()
-                .map(move |rel| (i, rel))
-        })
-        .collect()
-}
-
-fn stratum_inputs(groups: &[usize], modules: &[RamModule]) -> StratumInputs {
-    let reads: BTreeSet<(FlatInRel, IndexSpec)> = groups
-        .iter()
-        .flat_map(|&m| module_env_in_rels(&modules[m]))
-        .collect();
-    let sources: Vec<FlatInRel> = reads
-        .iter()
-        .map(|(rel, _)| source_relation(rel))
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect();
-    let reads = reads
-        .into_iter()
-        .map(|(rel, index)| {
-            let source = sources
-                .iter()
-                .position(|other| *other == source_relation(&rel))
-                .expect("sources contain every read relation");
-            ((rel, index), source)
-        })
-        .collect();
-    StratumInputs { sources, reads }
-}
-
 pub(super) fn display_struct<'a>(
     name: &'a str,
     ctx: &'a RustGenCtx<'a>,
     tables: &'a Tables,
-    program: &'a RamProgram,
+    _program: &'a RamProgram,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let table_fields = tables
@@ -223,22 +112,23 @@ pub(super) fn display_struct<'a>(
             .iter_types()
             .map(|typ| display_type_fields(typ, ctx))
             .format("\n");
-        let functional_fields = function_codomains(ctx)
-            .into_iter()
+        let functional_fields = ctx
+            .indexed()
+            .function_codomains
+            .iter()
+            .copied()
             .map(|typ| {
                 let name = type_snake(typ, ctx);
                 format!("__functional_{name}: Vec<[u32; 2]>,")
             })
             .join("\n");
-        let strata = &program.schedule.strata;
+        let strata = &ctx.indexed().strata;
         let count = strata.len();
         let since_fields = strata
             .iter()
             .enumerate()
             .map(|(s, stratum)| {
-                let len = stratum_inputs(&stratum.groups, &program.modules)
-                    .sources
-                    .len();
+                let len = stratum.sources.len();
                 format!("__since_{s}: [u32; {len}],")
             })
             .join("\n");
@@ -246,13 +136,11 @@ pub(super) fn display_struct<'a>(
             .iter()
             .enumerate()
             .flat_map(|(s, stratum)| {
-                output_buffers(&stratum.groups, &program.modules)
-                    .into_iter()
-                    .map(move |(i, rel)| {
-                        let field = display_out_set_field_name(&rel, ctx);
-                        let typ = display_out_set_type(&rel, ctx);
-                        format!("__out_{s}_{i}_{field}: {typ},")
-                    })
+                stratum.buffers.iter().copied().map(move |(i, rel)| {
+                    let field = display_out_set_field_name(&rel, ctx);
+                    let typ = display_out_set_type(&rel, ctx);
+                    format!("__out_{s}_{i}_{field}: {typ},")
+                })
             })
             .join("\n");
         writedoc! {f, "
@@ -276,7 +164,7 @@ pub(super) fn display_struct<'a>(
 pub(super) fn display_new_fn<'a>(
     ctx: &'a RustGenCtx<'a>,
     tables: &'a Tables,
-    program: &'a RamProgram,
+    _program: &'a RamProgram,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let tables_init = tables
@@ -307,22 +195,23 @@ pub(super) fn display_new_fn<'a>(
                 "}
             })
             .join("\n");
-        let functional = function_codomains(ctx)
-            .into_iter()
+        let functional = ctx
+            .indexed()
+            .function_codomains
+            .iter()
+            .copied()
             .map(|typ| {
                 let name = type_snake(typ, ctx);
                 format!("__functional_{name}: Vec::new(),")
             })
             .join("\n");
-        let strata = &program.schedule.strata;
+        let strata = &ctx.indexed().strata;
         let count = strata.len();
         let since = strata
             .iter()
             .enumerate()
             .map(|(s, stratum)| {
-                let len = stratum_inputs(&stratum.groups, &program.modules)
-                    .sources
-                    .len();
+                let len = stratum.sources.len();
                 format!("__since_{s}: [0; {len}],")
             })
             .join("\n");
@@ -330,12 +219,10 @@ pub(super) fn display_new_fn<'a>(
             .iter()
             .enumerate()
             .flat_map(|(s, stratum)| {
-                output_buffers(&stratum.groups, &program.modules)
-                    .into_iter()
-                    .map(move |(i, rel)| {
-                        let field = display_out_set_field_name(&rel, ctx);
-                        format!("__out_{s}_{i}_{field}: Vec::new(),")
-                    })
+                stratum.buffers.iter().copied().map(move |(i, rel)| {
+                    let field = display_out_set_field_name(&rel, ctx);
+                    format!("__out_{s}_{i}_{field}: Vec::new(),")
+                })
             })
             .join("\n");
         writedoc! {f, "
@@ -398,9 +285,9 @@ pub(super) fn display_strata<'a>(
                 {set_deferred}
             }}
         "}?;
-        let modules = &program.modules;
-        for (s, stratum) in program.schedule.strata.iter().enumerate() {
-            let inputs = stratum_inputs(&stratum.groups, modules);
+        let modules = &program.functions;
+        for (s, stratum) in ctx.indexed().strata.iter().enumerate() {
+            let inputs = stratum;
             writedoc! {f, "
                 #[allow(unused_variables)]
                 #[inline(never)]
@@ -435,14 +322,10 @@ pub(super) fn display_strata<'a>(
                 self.__sync_tables();
                 let work: usize = now.iter().zip(&since).map(|(now, since)| (now - since) as usize).sum();
             "}?;
-            let deltas: Vec<_> = inputs
-                .reads
+            let deltas: Vec<_> = stratum
+                .deltas
                 .iter()
-                .enumerate()
-                .filter(|(_, ((_, index), _))| match index.age {
-                    IndexAge::New => true,
-                    IndexAge::Old | IndexAge::All => false,
-                })
+                .map(|&k| (k, &stratum.reads[k]))
                 .collect();
             for (k, ((_, index), _)) in &deltas {
                 let width = index.order.len();
@@ -466,8 +349,8 @@ pub(super) fn display_strata<'a>(
                 }
                 writeln!(f, "eqlog_runtime::run_tasks(work, tasks); }}")?;
             }
-            let buffers = output_buffers(&stratum.groups, modules);
-            for (i, rel) in &buffers {
+            let buffers = &stratum.buffers;
+            for (i, rel) in buffers {
                 let field = display_out_set_field_name(rel, ctx);
                 writeln!(
                     f,
@@ -523,14 +406,8 @@ pub(super) fn display_strata<'a>(
             }
             writeln!(f, "eqlog_runtime::run_tasks(work, tasks);")?;
             writeln!(f, "}}")?;
-            let outputs: BTreeSet<_> = buffers.iter().map(|(_, rel)| rel).collect();
-            let producers = |output: &FlatOutRel| -> Vec<usize> {
-                buffers
-                    .iter()
-                    .filter(|(_, rel)| rel == output)
-                    .map(|(i, _)| *i)
-                    .collect()
-            };
+            let outputs: Vec<_> = stratum.producers.keys().collect();
+            let producers = |output: &FlatOutRel| stratum.producers[output].iter().copied();
             let mut equalities = Vec::new();
             for &output in &outputs {
                 match output {
@@ -580,7 +457,7 @@ pub(super) fn display_strata<'a>(
                     FlatOutRel::Equality(_) => {}
                 }
             }
-            for (i, rel) in &buffers {
+            for (i, rel) in buffers {
                 let field = display_out_set_field_name(rel, ctx);
                 writeln!(f, "self.__out_{s}_{i}_{field} = __out_{i}_{field};")?;
             }
@@ -591,54 +468,39 @@ pub(super) fn display_strata<'a>(
     })
 }
 
-fn emit_schedule(
-    f: &mut std::fmt::Formatter<'_>,
-    schedule: &Schedule,
-    active: Option<usize>,
-    depth: usize,
-) -> std::fmt::Result {
-    match schedule {
-        Schedule::Sequence(children) | Schedule::Independent(children) => {
-            for child in children {
-                emit_schedule(f, child, active, depth)?;
+fn emit_schedule(f: &mut std::fmt::Formatter<'_>, body: &[IndexedStmt]) -> std::fmt::Result {
+    for stmt in body {
+        match stmt {
+            IndexedStmt::Loop(body) => {
+                writeln!(f, "loop {{")?;
+                emit_schedule(f, body)?;
+                writeln!(f, "}}")?;
             }
-        }
-        Schedule::Rules(id) => {
-            let s = id.0;
-            writeln!(f, "if self.__run_stratum_{s}(&mut delta) {{")?;
-            if let Some(active) = active {
-                writeln!(f, "active_{active} = true;")?;
+            IndexedStmt::WhenChanged { stratum, body } => {
+                writeln!(f, "if self.__run_stratum_{stratum}(&mut delta) {{")?;
+                emit_schedule(f, body)?;
+                writeln!(f, "}}")?;
             }
-            writedoc! {f, "
+            IndexedStmt::InitializeChanges(id) => writeln!(f, "let mut active_{id} = false;")?,
+            IndexedStmt::MarkChanged(id) => writeln!(f, "active_{id} = true;")?,
+            IndexedStmt::BreakUnlessChanged(id) => writeln!(f, "if !active_{id} {{ break; }}")?,
+            IndexedStmt::CheckCondition => writedoc! {f, "
                 if self.__check_condition(condition) {{
                     std::mem::swap(&mut self.__pending_delta, &mut delta);
                     return true;
                 }}
-            }}
-            "}?;
-        }
-        Schedule::Saturate(body) => {
-            writeln!(f, "loop {{ let mut active_{depth} = false;")?;
-            emit_schedule(f, body, Some(depth), depth + 1)?;
-            writeln!(f, "if !active_{depth} {{ break; }}")?;
-            if let Some(active) = active {
-                writeln!(f, "active_{active} = true;")?;
-            }
-            writeln!(f, "}}")?;
-        }
-        Schedule::ModelComponents { .. } => {
-            unreachable!("desugared models have no model-scoped strata")
+            "}?,
         }
     }
     Ok(())
 }
 
 pub(super) fn display_close<'a>(
-    program: &'a RamProgram,
+    _program: &'a RamProgram,
     ctx: &'a RustGenCtx<'a>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let codomains = function_codomains(ctx);
+        let codomains = &ctx.indexed().function_codomains;
         let equate = codomains
             .iter()
             .map(|&typ| {
@@ -697,7 +559,7 @@ pub(super) fn display_close<'a>(
                 let mut delta = std::mem::replace(&mut self.__pending_delta, ModelDelta::new());
                 loop {{
         "}?;
-        emit_schedule(f, &program.schedule.body, None, 0)?;
+        emit_schedule(f, &ctx.indexed().body)?;
         writedoc! {f, "
                     self.__allocated = false;
                     // Defining functions evaluates them through the tries.
@@ -915,7 +777,7 @@ pub(super) fn display_eval_body(
     let rel = FlatInRel::Rel(FlatRel::Func(func));
     let index = selection.current_query(&rel, QuerySpec::eval_func(func, ctx.signature()));
     let field = table_field(&rel, ctx);
-    let position = index_position(&table_indices(selection), &rel, &index.order);
+    let position = ctx.indexed().position(&rel, &index.order);
     let gets = index.order[..index.order.len() - 1]
         .iter()
         .map(|i| format!("let set = set.get(arg{i}.0)?;"))

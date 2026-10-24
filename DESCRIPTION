@@ -1,136 +1,21 @@
-Share native members through persistent indexes
+Plan evaluator execution before Rust generation
 
-Avoid copying complete inherited member relations at every morphism.
-Keep monotone mappings as compressed offset runs through prefix keys
-and suffix values, compose compatible transforms, and preserve shared
-subtrees during transport, comparisons, and incremental index updates.
-Retain eager paths for small relations and non-injective images.
+Expose rule evaluation as RAM functions with explicit nested loops,
+branches, calls, and scalar computations so optimization passes can
+change execution without reconstructing Rust control flow.
 
-For declared acyclic total inheritance, share materialized owner-local
-indexes in stable origin coordinates. Persistent member domains and
-partitions retain local additions and equations without allocating
-individual inherited images. Virtual handle blocks preserve distinct
-public identities for each owner. Rebase from parent snapshots and
-replay only local support and quotient changes.
+Lower shared rule prefixes, adaptive join selection, proof pruning,
+canonical binding checks, and insertion guards before code generation.
+Keep the linear query-planning form out of the final function bodies.
 
-Share intersections at DAG merges when invariant-key equality rules
-prove their images equal. Carry persistent witnesses for the same
-transported fact; recognize predicate uniqueness and function rules
-through the same logical constraint. Keep one coherent incoming source
-as the old matching baseline so joins across parents still fire.
-Union relation rows and reverse incidence without expanding ancestry.
-Reuse proved overlap when every adopted source revision is unchanged,
-while still rejecting target equations before taking that shortcut.
-Prepare incoming member proofs once before changing any member type.
-Retain the inherited aggregate so another incoming morphism extends its
-proof and indexes without rebuilding previously adopted parents. Keep
-local witnesses out of these proofs and rebuild after source changes or
-target row rewrites, retaining raw snapshots for matching proofs.
+Plan compact storage capabilities, invariant keys, index layouts, and
+coordinate conversions independently of Rust names and data types.
+Preserve eligibility diagnostics and the existing storage fallbacks.
 
-Register pending edges before transport to avoid repeated walks through
-future descendants, and refresh descendants in topological order.
-Batch incoming transport before closing each acyclic compact target,
-so merged indexes see completed parent snapshots. Preserve the original
-primary source and traversal direction through storage fallback; leave
-cyclic component iteration on its ordinary path.
-Validate and install each target's incoming batch together so wide
-merges do not repeatedly scan previously adopted parents. Preserve each
-parallel morphism's adopted domain and prepare every member type before
-changing the target. Publish the merged indexes once, retaining the raw
-snapshot of each incoming source for matching proofs. Refresh an already
-adopted batch once per owner and replay the whole group after ordinary
-fallback.
-Keep each incoming source's adopted domain so late source growth cannot
-expose another path's image before its own transport. Preserve the
-first incoming map immediately; adopt additional maps during closure.
-Materialize unproved overlaps and changing multi-source quotients before
-mutation, retaining ordinary semantics for bare members and equations.
+Expand stratified model traversal into RAM preparations, graph and
+owner loops, transport operations, history bindings, and change checks.
+Plan indexed storage views and desugared schedule control flow before
+selecting their Rust representations.
 
-Index equality work by the losing representative. Reuse the row tree
-for leading member columns instead of duplicating their incidence.
-Retain auxiliary incidence only for occurrences outside that prefix.
-Share one equality index across each relation's selected column orders.
-Use its affected rows to update every permutation, and retain plain row
-trees for the remaining orders. Reuse or rebuild each relation together
-so equality never mixes an old permutation with newly inherited rows.
-Preserve unchanged relation roots so publication and consumer histories
-can skip unrelated updates. Extend secondary indexes with new owned
-rows instead of repeatedly unioning their entire previous seed.
-
-Reuse inherited closure through ordinary rule input histories. Require
-exact processed source snapshots and completed transport, and retain
-normal matching while existential definitions are pending. Compare
-current rows with the unmodified inherited roots so target equality
-makes rewritten rows new matching work. When parent facts advance,
-replay local rows to preserve joins with facts processed earlier; then
-resume ordinary temporal deltas. Track member revisions as well as
-relation revisions so pure domain growth follows the same contract.
-
-Avoid repeating ancestor matches when a small primary source is joined
-by a larger completed model. Choose one certified incoming snapshot by
-its combined member-domain size, checking its adopted revisions and
-processed rule inputs before reuse. Preserve primary mapping identities
-and raw rows, and keep tied choices stable so local closure does not
-rotate between already consumed proofs.
-
-Reuse every certified incoming proof when evaluating a merged model.
-Keep the largest source as a cheap delta baseline, then exclude matches
-covered by other completed parents before expanding their join products.
-Retain the target's previous processed snapshots when resetting that
-baseline, so older mixed-parent matches are not repeated either.
-
-Carry source certificates through bound prefixes, preserving membership
-in overlapping parents. Prune covered suffixes and subtract the union of
-eligible source suffixes before enumerating the last matching variable.
-Project private witnesses by existence without expanding their products.
-Keep ordinary matching unchanged when no extra certificate is available.
-Strip a known owner prefix from proof inputs once, avoiding a temporary
-owner tree and repeated owner restriction for every incoming snapshot.
-
-Use the same mechanism for predicates and functionality. Keep
-owner-dependent global premises and owner-valued data on the ordinary
-path when their matches do not transport. Prefer selective owner-bound
-joins while preserving premise ages, canonical binding checks, and
-private noncanonical witnesses.
-
-Keep public lookups, iteration, equality, and handles consistent across
-compact and ordinary storage. Materialize unsupported operations before
-mutation, retaining pending outputs, allocated elements, and live total
-inheritance policies. Check cumulative owner and morphism quotients
-before accepting endpoints that could introduce cycles. Parallel
-morphisms keep independent images. Dynamic exports remain snapshots of
-current state and do not serialize live total inheritance policies.
-
-Keep compact activation conservative for nested, cross-owner, and
-unsupported relation layouts. Ordinary partial mappings retain their
-existing path. Preserve historical snapshots and finite evaluation
-fuel through source growth, equality, and storage transitions.
-
-Reduce ordinary tree overhead with compact leaves, persistent interval
-sets, path-only updates, shared cursors, and stack-safe destruction.
-The generic WBTreeMap lazy caches and destruction changes tighten some
-borrowed-value lifetime behavior: previous covariance and some early
-dropping examples are not preserved. Generated evaluators own values.
-
-Regression coverage executes native and desugared evaluators with both
-evaluation strategies. It includes partial/conflicting images, private
-aliases, local and inherited functionality conflicts, late growth,
-owner/morphism equality, fallback, pending definitions, and randomized
-persistent-tree mutations. Standalone COW comparisons and their plots
-are temporary artifacts rather than repository benchmarks.
-
-Keep compact regression theories under the ordinary Cargo fixture
-directory so the generated evaluators run in the full test suite.
-
-Exercise inherited closure through public evaluator operations,
-including recursive local/inherited joins, target equality, late parent
-changes, owner-valued data, and pending existential consequences across
-partial closure. Keep functionality coverage independent of internal
-validation hooks by checking public lookups and equality.
-
-Avoid rebuilding witness trees when an equality changes only the source
-partition. Preserve local proofs while invalidating inherited proof
-caches on source proof changes. Keep lazy exact relation counts in one
-word so shared unions do not enlarge every index on ordinary chains.
-Avoid allocating edge containers for one-child lineages or search state
-for leaf targets, while preserving directed cycle checks for late edges.
+Retain evaluator behavior and runtime operations while exposing their
+compiler decisions for independent review and execution-based checks.

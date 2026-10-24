@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use std::fmt::Display;
 
 use convert_case::{Case, Casing};
@@ -6,146 +5,24 @@ use indoc::{formatdoc, writedoc};
 use itertools::Itertools;
 
 use super::{
-    compact_keys, display_all_index_field_name, display_own_index_field_name, display_rel,
-    display_type, indices, RustGenCtx,
+    display_all_index_field_name, display_own_index_field_name, display_rel, display_type, indices,
+    RustGenCtx,
 };
 use crate::algebra::signature::TypeId;
-use crate::flat_eqlog::{iter_flat_rels, FlatInRel, FlatRel, IndexSelection, IndexSpec};
+use crate::flat_eqlog::{FlatInRel, FlatRel, IndexSelection};
 use crate::fmt_util::FmtFn;
 use crate::ram::RamProgram;
 
 pub(super) fn members(model: TypeId, ctx: &RustGenCtx<'_>) -> Vec<TypeId> {
-    ctx.signature()
-        .iter_types()
-        .filter(|&typ| {
-            ctx.supports_compact_members(typ)
-                && ctx.signature().type_(typ).parents.as_slice() == [model]
-        })
-        .collect()
+    ctx.compact().members(model).to_vec()
 }
 
 pub(super) fn supports_model(model: TypeId, ctx: &RustGenCtx<'_>) -> bool {
-    ctx.signature().type_(model).parents.is_empty() && !members(model, ctx).is_empty()
+    ctx.compact().supports_model(model)
 }
 
 pub(super) fn owner(rel: &FlatInRel, ctx: &RustGenCtx<'_>) -> Option<TypeId> {
-    let rel = match rel {
-        FlatInRel::Rel(rel) => *rel,
-        FlatInRel::RelWithDiagonals { .. } | FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => {
-            return None;
-        }
-    };
-    match rel {
-        FlatRel::ModelMember(_) => None,
-        FlatRel::Pred(_) | FlatRel::Func(_) => rel
-            .parent_model_type(ctx.signature())
-            .filter(|&model| supports_model(model, ctx)),
-    }
-}
-
-pub(super) fn inherited_slot(
-    rel: &FlatInRel,
-    index: &IndexSpec,
-    model: TypeId,
-    ctx: &RustGenCtx<'_>,
-    selection: &IndexSelection,
-) -> Option<usize> {
-    if owner(rel, ctx) != Some(model) || index.order.first() != Some(&0) {
-        return None;
-    }
-    let relation = match rel {
-        FlatInRel::Rel(rel) => *rel,
-        FlatInRel::RelWithDiagonals { .. } | FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => {
-            return None;
-        }
-    };
-    let mut order = index.order.to_vec();
-    order.sort_unstable();
-    if !order
-        .iter()
-        .copied()
-        .eq(0..rel.arity(ctx.signature()).len())
-    {
-        return None;
-    }
-    let order = index.order[1..]
-        .iter()
-        .map(|&column| column - 1)
-        .collect_vec();
-    layouts(model, ctx, selection)
-        .into_iter()
-        .find(|layout| layout.rel == relation)?
-        .slots
-        .into_iter()
-        .find_map(|(candidate, slot)| (candidate == order).then_some(slot))
-}
-
-struct RelationLayout {
-    rel: FlatRel,
-    relation: usize,
-    member_types: Vec<Option<usize>>,
-    slots: Vec<(Vec<usize>, usize)>,
-}
-
-impl RelationLayout {
-    fn slot(&self, order: &[usize]) -> usize {
-        self.slots
-            .iter()
-            .find_map(|(candidate, slot)| (candidate == order).then_some(*slot))
-            .expect("selected compact permutation has a storage slot")
-    }
-
-    fn signature_slot(&self) -> usize {
-        self.slot(&(0..self.member_types.len()).collect_vec())
-    }
-}
-
-fn layouts(model: TypeId, ctx: &RustGenCtx<'_>, selection: &IndexSelection) -> Vec<RelationLayout> {
-    let members = members(model, ctx);
-    let mut next_slot = 0;
-    iter_flat_rels(ctx.signature())
-        .filter(|&rel| owner(&FlatInRel::Rel(rel), ctx) == Some(model))
-        .enumerate()
-        .map(|(relation, rel)| {
-            let arity = rel.arity(ctx.signature());
-            let member_types = arity[1..]
-                .iter()
-                .enumerate()
-                .map(|(column, typ)| {
-                    rel.column_maps_under(ctx.signature(), column + 1, model)
-                        .then(|| members.iter().position(|member| member == typ))
-                        .flatten()
-                })
-                .collect();
-            let mut orders = BTreeSet::from([(0..arity.len() - 1).collect_vec()]);
-            for index in &selection.indices[&FlatInRel::Rel(rel)] {
-                assert_eq!(index.order.len(), arity.len());
-                orders.insert(
-                    index
-                        .order
-                        .iter()
-                        .copied()
-                        .filter(|&column| column != 0)
-                        .map(|column| column - 1)
-                        .collect(),
-                );
-            }
-            let slots = orders
-                .into_iter()
-                .map(|order| {
-                    let slot = next_slot;
-                    next_slot += 1;
-                    (order, slot)
-                })
-                .collect();
-            RelationLayout {
-                rel,
-                relation,
-                member_types,
-                slots,
-            }
-        })
-        .collect()
+    ctx.compact().owner(rel)
 }
 
 fn model_name(model: TypeId, ctx: &RustGenCtx<'_>) -> String {
@@ -305,17 +182,10 @@ pub(super) fn methods<'a>(
             }
             let name = model_name(model, ctx);
             let members = members(model, ctx);
-            let layouts = layouts(model, ctx, selection);
-            let keys = compact_keys::invariant_keys(model, program, ctx);
-            let owner_leading = layouts.iter().all(|layout| {
-                selection
-                    .current_primary(&FlatInRel::Rel(layout.rel))
-                    .order
-                    .first()
-                    == Some(&0)
-            }) && native.iter().all(|plan| {
-                owner(&plan.rel, ctx) != Some(model) || plan.index.order.first() == Some(&0)
-            });
+            let plan = ctx.compact().model(model).unwrap();
+            let layouts = &plan.layouts;
+            let keys = &plan.keys;
+            let owner_leading = plan.owner_leading;
             let specs = layouts
                 .iter()
                 .flat_map(|layout| {
@@ -358,7 +228,7 @@ pub(super) fn methods<'a>(
                     let owners: Vec<_> = self.iter_{name}().map(|owner| owner.0).collect();
                     for &owner in &owners {{ indices.create_owner(owner); }}
             "}?;
-            for layout in &layouts {
+            for layout in layouts {
                 let rel = FlatInRel::Rel(layout.rel);
                 let primary = selection.current_primary(&rel);
                 let own = display_own_index_field_name(&rel, primary, ctx);
@@ -378,7 +248,7 @@ pub(super) fn methods<'a>(
                     }
                 }).join(", ");
                 let relation = layout.relation;
-                let witnesses = witnesses(layout.rel, &keys, "el0", ctx);
+                let witnesses = witnesses(layout.rel, keys, "el0", ctx);
                 writeln!(f, "for [{args}] in self.{own}.iter() {{ let row = [{row}]; indices.record(el0, {relation}, &row, true); {witnesses} }}")?;
             }
             writedoc! {f, "
@@ -419,7 +289,7 @@ pub(super) fn methods<'a>(
                 fn __compact_publish_{name}(&mut self, owner: u32) {{
                     let indices = self.__compact_indices_{name}.as_ref().unwrap();
             "}?;
-            for layout in &layouts {
+            for layout in layouts {
                 let rel = FlatInRel::Rel(layout.rel);
                 let primary = selection.current_primary(&rel);
                 if primary.order.first() != Some(&0) {
@@ -471,7 +341,7 @@ pub(super) fn methods<'a>(
                 "}?;
             }
             writeln!(f, "}}")?;
-            for layout in &layouts {
+            for layout in layouts {
                 let relation = layout.relation;
                 let rel_name = display_rel(layout.rel, ctx).to_case(Case::Snake);
                 let arity = layout.rel.arity(ctx.signature());
@@ -493,7 +363,7 @@ pub(super) fn methods<'a>(
                 }).join(", ");
                 let signature_slot = layout.signature_slot();
                 let invalidate = indices::invalidate(layout.rel, selection, ctx);
-                let witnesses = witnesses(layout.rel, &keys, "owner", ctx);
+                let witnesses = witnesses(layout.rel, keys, "owner", ctx);
                 writedoc! {f, "
                     fn __compact_primary_{rel_name}(&self, owner: u32) -> Option<&eqlog_runtime::__private::Table> {{
                         let indices = self.__compact_indices_{name}.as_ref()?;

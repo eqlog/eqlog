@@ -28,11 +28,13 @@ pub(super) fn methods<'a>(
                 let tree = display_index_expr(&rel, index, ctx);
                 format!("({tree}).get(morphism.0).is_some_and(|set| set.iter().take(2).count() > 1)")
             }).join(" || ");
-            let eligibility =
-                match compact_eligibility::rejection_reason(model, program, selection, ctx) {
-                    Some(reason) => format!("assert!(false, {reason:?});"),
-                    None => String::new(),
-                };
+            let eligibility = match &program.compact.model(model).unwrap().rejection {
+                Some(reason) => {
+                    let reason = compact_eligibility::rejection_message(reason, ctx);
+                    format!("assert!(false, {reason:?});")
+                }
+                None => String::new(),
+            };
             writedoc! {f, "
                 /// Enables shared member storage for acyclic total inheritance.
                 /// Requires a graph without assigned morphism endpoints.

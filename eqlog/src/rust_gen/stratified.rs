@@ -11,40 +11,45 @@ use super::{compact_indices, compact_policy};
 use super::{
     display_all_index_field_name, display_index_field_name, display_index_type,
     display_module_env_struct_name, display_morphism_components, display_out_set_field_name,
-    display_type, module_env_in_rels, module_env_iter_types, module_env_out_rels, RustGenCtx,
+    display_type, module_env_out_rels, RustGenCtx,
 };
 use crate::algebra::signature::TypeId;
-use crate::flat_eqlog::{
-    FlatInRel, FlatOutRel, FlatRel, IndexAge, IndexSelection, IndexSpec, RuleSchedule, Schedule,
-    Stratum,
-};
+use crate::flat_eqlog::{FlatInRel, FlatOutRel, FlatRel, IndexAge, IndexSelection, IndexSpec};
 use crate::fmt_util::FmtFn;
 use crate::ram::{
-    IndexPreparation, NativeIndexPreparation, NativePreparation, RamModule, RamProgram,
+    input_key, CanonicalInput, EvaluationCondition, EvaluationIteration, EvaluationPlan,
+    EvaluationStmt, IndexPreparation, InheritedInput, InheritedRows, InputStorage,
+    NativeIndexPreparation, NativePreparation, ProofRows, RamFunction, RamProgram, RetainedOwners,
+    StratumEvaluation, TransportBaseline, TransportEdges,
 };
 
 pub struct Codegen<'s> {
-    modules: &'s [RamModule],
-    strata: &'s [Stratum],
-    body: &'s Schedule,
-    models: BTreeMap<TypeId, usize>,
-    inputs: BTreeMap<FlatInRel, usize>,
-    indices: BTreeMap<(FlatInRel, IndexSpec), usize>,
-    old_indices: BTreeSet<(FlatInRel, IndexSpec)>,
+    evaluation: &'s EvaluationPlan,
+    strata: &'s [StratumEvaluation],
+    body: &'s [EvaluationStmt],
+    models: &'s BTreeMap<TypeId, usize>,
+    inputs: &'s BTreeMap<FlatInRel, usize>,
+    indices: &'s BTreeMap<(FlatInRel, IndexSpec), usize>,
+    old_indices: &'s BTreeSet<(FlatInRel, IndexSpec)>,
     preparations: &'s [IndexPreparation],
     native_indices: &'s [NativeIndexPreparation],
     model_preparations: &'s BTreeMap<TypeId, NativePreparation>,
 }
 
-struct TransportBaseline {
-    relations: Vec<FlatInRel>,
-    maps: Vec<(FlatInRel, IndexSpec)>,
-    relation_maps: Vec<Vec<usize>>,
+fn input_name(storage: InputStorage) -> String {
+    match storage {
+        InputStorage::Relation(id) => format!("input_{id}"),
+        InputStorage::Index(id) => format!("index_{id}"),
+        InputStorage::Native(id) => format!("native_input_{id}"),
+    }
 }
 
-fn input_key(rel: FlatInRel, mut index: IndexSpec) -> (FlatInRel, IndexSpec) {
-    index.age = IndexAge::Old;
-    (rel, index)
+fn history_name(storage: InputStorage, count: usize) -> String {
+    match storage {
+        InputStorage::Relation(id) => format!("__scope_input_{id}_{count}"),
+        InputStorage::Index(id) => format!("__scope_index_{id}_{count}"),
+        InputStorage::Native(id) => format!("__scope_native_{id}_{count}"),
+    }
 }
 
 impl<'s> Codegen<'s> {
@@ -52,40 +57,16 @@ impl<'s> Codegen<'s> {
         &self,
         stratum: usize,
         source: &FlatInRel,
-        modules: &[RamModule],
         selection: &IndexSelection,
         ctx: &RustGenCtx<'_>,
     ) -> Option<String> {
-        if self.strata[stratum].model.is_some() {
+        if !self.evaluation.strata[stratum]
+            .diagonal_inputs
+            .contains(source)
+        {
             return None;
         }
         let primary = selection.current_primary(source);
-        let [first, second, ..] = primary.order.as_ref() else {
-            return None;
-        };
-        let mut used = false;
-        for &module in &self.strata[stratum].groups {
-            for routine in &modules[module].routines {
-                for (rel, _) in routine.input_indices() {
-                    if source_relation(&rel) != *source {
-                        continue;
-                    }
-                    used = true;
-                    let constrained = match rel {
-                        FlatInRel::RelWithDiagonals { equalities, .. } => {
-                            equalities[*first] == equalities[*second]
-                        }
-                        FlatInRel::Rel(_) | FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => false,
-                    };
-                    if !constrained {
-                        return None;
-                    }
-                }
-            }
-        }
-        if !used {
-            return None;
-        }
         let field = display_all_index_field_name(source, primary, ctx);
         let arity = primary.order.len();
         let suffix = arity - 1;
@@ -104,88 +85,20 @@ impl<'s> Codegen<'s> {
         "})
     }
 
-    fn transport_baseline(
-        &self,
-        model: TypeId,
-        selection: &IndexSelection,
-        ctx: &RustGenCtx<'_>,
-    ) -> Option<TransportBaseline> {
-        if !ctx.signature().type_(model).parents.is_empty()
-            || ctx
-                .signature()
-                .iter_model_decls()
-                .any(|(_, ids)| ctx.signature().type_(ids.type_).parents.last() == Some(&model))
-        {
-            return None;
-        }
-        let plan = &self.model_preparations[&model].propagation;
-        let relations: Vec<_> = selection
-            .indices
-            .keys()
-            .filter(|rel| ctx.has_shared_indices(rel))
-            .filter(|rel| match rel {
-                FlatInRel::Rel(rel) => {
-                    plan.relations.contains(rel)
-                        && rel.parent_model_type(ctx.signature()) == Some(model)
-                }
-                FlatInRel::RelWithDiagonals { .. }
-                | FlatInRel::TypeSet(_)
-                | FlatInRel::Equality(_) => false,
-            })
-            .cloned()
-            .collect();
-        if relations
-            .iter()
-            .any(|rel| selection.current_primary(rel).order.first() != Some(&0))
-        {
-            return None;
-        }
-        let maps: Vec<_> = relations
-            .iter()
-            .flat_map(|rel| plan.map_indices.get(&(model, rel.clone())))
-            .flatten()
-            .cloned()
-            .collect::<BTreeSet<_>>()
-            .into_iter()
-            .collect();
-        let relation_maps = relations
-            .iter()
-            .map(|rel| {
-                plan.map_indices
-                    .get(&(model, rel.clone()))
-                    .into_iter()
-                    .flatten()
-                    .map(|map| maps.binary_search(map).unwrap())
-                    .collect()
-            })
-            .collect();
-        Some(TransportBaseline {
-            relations,
-            maps,
-            relation_maps,
-        })
+    fn transport_baseline(&self, model: TypeId) -> Option<&TransportBaseline> {
+        self.evaluation.transport_baselines.get(&model)
     }
 
-    pub fn tracks_owner(&self, typ: TypeId, ctx: &RustGenCtx<'_>) -> bool {
-        self.strata
-            .iter()
-            .filter_map(|stratum| stratum.model)
-            .any(|model| typ == model || ctx.signature().type_(model).parents.contains(&typ))
+    pub fn tracks_owner(&self, typ: TypeId, _ctx: &RustGenCtx<'_>) -> bool {
+        self.evaluation.tracked_owners.contains(&typ)
     }
 
     fn stratum_inputs(&self, s: usize) -> BTreeSet<FlatInRel> {
-        self.preparations[s]
-            .indices
-            .iter()
-            .map(|(rel, _)| source_relation(rel))
-            .collect()
+        self.evaluation.strata[s].inputs.clone()
     }
 
     fn has_stable_inputs(&self, s: usize) -> bool {
-        self.preparations[s]
-            .indices
-            .iter()
-            .any(|(rel, _)| self.strata[s].stable_inputs.contains(&source_relation(rel)))
+        !self.evaluation.strata[s].stable_fields.is_empty()
     }
 
     fn consume_method(&self, s: usize, rel: &FlatInRel, index: &IndexSpec) -> &'static str {
@@ -199,171 +112,57 @@ impl<'s> Codegen<'s> {
         }
     }
 
-    fn inherited_rows(
-        &self,
-        rel: &FlatInRel,
-        index: &IndexSpec,
-        model: TypeId,
-        selection: &IndexSelection,
-        ctx: &RustGenCtx<'_>,
-    ) -> Option<String> {
-        match rel {
-            FlatInRel::Rel(FlatRel::ModelMember(typ)) => {
-                if !ctx.supports_compact_members(*typ)
-                    || ctx.signature().type_(*typ).parents.as_slice() != [model]
-                    || index.order.as_ref() != [0, 1]
-                {
-                    return None;
-                }
-                let name = display_type(*typ, ctx).to_string().to_case(Case::Snake);
-                Some(format!(
-                    "PrefixTree1 {{ set: source_{name}.canonical_domain().clone() }}"
-                ))
+    fn inherited_rows(&self, input: &InheritedInput, ctx: &RustGenCtx<'_>) -> String {
+        match input.rows {
+            InheritedRows::MemberDomain(typ) => {
+                let name = display_type(typ, ctx).to_string().to_case(Case::Snake);
+                format!("PrefixTree1 {{ set: source_{name}.canonical_domain().clone() }}")
             }
-            FlatInRel::Rel(FlatRel::Pred(_) | FlatRel::Func(_)) => {
-                let slot = compact_indices::inherited_slot(rel, index, model, ctx, selection)?;
-                let arity = rel.arity(ctx.signature()).len() - scope_prefix(&rel, model, ctx);
-                Some(format!("<&PrefixTree{arity}>::try_from(rows.get({slot})?).expect(\"inherited index arity\").clone()"))
+            InheritedRows::CompactIndex(slot) => {
+                let arity = input.arity;
+                format!("<&PrefixTree{arity}>::try_from(rows.get({slot})?).expect(\"inherited index arity\").clone()")
             }
-            FlatInRel::TypeSet(typ) => {
-                if *typ != model || index.order.as_ref() != [0] {
-                    return None;
-                }
-                let field = display_all_index_field_name(rel, index, ctx);
-                Some(format!("self.{field}.clone()"))
-            }
-            FlatInRel::RelWithDiagonals { .. } | FlatInRel::Equality(_) => None,
-        }
-    }
-
-    fn matching_rows(
-        &self,
-        rel: &FlatInRel,
-        index: &IndexSpec,
-        model: TypeId,
-        selection: &IndexSelection,
-        ctx: &RustGenCtx<'_>,
-    ) -> String {
-        match rel {
-            FlatInRel::Rel(FlatRel::ModelMember(typ)) => {
-                let name = display_type(*typ, ctx).to_string().to_case(Case::Snake);
-                format!("PrefixTree1 {{ set: self.__compact_members_{name}.as_ref()?.get_snapshot(owners[0])?.canonical_domain().clone() }}")
-            }
-            FlatInRel::Rel(FlatRel::Pred(_) | FlatRel::Func(_)) => {
-                let slot =
-                    compact_indices::inherited_slot(rel, index, model, ctx, selection).unwrap();
-                let arity = rel.arity(ctx.signature()).len() - scope_prefix(rel, model, ctx);
-                format!("<&PrefixTree{arity}>::try_from(indices.rows(owners[0], {slot})).expect(\"matching index arity\").clone()")
-            }
-            FlatInRel::TypeSet(_) => {
-                let field = display_all_index_field_name(rel, index, ctx);
+            InheritedRows::Global => {
+                let field = display_all_index_field_name(&input.rel, &input.index, ctx);
                 format!("self.{field}.clone()")
             }
-            FlatInRel::RelWithDiagonals { .. } | FlatInRel::Equality(_) => {
-                unreachable!("only certified inputs have matching snapshots")
+        }
+    }
+
+    fn matching_rows(&self, input: &InheritedInput, ctx: &RustGenCtx<'_>) -> String {
+        match input.rows {
+            InheritedRows::MemberDomain(typ) => {
+                let name = display_type(typ, ctx).to_string().to_case(Case::Snake);
+                format!("PrefixTree1 {{ set: self.__compact_members_{name}.as_ref()?.get_snapshot(owners[0])?.canonical_domain().clone() }}")
+            }
+            InheritedRows::CompactIndex(slot) => {
+                let arity = input.arity;
+                format!("<&PrefixTree{arity}>::try_from(indices.rows(owners[0], {slot})).expect(\"matching index arity\").clone()")
+            }
+            InheritedRows::Global => {
+                let field = display_all_index_field_name(&input.rel, &input.index, ctx);
+                format!("self.{field}.clone()")
             }
         }
     }
 
-    fn inherited_field(
-        &self,
-        rel: &FlatInRel,
-        index: &IndexSpec,
-        selection: &IndexSelection,
-    ) -> String {
-        if let Some(id) = native_indices::find(self.native_indices, rel, index) {
-            format!("native_input_{id}")
-        } else if selection.is_primary(rel, index) {
-            let i = self.inputs[&source_relation(rel)];
-            format!("input_{i}")
-        } else {
-            let j = self.indices[&input_key(rel.clone(), index.clone())];
-            format!("index_{j}")
-        }
-    }
-
-    fn inherited_plan(
-        &self,
-        s: usize,
-        selection: &IndexSelection,
-        ctx: &RustGenCtx<'_>,
-    ) -> Option<BTreeMap<String, (FlatInRel, IndexSpec)>> {
-        let model = self.strata[s].model?;
-        if !compact_indices::supports_model(model, ctx) {
-            return None;
-        }
-        for &module in &self.strata[s].groups {
-            for routine in &self.modules[module].routines {
-                let owner = routine.flat_rule.scope.owners().first()?;
-                for stmt in &routine.flat_rule.premise {
-                    match &stmt.rel {
-                        FlatInRel::TypeSet(typ) => {
-                            if *typ != model || stmt.args.len() != 1 || &stmt.args[0] != owner {
-                                return None;
-                            }
-                        }
-                        FlatInRel::RelWithDiagonals { .. } => return None,
-                        FlatInRel::Rel(_) | FlatInRel::Equality(_) => {}
-                    }
-                }
-                // The owner prefix changes during transport, while an owner
-                // stored as ordinary data does not change with it.
-                if routine
-                    .flat_rule
-                    .premise
-                    .iter()
-                    .any(|stmt| stmt.args.iter().skip(1).any(|arg| arg == owner))
-                    || routine
-                        .flat_rule
-                        .conclusion
-                        .iter()
-                        .any(|stmt| stmt.args.iter().skip(1).any(|arg| arg == owner))
-                {
-                    return None;
-                }
-            }
-        }
-        let mut fields = BTreeMap::new();
-        for rel in self.stratum_inputs(s) {
-            let i = self.inputs[&rel];
-            fields.insert(
-                format!("input_{i}"),
-                (rel.clone(), selection.current_primary(&rel).clone()),
-            );
-        }
-        if fields.is_empty() {
-            return None;
-        }
-        for (rel, index) in &self.preparations[s].indices {
-            self.inherited_rows(rel, index, model, selection, ctx)?;
-            let name = if let Some(id) = native_indices::find(self.native_indices, rel, index) {
-                Some(format!("native_input_{id}"))
-            } else if !selection.is_primary(rel, index) {
-                let key = input_key(rel.clone(), index.clone());
-                let j = self.indices[&key];
-                Some(format!("index_{j}"))
-            } else {
-                None
-            };
-            if let Some(name) = name {
-                fields.insert(name, (rel.clone(), index.clone()));
-            }
-        }
-        for (rel, index) in fields.values() {
-            // An owner-dependent global premise need not hold in the source.
-            self.inherited_rows(rel, index, model, selection, ctx)?;
-        }
-        Some(fields)
+    fn inherited_plan(&self, s: usize) -> Option<BTreeMap<String, &InheritedInput>> {
+        self.evaluation.strata[s].inherited.as_ref().map(|fields| {
+            fields
+                .iter()
+                .map(|(&storage, input)| (input_name(storage), input))
+                .collect()
+        })
     }
 
     pub fn loop_input_types<'a>(
         &'a self,
-        selection: &'a IndexSelection,
+        _selection: &'a IndexSelection,
         ctx: &'a RustGenCtx<'a>,
     ) -> impl Display + 'a {
         FmtFn(move |f| {
-            for (&model, &m) in &self.models {
-                let Some(baseline) = self.transport_baseline(model, selection, ctx) else {
+            for (&model, &m) in self.models {
+                let Some(baseline) = self.transport_baseline(model) else {
                     continue;
                 };
                 writeln!(f, "struct __TransportBaseline{m} {{")?;
@@ -383,7 +182,7 @@ impl<'s> Codegen<'s> {
                 writeln!(f, "}}")?;
             }
             for (s, stratum) in self.strata.iter().enumerate() {
-                let inherited = self.inherited_plan(s, selection, ctx);
+                let inherited = self.inherited_plan(s);
                 if let Some(model) = stratum.model {
                     writeln!(f, "struct __OwnerInputs{s} {{")?;
                     if inherited.is_some() {
@@ -402,32 +201,14 @@ impl<'s> Codegen<'s> {
                     if let Some(fields) = inherited {
                         let members = compact_indices::members(model, ctx).len();
                         writeln!(f, "#[derive(Clone)] struct __InheritedInputs{s} {{ revision: (u32, u64, [u64; {members}]),")?;
-                        for (name, (rel, _)) in fields {
-                            let arity =
-                                rel.arity(ctx.signature()).len() - scope_prefix(&rel, model, ctx);
+                        for (name, input) in fields {
+                            let arity = input.arity;
                             writeln!(f, "{name}: PrefixTree{arity},")?;
                         }
                         writeln!(f, "}}")?;
                     }
                 }
-                let mut fields = BTreeMap::new();
-                for (rel, index) in &self.preparations[s].indices {
-                    let source = source_relation(rel);
-                    if !stratum.stable_inputs.contains(&source) {
-                        continue;
-                    }
-                    let i = self.inputs[&source];
-                    fields.insert(format!("input_{i}"), source);
-                    if let Some(id) = native_indices::find(self.native_indices, rel, index) {
-                        fields.insert(format!("native_input_{id}"), rel.clone());
-                    } else if !selection.is_primary(rel, index) {
-                        let key = input_key(rel.clone(), index.clone());
-                        if self.old_indices.contains(&key) {
-                            let j = self.indices[&key];
-                            fields.insert(format!("index_{j}"), rel.clone());
-                        }
-                    }
-                }
+                let fields = &self.evaluation.strata[s].stable_fields;
                 if fields.is_empty() {
                     continue;
                 }
@@ -435,7 +216,8 @@ impl<'s> Codegen<'s> {
                 if self.preparations[s].stable.is_some() {
                     writeln!(f, "propagated: bool,")?;
                 }
-                for (name, rel) in fields {
+                for (&storage, rel) in fields {
+                    let name = input_name(storage);
                     let typ = display_index_type(&rel, ctx);
                     writeln!(f, "{name}: Option<{typ}>,")?;
                 }
@@ -445,101 +227,32 @@ impl<'s> Codegen<'s> {
         })
     }
 
-    fn scoped_histories(
-        &self,
-        ctx: &RustGenCtx<'_>,
-        selection: &IndexSelection,
-    ) -> BTreeMap<String, (Vec<TypeId>, usize)> {
-        let mut fields = BTreeMap::new();
-        for (s, stratum) in self.strata.iter().enumerate() {
-            let Some(model) = stratum.model else {
-                continue;
-            };
-            for (rel, index) in &self.preparations[s].indices {
-                let source = source_relation(rel);
-                let i = self.inputs[&source];
-                let count = scope_prefix(&source, model, ctx);
-                if count == 0 {
-                    continue;
-                }
-                let owners: Vec<_> = ctx
-                    .signature()
-                    .type_(model)
-                    .parents
-                    .iter()
-                    .copied()
-                    .chain(std::iter::once(model))
-                    .take(count)
-                    .collect();
-                let arity = source.arity(ctx.signature()).len() - count;
-                fields.insert(
-                    format!("__scope_input_{i}_{count}"),
-                    (owners.clone(), arity),
-                );
-                let arity = rel.arity(ctx.signature()).len() - scope_prefix(rel, model, ctx);
-                if let Some(id) = native_indices::find(self.native_indices, rel, index) {
-                    fields.insert(
-                        format!("__scope_native_{id}_{count}"),
-                        (owners.clone(), arity),
-                    );
-                } else if !selection.is_primary(rel, index) {
-                    let key = input_key(rel.clone(), index.clone());
-                    if self.old_indices.contains(&key) {
-                        let j = self.indices[&key];
-                        fields.insert(
-                            format!("__scope_index_{j}_{count}"),
-                            (owners.clone(), arity),
-                        );
-                    }
-                }
-            }
-        }
-        fields
+    fn scoped_histories(&self) -> BTreeMap<String, (Vec<TypeId>, usize)> {
+        self.evaluation
+            .scoped_histories
+            .iter()
+            .map(|history| {
+                (
+                    history_name(history.storage, history.owners.len()),
+                    (history.owners.clone(), history.arity),
+                )
+            })
+            .collect()
     }
 
-    pub fn new(plan: &'s RuleSchedule, program: &'s RamProgram) -> Self {
-        let indices: BTreeSet<_> = program
-            .preparations
-            .iter()
-            .flat_map(|plan| plan.indices.iter().cloned())
-            .collect();
-        let old_indices = indices
-            .iter()
-            .filter(|(_, index)| index.age == IndexAge::Old)
-            .cloned()
-            .collect();
-        let inputs: BTreeSet<_> = indices
-            .iter()
-            .map(|(rel, _)| source_relation(rel))
-            .collect();
+    pub fn new(program: &'s RamProgram) -> Self {
+        let evaluation = &program.evaluation;
         Self {
-            modules: &program.modules,
-            strata: &plan.strata,
-            body: &plan.body,
-            models: program
-                .model_preparations
-                .keys()
-                .copied()
-                .enumerate()
-                .map(|(i, model)| (model, i))
-                .collect(),
+            evaluation,
+            strata: &evaluation.strata,
+            body: &evaluation.body,
+            models: &evaluation.models,
             preparations: &program.preparations,
             native_indices: &program.native_indices,
             model_preparations: &program.model_preparations,
-            old_indices,
-            inputs: inputs
-                .into_iter()
-                .enumerate()
-                .map(|(i, key)| (key, i))
-                .collect(),
-            indices: indices
-                .into_iter()
-                .map(|(rel, index)| input_key(rel, index))
-                .collect::<BTreeSet<_>>()
-                .into_iter()
-                .enumerate()
-                .map(|(i, key)| (key, i))
-                .collect(),
+            old_indices: &evaluation.old_indices,
+            inputs: &evaluation.inputs,
+            indices: &evaluation.indices,
         }
     }
 
@@ -571,18 +284,18 @@ impl<'s> Codegen<'s> {
                     )?;
                 }
             }
-            for (field, (owners, arity)) in self.scoped_histories(ctx, selection) {
+            for (field, (owners, arity)) in self.scoped_histories() {
                 let count = owners.len();
                 writeln!(f, "{field}: std::collections::BTreeMap<[u32; {count}], eqlog_runtime::__private::RelationVersions<PrefixTree{arity}, (usize, Vec<u32>)>>,")?;
             }
-            for (rel, i) in &self.inputs {
+            for (rel, i) in self.inputs {
                 let typ = display_index_type(rel, ctx);
                 writeln!(
                     f,
                     "__rule_input_{i}: eqlog_runtime::__private::RelationVersions<{typ}, (usize, Vec<u32>)>,"
                 )?;
             }
-            for ((rel, index), i) in &self.indices {
+            for ((rel, index), i) in self.indices {
                 if selection.is_primary(rel, index)
                     || native_indices::find(self.native_indices, rel, index).is_some()
                 {
@@ -624,7 +337,7 @@ impl<'s> Codegen<'s> {
                     writeln!(f, "__owner_inputs_{s}: std::collections::BTreeMap::new(),")?;
                 }
             }
-            for field in self.scoped_histories(ctx, selection).keys() {
+            for field in self.scoped_histories().keys() {
                 writeln!(f, "{field}: std::collections::BTreeMap::new(),")?;
             }
             for i in self.inputs.values() {
@@ -633,7 +346,7 @@ impl<'s> Codegen<'s> {
                     "__rule_input_{i}: eqlog_runtime::__private::RelationVersions::new(),"
                 )?;
             }
-            for ((rel, index), i) in &self.indices {
+            for ((rel, index), i) in self.indices {
                 if selection.is_primary(rel, index)
                     || native_indices::find(self.native_indices, rel, index).is_some()
                 {
@@ -656,14 +369,14 @@ impl<'s> Codegen<'s> {
 
     pub fn methods<'a>(
         &'a self,
-        modules: &'a [RamModule],
+        modules: &'a [RamFunction],
         ctx: &'a RustGenCtx<'a>,
         selection: &'a IndexSelection,
     ) -> impl Display + 'a {
         FmtFn(move |f| {
             for (s, stratum) in self.strata.iter().enumerate() {
                 let inputs = self.stratum_inputs(s);
-                let inherited_plan = self.inherited_plan(s, selection, ctx);
+                let inherited_plan = self.inherited_plan(s);
                 if let Some(fields) = &inherited_plan {
                     // A matching checkpoint proves only its exact input roots.
                     // The source revision also covers transported conclusions.
@@ -676,8 +389,8 @@ impl<'s> Codegen<'s> {
                             if !indices.has_owner(owners[0]) {{ return None; }}
                             let revision = (owners[0], 0, [0; {members}]);
                     "}?;
-                    for (field, (rel, index)) in fields {
-                        let rows = self.matching_rows(rel, index, model, selection, ctx);
+                    for (field, input) in fields {
+                        let rows = self.matching_rows(input, ctx);
                         writeln!(f, "let {field} = {rows};")?;
                     }
                     let names = fields.keys().join(", ");
@@ -721,12 +434,9 @@ impl<'s> Codegen<'s> {
                         let revision = (source, revision, [{revisions}]);
                         let proved = self.__owner_inputs_{s}.get(&[source])?;
                     "}?;
-                    for (name, (rel, index)) in fields {
-                        let arity =
-                            rel.arity(ctx.signature()).len() - scope_prefix(&rel, model, ctx);
-                        let rows = self
-                            .inherited_rows(rel, index, model, selection, ctx)
-                            .unwrap();
+                    for (name, input) in fields {
+                        let arity = input.arity;
+                        let rows = self.inherited_rows(input, ctx);
                         writeln!(f, "let {name}: PrefixTree{arity} = {rows};")?;
                     }
                     for rel in &inputs {
@@ -764,11 +474,8 @@ impl<'s> Codegen<'s> {
                     }}
                     "}?;
                 }
-                let outputs: BTreeSet<_> = stratum
-                    .groups
-                    .iter()
-                    .flat_map(|&m| module_env_out_rels(&modules[m]))
-                    .collect();
+                let evaluation = &self.evaluation.strata[s];
+                let outputs = &evaluation.outputs;
                 let stable = if self.has_stable_inputs(s) {
                     format!("stable: &mut __StableInputs{s}, ")
                 } else {
@@ -792,25 +499,10 @@ impl<'s> Codegen<'s> {
                             let mut dirty = !self.__stratum_initialized[{s}];
                     "}?;
                 }
-                if let Some(model) = stratum.model {
-                    for output in &outputs {
-                        match output {
-                            FlatOutRel::FuncDomain(func) => {
-                                let rel = FlatRel::Func(*func);
-                                let arity = output.arity(ctx.signature());
-                                if arity.iter().enumerate().any(|(column, &typ)| {
-                                    ctx.supports_compact_members(typ)
-                                        && rel.column_maps_under(ctx.signature(), column, model)
-                                }) {
-                                    let field = display_out_set_field_name(output, ctx);
-                                    writeln!(
-                                        f,
-                                        "let __compact_start_{field} = delta.{field}.len();"
-                                    )?;
-                                }
-                            }
-                            FlatOutRel::Rel(_) | FlatOutRel::Equality(_) => {}
-                        }
+                for conversion in &evaluation.output_conversions {
+                    if conversion.pending {
+                        let field = display_out_set_field_name(&conversion.output, ctx);
+                        writeln!(f, "let __compact_start_{field} = delta.{field}.len();")?;
                     }
                 }
                 if let Some(plan) = &self.preparations[s].stable {
@@ -879,31 +571,20 @@ impl<'s> Codegen<'s> {
                         let checkpoint = __OwnerInputs{s} {{ {snapshots} }};
                         self.__owner_inputs_{s}.insert(owners, checkpoint);
                     "}?;
-                    let possible: BTreeSet<_> = stratum
-                        .groups
-                        .iter()
-                        .flat_map(|&m| &modules[m].routines)
-                        .map(|routine| {
-                            let sources: BTreeSet<_> = routine
-                                .input_indices()
-                                .iter()
-                                .map(|(rel, _)| self.inputs[&source_relation(rel)])
-                                .collect();
-                            if sources.is_empty() {
-                                "true".to_owned()
-                            } else {
+                    if let Some(possible) = &evaluation.possible_inputs {
+                        let terms: BTreeSet<_> = possible
+                            .iter()
+                            .map(|sources| {
                                 sources
                                     .iter()
                                     .map(|i| format!("!input_{i}.is_empty()"))
                                     .join(" && ")
-                            }
-                        })
-                        .collect();
-                    if !possible.contains("true") {
-                        let possible = if possible.is_empty() {
+                            })
+                            .collect();
+                        let possible = if terms.is_empty() {
                             "false".to_owned()
                         } else {
-                            possible.iter().map(|expr| format!("({expr})")).join(" || ")
+                            terms.iter().map(|expr| format!("({expr})")).join(" || ")
                         };
                         writeln!(f, "if !({possible}) {{ return false; }}")?;
                     }
@@ -956,7 +637,7 @@ impl<'s> Codegen<'s> {
                     }
                     let current =
                         display_all_index_field_name(&rel, selection.current_primary(&rel), ctx);
-                    if let Some(filtered) = self.diagonal_input(s, &rel, modules, selection, ctx) {
+                    if let Some(filtered) = self.diagonal_input(s, &rel, selection, ctx) {
                         // Every consumer in this stratum requires this diagonal.
                         // Restrict before computing differences or projecting rows.
                         writeln!(f, "let filtered_input_{i} = {filtered};")?;
@@ -1136,27 +817,24 @@ impl<'s> Codegen<'s> {
                         }
                     }
                 }
-                for &m in &stratum.groups {
+                for call in &evaluation.calls {
+                    let m = call.module;
                     let module = &modules[m];
                     let env = display_module_env_struct_name(module);
                     let name = &module.name;
                     if inherited_plan.is_some() {
-                        let model = stratum.model.unwrap();
                         writeln!(f, "let matching_proofs_{m}: Vec<Vec<eqlog_runtime::__private::Table>> = matching_proofs.iter().map(|proof| {{ vec![")?;
-                        for (rel, index) in module_env_in_rels(module) {
-                            let field = self.inherited_field(&rel, &index, selection);
-                            let arity = rel.arity(ctx.signature()).len();
+                        for input in &call.inputs {
+                            let field = input_name(input.storage);
                             writeln!(f, "{{ let rows = proof.{field}.clone();")?;
-                            let prefix = scope_prefix(&rel, model, ctx);
-                            if super::rule::proof_owner_prefix(module) {
-                                if prefix == 0 {
-                                    let suffix = arity - 1;
-                                    writeln!(f, "let rows = rows.get(owners[0]).cloned().unwrap_or_else(PrefixTree{suffix}::new);")?;
-                                }
-                            } else {
-                                for i in (0..prefix).rev() {
-                                    let dim = arity - i;
-                                    writeln!(f, "let rows = {{ let mut tree = PrefixTree{dim}::new(); tree.insert_restriction(owners[{i}], rows); tree }};")?;
+                            match input.proof_rows {
+                                ProofRows::Direct => {}
+                                ProofRows::RestrictOwner { suffix } => writeln!(f, "let rows = rows.get(owners[0]).cloned().unwrap_or_else(PrefixTree{suffix}::new);")?,
+                                ProofRows::RestoreOwners { prefix, arity } => {
+                                    for i in (0..prefix).rev() {
+                                        let dim = arity - i;
+                                        writeln!(f, "let rows = {{ let mut tree = PrefixTree{dim}::new(); tree.insert_restriction(owners[{i}], rows); tree }};")?;
+                                    }
                                 }
                             }
                             writeln!(f, "eqlog_runtime::__private::Table::from(rows) }},")?;
@@ -1174,54 +852,37 @@ impl<'s> Codegen<'s> {
                     if stratum.model.is_some() {
                         writeln!(f, "__owners: owners,")?;
                     }
-                    for typ in module_env_iter_types(module, ctx.signature()) {
+                    for (&typ, source) in &call.canonical {
                         let name = display_type(typ, ctx).to_string().to_case(Case::Snake);
                         let roots = format!("self.{name}_equalities.canonical_roots()");
-                        let roots = if ctx.supports_compact_members(typ) {
-                            if stratum.model == ctx.signature().type_(typ).parents.first().copied()
-                            {
-                                formatdoc! {"
-                                    match &self.__compact_members_{name} {{
-                                        Some(spaces) => spaces.get_snapshot(owners[0])
-                                            .map_or(eqlog_runtime::__private::CanonicalMask::Dense(&[]),
-                                                eqlog_runtime::__private::CanonicalMask::Origins),
-                                        None => eqlog_runtime::__private::CanonicalMask::Dense({roots}),
-                                    }}
-                                "}
-                            } else {
-                                formatdoc! {"
-                                    match &self.__compact_members_{name} {{
-                                        Some(spaces) => eqlog_runtime::__private::CanonicalMask::Members(spaces),
-                                        None => eqlog_runtime::__private::CanonicalMask::Dense({roots}),
-                                    }}
-                                "}
-                            }
-                        } else {
-                            roots
+                        let roots = match source {
+                            CanonicalInput::Global => roots,
+                            CanonicalInput::CompactOwner => formatdoc! {"
+                                match &self.__compact_members_{name} {{
+                                    Some(spaces) => spaces.get_snapshot(owners[0])
+                                        .map_or(eqlog_runtime::__private::CanonicalMask::Dense(&[]),
+                                            eqlog_runtime::__private::CanonicalMask::Origins),
+                                    None => eqlog_runtime::__private::CanonicalMask::Dense({roots}),
+                                }}
+                            "},
+                            CanonicalInput::CompactMembers => formatdoc! {"
+                                match &self.__compact_members_{name} {{
+                                    Some(spaces) => eqlog_runtime::__private::CanonicalMask::Members(spaces),
+                                    None => eqlog_runtime::__private::CanonicalMask::Dense({roots}),
+                                }}
+                            "},
                         };
                         writeln!(f, "__canonical_{name}: {roots},")?;
                     }
-                    for (rel, index) in module_env_in_rels(module) {
-                        let field = display_index_field_name(&rel, &index, ctx);
-                        let age = match index.age {
-                            IndexAge::Old => "old",
-                            IndexAge::New => "new",
+                    for input in &call.inputs {
+                        let field = display_index_field_name(&input.rel, &input.index, ctx);
+                        let storage = input_name(input.storage);
+                        let version = input.version.map_or("", |age| match age {
+                            IndexAge::Old => ".old",
+                            IndexAge::New => ".new",
                             IndexAge::All => unreachable!("native rules read ages separately"),
-                        };
-                        let i = self.inputs[&source_relation(&rel)];
-                        if let Some(id) = native_indices::find(self.native_indices, &rel, &index) {
-                            writeln!(f, "{field}: &native_input_{id}.{age},")?;
-                        } else if selection.is_primary(&rel, &index) {
-                            writeln!(f, "{field}: &input_{i}.{age},")?;
-                        } else {
-                            let key = input_key(rel.clone(), index.clone());
-                            let j = self.indices[&key];
-                            if self.old_indices.contains(&key) {
-                                writeln!(f, "{field}: &index_{j}.{age},")?;
-                            } else {
-                                writeln!(f, "{field}: &index_{j},")?;
-                            }
-                        }
+                        });
+                        writeln!(f, "{field}: &{storage}{version},")?;
                     }
                     for rel in module_env_out_rels(module) {
                         let field = display_out_set_field_name(&rel, ctx);
@@ -1230,52 +891,22 @@ impl<'s> Codegen<'s> {
                     writeln!(f, "}}; {name}(env);")?;
                 }
                 writeln!(f, "}}")?;
-                if let Some(model) = stratum.model {
-                    for output in &outputs {
-                        let field = display_out_set_field_name(output, ctx);
-                        let relation = match output {
-                            FlatOutRel::FuncDomain(func) => {
-                                Some((FlatRel::Func(*func), format!("[__compact_start_{field}..]")))
-                            }
-                            FlatOutRel::Rel(rel) => Some((*rel, String::new())),
-                            FlatOutRel::Equality(typ) => {
-                                if ctx.supports_compact_members(*typ)
-                                    && ctx.signature().type_(*typ).parents.first() == Some(&model)
-                                {
-                                    let name =
-                                        display_type(*typ, ctx).to_string().to_case(Case::Snake);
-                                    writedoc! {f, "
-                                        for args in &mut delta.{field} {{
-                                            args[0] = self.__compact_{name}_uid(owners[0], args[0]).0;
-                                            args[1] = self.__compact_{name}_uid(owners[0], args[1]).0;
-                                        }}
-                                    "}?;
-                                }
-                                None
-                            }
-                        };
-                        if let Some((rel, suffix)) = relation {
-                            let conversions = output.arity(ctx.signature()).into_iter()
-                                .enumerate().filter_map(|(column, typ)| {
-                                    if !ctx.supports_compact_members(typ)
-                                        || !rel.column_maps_under(ctx.signature(), column, model) {
-                                        return None;
-                                    }
-                                    let name = display_type(typ, ctx).to_string().to_case(Case::Snake);
-                                    Some(format!("args[{column}] = self.__compact_{name}_uid(owners[0], args[{column}]).0;"))
-                                }).join("\n");
-                            if !conversions.is_empty() {
-                                writedoc! {f, "
-                                    for args in &mut delta.{field}{suffix} {{
-                                        {conversions}
-                                    }}
-                                "}?;
-                            }
-                        }
+                for conversion in &evaluation.output_conversions {
+                    let field = display_out_set_field_name(&conversion.output, ctx);
+                    let suffix = if conversion.pending {
+                        format!("[__compact_start_{field}..]")
+                    } else {
+                        String::new()
+                    };
+                    writeln!(f, "for args in &mut delta.{field}{suffix} {{")?;
+                    for &(column, typ) in &conversion.columns {
+                        let name = display_type(typ, ctx).to_string().to_case(Case::Snake);
+                        writeln!(f, "args[{column}] = self.__compact_{name}_uid(owners[0], args[{column}]).0;")?;
                     }
+                    writeln!(f, "}}")?;
                 }
                 let mut equalities = Vec::new();
-                for output in &outputs {
+                for output in outputs {
                     match output {
                         FlatOutRel::Equality(typ) => {
                             let name = display_type(*typ, ctx).to_string().to_case(Case::Snake);
@@ -1293,7 +924,7 @@ impl<'s> Codegen<'s> {
                     let changed = equalities.join(" || ");
                     writeln!(f, "if {changed} {{ self.__canonicalize_relations(); }}")?;
                 }
-                for output in &outputs {
+                for output in outputs {
                     match output {
                         FlatOutRel::Rel(rel) => {
                             let field = display_out_set_field_name(output, ctx);
@@ -1318,9 +949,9 @@ impl<'s> Codegen<'s> {
                 }
                 writeln!(f, "true }}")?;
             }
-            for (&root, &m) in &self.models {
+            for (&root, &m) in self.models {
                 let plan = &self.model_preparations[&root];
-                let baseline = self.transport_baseline(root, selection, ctx);
+                let baseline = self.transport_baseline(root);
                 for &model in &plan.propagation.models {
                     let name = display_type(model, ctx).to_string().to_case(Case::Snake);
                     let count = ctx.signature().type_(model).parents.len();
@@ -1458,7 +1089,7 @@ impl<'s> Codegen<'s> {
                     writeln!(f, "self.__owner_inputs_{s}.retain(|owners, _| {retain});")?;
                 }
             }
-            for (field, (owners, _)) in self.scoped_histories(ctx, selection) {
+            for (field, (owners, _)) in self.scoped_histories() {
                 let retain = retain_owners(&owners, ctx);
                 writedoc! {f, "
                     self.{field}.retain(|owners, history| {{
@@ -1473,7 +1104,7 @@ impl<'s> Codegen<'s> {
                     "self.__rule_input_{i}.retain_consumers(&retain_consumer);"
                 )?;
             }
-            for ((rel, index), i) in &self.indices {
+            for ((rel, index), i) in self.indices {
                 if self.old_indices.contains(&(rel.clone(), index.clone()))
                     && !selection.is_primary(rel, index)
                     && native_indices::find(self.native_indices, rel, index).is_none()
@@ -1532,7 +1163,7 @@ impl<'s> Codegen<'s> {
                     loop {{
                         {prepare_policy}
             "}?;
-            emit_schedule(f, self.body, None, 0, None, "false", self, ctx, selection)?;
+            emit_schedule(f, self.body, self, ctx, selection)?;
             writedoc! {f, "
                         self.__allocated = false;
                         delta.apply_func_defs(self);
@@ -1672,44 +1303,8 @@ fn end_stable_input(
     writeln!(f, "stable.{name} = Some(full); {name} }};")
 }
 
-fn emit_loop_inputs(
-    f: &mut std::fmt::Formatter<'_>,
-    schedule: &Schedule,
-    codegen: &Codegen<'_>,
-) -> std::fmt::Result {
-    match schedule {
-        Schedule::Rules(id) => {
-            let s = id.0;
-            if codegen.has_stable_inputs(s) {
-                writeln!(f, "let mut stable_{s} = __StableInputs{s}::default();")?;
-            }
-        }
-        Schedule::Sequence(children) | Schedule::Independent(children) => {
-            for child in children {
-                emit_loop_inputs(f, child, codegen)?;
-            }
-        }
-        Schedule::Saturate(_) | Schedule::ModelComponents { .. } => {}
-    }
-    Ok(())
-}
-
 fn scope_prefix(rel: &FlatInRel, model: TypeId, ctx: &RustGenCtx<'_>) -> usize {
-    let parent = match rel {
-        FlatInRel::Rel(rel) | FlatInRel::RelWithDiagonals { rel, .. } => {
-            rel.parent_model_type(ctx.signature())
-        }
-        FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => None,
-    };
-    parent.map_or(0, |parent| {
-        assert!(
-            parent == model
-                || ctx.signature().type_(model).parents.contains(&parent)
-                || ctx.signature().type_(parent).parents.contains(&model)
-        );
-        (ctx.signature().type_(parent).parents.len() + 1)
-            .min(ctx.signature().type_(model).parents.len() + 1)
-    })
+    crate::ram::scope_prefix(rel, model, ctx.signature())
 }
 
 fn scoped_tree(source: &str, rel: &FlatInRel, model: TypeId, ctx: &RustGenCtx<'_>) -> String {
@@ -1809,260 +1404,222 @@ fn consume_scoped(
     "}
 }
 
-fn emit_schedule(
-    f: &mut std::fmt::Formatter<'_>,
-    schedule: &Schedule,
-    active: Option<usize>,
-    depth: usize,
-    root: Option<TypeId>,
-    retain_own: &str,
-    codegen: &Codegen<'_>,
-    ctx: &RustGenCtx<'_>,
-    selection: &IndexSelection,
-) -> std::fmt::Result {
-    match schedule {
-        Schedule::Sequence(children) | Schedule::Independent(children) => {
-            for child in children {
-                emit_schedule(
-                    f, child, active, depth, root, retain_own, codegen, ctx, selection,
-                )?;
-            }
-        }
-        Schedule::Rules(id) => {
-            let s = id.0;
-            let stable = if codegen.has_stable_inputs(s) {
-                format!("&mut stable_{s}, ")
-            } else {
-                String::new()
-            };
-            if codegen.strata[s].model.is_some() {
-                let retain = if !codegen.preparations[s].reads_descendants() {
-                    String::new()
-                } else {
-                    format!("{retain_own}, ")
-                };
-                writeln!(
-                    f,
-                    "if self.__run_stratum_{s}_at(owners, {retain}{stable}&mut delta) {{"
-                )?;
-            } else {
-                writeln!(f, "if self.__run_stratum_{s}({stable}&mut delta) {{")?;
-            }
-            if let Some(active) = active {
-                writeln!(f, "active_{active} = true;")?;
-            }
-            // Moving the full delta at each exit makes debug stack frames grow
-            // with the number of strata; swapping only passes references.
-            writedoc! {f, "
-                if self.__check_condition(condition) {{
-                    std::mem::swap(&mut self.__pending_delta, &mut delta);
-                    return true;
-                }}
-            }}
-            "}?;
-        }
-        Schedule::Saturate(body) => {
-            writeln!(f, "{{")?;
-            emit_loop_inputs(f, body, codegen)?;
-            writeln!(f, "loop {{ let mut active_{depth} = false;")?;
-            emit_schedule(
-                f,
-                body,
-                Some(depth),
-                depth + 1,
-                root,
-                retain_own,
-                codegen,
-                ctx,
-                selection,
-            )?;
-            writeln!(f, "if !active_{depth} {{ break; }}")?;
-            if let Some(active) = active {
-                writeln!(f, "active_{active} = true;")?;
-            }
-            writeln!(f, "}} }}")?;
-        }
-        Schedule::ModelComponents { model, body } => {
-            writeln!(f, "{{")?;
-            if root.is_none() {
-                let m = codegen.models[model];
-                let plan = &codegen.model_preparations[model];
-                writeln!(f, "self.__refresh_model_consumers(); let parents = [];")?;
-                if codegen.transport_baseline(*model, selection, ctx).is_none() {
-                    writeln!(f, "self.recompute_model_indices_model_{m}();")?;
-                }
-                for (rel, index) in &plan.support_indices {
-                    write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
-                }
-                for id in &plan.native_indices {
-                    if !codegen.native_indices[*id].from_primary {
-                        writeln!(f, "self.__prepare_native_index_{id}();")?;
-                    }
-                }
-                if let Some(baseline) = codegen.transport_baseline(*model, selection, ctx) {
-                    for (rel, index) in &baseline.maps {
-                        write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
-                    }
-                    // Keep this snapshot until the traversal ends: one owner's
-                    // equality can change inputs belonging to another owner.
-                    writeln!(f, "let mut baseline_{m} = __TransportBaseline{m} {{ work: std::array::from_fn(|_| eqlog_runtime::__private::TransportWork::default()),")?;
-                    for (i, rel) in baseline.relations.iter().enumerate() {
-                        let index = selection.current_primary(rel);
-                        let field = display_all_index_field_name(rel, index, ctx);
-                        writeln!(f, "source_{i}: self.{field}.clone(),")?;
-                    }
-                    for (i, (rel, index)) in baseline.maps.iter().enumerate() {
-                        let read = super::indices::read_method(rel, index, selection, ctx, true);
-                        writeln!(f, "map_{i}: self.{read}().clone(),")?;
-                    }
-                    writeln!(f, "}};")?;
-                }
-            } else {
-                writeln!(f, "let parents = owners;")?;
-            }
-            emit_components(
-                f,
-                *model,
-                root.unwrap_or(*model),
-                body,
-                active,
-                depth,
-                retain_own,
-                codegen,
-                ctx,
-                selection,
-            )?;
-            writeln!(f, "}}")?;
-        }
+fn retained_owners(retain: RetainedOwners) -> String {
+    match retain {
+        RetainedOwners::None => "false".to_owned(),
+        RetainedOwners::Always => "true".to_owned(),
+        RetainedOwners::Component(id) => format!("retain_component_{id}"),
     }
-    Ok(())
 }
 
-fn emit_components(
+fn emit_schedule(
     f: &mut std::fmt::Formatter<'_>,
-    model: TypeId,
-    root: TypeId,
-    body: &Schedule,
-    active: Option<usize>,
-    depth: usize,
-    retain_own: &str,
+    body: &[EvaluationStmt],
     codegen: &Codegen<'_>,
     ctx: &RustGenCtx<'_>,
     selection: &IndexSelection,
 ) -> std::fmt::Result {
-    let m = codegen.models[&root];
-    let name = display_type(model, ctx).to_string().to_case(Case::Snake);
-    let parent_count = ctx.signature().type_(model).parents.len();
-    let plan = &codegen.model_preparations[&root];
-    let baseline = if codegen.transport_baseline(root, selection, ctx).is_some() {
-        format!("&baseline_{m}, ")
-    } else {
-        String::new()
-    };
-    for (rel, index) in plan
-        .propagation
-        .graph_indices
-        .get(&model)
-        .into_iter()
-        .flatten()
-    {
-        write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?;
-    }
-    // Transport in an enclosing cycle can change this graph between visits.
-    write!(
-        f,
-        "{}",
-        display_morphism_components(model, ctx, selection, true)
-    )?;
-    if let Some(baseline) = codegen.transport_baseline(root, selection, ctx) {
-        let relations = baseline.relations.iter().collect_vec();
-        writeln!(f, "let retain_own = {retain_own};")?;
-        write!(
-            f,
-            "{}",
-            super::transport::stage_frontier(model, &relations, &plan.propagation, ctx, selection)
-        )?;
-        writeln!(f, "baseline_{m}.work = transport_work;")?;
-    }
-    let compact = super::compact_indices::supports_model(model, ctx);
-    if compact {
-        // A completed target batch avoids repeatedly adopting provisional
-        // snapshots from an already registered primary source.
-        writeln!(
-            f,
-            "let compact_incoming = self.__compact_incoming_{name}(&components);"
-        )?;
-    }
-    writeln!(f, "for component in components.iter() {{")?;
-    if compact {
-        writedoc! {f, "
-            if let Some(incoming) = &compact_incoming {{
-                for object in &component.objects {{
-                    if let Some(morphisms) = incoming.get(object) {{
-        "}?;
-        if let Some(active) = active {
-            write!(f, "active_{active} |= ")?;
-        }
-        writedoc! {f, "
-                        self.__transport_component_{m}_{name}({baseline}parents, morphisms, {retain_own});
+    for stmt in body {
+        match stmt {
+            EvaluationStmt::Block(body) => {
+                writeln!(f, "{{")?;
+                emit_schedule(f, body, codegen, ctx, selection)?;
+                writeln!(f, "}}")?;
+            }
+            EvaluationStmt::Loop(body) => {
+                writeln!(f, "loop {{")?;
+                emit_schedule(f, body, codegen, ctx, selection)?;
+                writeln!(f, "}}")?;
+            }
+            EvaluationStmt::ForEach { iteration, body } => {
+                match iteration {
+                    EvaluationIteration::Components => {
+                        writeln!(f, "for component in components.iter() {{")?
+                    }
+                    EvaluationIteration::ComponentObjects => {
+                        writeln!(f, "for &object in &component.objects {{")?
+                    }
+                    EvaluationIteration::IncomingObjects => {
+                        writeln!(f, "for object in &component.objects {{")?
+                    }
+                }
+                emit_schedule(f, body, codegen, ctx, selection)?;
+                writeln!(f, "}}")?;
+            }
+            EvaluationStmt::When { condition, body } => {
+                match condition {
+                    EvaluationCondition::StratumChanged {
+                        stratum,
+                        scoped,
+                        stable,
+                        retain,
+                    } => {
+                        let stable = if *stable {
+                            format!("&mut stable_{stratum}, ")
+                        } else {
+                            String::new()
+                        };
+                        let retain = retain.map_or_else(String::new, |retain| {
+                            format!("{}, ", retained_owners(retain))
+                        });
+                        if *scoped {
+                            writeln!(f, "if self.__run_stratum_{stratum}_at(owners, {retain}{stable}&mut delta) {{")?;
+                        } else {
+                            writeln!(f, "if self.__run_stratum_{stratum}({stable}&mut delta) {{")?;
+                        }
+                    }
+                    EvaluationCondition::IncomingPresent => {
+                        writeln!(f, "if let Some(incoming) = &compact_incoming {{")?
+                    }
+                    EvaluationCondition::IncomingForObject => {
+                        writeln!(f, "if let Some(morphisms) = incoming.get(object) {{")?
+                    }
+                    EvaluationCondition::IncomingAbsent => {
+                        writeln!(f, "if compact_incoming.is_none() {{")?
+                    }
+                }
+                emit_schedule(f, body, codegen, ctx, selection)?;
+                writeln!(f, "}}")?;
+            }
+            EvaluationStmt::AllocateStable(id) => {
+                writeln!(f, "let mut stable_{id} = __StableInputs{id}::default();")?
+            }
+            EvaluationStmt::InitializeChanges(id) => writeln!(f, "let mut active_{id} = false;")?,
+            EvaluationStmt::MarkChanged(id) => writeln!(f, "active_{id} = true;")?,
+            EvaluationStmt::PropagateChanges { source, target } => {
+                writeln!(f, "active_{target} |= active_{source};")?
+            }
+            EvaluationStmt::BreakUnlessChanged {
+                id,
+                require_internal,
+            } => {
+                let guard = if *require_internal {
+                    "component.internal.is_empty() || "
+                } else {
+                    ""
+                };
+                writeln!(f, "if {guard}!active_{id} {{ break; }}")?;
+            }
+            EvaluationStmt::CheckCondition => {
+                // Moving the delta at each exit grows debug stack frames with the number of strata.
+                writedoc! {f, "
+                    if self.__check_condition(condition) {{
+                        std::mem::swap(&mut self.__pending_delta, &mut delta);
+                        return true;
                     }}
-                }}
-            }}
-        "}?;
-    }
-    writeln!(f, "#[allow(unused_variables)] let retain_component_{depth} = {retain_own} || !component.internal.is_empty();")?;
-    writedoc! {f, "
-            loop {{
-                let mut active_{depth} = false;
-                for &object in &component.objects {{
-    "}?;
-    let owners = (0..parent_count)
-        .map(|i| format!("parents[{i}]"))
-        .chain(std::iter::once("object".to_string()))
-        .join(", ");
-    writeln!(f, "let owners = [{owners}];")?;
-    emit_schedule(
-        f,
-        body,
-        Some(depth),
-        depth + 1,
-        Some(root),
-        &format!("retain_component_{depth}"),
-        codegen,
-        ctx,
-        selection,
-    )?;
-    writedoc! {f, "
-                }}
-                active_{depth} |= self.__transport_component_{m}_{name}({baseline}parents, &component.internal, true);
-    "}?;
-    if let Some(active) = active {
-        writeln!(f, "active_{active} |= active_{depth};")?;
-    }
-    writeln!(
-        f,
-        "if component.internal.is_empty() || !active_{depth} {{ break; }} }}"
-    )?;
-    if compact {
-        // Keep the traversal direction after materialization so transport
-        // deferred by earlier components still reaches each later target.
-        writeln!(f, "if compact_incoming.is_none() {{")?;
-    }
-    if let Some(active) = active {
-        write!(f, "active_{active} |= ")?;
-    }
-    writeln!(
-        f,
-        "self.__transport_component_{m}_{name}({baseline}parents, &component.outgoing, {retain_own});"
-    )?;
-    if compact {
-        writeln!(f, "}}")?;
-    }
-    writeln!(f, "}}")?;
-    if let Some(baseline) = codegen.transport_baseline(root, selection, ctx) {
-        for (i, rel) in baseline.relations.iter().enumerate() {
-            let field = super::transport::field(rel, model, ctx);
-            writeln!(f, "self.{field}_frontier.insert(parents, frontier_{i});")?;
+                "}?;
+            }
+            EvaluationStmt::SetParents { from_owners } => {
+                let value = if *from_owners { "owners" } else { "[]" };
+                writeln!(f, "let parents = {value};")?;
+            }
+            EvaluationStmt::SetOwners { parent_count } => {
+                let owners = (0..*parent_count)
+                    .map(|i| format!("parents[{i}]"))
+                    .chain(std::iter::once("object".to_owned()))
+                    .join(", ");
+                writeln!(f, "let owners = [{owners}];")?;
+            }
+            EvaluationStmt::RefreshConsumers => writeln!(f, "self.__refresh_model_consumers();")?,
+            EvaluationStmt::RecomputeModelIndices(id) => {
+                writeln!(f, "self.recompute_model_indices_model_{id}();")?
+            }
+            EvaluationStmt::PrepareIndex { rel, index } => {
+                write!(f, "{}", super::indices::prepare(rel, index, selection, ctx))?
+            }
+            EvaluationStmt::PrepareNative(id) => {
+                writeln!(f, "self.__prepare_native_index_{id}();")?
+            }
+            EvaluationStmt::CaptureBaseline { model } => {
+                let id = codegen.models[model];
+                let baseline = &codegen.evaluation.transport_baselines[model];
+                writeln!(f, "let mut baseline_{id} = __TransportBaseline{id} {{ work: std::array::from_fn(|_| eqlog_runtime::__private::TransportWork::default()),")?;
+                for (i, rel) in baseline.relations.iter().enumerate() {
+                    let field =
+                        display_all_index_field_name(rel, selection.current_primary(rel), ctx);
+                    writeln!(f, "source_{i}: self.{field}.clone(),")?;
+                }
+                for (i, (rel, index)) in baseline.maps.iter().enumerate() {
+                    let read = super::indices::read_method(rel, index, selection, ctx, true);
+                    writeln!(f, "map_{i}: self.{read}().clone(),")?;
+                }
+                writeln!(f, "}};")?;
+            }
+            EvaluationStmt::ComputeComponents { model } => write!(
+                f,
+                "{}",
+                display_morphism_components(*model, ctx, selection, true)
+            )?,
+            EvaluationStmt::StageFrontier {
+                model,
+                root,
+                retain,
+            } => {
+                let id = codegen.models[root];
+                let baseline = &codegen.evaluation.transport_baselines[root];
+                let plan = &codegen.model_preparations[root];
+                let relations = baseline.relations.iter().collect_vec();
+                let retain = retained_owners(*retain);
+                writeln!(f, "let retain_own = {retain};")?;
+                write!(
+                    f,
+                    "{}",
+                    super::transport::stage_frontier(
+                        *model,
+                        &relations,
+                        &plan.propagation,
+                        ctx,
+                        selection
+                    )
+                )?;
+                writeln!(f, "baseline_{id}.work = transport_work;")?;
+            }
+            EvaluationStmt::ComputeIncoming { model } => {
+                let name = display_type(*model, ctx).to_string().to_case(Case::Snake);
+                writeln!(
+                    f,
+                    "let compact_incoming = self.__compact_incoming_{name}(&components);"
+                )?;
+            }
+            EvaluationStmt::DefineRetention { id, parent } => {
+                let retain = retained_owners(*parent);
+                writeln!(f, "#[allow(unused_variables)] let retain_component_{id} = {retain} || !component.internal.is_empty();")?;
+            }
+            EvaluationStmt::Transport {
+                model,
+                root,
+                edges,
+                retain,
+                changed,
+            } => {
+                let id = codegen.models[root];
+                let name = display_type(*model, ctx).to_string().to_case(Case::Snake);
+                let baseline = if codegen.evaluation.transport_baselines.contains_key(root) {
+                    format!("&baseline_{id}, ")
+                } else {
+                    String::new()
+                };
+                let edges = match edges {
+                    TransportEdges::Incoming => "morphisms",
+                    TransportEdges::Internal => "&component.internal",
+                    TransportEdges::Outgoing => "&component.outgoing",
+                };
+                let retain = retained_owners(*retain);
+                if let Some(id) = changed {
+                    write!(f, "active_{id} |= ")?;
+                }
+                writeln!(
+                    f,
+                    "self.__transport_component_{id}_{name}({baseline}parents, {edges}, {retain});"
+                )?;
+            }
+            EvaluationStmt::SaveFrontier { model, root } => {
+                let baseline = &codegen.evaluation.transport_baselines[root];
+                for (i, rel) in baseline.relations.iter().enumerate() {
+                    let field = super::transport::field(rel, *model, ctx);
+                    writeln!(f, "self.{field}_frontier.insert(parents, frontier_{i});")?;
+                }
+            }
         }
     }
     Ok(())

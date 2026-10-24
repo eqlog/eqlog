@@ -4,19 +4,30 @@ use crate::algebra::signature::{FuncId, Signature, TypeId, TypeKind};
 use crate::ast::Ast;
 use crate::flat_eqlog::{FlatInRel, FlatRel};
 use crate::options::ModelMode;
+use crate::ram::{CompactPlan, IndexedPlan};
 
 pub(crate) struct RustGenCtx<'a> {
     ast: &'a Ast,
     signature: &'a Signature,
     model_mode: ModelMode,
+    compact: &'a CompactPlan,
+    indexed: Option<&'a IndexedPlan>,
 }
 
 impl<'a> RustGenCtx<'a> {
-    pub(crate) fn new(ast: &'a Ast, signature: &'a Signature, model_mode: ModelMode) -> Self {
+    pub(crate) fn new(
+        ast: &'a Ast,
+        signature: &'a Signature,
+        model_mode: ModelMode,
+        compact: &'a CompactPlan,
+        indexed: Option<&'a IndexedPlan>,
+    ) -> Self {
         Self {
             ast,
             signature,
             model_mode,
+            compact,
+            indexed,
         }
     }
 
@@ -24,27 +35,20 @@ impl<'a> RustGenCtx<'a> {
         self.model_mode
     }
 
+    pub(crate) fn compact(&self) -> &CompactPlan {
+        self.compact
+    }
+
+    pub(crate) fn indexed(&self) -> &IndexedPlan {
+        self.indexed.expect("indexed storage has a RAM plan")
+    }
+
     pub(crate) fn supports_compact_members(&self, typ: TypeId) -> bool {
-        match self.model_mode {
-            ModelMode::Native => match self.signature.type_(typ).kind {
-                TypeKind::Plain => self.signature.type_(typ).parents.len() == 1,
-                TypeKind::Enum | TypeKind::Model | TypeKind::Mor(_) => false,
-            },
-            ModelMode::Desugared => false,
-        }
+        self.compact.supports_member(typ)
     }
 
     pub(crate) fn has_shared_indices(&self, rel: &FlatInRel) -> bool {
-        match self.model_mode {
-            ModelMode::Native => match rel {
-                FlatInRel::Rel(rel) | FlatInRel::RelWithDiagonals { rel, .. } => {
-                    !rel.is_model_membership_relation()
-                        && rel.parent_model_type(self.signature).is_some()
-                }
-                FlatInRel::Equality(_) | FlatInRel::TypeSet(_) => false,
-            },
-            ModelMode::Desugared => false,
-        }
+        self.compact.shared_indices(rel)
     }
 
     pub(crate) fn internal_insert_name(&self, rel: FlatRel) -> String {

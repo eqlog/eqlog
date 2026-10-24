@@ -1,11 +1,17 @@
 use std::collections::BTreeSet;
 
-use super::RustGenCtx;
-use crate::algebra::signature::TypeId;
+use super::supports_member;
+use crate::algebra::signature::{Signature, TypeId};
 use crate::flat_eqlog::{FlatInRel, FlatOutRel, FlatRel, FlatRule, RuleScope};
-use crate::ram::RamProgram;
+use crate::options::ModelMode;
+use crate::ram::RamFunction;
 
-fn invariant_key(model: TypeId, rule: &FlatRule, ctx: &RustGenCtx<'_>) -> Option<(FlatRel, usize)> {
+fn invariant_key(
+    model: TypeId,
+    rule: &FlatRule,
+    signature: &Signature,
+    mode: ModelMode,
+) -> Option<(FlatRel, usize)> {
     let owner = match &rule.scope {
         RuleScope::Model {
             model: scope,
@@ -33,7 +39,6 @@ fn invariant_key(model: TypeId, rule: &FlatRule, ctx: &RustGenCtx<'_>) -> Option
             return None
         }
     };
-    let signature = ctx.signature();
     if second.rel != first.rel
         || relation.parent_model_type(signature) != Some(model)
         || first.args.first() != Some(owner)
@@ -54,7 +59,7 @@ fn invariant_key(model: TypeId, rule: &FlatRule, ctx: &RustGenCtx<'_>) -> Option
     };
     let column = *column;
     let member = arity[column];
-    if !ctx.supports_compact_members(member)
+    if !supports_member(signature, mode, member)
         || signature.type_(member).parents.as_slice() != [model]
         || !relation.column_maps_under(signature, column, model)
         || first.args.len() != arity.len()
@@ -117,14 +122,14 @@ fn invariant_key(model: TypeId, rule: &FlatRule, ctx: &RustGenCtx<'_>) -> Option
 /// Recognizing the logical constraint also covers predicate uniqueness rules.
 pub(super) fn invariant_keys(
     model: TypeId,
-    program: &RamProgram,
-    ctx: &RustGenCtx<'_>,
+    modules: &[RamFunction],
+    signature: &Signature,
+    mode: ModelMode,
 ) -> Vec<(FlatRel, usize)> {
-    program
-        .modules
+    modules
         .iter()
-        .flat_map(|module| &module.routines)
-        .filter_map(|routine| invariant_key(model, &routine.flat_rule, ctx))
+        .flat_map(RamFunction::flat_rules)
+        .filter_map(|rule| invariant_key(model, rule, signature, mode))
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect()

@@ -95,7 +95,7 @@ fn alternative(
 }
 
 fn probe(
-    stmts: &mut Vec<RamStmt>,
+    stmts: &mut Vec<QueryOp>,
     stmt: &FlatIfStmt,
     fixed: &BTreeSet<FlatVar>,
     indices: &IndexSelection,
@@ -117,7 +117,7 @@ fn probe(
                 arity: stmt.args.len(),
                 strictness: Strictness::Strict,
             };
-            stmts.push(RamStmt::DefineSet(DefineSetStmt {
+            stmts.push(QueryOp::DefineSet(DefineSetStmt {
                 defined_var: set.clone(),
                 expr: InSetExpr::GetIndex(GetIndexExpr {
                     rel: stmt.rel.clone(),
@@ -134,7 +134,7 @@ fn probe(
                 });
                 set.name.restricted += 1;
                 set.arity -= 1;
-                stmts.push(RamStmt::DefineSet(DefineSetStmt {
+                stmts.push(QueryOp::DefineSet(DefineSetStmt {
                     defined_var: set.clone(),
                     expr,
                 }));
@@ -144,7 +144,7 @@ fn probe(
         .collect()
 }
 
-fn residual_plans(rule: FlatRule, indices: &IndexSelection, mode: ModelMode) -> Vec<RamRoutine> {
+fn residual_plans(rule: FlatRule, indices: &IndexSelection, mode: ModelMode) -> Vec<QueryPlan> {
     let Some((other, start)) = alternative(&rule, indices, mode) else {
         return vec![flat_rule_to_ram(rule, indices)];
     };
@@ -180,14 +180,14 @@ fn residual_plans(rule: FlatRule, indices: &IndexSelection, mode: ModelMode) -> 
                 .stmts
                 .iter()
                 .position(|stmt| match stmt {
-                    RamStmt::DefineSet(stmt) => stmt.defined_var.name.stmt_index != 0,
-                    RamStmt::Iter(stmt) => stmt.loop_var_set.name.stmt_index != 0,
-                    RamStmt::GuardInhabited(stmt) => stmt.sets[0].name.stmt_index != 0,
-                    RamStmt::Insert(_) => true,
-                    RamStmt::GuardPlan(_) => unreachable!("plans are added after lowering"),
+                    QueryOp::DefineSet(stmt) => stmt.defined_var.name.stmt_index != 0,
+                    QueryOp::Iter(stmt) => stmt.loop_var_set.name.stmt_index != 0,
+                    QueryOp::GuardInhabited(stmt) => stmt.sets[0].name.stmt_index != 0,
+                    QueryOp::Insert(_) => true,
+                    QueryOp::GuardPlan(_) => unreachable!("plans are added after lowering"),
                 })
                 .unwrap();
-            let guard = RamStmt::GuardPlan(GuardPlanStmt {
+            let guard = QueryOp::GuardPlan(GuardPlanStmt {
                 original: original.clone(),
                 alternative: alternative.clone(),
                 select_alternative: choice != 0,
@@ -263,7 +263,7 @@ fn owner_alternative(rule: &FlatRule, indices: &IndexSelection) -> Option<FlatRu
     None
 }
 
-pub(super) fn plans(rule: FlatRule, indices: &IndexSelection, mode: ModelMode) -> Vec<RamRoutine> {
+pub(super) fn plans(rule: FlatRule, indices: &IndexSelection, mode: ModelMode) -> Vec<QueryPlan> {
     let other = match mode {
         ModelMode::Native => owner_alternative(&rule, indices),
         ModelMode::Desugared => None,
@@ -289,7 +289,7 @@ pub(super) fn plans(rule: FlatRule, indices: &IndexSelection, mode: ModelMode) -
     );
     let mut routines = residual_plans(rule, indices, mode);
     for routine in &mut routines {
-        let guard = RamStmt::GuardPlan(GuardPlanStmt {
+        let guard = QueryOp::GuardPlan(GuardPlanStmt {
             original: original.clone(),
             alternative: alternative.clone(),
             select_alternative: false,
@@ -300,7 +300,7 @@ pub(super) fn plans(rule: FlatRule, indices: &IndexSelection, mode: ModelMode) -
             .splice(0..0, probes.iter().cloned().chain(std::iter::once(guard)));
     }
     let mut alternative_routine = flat_rule_to_ram(other, indices);
-    let guard = RamStmt::GuardPlan(GuardPlanStmt {
+    let guard = QueryOp::GuardPlan(GuardPlanStmt {
         original,
         alternative,
         select_alternative: true,

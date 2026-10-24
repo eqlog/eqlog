@@ -1,8 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
-    IndexPreparation, NativeIndexPreparation, NativePreparation, PropagationPlan, RamModule,
-    RamStmt,
+    IndexPreparation, NativeIndexPreparation, NativePreparation, PropagationPlan, RamFunction,
 };
 use crate::algebra::signature::{MorphismMemberTypes, Signature, TypeId};
 use crate::flat_eqlog::{
@@ -194,7 +193,7 @@ fn model_groups(
 }
 
 pub fn plan_index_preparation(
-    modules: &[RamModule],
+    modules: &[RamFunction],
     schedule: &RuleSchedule,
     indices: &IndexSelection,
     signature: &Signature,
@@ -247,26 +246,17 @@ pub fn plan_index_preparation(
             })
             .collect();
         if model.is_some() {
-            for stmt in groups
-                .iter()
-                .flat_map(|&i| &modules[i].routines)
-                .flat_map(|routine| &routine.stmts)
-            {
-                match stmt {
-                    RamStmt::Insert(stmt) => match stmt.rel {
-                        FlatOutRel::Rel(rel) => {
-                            let rel = FlatInRel::Rel(rel);
-                            inputs.insert((rel.clone(), indices.current_primary(&rel).clone()));
-                        }
-                        FlatOutRel::Equality(_) | FlatOutRel::FuncDomain(_) => {}
-                    },
-                    RamStmt::DefineSet(_)
-                    | RamStmt::Iter(_)
-                    | RamStmt::GuardInhabited(_)
-                    | RamStmt::GuardPlan(_) => {}
+            for output in groups.iter().flat_map(|&i| &modules[i].interface.outputs) {
+                match output {
+                    FlatOutRel::Rel(rel) => {
+                        let rel = FlatInRel::Rel(*rel);
+                        inputs.insert((rel.clone(), indices.current_primary(&rel).clone()));
+                    }
+                    FlatOutRel::Equality(_) | FlatOutRel::FuncDomain(_) => {}
                 }
             }
         }
+
         for &model in &traversals {
             let ids = signature.ids_for_model_type(model).unwrap();
             for func in [ids.dom, ids.cod] {

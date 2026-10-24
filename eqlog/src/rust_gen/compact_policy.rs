@@ -93,21 +93,11 @@ pub(super) fn endpoint_notice<'a>(
 }
 
 pub(super) fn models(ctx: &RustGenCtx<'_>) -> Vec<TypeId> {
-    ctx.signature()
-        .iter_model_decls()
-        .map(|(_, ids)| ids.type_)
-        .filter(|&model| !members(model, ctx).is_empty())
-        .collect()
+    ctx.compact().policy_models().to_vec()
 }
 
 fn members(model: TypeId, ctx: &RustGenCtx<'_>) -> Vec<TypeId> {
-    ctx.signature()
-        .iter_types()
-        .filter(|&typ| {
-            ctx.supports_compact_members(typ)
-                && ctx.signature().type_(typ).parents.first() == Some(&model)
-        })
-        .collect()
+    ctx.compact().members(model).to_vec()
 }
 
 fn active(types: &[TypeId], ctx: &RustGenCtx<'_>) -> String {

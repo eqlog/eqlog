@@ -1,7 +1,9 @@
 use crate::algebra::signature::TypeId;
-use crate::flat_eqlog::{FlatInRel, FlatOutRel, FlatRel, FlatRule, IndexSpec, RuleSchedule};
+use crate::flat_eqlog::{FlatInRel, FlatOutRel, FlatRel, FlatRule, IndexSpec};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
+
+use super::{CompactPlan, EvaluationPlan, IndexedPlan};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub enum Strictness {
@@ -83,7 +85,7 @@ pub struct GuardPlanStmt {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-pub enum RamStmt {
+pub enum QueryOp {
     DefineSet(DefineSetStmt),
     Iter(IterStmt),
     Insert(InsertStmt),
@@ -92,22 +94,176 @@ pub enum RamStmt {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-pub struct RamRoutine {
+pub struct QueryPlan {
     pub name: String,
     pub flat_rule: FlatRule,
-    pub stmts: Vec<RamStmt>,
+    pub stmts: Vec<QueryOp>,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-pub struct RamModule {
+pub struct RamFunction {
     pub name: String,
-    pub routines: Vec<RamRoutine>,
+    pub rules: Vec<RuleSource>,
+    pub interface: FunctionInterface,
+    pub body: RamBlock,
+    pub procedures: Vec<RamProcedure>,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct RuleSource {
+    pub flat_rule: FlatRule,
+    pub inputs: BTreeSet<(FlatInRel, IndexSpec)>,
+}
+
+impl RuleSource {
+    pub fn input_indices(&self) -> BTreeSet<(FlatInRel, IndexSpec)> {
+        self.inputs.clone()
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Default)]
+pub struct FunctionInterface {
+    pub inputs: BTreeSet<(FlatInRel, IndexSpec)>,
+    pub outputs: BTreeSet<FlatOutRel>,
+    pub canonical_types: BTreeSet<TypeId>,
+    pub owners: Vec<TypeId>,
+    pub matching_proofs: bool,
+    pub proof_owner_prefix: bool,
+}
+
+pub type RamBlock = Vec<RamInstruction>;
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub enum RamCondition {
+    Inhabited(GuardInhabitedStmt),
+    Scalar(RamScalarExpr),
+    Distinct(ElVar, ElVar),
+    Absent { rel: FlatRel, args: Vec<ElVar> },
+    Uncovered,
+    NoProofs,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub enum RamScalarVar {
+    LoopSize(SetVar),
+    LookupSelected(SetVar),
+    PlanSize,
+    PlanLookupCost,
+    PlanBudget,
+    PlanAlternative,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub enum RamScalarOp {
+    Add,
+    SaturatingAdd,
+    SaturatingMul,
+    Divide,
+    Max,
+    GreaterThan,
+    LessThan,
+    LessEqual,
+    Equal,
+    And,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub enum RamScalarExpr {
+    Integer(usize),
+    Boolean(bool),
+    Variable(RamScalarVar),
+    KeyCount(Vec<SetVar>),
+    RowCount {
+        sets: Vec<SetVar>,
+        limit: Box<RamScalarExpr>,
+    },
+    Log2(Box<RamScalarExpr>),
+    Binary {
+        op: RamScalarOp,
+        left: Box<RamScalarExpr>,
+        right: Box<RamScalarExpr>,
+    },
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub enum IterationStrategy {
+    Direct,
+    AdaptiveLookup(RamScalarVar),
+    Oldest,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct RamIteration {
+    pub sets: Vec<SetVar>,
+    pub lookup_drivers: Vec<SetVar>,
+    pub loop_var_el: ElVar,
+    pub loop_var_set: SetVar,
+    pub strategy: IterationStrategy,
+    pub canonical_type: Option<TypeId>,
+    pub limit: Option<usize>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub enum ProofAccess {
+    Consume,
+    Borrow,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub enum RamInstruction {
+    DefineSet(DefineSetStmt),
+    DefineScalar {
+        variable: RamScalarVar,
+        value: RamScalarExpr,
+    },
+    Insert(InsertStmt),
+    ForEach {
+        iteration: RamIteration,
+        proof_variable: Option<usize>,
+        body: RamBlock,
+    },
+    If {
+        condition: RamCondition,
+        then_body: RamBlock,
+        else_body: RamBlock,
+    },
+    Scope(RamBlock),
+    Call(usize),
+    BeginProof(ProofPlan),
+    PrepareProofKeys(usize),
+    RestrictProof {
+        variable: usize,
+        value: ElVar,
+        access: ProofAccess,
+    },
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct RamProcedure {
+    pub name: String,
+    pub owners: Vec<ElVar>,
+    pub rules: Vec<FlatRule>,
+    pub body: RamBlock,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct ProofAtom {
+    pub inputs: Vec<usize>,
+    pub columns: Vec<usize>,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct ProofPlan {
+    pub atoms: Vec<ProofAtom>,
+    pub relevant: BTreeSet<usize>,
+    pub owner_prefix: Option<ElVar>,
 }
 
 pub struct RamProgram {
-    // Keep group order through lowering so the schedule also indexes modules.
-    pub modules: Vec<RamModule>,
-    pub schedule: RuleSchedule,
+    pub compact: CompactPlan,
+    pub evaluation: EvaluationPlan,
+    pub indexed: Option<IndexedPlan>,
+    pub functions: Vec<RamFunction>,
     pub preparations: Vec<IndexPreparation>,
     pub model_preparations: BTreeMap<TypeId, NativePreparation>,
     pub native_indices: Vec<NativeIndexPreparation>,
@@ -160,36 +316,35 @@ pub struct NativeIndexPreparation {
     pub support_indices: BTreeSet<(FlatInRel, IndexSpec)>,
 }
 
-impl RamModule {
+impl RamFunction {
+    pub fn flat_rules(&self) -> impl Iterator<Item = &FlatRule> {
+        self.rules.iter().map(|source| &source.flat_rule)
+    }
+
     pub fn owner_count(&self) -> usize {
-        self.routines
-            .first()
-            .map_or(0, |routine| routine.flat_rule.scope.owners().len())
+        self.interface.owners.len()
     }
 
     pub fn input_indices(&self) -> BTreeSet<(FlatInRel, IndexSpec)> {
-        self.routines
-            .iter()
-            .flat_map(RamRoutine::input_indices)
-            .collect()
+        self.interface.inputs.clone()
     }
 }
 
-impl RamRoutine {
+impl QueryPlan {
     pub fn input_indices(&self) -> BTreeSet<(FlatInRel, IndexSpec)> {
         self.stmts
             .iter()
             .filter_map(|stmt| match stmt {
-                RamStmt::DefineSet(stmt) => match &stmt.expr {
+                QueryOp::DefineSet(stmt) => match &stmt.expr {
                     InSetExpr::GetIndex(index) => {
                         Some((index.rel.clone(), index.index_spec.clone()))
                     }
                     InSetExpr::Restrict(_) => None,
                 },
-                RamStmt::Iter(_)
-                | RamStmt::Insert(_)
-                | RamStmt::GuardInhabited(_)
-                | RamStmt::GuardPlan(_) => None,
+                QueryOp::Iter(_)
+                | QueryOp::Insert(_)
+                | QueryOp::GuardInhabited(_)
+                | QueryOp::GuardPlan(_) => None,
             })
             .collect()
     }

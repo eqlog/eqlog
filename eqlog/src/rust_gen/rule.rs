@@ -22,7 +22,7 @@ fn display_imports<'a>() -> impl 'a + Display {
     })
 }
 
-pub fn display_module_env_struct_name<'a>(ram_module: &'a RamModule) -> impl 'a + Display {
+pub fn display_module_env_struct_name<'a>(ram_module: &'a RamFunction) -> impl 'a + Display {
     FmtFn(move |f| {
         // Keep internal environments distinct from user rules after case conversion.
         if ram_module.name.starts_with("__") {
@@ -33,56 +33,16 @@ pub fn display_module_env_struct_name<'a>(ram_module: &'a RamModule) -> impl 'a 
     })
 }
 
-pub fn module_env_in_rels(ram_module: &RamModule) -> BTreeSet<(FlatInRel, IndexSpec)> {
+pub fn module_env_in_rels(ram_module: &RamFunction) -> BTreeSet<(FlatInRel, IndexSpec)> {
     ram_module.input_indices()
 }
 
-fn iteration_type(stmt: &IterStmt, signature: &Signature) -> TypeId {
-    let set = &stmt.sets[0];
-    let column = set.name.index.order[set.name.restricted];
-    set.name.rel.arity(signature)[column]
+pub fn module_env_iter_types(ram_module: &RamFunction, _signature: &Signature) -> BTreeSet<TypeId> {
+    ram_module.interface.canonical_types.clone()
 }
 
-pub fn module_env_iter_types(ram_module: &RamModule, signature: &Signature) -> BTreeSet<TypeId> {
-    ram_module
-        .routines
-        .iter()
-        .flat_map(|routine| &routine.stmts)
-        .filter_map(|stmt| match stmt {
-            RamStmt::Iter(stmt) => stmt
-                .canonical_filter
-                .then(|| iteration_type(stmt, signature)),
-            RamStmt::DefineSet(_)
-            | RamStmt::Insert(_)
-            | RamStmt::GuardInhabited(_)
-            | RamStmt::GuardPlan(_) => None,
-        })
-        .collect()
-}
-
-pub fn module_env_out_rels(ram_module: &RamModule) -> BTreeSet<FlatOutRel> {
-    ram_module
-        .routines
-        .iter()
-        .flat_map(|routine| {
-            routine
-                .stmts
-                .iter()
-                .filter_map(|stmt| -> Option<FlatOutRel> {
-                    let InsertStmt { rel, args: _ } = match stmt {
-                        RamStmt::DefineSet(_)
-                        | RamStmt::Iter(_)
-                        | RamStmt::GuardInhabited(_)
-                        | RamStmt::GuardPlan(_) => {
-                            return None;
-                        }
-                        RamStmt::Insert(insert_stmt) => insert_stmt,
-                    };
-
-                    Some(rel.clone())
-                })
-        })
-        .collect()
+pub fn module_env_out_rels(ram_module: &RamFunction) -> BTreeSet<FlatOutRel> {
+    ram_module.interface.outputs.clone()
 }
 
 pub fn display_out_rows_field_name<'a>(rel: FlatRel, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
@@ -93,7 +53,7 @@ pub fn display_out_rows_field_name<'a>(rel: FlatRel, ctx: &'a RustGenCtx<'a>) ->
 }
 
 pub fn display_module_env_struct<'a>(
-    ram_module: &'a RamModule,
+    ram_module: &'a RamFunction,
     ctx: &'a RustGenCtx<'a>,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
@@ -147,10 +107,7 @@ pub fn display_module_env_struct<'a>(
             .format("\n");
 
         let name = display_module_env_struct_name(ram_module);
-        let canonical_types = match ctx.model_mode() {
-            ModelMode::Native => module_env_iter_types(ram_module, ctx.signature()),
-            ModelMode::Desugared => BTreeSet::new(),
-        };
+        let canonical_types = module_env_iter_types(ram_module, ctx.signature());
         let canonical = canonical_types
             .iter()
             .map(|&typ| {
@@ -162,11 +119,10 @@ pub fn display_module_env_struct<'a>(
                 }
             })
             .join("\n");
-        let proofs = match ctx.model_mode() {
-            ModelMode::Native if ram_module.owner_count() > 0 => {
-                "__proofs: &'a [Vec<eqlog_runtime::__private::Table>],"
-            }
-            ModelMode::Native | ModelMode::Desugared => "",
+        let proofs = if ram_module.interface.matching_proofs {
+            "__proofs: &'a [Vec<eqlog_runtime::__private::Table>],"
+        } else {
+            ""
         };
         let owners = if ram_module.owner_count() > 0 {
             let count = ram_module.owner_count();
@@ -229,6 +185,136 @@ fn display_in_set_expr<'a>(expr: &'a InSetExpr, ctx: &'a RustGenCtx<'a>) -> impl
     })
 }
 
+fn display_scalar_var<'a>(
+    variable: &'a RamScalarVar,
+    ctx: &'a RustGenCtx<'a>,
+) -> impl 'a + Display {
+    FmtFn(move |f| match variable {
+        RamScalarVar::LoopSize(set) => {
+            let set = display_set_var(set, ctx);
+            write!(f, "{set}_key_count")
+        }
+        RamScalarVar::LookupSelected(set) => {
+            let set = display_set_var(set, ctx);
+            write!(f, "{set}_use_lookup")
+        }
+        RamScalarVar::PlanSize => write!(f, "__plan_size"),
+        RamScalarVar::PlanLookupCost => write!(f, "__plan_lookup_cost"),
+        RamScalarVar::PlanBudget => write!(f, "__plan_budget"),
+        RamScalarVar::PlanAlternative => write!(f, "__plan_alternative"),
+    })
+}
+
+fn scalar_precedence(expr: &RamScalarExpr) -> usize {
+    match expr {
+        RamScalarExpr::Binary { op, .. } => match op {
+            RamScalarOp::And => 1,
+            RamScalarOp::GreaterThan
+            | RamScalarOp::LessThan
+            | RamScalarOp::LessEqual
+            | RamScalarOp::Equal => 2,
+            RamScalarOp::Add => 3,
+            RamScalarOp::Divide => 4,
+            RamScalarOp::SaturatingAdd | RamScalarOp::SaturatingMul | RamScalarOp::Max => 6,
+        },
+        RamScalarExpr::Log2(_) => 5,
+        RamScalarExpr::Integer(_)
+        | RamScalarExpr::Boolean(_)
+        | RamScalarExpr::Variable(_)
+        | RamScalarExpr::KeyCount(_)
+        | RamScalarExpr::RowCount { .. } => 6,
+    }
+}
+
+fn display_scalar_expr<'a>(expr: &'a RamScalarExpr, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
+    display_scalar_operand(expr, 0, ctx)
+}
+
+fn display_scalar_operand<'a>(
+    expr: &'a RamScalarExpr,
+    precedence: usize,
+    ctx: &'a RustGenCtx<'a>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let own_precedence = scalar_precedence(expr);
+        let parentheses = own_precedence < precedence;
+        if parentheses {
+            write!(f, "(")?;
+        }
+        match expr {
+            RamScalarExpr::Integer(value) => write!(f, "{value}usize")?,
+            RamScalarExpr::Boolean(value) => write!(f, "{value}")?,
+            RamScalarExpr::Variable(variable) => {
+                write!(f, "{}", display_scalar_var(variable, ctx))?
+            }
+            RamScalarExpr::KeyCount(sets) => write!(f, "{}", display_key_count(sets, ctx))?,
+            RamScalarExpr::RowCount { sets, limit } => {
+                let (first, rest) = sets.split_first().expect("a row count has a source");
+                let first = display_set_var(first, ctx);
+                write!(f, "{first}.iter()")?;
+                for set in rest {
+                    let set = display_set_var(set, ctx);
+                    write!(f, ".chain({set}.iter())")?;
+                }
+                let limit = display_scalar_expr(limit, ctx);
+                write!(f, ".take({limit}).count()")?;
+            }
+            RamScalarExpr::Log2(expr) => {
+                let expr = display_scalar_operand(expr, 6, ctx);
+                write!(f, "{expr}.ilog2() as usize")?;
+            }
+            RamScalarExpr::Binary { op, left, right } => match op {
+                RamScalarOp::SaturatingAdd | RamScalarOp::SaturatingMul | RamScalarOp::Max => {
+                    let left = display_scalar_operand(left, 6, ctx);
+                    let right = display_scalar_expr(right, ctx);
+                    let method = match op {
+                        RamScalarOp::SaturatingAdd => "saturating_add",
+                        RamScalarOp::SaturatingMul => "saturating_mul",
+                        RamScalarOp::Max => "max",
+                        RamScalarOp::Add
+                        | RamScalarOp::Divide
+                        | RamScalarOp::GreaterThan
+                        | RamScalarOp::LessThan
+                        | RamScalarOp::LessEqual
+                        | RamScalarOp::Equal
+                        | RamScalarOp::And => unreachable!("scalar method has a method operator"),
+                    };
+                    write!(f, "{left}.{method}({right})")?;
+                }
+                RamScalarOp::Add
+                | RamScalarOp::Divide
+                | RamScalarOp::GreaterThan
+                | RamScalarOp::LessThan
+                | RamScalarOp::LessEqual
+                | RamScalarOp::Equal
+                | RamScalarOp::And => {
+                    let left = display_scalar_operand(left, own_precedence + 1, ctx);
+                    let right = display_scalar_operand(right, own_precedence + 1, ctx);
+                    let operator = match op {
+                        RamScalarOp::Add => "+",
+                        RamScalarOp::Divide => "/",
+                        RamScalarOp::GreaterThan => ">",
+                        RamScalarOp::LessThan => "<",
+                        RamScalarOp::LessEqual => "<=",
+                        RamScalarOp::Equal => "==",
+                        RamScalarOp::And => "&&",
+                        RamScalarOp::SaturatingAdd
+                        | RamScalarOp::SaturatingMul
+                        | RamScalarOp::Max => {
+                            unreachable!("scalar binary expression has an infix operator")
+                        }
+                    };
+                    write!(f, "{left} {operator} {right}")?;
+                }
+            },
+        }
+        if parentheses {
+            write!(f, ")")?;
+        }
+        Ok(())
+    })
+}
+
 fn display_key_count<'a>(sets: &'a [SetVar], ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
     FmtFn(move |f| {
         write!(f, "0usize")?;
@@ -273,13 +359,20 @@ fn display_iter_sources<'a>(
     })
 }
 
-fn display_iter_expr<'a>(stmt: &'a IterStmt, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
+fn display_iter_expr<'a>(stmt: &'a RamIteration, ctx: &'a RustGenCtx<'a>) -> impl 'a + Display {
     FmtFn(move |f| {
         let direct = display_iter_sources(&stmt.sets, ctx, false);
-        if stmt.lookup_drivers.is_empty() {
-            return write!(f, "{direct}");
-        }
-        let loop_set = display_set_var(&stmt.loop_var_set, ctx);
+        let selected = match &stmt.strategy {
+            IterationStrategy::Direct => return write!(f, "{direct}"),
+            IterationStrategy::Oldest => {
+                let [set] = stmt.sets.as_slice() else {
+                    panic!("desugared anchors read one set")
+                };
+                let set = display_set_var(set, ctx);
+                return write!(f, "{set}.oldest_restriction().into_iter()");
+            }
+            IterationStrategy::AdaptiveLookup(selected) => display_scalar_var(selected, ctx),
+        };
         match ctx.model_mode() {
             ModelMode::Native => {}
             ModelMode::Desugared => {
@@ -290,18 +383,15 @@ fn display_iter_expr<'a>(stmt: &'a IterStmt, ctx: &'a RustGenCtx<'a>) -> impl 'a
                 let inverse = display_iter_sources(&stmt.lookup_drivers, ctx, true);
                 return write!(
                     f,
-                    "if {loop_set}_use_lookup {{ eqlog_runtime::Either::Right({inverse}.filter_map(|(key, _)| {set}.get(key).map(|suffix| (key, suffix)))) }} else {{ eqlog_runtime::Either::Left({direct}) }}"
+                    "if {selected} {{ eqlog_runtime::Either::Right({inverse}.filter_map(|(key, _)| {set}.get(key).map(|suffix| (key, suffix)))) }} else {{ eqlog_runtime::Either::Left({direct}) }}"
                 );
             }
         }
         let inverse = display_iter_sources(&stmt.lookup_drivers, ctx, true);
+        write!(f, "(!{selected}).then(|| {direct}).into_iter().flatten()")?;
         write!(
             f,
-            "(!{loop_set}_use_lookup).then(|| {direct}).into_iter().flatten()"
-        )?;
-        write!(
-            f,
-            ".chain({loop_set}_use_lookup.then(|| {inverse}.flat_map(|(key, _)| {{"
+            ".chain({selected}.then(|| {inverse}.flat_map(|(key, _)| {{"
         )?;
         for (i, set) in stmt.sets.iter().enumerate() {
             let name = display_set_var(set, ctx);
@@ -325,18 +415,15 @@ fn display_iter_expr<'a>(stmt: &'a IterStmt, ctx: &'a RustGenCtx<'a>) -> impl 'a
     })
 }
 
-fn display_stmt_pre<'a>(
-    ram_stmt: &'a RamStmt,
+fn display_instruction<'a>(
+    instruction: &'a RamInstruction,
+    module: &'a RamFunction,
     ctx: &'a RustGenCtx<'a>,
-    proof_variable: Option<usize>,
 ) -> impl 'a + Display {
-    FmtFn(move |f| match ram_stmt {
-        RamStmt::DefineSet(DefineSetStmt { defined_var, expr }) => {
+    FmtFn(move |f| match instruction {
+        RamInstruction::DefineSet(DefineSetStmt { defined_var, expr }) => {
             let expr = display_in_set_expr(expr, ctx);
-            let strictness = match ctx.model_mode() {
-                ModelMode::Native => defined_var.strictness,
-                ModelMode::Desugared => Strictness::Strict,
-            };
+            let strictness = defined_var.strictness;
             let defined_var = display_set_var(defined_var, ctx);
             match strictness {
                 Strictness::Lazy => {
@@ -356,24 +443,28 @@ fn display_stmt_pre<'a>(
                 }
             }
         }
-        RamStmt::Iter(
-            iter @ IterStmt {
-                sets,
-                lookup_drivers,
-                loop_var_el,
-                loop_var_set,
-                first_only,
-                canonical_filter,
-            },
-        ) => {
-            let canonical_filter = match ctx.model_mode() {
-                ModelMode::Native => *canonical_filter,
-                ModelMode::Desugared => false,
-            };
-            let filter = if canonical_filter {
-                let typ = iteration_type(iter, ctx.signature());
-                let name = display_type(typ, ctx).to_string().to_case(Snake);
-                if ctx.supports_compact_members(typ) {
+        RamInstruction::DefineScalar { variable, value } => {
+            let variable = display_scalar_var(variable, ctx);
+            let value = display_scalar_expr(value, ctx);
+            writeln!(f, "let {variable} = {value};")
+        }
+        RamInstruction::ForEach {
+            iteration:
+                iter @ RamIteration {
+                    sets,
+                    lookup_drivers: _,
+                    loop_var_el,
+                    loop_var_set,
+                    strategy: _,
+                    canonical_type,
+                    limit,
+                },
+            proof_variable,
+            body,
+        } => {
+            let filter = if let Some(typ) = canonical_type {
+                let name = display_type(*typ, ctx).to_string().to_case(Snake);
+                if ctx.supports_compact_members(*typ) {
                     format!(".filter(|(key, _)| env.__canonical_{name}.contains(*key))")
                 } else {
                     format!(".filter(|(key, _)| env.__canonical_{name}[*key as usize])")
@@ -394,11 +485,7 @@ fn display_stmt_pre<'a>(
             }
             assert!(sets.len() >= 1, "Expected at least one set in IterStmt");
             let iterator = display_iter_expr(iter, ctx);
-            let iterator = if let Some(variable) = proof_variable {
-                writedoc! {f, "
-                    let __proof_keys = __match_proofs.as_ref()
-                        .and_then(|proofs| proofs.uncovered_keys({variable}));
-                "}?;
+            let iterator = if proof_variable.is_some() {
                 let copy = if sets[0].arity == 1 { ".cloned()" } else { "" };
                 let lookups = sets
                     .iter()
@@ -416,31 +503,8 @@ fn display_stmt_pre<'a>(
             } else {
                 iterator.to_string()
             };
-            if !lookup_drivers.is_empty() {
-                let direct_count = display_key_count(sets, ctx);
-                let inverse_count = display_key_count(lookup_drivers, ctx);
-                let loop_set = display_set_var(loop_var_set, ctx);
-                let lookup_cost = sets.len() + 1;
-                writedoc! {f, "
-                    let {loop_set}_key_count = {direct_count};
-                    let {loop_set}_use_lookup = {loop_set}_key_count > 1
-                        && ({inverse_count}).saturating_mul({lookup_cost}) < {loop_set}_key_count;
-                "}?;
-            }
             let loop_var_set = display_set_var(loop_var_set, ctx);
-            let limit = if *first_only { ".take(1)" } else { "" };
-            // Old rows come first in trie views of age all only until a
-            // removal reorders their entries.
-            let iterator = match ctx.model_mode() {
-                ModelMode::Desugared if *first_only => {
-                    let [set] = sets.as_slice() else {
-                        panic!("desugared anchors read one set")
-                    };
-                    let set = display_set_var(set, ctx);
-                    format!("{set}.oldest_restriction().into_iter()")
-                }
-                ModelMode::Native | ModelMode::Desugared => iterator.to_string(),
-            };
+            let limit = limit.map_or_else(String::new, |limit| format!(".take({limit})"));
             writedoc! {f, "
                     #[allow(unused_variables)]
                     for
@@ -450,77 +514,75 @@ fn display_stmt_pre<'a>(
                     {filter}
                     {limit}
                     {{
-                "}
+                "}?;
+            write!(f, "{}", display_block(body, module, ctx))?;
+            writeln!(f, "}}")
         }
-        RamStmt::Insert(InsertStmt { rel, args }) => {
+        RamInstruction::Insert(InsertStmt { rel, args }) => {
             let rel_field = display_out_set_field_name(rel, ctx);
-            match rel {
-                FlatOutRel::Equality(_) => {
-                    let [lhs, rhs] = args.as_slice() else {
-                        unreachable!("equality output has two operands")
-                    };
-                    if lhs == rhs {
-                        return Ok(());
-                    }
-                    writedoc! {f, "
-                            if {lhs} != {rhs} {{
-                                env.{rel_field}.push([{lhs}, {rhs}]);
-                            }}
-                        "}
-                }
-                FlatOutRel::Rel(out_rel) => {
-                    let args = args.iter().join(", ");
-                    match ctx.model_mode() {
-                        ModelMode::Native => writedoc! {f, "
-                            env.{rel_field}.push([{args}]);
-                        "},
-                        ModelMode::Desugared => {
-                            let rows = display_out_rows_field_name(*out_rel, ctx);
-                            writedoc! {f, "
-                                if !env.{rows}.contains([{args}]) {{
-                                    env.{rel_field}.push([{args}]);
-                                }}
-                            "}
-                        }
-                    }
-                }
-                FlatOutRel::FuncDomain(_) => {
-                    let args = args.iter().format(", ");
-                    writedoc! {f, "
-                            env.{rel_field}.push([{args}]);
-                        "}
-                }
-            }
+            let args = args.iter().join(", ");
+            writeln!(f, "env.{rel_field}.push([{args}]);")
         }
-        RamStmt::GuardPlan(plan) => {
-            let original = display_key_count(&plan.original, ctx);
-            let alternative = display_key_count(&plan.alternative, ctx);
-            let selected = plan.select_alternative;
-            if !plan.probe_rows {
-                return writedoc! {f, "
-                    if (({alternative}).saturating_mul(2) < {original}) == {selected} {{
-                "};
+        RamInstruction::If {
+            condition,
+            then_body,
+            else_body,
+        } => {
+            write!(f, "{}", display_condition_open(condition, ctx))?;
+            write!(f, "{}", display_block(then_body, module, ctx))?;
+            if !else_body.is_empty() {
+                writeln!(f, "}} else {{")?;
+                write!(f, "{}", display_block(else_body, module, ctx))?;
             }
-            let (first, rest) = plan.alternative.split_first().expect("a plan has a driver");
-            let first = display_set_var(first, ctx);
-            let rest = rest
-                .iter()
-                .map(|set| {
-                    let name = display_set_var(set, ctx);
-                    format!(".chain({name}.iter())")
-                })
-                .join("");
+            writeln!(f, "}}")
+        }
+        RamInstruction::Scope(body) => {
+            writeln!(f, "{{")?;
+            write!(f, "{}", display_block(body, module, ctx))?;
+            writeln!(f, "}}")
+        }
+        RamInstruction::Call(procedure) => {
+            let name = &module.procedures[*procedure].name;
+            writeln!(f, "{name}(&mut env);")
+        }
+        RamInstruction::BeginProof(plan) => write!(f, "{}", display_begin_proof(module, plan, ctx)),
+        RamInstruction::PrepareProofKeys(variable) => writedoc! {f, "
+            let __proof_keys = __match_proofs.as_ref()
+                .and_then(|proofs| proofs.uncovered_keys({variable}));
+        "},
+        RamInstruction::RestrictProof {
+            variable,
+            value,
+            access,
+        } => {
+            let access = match access {
+                ProofAccess::Consume => "",
+                ProofAccess::Borrow => ".as_ref()",
+            };
             writedoc! {f, "
-                let __plan_size = {original};
-                let __plan_lookup_cost = (__plan_size.max(1).ilog2() as usize + 1).saturating_mul(2);
-                let __plan_budget = __plan_size / __plan_lookup_cost;
-                let __plan_alternative = __plan_size > 1
-                    && ({alternative}) <= __plan_budget
-                    && {first}.iter(){rest}.take(__plan_budget.saturating_add(1)).count() <= __plan_budget;
-                if __plan_alternative == {selected} {{
+                let __match_proofs = __match_proofs{access}
+                    .and_then(|proofs| proofs.restrict({variable}, {value}));
             "}
         }
-        RamStmt::GuardInhabited(GuardInhabitedStmt { sets }) => {
+    })
+}
+
+fn display_condition_open<'a>(
+    condition: &'a RamCondition,
+    ctx: &'a RustGenCtx<'a>,
+) -> impl 'a + Display {
+    FmtFn(move |f| match condition {
+        RamCondition::Scalar(condition) => {
+            let condition = display_scalar_expr(condition, ctx);
+            writeln!(f, "if {condition} {{")
+        }
+        RamCondition::Distinct(left, right) => writeln!(f, "if {left} != {right} {{"),
+        RamCondition::Absent { rel, args } => {
+            let rows = display_out_rows_field_name(*rel, ctx);
+            let args = args.iter().join(", ");
+            writeln!(f, "if !env.{rows}.contains([{args}]) {{")
+        }
+        RamCondition::Inhabited(GuardInhabitedStmt { sets }) => {
             let checks = sets
                 .iter()
                 .map(|set| {
@@ -534,227 +596,29 @@ fn display_stmt_pre<'a>(
                     if false {checks} {{
                 "}
         }
+        RamCondition::Uncovered => writeln!(
+            f,
+            "if !__match_proofs.as_ref().is_some_and(|proofs| proofs.is_covered()) {{"
+        ),
+        RamCondition::NoProofs => writeln!(f, "if env.__proofs.is_empty() {{"),
     })
 }
 
-fn display_stmt_post<'a>(ram_stmt: &'a RamStmt) -> impl 'a + Display {
-    FmtFn(move |f| match ram_stmt {
-        RamStmt::DefineSet(_) | RamStmt::Insert(_) => Ok(()),
-        RamStmt::Iter(_) | RamStmt::GuardInhabited(_) | RamStmt::GuardPlan(_) => {
-            writedoc! {f, "
-                    }}
-                "}
-        }
-    })
-}
-
-fn shared_routine_groups(ram_module: &RamModule) -> Vec<Vec<&RamRoutine>> {
-    let mut groups: BTreeMap<(&[FlatVar], &[RamStmt]), Vec<&RamRoutine>> = BTreeMap::new();
-    let mut independent = Vec::new();
-    for routine in &ram_module.routines {
-        let first_loop = routine.stmts.iter().position(|stmt| match stmt {
-            RamStmt::Iter(_) => true,
-            RamStmt::DefineSet(_)
-            | RamStmt::Insert(_)
-            | RamStmt::GuardInhabited(_)
-            | RamStmt::GuardPlan(_) => false,
-        });
-        if let Some(first_loop) = first_loop {
-            groups
-                .entry((
-                    routine.flat_rule.scope.owners(),
-                    &routine.stmts[..=first_loop],
-                ))
-                .or_default()
-                .push(routine);
-        } else {
-            independent.push(vec![routine]);
-        }
-    }
-    independent.extend(groups.into_values());
-    independent
-}
-
-fn display_shared_stmts<'a>(
-    routines: &'a [&'a [RamStmt]],
+fn display_block<'a>(
+    body: &'a [RamInstruction],
+    module: &'a RamFunction,
     ctx: &'a RustGenCtx<'a>,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
-        let first = routines[0];
-        if routines.len() == 1 {
-            for stmt in first {
-                write!(f, "{}", display_stmt_pre(stmt, ctx, None))?;
-            }
-            for stmt in first.iter().rev() {
-                write!(f, "{}", display_stmt_post(stmt))?;
-            }
-            return Ok(());
-        }
-        let shared = first
-            .iter()
-            .enumerate()
-            .take_while(|(i, stmt)| match stmt {
-                RamStmt::Insert(_) => false,
-                RamStmt::DefineSet(_)
-                | RamStmt::Iter(_)
-                | RamStmt::GuardInhabited(_)
-                | RamStmt::GuardPlan(_) => {
-                    routines.iter().all(|routine| routine.get(*i) == Some(stmt))
-                }
-            })
-            .count();
-        for stmt in &first[..shared] {
-            write!(f, "{}", display_stmt_pre(stmt, ctx, None))?;
-        }
-
-        let mut branches: BTreeMap<&RamStmt, Vec<&[RamStmt]>> = BTreeMap::new();
-        for routine in routines {
-            if let Some(stmt) = routine.get(shared) {
-                branches.entry(stmt).or_default().push(&routine[shared..]);
-            }
-        }
-        for (stmt, branch) in branches {
-            writeln!(f, "{{")?;
-            match stmt {
-                RamStmt::Insert(_) => {
-                    for suffix in branch {
-                        writeln!(f, "{{ {} }}", display_shared_stmts(&[suffix], ctx))?;
-                    }
-                }
-                RamStmt::DefineSet(_)
-                | RamStmt::Iter(_)
-                | RamStmt::GuardInhabited(_)
-                | RamStmt::GuardPlan(_) => {
-                    write!(f, "{}", display_shared_stmts(&branch, ctx))?;
-                }
-            }
-            writeln!(f, "}}")?;
-        }
-
-        for stmt in first[..shared].iter().rev() {
-            write!(f, "{}", display_stmt_post(stmt))?;
+        for instruction in body {
+            write!(f, "{}", display_instruction(instruction, module, ctx))?;
         }
         Ok(())
     })
 }
 
-pub(super) fn proof_owner_prefix(module: &RamModule) -> bool {
-    if module.owner_count() != 1 {
-        return false;
-    }
-    module.routines.iter().all(|routine| {
-        let owner = &routine.flat_rule.scope.owners()[0];
-        !routine.flat_rule.premise.is_empty()
-            && routine
-                .flat_rule
-                .premise
-                .iter()
-                .all(|stmt| stmt.args.first() == Some(owner))
-            && routine.stmts.iter().all(|stmt| match stmt {
-                RamStmt::DefineSet(stmt) => match &stmt.expr {
-                    InSetExpr::GetIndex(index) => index.index_spec.order.first() == Some(&0),
-                    InSetExpr::Restrict(_) => true,
-                },
-                RamStmt::Iter(_)
-                | RamStmt::Insert(_)
-                | RamStmt::GuardInhabited(_)
-                | RamStmt::GuardPlan(_) => true,
-            })
-    })
-}
-
-struct ProofAtom {
-    inputs: Vec<usize>,
-    columns: Vec<usize>,
-}
-
-struct ProofPlan {
-    atoms: Vec<ProofAtom>,
-    variables: BTreeMap<String, usize>,
-    relevant: BTreeSet<usize>,
-    owner_prefix: bool,
-}
-
-fn proof_plan(routine: &RamRoutine, module: &RamModule) -> Option<ProofPlan> {
-    let inputs: Vec<_> = module_env_in_rels(module).into_iter().collect();
-    let mut variables = BTreeMap::new();
-    for var in routine.flat_rule.premise.iter().flat_map(|stmt| &stmt.args) {
-        let next = variables.len();
-        variables.entry(var.name.to_string()).or_insert(next);
-    }
-    let owner_prefix = proof_owner_prefix(module);
-    let mut atoms = Vec::new();
-    for (position, premise) in routine.flat_rule.premise.iter().enumerate() {
-        let mut reads = Vec::new();
-        for stmt in &routine.stmts {
-            match stmt {
-                RamStmt::DefineSet(stmt) => match &stmt.expr {
-                    InSetExpr::GetIndex(index) => {
-                        if stmt.defined_var.name.stmt_index == position {
-                            reads.push(index);
-                        }
-                    }
-                    InSetExpr::Restrict(_) => {}
-                },
-                RamStmt::Iter(_)
-                | RamStmt::Insert(_)
-                | RamStmt::GuardInhabited(_)
-                | RamStmt::GuardPlan(_) => {}
-            }
-        }
-        let first = reads.first()?;
-        if reads
-            .iter()
-            .any(|read| read.rel != premise.rel || read.index_spec.order != first.index_spec.order)
-        {
-            return None;
-        }
-        atoms.push(ProofAtom {
-            inputs: reads
-                .iter()
-                .map(|read| {
-                    inputs
-                        .binary_search(&(read.rel.clone(), read.index_spec.clone()))
-                        .unwrap()
-                })
-                .collect(),
-            columns: first
-                .index_spec
-                .order
-                .iter()
-                .skip(usize::from(owner_prefix))
-                .map(|&column| variables[premise.args[column].name.as_ref()])
-                .collect(),
-        });
-    }
-    let mut relevant = BTreeSet::new();
-    for owner in routine.flat_rule.scope.owners() {
-        if let Some(&variable) = variables.get(owner.name.as_ref()) {
-            relevant.insert(variable);
-        }
-    }
-    for stmt in &routine.stmts {
-        match stmt {
-            RamStmt::Iter(iter) => {
-                relevant.insert(variables[iter.loop_var_el.name.as_ref()]);
-            }
-            RamStmt::DefineSet(_)
-            | RamStmt::Insert(_)
-            | RamStmt::GuardInhabited(_)
-            | RamStmt::GuardPlan(_) => {}
-        }
-    }
-    (!atoms.is_empty()).then_some(ProofPlan {
-        atoms,
-        variables,
-        relevant,
-        owner_prefix,
-    })
-}
-
-fn display_proved_routine<'a>(
-    routine: &'a RamRoutine,
-    module: &'a RamModule,
+fn display_begin_proof<'a>(
+    module: &'a RamFunction,
     plan: &'a ProofPlan,
     ctx: &'a RustGenCtx<'a>,
 ) -> impl 'a + Display {
@@ -773,8 +637,7 @@ fn display_proved_routine<'a>(
                     })
                     .reduce(|left, right| format!("{left}.union(&{right})"))
                     .unwrap();
-                if plan.owner_prefix {
-                    let owner = &routine.flat_rule.scope.owners()[0].name;
+                if let Some(owner) = &plan.owner_prefix {
                     let arity = atom.columns.len();
                     format!("({rows}).first_column({owner}).unwrap_or_else(|| eqlog_runtime::__private::Table::new({arity}))")
                 } else {
@@ -805,138 +668,51 @@ fn display_proved_routine<'a>(
                 env.__proofs.iter().map(|proof| vec![{proofs}]).collect(),
                 vec![{columns}],
             ).map(|proofs| proofs.with_relevant_variables(&[{relevant}]));
-        "}?;
-        for owner in routine
-            .flat_rule
-            .scope
-            .owners()
-            .iter()
-            .filter(|_| !plan.owner_prefix)
-        {
-            if let Some(variable) = plan.variables.get(owner.name.as_ref()) {
-                let owner = &owner.name;
-                writedoc! {f, "
-                    let __match_proofs = __match_proofs
-                        .and_then(|proofs| proofs.restrict({variable}, {owner}));
-                "}?;
-            }
-        }
-        writeln!(
-            f,
-            "if !__match_proofs.as_ref().is_some_and(|proofs| proofs.is_covered()) {{"
-        )?;
-        for stmt in &routine.stmts {
-            match stmt {
-                RamStmt::Iter(iter) => {
-                    let variable = plan.variables[iter.loop_var_el.name.as_ref()];
-                    write!(f, "{}", display_stmt_pre(stmt, ctx, Some(variable)))?;
-                    let value = &iter.loop_var_el;
-                    writedoc! {f, "
-                        let __match_proofs = __match_proofs.as_ref()
-                            .and_then(|proofs| proofs.restrict({variable}, {value}));
-                        if !__match_proofs.as_ref().is_some_and(|proofs| proofs.is_covered()) {{
-                    "}?;
-                }
-                RamStmt::Insert(_) => {
-                    // Unbound private suffixes only witness existence. A source
-                    // containing all those witnesses has already proved this head.
-                    writeln!(
-                        f,
-                        "if !__match_proofs.as_ref().is_some_and(|proofs| proofs.is_covered()) {{"
-                    )?;
-                    write!(f, "{}", display_stmt_pre(stmt, ctx, None))?;
-                    writeln!(f, "}}")?;
-                }
-                RamStmt::DefineSet(_) | RamStmt::GuardInhabited(_) | RamStmt::GuardPlan(_) => {
-                    write!(f, "{}", display_stmt_pre(stmt, ctx, None))?;
-                }
-            }
-        }
-        for stmt in routine.stmts.iter().rev() {
-            match stmt {
-                RamStmt::Iter(_) => writeln!(f, "}}")?,
-                RamStmt::DefineSet(_)
-                | RamStmt::Insert(_)
-                | RamStmt::GuardInhabited(_)
-                | RamStmt::GuardPlan(_) => {}
-            }
-            write!(f, "{}", display_stmt_post(stmt))?;
-        }
-        writeln!(f, "}}")
+        "}
     })
 }
 
-fn display_routine_group<'a>(
-    routines: &'a [&'a RamRoutine],
-    ram_module: &'a RamModule,
+fn display_procedure<'a>(
+    procedure: &'a RamProcedure,
+    module: &'a RamFunction,
     ctx: &'a RustGenCtx<'a>,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
-        let name = &routines[0].name;
-        let env_type = display_module_env_struct_name(ram_module);
-        let owners = routines[0]
-            .flat_rule
-            .scope
-            .owners()
+        let name = &procedure.name;
+        let env_type = display_module_env_struct_name(module);
+        let owners = procedure
+            .owners
             .iter()
             .enumerate()
-            .map(|(i, owner)| {
-                let name = &owner.name;
-                format!("let {name} = env.__owners[{i}];")
-            })
+            .map(|(i, owner)| format!("let {owner} = env.__owners[{i}];"))
             .join("\n");
-
-        let stmts: Vec<_> = routines
+        let flat_rules = procedure
+            .rules
             .iter()
-            .map(|routine| routine.stmts.as_slice())
-            .collect();
-        let body = display_shared_stmts(&stmts, ctx);
-
-        let flat_rules = routines
-            .iter()
-            .map(|routine| display_flat_rule(&routine.flat_rule, ctx))
+            .map(|rule| display_flat_rule(rule, ctx))
             .format("\n")
             .to_string();
-        let flat_rule_comment = flat_rules
+        let comment = flat_rules
             .lines()
-            .map(|line| FmtFn(move |f| write!(f, "// {line}")))
-            .format("\n");
-
+            .map(|line| format!("// {line}"))
+            .join("\n");
+        let body = display_block(&procedure.body, module, ctx);
         writedoc! {f, "
-            {flat_rule_comment}
+            {comment}
             fn {name}(env: &mut {env_type}) {{
-            {owners}
-        "}?;
-        let plans: Option<Vec<_>> = match ctx.model_mode() {
-            ModelMode::Native if ram_module.owner_count() > 0 => routines
-                .iter()
-                .map(|routine| proof_plan(routine, ram_module))
-                .collect(),
-            ModelMode::Native | ModelMode::Desugared => None,
-        };
-        if let Some(plans) = plans {
-            writeln!(f, "if env.__proofs.is_empty() {{ {body} }} else {{")?;
-            for (routine, plan) in routines.iter().zip(&plans) {
-                writeln!(
-                    f,
-                    "{{ {} }}",
-                    display_proved_routine(routine, ram_module, plan, ctx)
-                )?;
-            }
-            writeln!(f, "}}")?;
-        } else {
-            write!(f, "{body}")?;
-        }
-        writeln!(f, "}}")
+                {owners}
+                {body}
+            }}
+        "}
     })
 }
 
-pub fn display_module_main_fn_name<'a>(ram_module: &'a RamModule) -> impl 'a + Display {
+pub fn display_module_main_fn_name<'a>(ram_module: &'a RamFunction) -> impl 'a + Display {
     ram_module.name.to_case(Snake)
 }
 
 pub fn display_module_main_fn_decl<'a>(
-    ram_module: &'a RamModule,
+    ram_module: &'a RamFunction,
     symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
@@ -950,22 +726,14 @@ pub fn display_module_main_fn_decl<'a>(
 }
 
 fn display_module_main_fn<'a>(
-    ram_module: &'a RamModule,
-    routine_groups: &'a [Vec<&'a RamRoutine>],
+    ram_module: &'a RamFunction,
+    ctx: &'a RustGenCtx<'a>,
     symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let fn_name = display_module_main_fn_name(ram_module);
         let env_name = display_module_env_struct_name(ram_module);
-        let calls = routine_groups
-            .iter()
-            .map(|routines| {
-                FmtFn(move |f| {
-                    let name = &routines[0].name;
-                    write!(f, "{name}(&mut env);")
-                })
-            })
-            .format("\n");
+        let calls = display_block(&ram_module.body, ram_module, ctx);
         writedoc! {f, r#"
             #[allow(non_snake_case)]
             #[unsafe(no_mangle)]
@@ -977,18 +745,18 @@ fn display_module_main_fn<'a>(
 }
 
 pub fn display_ram_module<'a>(
-    ram_module: &'a RamModule,
+    ram_module: &'a RamFunction,
     ctx: &'a RustGenCtx<'a>,
     symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
         let imports = display_imports();
         let env_struct = display_module_env_struct(ram_module, ctx);
-        let groups = shared_routine_groups(ram_module);
-        let main_fn = display_module_main_fn(ram_module, &groups, symbol_prefix);
-        let routines = groups
+        let main_fn = display_module_main_fn(ram_module, ctx, symbol_prefix);
+        let routines = ram_module
+            .procedures
             .iter()
-            .map(|routines| display_routine_group(routines, ram_module, ctx))
+            .map(|procedure| display_procedure(procedure, ram_module, ctx))
             .format("\n");
 
         writedoc! {f, r#"

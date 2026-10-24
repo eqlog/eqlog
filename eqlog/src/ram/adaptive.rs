@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use crate::flat_eqlog::{FlatInRel, FlatRel, FlatRule, QueryAge};
 
-use super::{InSetExpr, RamStmt, SetVar, SetVarName};
+use super::{InSetExpr, QueryOp, SetVar, SetVarName};
 
 fn is_function_result(set: &SetVar) -> bool {
     let result_is_last = match &set.name.rel {
@@ -21,7 +21,7 @@ fn is_function_result(set: &SetVar) -> bool {
         && set.name.index.order.last().copied() == Some(set.name.index.order.len() - 1)
 }
 
-pub fn add_adaptive_lookup_joins(stmts: &mut [RamStmt], rule: &FlatRule) {
+pub fn add_adaptive_lookup_joins(stmts: &mut [QueryOp], rule: &FlatRule) {
     let has_delta_seed = rule
         .premise
         .first()
@@ -30,19 +30,19 @@ pub fn add_adaptive_lookup_joins(stmts: &mut [RamStmt], rule: &FlatRule) {
         .iter()
         .enumerate()
         .filter_map(|(i, stmt)| match stmt {
-            RamStmt::DefineSet(stmt) => Some((&stmt.defined_var.name, i)),
-            RamStmt::Iter(stmt) => Some((&stmt.loop_var_set.name, i)),
-            RamStmt::Insert(_) | RamStmt::GuardInhabited(_) | RamStmt::GuardPlan(_) => None,
+            QueryOp::DefineSet(stmt) => Some((&stmt.defined_var.name, i)),
+            QueryOp::Iter(stmt) => Some((&stmt.loop_var_set.name, i)),
+            QueryOp::Insert(_) | QueryOp::GuardInhabited(_) | QueryOp::GuardPlan(_) => None,
         })
         .collect();
     let mut drivers = vec![Vec::new(); stmts.len()];
     for (i, stmt) in stmts.iter().enumerate() {
         let iter = match stmt {
-            RamStmt::Iter(stmt) => stmt,
-            RamStmt::DefineSet(_)
-            | RamStmt::Insert(_)
-            | RamStmt::GuardInhabited(_)
-            | RamStmt::GuardPlan(_) => continue,
+            QueryOp::Iter(stmt) => stmt,
+            QueryOp::DefineSet(_)
+            | QueryOp::Insert(_)
+            | QueryOp::GuardInhabited(_)
+            | QueryOp::GuardPlan(_) => continue,
         };
         if iter.first_only
             || iter.sets.iter().all(is_function_result)
@@ -52,10 +52,10 @@ pub fn add_adaptive_lookup_joins(stmts: &mut [RamStmt], rule: &FlatRule) {
         }
         for later in &stmts[i + 1..] {
             let guard = match later {
-                RamStmt::GuardInhabited(stmt) => stmt,
+                QueryOp::GuardInhabited(stmt) => stmt,
                 // A later guard cannot remove outputs already emitted by this loop.
-                RamStmt::Insert(_) => break,
-                RamStmt::DefineSet(_) | RamStmt::Iter(_) | RamStmt::GuardPlan(_) => continue,
+                QueryOp::Insert(_) => break,
+                QueryOp::DefineSet(_) | QueryOp::Iter(_) | QueryOp::GuardPlan(_) => continue,
             };
             let candidate: Option<Vec<SetVar>> = guard
                 .sets
@@ -63,14 +63,14 @@ pub fn add_adaptive_lookup_joins(stmts: &mut [RamStmt], rule: &FlatRule) {
                 .map(|set| {
                     let definition = definitions[&set.name];
                     let restriction = match &stmts[definition] {
-                        RamStmt::DefineSet(stmt) => match &stmt.expr {
+                        QueryOp::DefineSet(stmt) => match &stmt.expr {
                             InSetExpr::Restrict(expr) => expr,
                             InSetExpr::GetIndex(_) => return None,
                         },
-                        RamStmt::Iter(_)
-                        | RamStmt::Insert(_)
-                        | RamStmt::GuardInhabited(_)
-                        | RamStmt::GuardPlan(_) => {
+                        QueryOp::Iter(_)
+                        | QueryOp::Insert(_)
+                        | QueryOp::GuardInhabited(_)
+                        | QueryOp::GuardPlan(_) => {
                             return None;
                         }
                     };
@@ -89,11 +89,11 @@ pub fn add_adaptive_lookup_joins(stmts: &mut [RamStmt], rule: &FlatRule) {
     }
     for (stmt, drivers) in stmts.iter_mut().zip(drivers) {
         match stmt {
-            RamStmt::Iter(stmt) => stmt.lookup_drivers = drivers,
-            RamStmt::DefineSet(_)
-            | RamStmt::Insert(_)
-            | RamStmt::GuardInhabited(_)
-            | RamStmt::GuardPlan(_) => {}
+            QueryOp::Iter(stmt) => stmt.lookup_drivers = drivers,
+            QueryOp::DefineSet(_)
+            | QueryOp::Insert(_)
+            | QueryOp::GuardInhabited(_)
+            | QueryOp::GuardPlan(_) => {}
         }
     }
 }

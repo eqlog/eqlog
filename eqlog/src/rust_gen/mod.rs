@@ -1,7 +1,6 @@
 mod compact_api;
 mod compact_eligibility;
 mod compact_indices;
-mod compact_keys;
 mod compact_members;
 mod compact_policy;
 mod compact_views;
@@ -3467,7 +3466,7 @@ fn display_theory_impl<'a>(
     tables: &'a indexed::Tables,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let ram_modules = program.modules.as_slice();
+        let ram_modules = program.functions.as_slice();
         writeln!(f, "impl {} {{", name)?;
         write!(f, "{}", compact_api::methods(program, index_selection, ctx))?;
         write!(f, "{}", compact_policy::methods(ctx))?;
@@ -3615,7 +3614,7 @@ fn display_theory_impl<'a>(
                     display_recompute_model_indices_fn(ctx, index_selection, None, "");
                 write!(f, "{recompute_model_indices_fn}")?;
                 for (s, preparation) in program.preparations.iter().enumerate() {
-                    let scoped = program.schedule.strata[s].model.is_some();
+                    let scoped = program.evaluation.strata[s].model.is_some();
                     let plans = std::iter::once((format!("_stratum_{s}"), &preparation.native))
                         .chain(
                             preparation
@@ -3680,7 +3679,7 @@ fn display_theory_impl<'a>(
 }
 
 fn display_rule_modules<'a>(
-    ram_modules: &'a [RamModule],
+    ram_modules: &'a [RamFunction],
     ctx: &'a RustGenCtx<'a>,
     symbol_prefix: &'a str,
 ) -> impl 'a + Display {
@@ -3708,7 +3707,7 @@ pub fn display_module<'a>(
     symbol_prefix: &'a str,
     build_type: BuildType,
 ) -> impl 'a + Display {
-    let ram_modules = program.modules.as_slice();
+    let ram_modules = program.functions.as_slice();
     FmtFn(move |f| {
         let imports = display_imports();
         write!(f, "{}", imports)?;
@@ -3762,7 +3761,7 @@ pub fn display_module<'a>(
         write!(f, "\n")?;
 
         let outputs = program
-            .modules
+            .functions
             .iter()
             .flat_map(module_env_out_rels)
             .filter(|rel| match ctx.model_mode() {
@@ -3776,8 +3775,8 @@ pub fn display_module<'a>(
         let model_delta_struct = display_model_delta_struct(&outputs, ctx);
         write!(f, "{}", model_delta_struct)?;
 
-        let codegen = stratified::Codegen::new(&program.schedule, program);
-        let tables = indexed::Tables::new(index_selection, program, ctx.signature());
+        let codegen = stratified::Codegen::new(program);
+        let tables = indexed::Tables::new(program);
         match ctx.model_mode() {
             ModelMode::Native => {
                 write!(f, "{}", codegen.loop_input_types(index_selection, ctx))?;

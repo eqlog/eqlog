@@ -37,8 +37,8 @@ fn functionality_seed_indices(
     )
 }
 
-fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> RamRoutine {
-    let mut stmts: Vec<RamStmt> = Vec::new();
+fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> QueryPlan {
+    let mut stmts: Vec<QueryOp> = Vec::new();
     let anchor = functionality_anchor(&flat_rule);
     let mut occurrences = BTreeMap::new();
     for var in flat_rule.premise.iter().flat_map(|stmt| &stmt.args) {
@@ -126,7 +126,7 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
         // Get the full indices and define variables for them.
         for (index_spec, set_name) in indices.iter().zip(set_names.iter()) {
             let rel = flat_stmt.rel.clone();
-            stmts.push(RamStmt::DefineSet(DefineSetStmt {
+            stmts.push(QueryOp::DefineSet(DefineSetStmt {
                 defined_var: SetVar {
                     name: set_name.clone(),
                     arity,
@@ -140,7 +140,7 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
         }
 
         if !fixed_args.is_empty() {
-            stmts.push(RamStmt::GuardInhabited(GuardInhabitedStmt {
+            stmts.push(QueryOp::GuardInhabited(GuardInhabitedStmt {
                 sets: set_names
                     .iter()
                     .map(|name| SetVar {
@@ -168,7 +168,7 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
                     first_column_var: var.clone(),
                 });
                 set_name.restricted += 1;
-                stmts.push(RamStmt::DefineSet(DefineSetStmt {
+                stmts.push(QueryOp::DefineSet(DefineSetStmt {
                     defined_var: SetVar {
                         name: set_name.clone(),
                         arity: arity - 1,
@@ -181,7 +181,7 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
             arity -= 1;
 
             if fixed_args.len() < order.len() {
-                stmts.push(RamStmt::GuardInhabited(GuardInhabitedStmt {
+                stmts.push(QueryOp::GuardInhabited(GuardInhabitedStmt {
                     sets: set_names
                         .iter()
                         .map(|name| SetVar {
@@ -202,7 +202,7 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
         if used_columns == 0 {
             // We don't need to retrieve any new variables, but we still have to check that the set
             // is not empty.
-            stmts.push(RamStmt::GuardInhabited(GuardInhabitedStmt {
+            stmts.push(QueryOp::GuardInhabited(GuardInhabitedStmt {
                 sets: set_names
                     .iter()
                     .map(|name| SetVar {
@@ -259,13 +259,13 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
                     canonical_filter,
                 };
                 arity -= 1;
-                stmts.push(RamStmt::Iter(iter_stmt));
+                stmts.push(QueryOp::Iter(iter_stmt));
                 set_names = vec![next_set_name];
             }
             if arity > 0 {
                 // Private suffix variables witness the premise but cannot
                 // distinguish matches in another premise or the conclusion.
-                stmts.push(RamStmt::GuardInhabited(GuardInhabitedStmt {
+                stmts.push(QueryOp::GuardInhabited(GuardInhabitedStmt {
                     sets: set_names
                         .iter()
                         .map(|name| SetVar {
@@ -294,17 +294,17 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
             rel: flat_stmt.rel.clone(),
             args,
         };
-        stmts.push(RamStmt::Insert(insert_stmt));
+        stmts.push(QueryOp::Insert(insert_stmt));
     }
 
-    RamRoutine {
+    QueryPlan {
         name: flat_rule.name.clone(),
         flat_rule,
         stmts,
     }
 }
 
-fn merge_all_age_sets(routine: &mut RamRoutine) {
+fn merge_all_age_sets(routine: &mut QueryPlan) {
     let mut all: BTreeSet<usize> = routine
         .flat_rule
         .premise
@@ -318,7 +318,7 @@ fn merge_all_age_sets(routine: &mut RamRoutine) {
     let mut probe_ages: BTreeMap<usize, BTreeSet<IndexAge>> = BTreeMap::new();
     for stmt in &routine.stmts {
         match stmt {
-            RamStmt::DefineSet(define) => {
+            QueryOp::DefineSet(define) => {
                 let name = &define.defined_var.name;
                 if name.stmt_index >= routine.flat_rule.premise.len() {
                     probe_ages
@@ -327,10 +327,10 @@ fn merge_all_age_sets(routine: &mut RamRoutine) {
                         .insert(name.index.age);
                 }
             }
-            RamStmt::Iter(_)
-            | RamStmt::Insert(_)
-            | RamStmt::GuardInhabited(_)
-            | RamStmt::GuardPlan(_) => {}
+            QueryOp::Iter(_)
+            | QueryOp::Insert(_)
+            | QueryOp::GuardInhabited(_)
+            | QueryOp::GuardPlan(_) => {}
         }
     }
     all.extend(probe_ages.into_iter().filter_map(|(probe, ages)| {
@@ -352,7 +352,7 @@ fn merge_all_age_sets(routine: &mut RamRoutine) {
     let mut stmts = Vec::new();
     for mut stmt in std::mem::take(&mut routine.stmts) {
         match &mut stmt {
-            RamStmt::DefineSet(define) => {
+            QueryOp::DefineSet(define) => {
                 rename(&mut define.defined_var.name);
                 match &mut define.expr {
                     InSetExpr::GetIndex(get) => {
@@ -364,24 +364,24 @@ fn merge_all_age_sets(routine: &mut RamRoutine) {
                     continue;
                 }
             }
-            RamStmt::Iter(iter) => {
+            QueryOp::Iter(iter) => {
                 merge(&mut iter.sets);
                 merge(&mut iter.lookup_drivers);
                 rename(&mut iter.loop_var_set.name);
             }
-            RamStmt::GuardInhabited(guard) => merge(&mut guard.sets),
-            RamStmt::GuardPlan(plan) => {
+            QueryOp::GuardInhabited(guard) => merge(&mut guard.sets),
+            QueryOp::GuardPlan(plan) => {
                 merge(&mut plan.original);
                 merge(&mut plan.alternative);
             }
-            RamStmt::Insert(_) => {}
+            QueryOp::Insert(_) => {}
         }
         stmts.push(stmt);
     }
     routine.stmts = stmts;
 }
 
-fn share_equal_sets(routine: &mut RamRoutine) {
+fn share_equal_sets(routine: &mut QueryPlan) {
     let mut definitions: BTreeMap<InSetExpr, SetVar> = BTreeMap::new();
     let mut aliases: BTreeMap<SetVarName, SetVar> = BTreeMap::new();
     let alias = |set: &mut SetVar, aliases: &BTreeMap<SetVarName, SetVar>| {
@@ -396,7 +396,7 @@ fn share_equal_sets(routine: &mut RamRoutine) {
     let mut stmts = Vec::new();
     for mut stmt in std::mem::take(&mut routine.stmts) {
         match &mut stmt {
-            RamStmt::DefineSet(define) => {
+            QueryOp::DefineSet(define) => {
                 match &mut define.expr {
                     InSetExpr::GetIndex(_) => {}
                     InSetExpr::Restrict(restrict) => alias(&mut restrict.set, &aliases),
@@ -407,25 +407,25 @@ fn share_equal_sets(routine: &mut RamRoutine) {
                 }
                 definitions.insert(define.expr.clone(), define.defined_var.clone());
             }
-            RamStmt::Iter(iter) => {
+            QueryOp::Iter(iter) => {
                 for set in iter.sets.iter_mut().chain(&mut iter.lookup_drivers) {
                     alias(set, &aliases);
                 }
                 dedup(&mut iter.sets);
                 dedup(&mut iter.lookup_drivers);
             }
-            RamStmt::GuardInhabited(guard) => {
+            QueryOp::GuardInhabited(guard) => {
                 for set in &mut guard.sets {
                     alias(set, &aliases);
                 }
                 dedup(&mut guard.sets);
             }
-            RamStmt::GuardPlan(plan) => {
+            QueryOp::GuardPlan(plan) => {
                 for set in plan.original.iter_mut().chain(&mut plan.alternative) {
                     alias(set, &aliases);
                 }
             }
-            RamStmt::Insert(_) => {}
+            QueryOp::Insert(_) => {}
         }
         stmts.push(stmt);
     }
@@ -436,7 +436,8 @@ fn flat_rule_group_to_ram(
     flat_rule_group: FlatRuleGroup,
     index_selection: &IndexSelection,
     mode: ModelMode,
-) -> RamModule {
+    signature: &Signature,
+) -> RamFunction {
     let routines = flat_rule_group
         .rules
         .into_iter()
@@ -462,10 +463,7 @@ fn flat_rule_group_to_ram(
             routine
         })
         .collect();
-    RamModule {
-        name: flat_rule_group.name.clone(),
-        routines,
-    }
+    lower_function(flat_rule_group.name, routines, signature, mode)
 }
 
 pub fn flat_rule_groups_to_ram(
@@ -475,15 +473,46 @@ pub fn flat_rule_groups_to_ram(
     signature: &Signature,
     mode: ModelMode,
 ) -> RamProgram {
-    let modules: Vec<_> = groups
+    let functions: Vec<_> = groups
         .into_iter()
-        .map(|group| flat_rule_group_to_ram(group, index_selection, mode))
+        .map(|group| flat_rule_group_to_ram(group, index_selection, mode, signature))
         .collect();
     let (preparations, model_preparations, native_indices) =
-        plan_index_preparation(&modules, &schedule, index_selection, signature, mode);
+        plan_index_preparation(&functions, &schedule, index_selection, signature, mode);
+    let compact = CompactPlan::new(
+        &functions,
+        &schedule,
+        index_selection,
+        signature,
+        mode,
+        &native_indices,
+    );
+    let evaluation = match mode {
+        ModelMode::Native => plan_evaluation(
+            &functions,
+            &schedule,
+            &preparations,
+            &model_preparations,
+            &native_indices,
+            index_selection,
+            signature,
+            &compact,
+        ),
+        ModelMode::Desugared => EvaluationPlan::default(),
+    };
     RamProgram {
-        modules,
-        schedule,
+        compact,
+        evaluation,
+        indexed: match mode {
+            ModelMode::Native => None,
+            ModelMode::Desugared => Some(IndexedPlan::new(
+                &functions,
+                &schedule,
+                index_selection,
+                signature,
+            )),
+        },
+        functions,
         preparations,
         model_preparations,
         native_indices,
