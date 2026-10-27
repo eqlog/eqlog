@@ -45,3 +45,5 @@ Generate identical seeded inputs for both engines and time one populated
 closure, with complete semantic checks outside the measured operation.
 Keep benchmark programs and reference algorithms in the repository so
 performance comparisons no longer depend on temporary experiment files.
+Remove historical results and the obsolete ETT profiling script and
+reports so the benchmark crate contains only maintained workloads.
