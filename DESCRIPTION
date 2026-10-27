@@ -37,3 +37,11 @@ obsolete renderer wrappers, parameters, and commented-out fragments.
 Validate dynamic edits through a shared read-only storage interface
 instead of exporting and mutating a disposable model. Preserve checked
 errors and pending raw-result selection before applying the typed edit.
+
+Replace synthetic scheduling benchmarks with native propagation and
+Rust copy-on-write references on chains and acyclic graphs. Include
+equation chains and joins that combine several incoming models.
+Generate identical seeded inputs for both engines and time one populated
+closure, with complete semantic checks outside the measured operation.
+Keep benchmark programs and reference algorithms in the repository so
+performance comparisons no longer depend on temporary experiment files.

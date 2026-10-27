@@ -347,9 +347,9 @@ dependencies = [
 name = "eqlog-bench"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "eqlog",
  "eqlog-runtime",
- "indoc",
 ]
 
 [[package]]

@@ -1,0 +1,29 @@
+// Stable names identify coincident images through item functionality.
+type Key;
+
+model World {
+    type El;
+    func item(Key) -> El;
+    pred marked(El);
+}
+
+pred job(World, Key, Key);
+pred join(World, Key, Key, Key);
+
+rule propagate {
+    if job(w, input, output);
+    if w.item(input) = x;
+    if w.marked(x);
+    if w.item(output) = y;
+    then w.marked(y);
+}
+
+rule cross_parent {
+    if join(w, left_key, right_key, output);
+    if w.item(left_key) = l;
+    if w.marked(l);
+    if w.item(right_key) = r;
+    if w.marked(r);
+    if w.item(output) = y;
+    then w.marked(y);
+}

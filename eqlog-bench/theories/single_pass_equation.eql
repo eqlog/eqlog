@@ -1,0 +1,22 @@
+// Keys name corresponding members across models.
+type Key;
+
+model World {
+    type El;
+    func item(Key) -> El;
+    pred marked(El);
+}
+
+// Each local job also chooses two inherited keys to identify.
+pred job(World, Key, Key, Key, Key);
+
+rule propagate {
+    if job(w, input, output, left, right);
+    if w.item(input) = x;
+    if w.marked(x);
+    if w.item(output) = y;
+    if w.item(left) = a;
+    if w.item(right) = b;
+    then w.marked(y);
+    then a = b;
+}

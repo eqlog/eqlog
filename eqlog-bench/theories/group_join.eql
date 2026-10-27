@@ -1,0 +1,17 @@
+type Key;
+type Group;
+
+model World {
+    type El;
+    func item(Key) -> El;
+    pred left(Group, El);
+    pred right(Group, El);
+    pred pair(Group, El, El);
+
+    // A parent already proves products made entirely from its own inputs.
+    rule product {
+        if left(g, x);
+        if right(g, y);
+        then pair(g, x, y);
+    }
+}

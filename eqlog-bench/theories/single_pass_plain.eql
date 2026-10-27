@@ -1,0 +1,19 @@
+// Keys name corresponding members across models.
+type Key;
+
+model World {
+    type El;
+    func item(Key) -> El;
+    pred marked(El);
+}
+
+// The harness gives each model one inherited input key and one local output key.
+pred job(World, Key, Key);
+
+rule propagate {
+    if job(w, input, output);
+    if w.item(input) = x;
+    if w.marked(x);
+    if w.item(output) = y;
+    then w.marked(y);
+}

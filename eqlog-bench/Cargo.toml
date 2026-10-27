@@ -9,12 +9,12 @@ autobenches = false
 allocations = []
 
 [dependencies]
+clap = { version = "4", features = ["derive"] }
 eqlog-runtime = { path = "../eqlog-runtime" }
 
 [build-dependencies]
 eqlog = { path = "../eqlog", features = ["rebuild"] }
-indoc = "2"
 
 [[bench]]
-name = "scheduling"
+name = "member_mapping"
 harness = false
