@@ -1,9 +1,7 @@
 use super::spec::{oracle, Inputs, Metrics, Operation, SEED};
 
-mod generated {
-    include!(concat!(env!("OUT_DIR"), "/random_dag.eql.rs"));
-}
-use generated::{El, Key, RandomDag, World, WorldMor};
+eqlog_runtime::eqlog_mod!(random_dag);
+use random_dag::{El, Key, RandomDag, World, WorldMor};
 
 #[path = "verify.rs"]
 mod verify;

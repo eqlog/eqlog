@@ -1,13 +1,11 @@
 macro_rules! native_engine {
-    ($module:ident, $source:literal, $model:ident, [$($argument:ident),*]) => {
+    ($module:ident, $source:ident, $model:ident, [$($argument:ident),*]) => {
         pub(super) mod $module {
             use super::super::spec::View;
             use super::super::{Evaluator, Inputs, SEEDS};
 
-            mod generated {
-                include!(concat!(env!("OUT_DIR"), "/", $source));
-            }
-            use generated::{$model as Model, El, Key, World, WorldMor};
+            eqlog_runtime::eqlog_mod!($source);
+            use $source::{$model as Model, El, Key, World, WorldMor};
 
             pub struct Engine {
                 model: Model,
@@ -132,15 +130,10 @@ macro_rules! native_engine {
     };
 }
 
-native_engine!(
-    plain,
-    "single_pass_plain.eql.rs",
-    SinglePassPlain,
-    [input, output]
-);
+native_engine!(plain, single_pass_plain, SinglePassPlain, [input, output]);
 native_engine!(
     equation,
-    "single_pass_equation.eql.rs",
+    single_pass_equation,
     SinglePassEquation,
     [input, output, left, right]
 );

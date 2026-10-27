@@ -47,3 +47,5 @@ Keep benchmark programs and reference algorithms in the repository so
 performance comparisons no longer depend on temporary experiment files.
 Remove historical results and the obsolete ETT profiling script and
 reports so the benchmark crate contains only maintained workloads.
+Use the normal Cargo build entry point and keep Eqlog programs beside
+their Rust adapters instead of maintaining custom generation paths.

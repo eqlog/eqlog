@@ -1,9 +1,7 @@
 use super::spec::{Evaluator, Inputs, Role};
-use generated::GroupJoin;
+use group_join::GroupJoin;
 
-mod generated {
-    include!(concat!(env!("OUT_DIR"), "/group_join.eql.rs"));
-}
+eqlog_runtime::eqlog_mod!(group_join);
 
 pub struct Native {
     model: GroupJoin,

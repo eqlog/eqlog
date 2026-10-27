@@ -1,4 +1,4 @@
-use super::generated::{El, World};
+use super::random_dag::{El, World};
 use super::Engine;
 use crate::dag::spec::{Inputs, Metrics, Oracle, SEED};
 use std::collections::BTreeMap;
