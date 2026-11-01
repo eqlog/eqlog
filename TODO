@@ -1,0 +1,94 @@
+Benchmark axes:
+- Category shape: {linear, linear, sparse dag, dense dag, loops}.
+  Most important: Linear, sparse dag. Sparse dag: #edges ~= #nodes.
+- Relation args: Member types versus ambient types.
+- Member types vs no member types.
+- Merges required, no merges required.
+  Cases where no merges should be required will probably want to use only preds, no funcs.
+- Not fully orthogonal to merges, but we can try: Functions.
+  E.g. we might benchmarks where functionality rules only fire trivially (no merges), only once, and requiring recursive merges.
+- Rules: None versus member versus ambient.
+  For now, focus on member rules.
+- Rule interaction with category shape: No parent, single parent, multiple parents.
+  Rules that fire on premises inherited from multiple parents versus rules firing on just elements of a single parent versus rules that fire on parent + model owned facts.
+
+In all cases, derive how long a reasonable classical algorithm to compute free models using copy-on-write trees would take.
+No long derivation, just the result, double checked by subagents.
+Some of these benchmark cases will have more than 1 parameter, e.g. model category size (+ shape) versus relation size.
+That's OK, give the bound in terms of multiple variables in those cases.
+
+It's better to duplicate a bit versus trying to make the same program fit multiple use-cases (e.g. some relation is only used in one test case).
+This is to make it easy to understand one specific failure versus the whole test suite at once.
+Benchmarks should be written in such a way that the input size can be configured.
+Each benchmark shoudl be accompanied by a classical rust program using the same cow datastructures that computes the specific free model type directly.
+It can compute loops efficiently, traverse the graph efficiently etc.
+
+We should have machinery to validate in each case:
+- Does eqlog evaluation have the same scaling (i.e. big O) behavior as the rust program?
+- What's the constant: How much faster is the rust program compared to eqlog?
+
+Benchmarks shouldn't take long to run.
+Ideally a few hundreds of milliseconds in most cases.
+Problem sizes just big enough so that we start observing asymptotic complexity.
+If some benchmarks just need to take a few seconds or longer at the moment, they should be ignored by default.
+
+Ideally in each case where the eqlog program already has the expected asymptotic complexity, we should add test cases that make sure that we're not falling behind the rust program.
+Not sure how to approach this.
+Do we run both, hopefully in a mostly low noise way, and then compare factors?
+Hardcode mean, variance, so that we have good confidence intervals (is noise reasonably close to normal though, do we have to remove outliers?).
+It's OK to rerun benchmarks a few times to tighten confidence intervals if the benchmarks are fast enough to execute individually.
+Maybe we can also add some tools to refresh those ratios.
+An improved ratio btw should also trigger a failure, so that we keep those ratios up to date.
+
+For now we only care about performance on this host.
+In the future we might also have different expected ratios for different host properties, e.g. cpu family or ram type etc.
+
+Some thoughts for specific cases:
+- Measuring just propagation of member data, no rules:
+  For member types we only need something like
+  ```
+  model M {
+    type El;
+  }
+  ```
+  The rust host program can then instantiate this with:
+  A model category, with each models adding an element, or K elements.
+
+  For predicates of ambient types, add predicates to M on ambient types.
+  Similarly for member types (both the model above + predicates on them) and mixed member and ambient elements.
+- Measure member rule evaluation from single parent.
+  ```
+  model M {
+    type El;
+    pred should_mark(El);
+    pred marked(El);
+
+    rule {
+      should_mark(el);
+      marked(el);
+    }
+  }
+  ```
+  Then the rust program should seed every M with an El e and make it should_mark(e) hold.
+- Measure member function propagation.
+  ```
+  model M {
+    type El;
+    func f(El) -> El;
+  }
+  ```
+  Models could be seeded each with elements e0, e1 such that f(e0) = e1.
+  Or f(e) = e.
+  No actual element unification at this point.
+  Also perhaps from_ambient(AmbientEl) -> El, and seed AmbientEl outer_el with one element per model m, make m.from_ambient(outer_el) defined for each model.
+  And the reverse, to_ambient(El) -> AmbientEl, seed each model with its own element e and make m.to_ambient(e) defined.
+- Non-recursive congruence applications.
+  Same as before with from_ambient case, but give some models the same ambient els, leading to non-trivial congruence applications (since initially, after seeding, each model has its own local El as image under from_ambient).
+- Recurisve congruence.
+  Same as before, but also use the member function f(El) -> El to produce downstream merges.
+  Can even add to_ambient in addition to prouce also some merges outside the model.
+- In general it's tricky to make rules fire based on derived data.
+  One option is to introduce global AmbientEl type as above and add a member function to_ambient: El -> AmbientEl.
+	Then make rules fire on elements that map to some specific AmbientEl, e.g. the same one or such that soem relation among ambient els holds etc.
+	However, this machinery itself introduces overhead.
+	So before working on benchmarks that require this, we need to make sure that to_ambient member function is represented well, using copy on write efficiently.
