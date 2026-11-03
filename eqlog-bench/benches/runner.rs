@@ -30,7 +30,7 @@ pub struct Options {
     pub max_ratio_growth: f64,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Serialize)]
 pub struct Label {
     pub case: String,
     pub shape: String,
@@ -39,15 +39,17 @@ pub struct Label {
 }
 
 impl Label {
-    fn key(&self) -> String {
-        let parameters = serde_json::to_string(&self.parameters).unwrap();
-        format!("{}/{}/{parameters}", self.case, self.shape)
-    }
-
-    fn series(&self, axis: &str) -> String {
-        let mut label = self.clone();
-        label.parameters.remove(axis);
-        label.key()
+    fn same_series(&self, other: &Self, axis: &str) -> bool {
+        self.case == other.case
+            && self.shape == other.shape
+            && self
+                .parameters
+                .iter()
+                .filter(|(key, _)| key.as_str() != axis)
+                .eq(other
+                    .parameters
+                    .iter()
+                    .filter(|(key, _)| key.as_str() != axis))
     }
 }
 
@@ -83,7 +85,7 @@ struct Cell {
     samples: Vec<Sample>,
     summary: Option<Summary>,
     growth: Vec<Growth>,
-    status: String,
+    status: &'static str,
 }
 
 #[derive(Serialize)]
@@ -124,6 +126,13 @@ fn sample<W: Workload>(mut workload: W) -> (Measurement, Metrics) {
     };
     let metrics = workload.verify();
     (measured, metrics)
+}
+
+#[cfg(feature = "allocations")]
+fn median(values: impl Iterator<Item = u128>) -> u128 {
+    let mut values: Vec<_> = values.collect();
+    values.sort_unstable();
+    values[values.len() / 2]
 }
 
 fn host() -> Result<String> {
@@ -273,6 +282,8 @@ impl Runner {
     }
 
     pub fn run<C: Case>(&mut self, label: Label, case: C) -> Result<()> {
+        let name = &label.case;
+        let shape = &label.shape;
         let mut samples = Vec::with_capacity(self.options.samples);
         let mut expected = None;
         for index in 0..self.options.samples {
@@ -285,7 +296,7 @@ impl Runner {
                 let native = sample(case.native());
                 (native, cow)
             };
-            assert_eq!(native.1, cow.1, "{}: native and COW disagree", label.case);
+            assert_eq!(native.1, cow.1, "{name}: native and COW disagree");
             if let Some(previous) = &expected {
                 assert_eq!(&native.1, previous, "samples disagree");
             } else {
@@ -296,6 +307,8 @@ impl Runner {
                 cow: cow.0,
             });
         }
+        let metrics = expected.unwrap();
+        let parameters = serde_json::to_string(&label.parameters)?;
         #[cfg(not(feature = "allocations"))]
         let summary = Some(analysis::summarize(
             &samples
@@ -311,62 +324,61 @@ impl Runner {
         let mut status = "measured";
         let mut growth = Vec::new();
         if let Some(summary) = &summary {
+            let key = format!("{name}/{shape}/{parameters}");
             for axis in ["vertices", "members", "keys", "depth"] {
-                if let Some(&to) = label.parameters.get(axis) {
-                    let previous = self.report.cells.iter().rev().find(|cell| {
-                        cell.label.series(axis) == label.series(axis)
-                            && cell
-                                .label
-                                .parameters
-                                .get(axis)
-                                .is_some_and(|&value| value < to)
-                    });
-                    if let Some(previous) = previous {
-                        let before = previous.summary.as_ref().unwrap();
-                        let from = previous.label.parameters[axis];
-                        let relative =
-                            analysis::relative_growth(before, summary, to as f64 / from as f64);
-                        let scaling_status = if self.options.check_scaling {
-                            match (relative.lower, relative.upper) {
-                                (Some(lower), Some(upper)) => {
-                                    if lower > self.options.max_ratio_growth {
-                                        "scaling-worse"
-                                    } else if upper <= self.options.max_ratio_growth {
-                                        "scaling-within"
-                                    } else {
-                                        "scaling-uncertain"
-                                    }
-                                }
-                                (None, None) | (None, Some(_)) | (Some(_), None) => {
-                                    "scaling-uncertain"
-                                }
+                let Some(&to) = label.parameters.get(axis) else {
+                    continue;
+                };
+                let previous = self.report.cells.iter().rev().find(|cell| {
+                    label.same_series(&cell.label, axis)
+                        && cell
+                            .label
+                            .parameters
+                            .get(axis)
+                            .is_some_and(|&value| value < to)
+                });
+                let Some(previous) = previous else {
+                    continue;
+                };
+                let before = previous.summary.as_ref().unwrap();
+                let from = previous.label.parameters[axis];
+                let relative = analysis::relative_growth(before, summary, to as f64 / from as f64);
+                let scaling_status = if self.options.check_scaling {
+                    match relative.lower.zip(relative.upper) {
+                        Some((lower, upper)) => {
+                            if lower > self.options.max_ratio_growth {
+                                "scaling-worse"
+                            } else if upper <= self.options.max_ratio_growth {
+                                "scaling-within"
+                            } else {
+                                "scaling-uncertain"
                             }
-                        } else {
-                            "measured"
-                        };
-                        if self.options.check_scaling && scaling_status != "scaling-within" {
-                            self.failures
-                                .push(format!("{} {axis}: {scaling_status}", label.key()));
                         }
-                        growth.push(Growth {
-                            axis,
-                            from,
-                            to,
-                            native_factor: summary.native_ns / before.native_ns,
-                            cow_factor: summary.cow_ns / before.cow_ns,
-                            ratio_factor: summary.ratio / before.ratio,
-                            relative,
-                            status: scaling_status,
-                        });
+                        None => "scaling-uncertain",
                     }
+                } else {
+                    "measured"
+                };
+                if self.options.check_scaling && scaling_status != "scaling-within" {
+                    self.failures
+                        .push(format!("{key} {axis}: {scaling_status}"));
                 }
+                growth.push(Growth {
+                    axis,
+                    from,
+                    to,
+                    native_factor: summary.native_ns / before.native_ns,
+                    cow_factor: summary.cow_ns / before.cow_ns,
+                    ratio_factor: summary.ratio / before.ratio,
+                    relative,
+                    status: scaling_status,
+                });
             }
-            let key = label.key();
             if self.options.update {
                 self.baseline.cases.insert(
                     key,
                     BaselineCase {
-                        metrics: expected.clone().unwrap(),
+                        metrics: metrics.clone(),
                         expected: Expected::from_summary(summary.clone(), self.options.tolerance)?,
                     },
                 );
@@ -374,7 +386,7 @@ impl Runner {
             } else if self.options.check {
                 status = match self.baseline.cases.get(&key) {
                     Some(reference) => {
-                        if expected.as_ref() != Some(&reference.metrics) {
+                        if metrics != reference.metrics {
                             "input-changed"
                         } else {
                             match reference.expected.check(summary) {
@@ -393,76 +405,52 @@ impl Runner {
             }
             let native_ms = summary.native_ns / 1e6;
             let cow_ms = summary.cow_ns / 1e6;
-            let interval = match (summary.lower, summary.upper) {
-                (Some(lower), Some(upper)) => format!("[{lower:.3},{upper:.3}]"),
-                (None, None) | (None, Some(_)) | (Some(_), None) => {
-                    "insufficient samples".to_owned()
-                }
+            let interval = match summary.lower.zip(summary.upper) {
+                Some((lower, upper)) => format!("[{lower:.3},{upper:.3}]"),
+                None => "insufficient samples".to_owned(),
             };
-            let parameters = serde_json::to_string(&label.parameters)?;
+            let ratio = summary.ratio;
             println!(
-                "{}\t{}\t{parameters}\t{native_ms:.3}\t{cow_ms:.3}\t{:.3}\t{interval}\t{status}",
-                label.case, label.shape, summary.ratio
+                "{name}\t{shape}\t{parameters}\t{native_ms:.3}\t{cow_ms:.3}\t{ratio:.3}\t{interval}\t{status}"
             );
-            for change in &growth {
+            for Growth {
+                axis,
+                from,
+                to,
+                native_factor,
+                cow_factor,
+                ratio_factor,
+                relative,
+                status,
+            } in &growth
+            {
+                let per_doubling = relative.per_doubling;
                 eprintln!(
-                    "{} {} {}->{}: native x{:.2}, COW x{:.2}, ratio x{:.2}; per doubling x{:.2} ({})",
-                    label.case,
-                    change.axis,
-                    change.from,
-                    change.to,
-                    change.native_factor,
-                    change.cow_factor,
-                    change.ratio_factor,
-                    change.relative.per_doubling,
-                    change.status
+                    "{name} {axis} {from}->{to}: native x{native_factor:.2}, COW x{cow_factor:.2}, ratio x{ratio_factor:.2}; per doubling x{per_doubling:.2} ({status})"
                 );
             }
         }
         #[cfg(feature = "allocations")]
         {
-            let median = |values: Vec<u128>| {
-                let mut values = values;
-                values.sort_unstable();
-                values[values.len() / 2]
-            };
-            let native_calls = median(
-                samples
-                    .iter()
-                    .map(|pair| pair.native.allocations.unwrap())
-                    .collect(),
-            );
-            let cow_calls = median(
-                samples
-                    .iter()
-                    .map(|pair| pair.cow.allocations.unwrap())
-                    .collect(),
-            );
+            let native_calls = median(samples.iter().map(|pair| pair.native.allocations.unwrap()));
+            let cow_calls = median(samples.iter().map(|pair| pair.cow.allocations.unwrap()));
             let native_bytes = median(
                 samples
                     .iter()
-                    .map(|pair| pair.native.allocated_bytes.unwrap())
-                    .collect(),
+                    .map(|pair| pair.native.allocated_bytes.unwrap()),
             );
-            let cow_bytes = median(
-                samples
-                    .iter()
-                    .map(|pair| pair.cow.allocated_bytes.unwrap())
-                    .collect(),
-            );
-            let parameters = serde_json::to_string(&label.parameters)?;
+            let cow_bytes = median(samples.iter().map(|pair| pair.cow.allocated_bytes.unwrap()));
             println!(
-                "{}\t{}\t{parameters}\t{native_calls}\t{cow_calls}\t{native_bytes}\t{cow_bytes}",
-                label.case, label.shape
+                "{name}\t{shape}\t{parameters}\t{native_calls}\t{cow_calls}\t{native_bytes}\t{cow_bytes}"
             );
         }
         self.report.cells.push(Cell {
             label,
-            metrics: expected.unwrap(),
+            metrics,
             samples,
             summary,
             growth,
-            status: status.to_owned(),
+            status,
         });
         Ok(())
     }

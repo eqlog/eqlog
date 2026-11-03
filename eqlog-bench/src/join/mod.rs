@@ -15,18 +15,6 @@ pub struct Params {
     pub seed: u64,
 }
 
-impl Default for Params {
-    fn default() -> Self {
-        Self {
-            vertices: 64,
-            parents: 4,
-            width: 8,
-            members: 16,
-            seed: 17,
-        }
-    }
-}
-
 #[derive(Clone, Copy)]
 pub enum Variant {
     Fanout,

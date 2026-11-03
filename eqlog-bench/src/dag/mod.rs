@@ -15,18 +15,6 @@ pub struct Params {
     pub seed_mask: u32,
 }
 
-impl Default for Params {
-    fn default() -> Self {
-        Self {
-            vertices: 64,
-            parents: 4,
-            width: 8,
-            seed: 17,
-            seed_mask: 255,
-        }
-    }
-}
-
 #[derive(Clone, Copy)]
 pub enum Variant {
     Forward,

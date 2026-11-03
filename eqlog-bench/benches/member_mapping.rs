@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use clap::{Parser, ValueEnum};
-use eqlog_bench::{ambient, chain, congruence, dag, graph::Graph, join, propagation};
+use eqlog_bench::{ambient, chain, congruence, dag, graph::Graph, join, propagation, Case};
 
 mod runner;
 use runner::{Label, Options, Result, Runner};
@@ -28,20 +28,20 @@ impl Shape {
         self.to_possible_value().unwrap().get_name().to_owned()
     }
 
-    fn graph(self, vertices: usize, parents: usize, seed: u64) -> Graph {
+    fn graph(self, vertices: usize, parents: usize, seed: u64) -> Result<Graph> {
         match self {
-            Self::Chain => Graph::chain(vertices),
-            Self::Merge => Graph::merge(vertices, seed),
-            Self::Sparse => Graph::sparse(vertices, parents, seed),
-            Self::Dense => Graph::dense(vertices),
-            Self::Cycle => Graph::cycle(vertices),
+            Self::Chain => Ok(Graph::chain(vertices)),
+            Self::Merge => Ok(Graph::merge(vertices, seed)),
+            Self::Sparse => Ok(Graph::sparse(vertices, parents, seed)),
+            Self::Dense => Ok(Graph::dense(vertices)),
+            Self::Cycle => Ok(Graph::cycle(vertices)),
             Self::Fanout
             | Self::Overlap
             | Self::Split
             | Self::Diamonds
             | Self::Layered
             | Self::Comb
-            | Self::Wide => unreachable!("case owns this graph"),
+            | Self::Wide => Err("case requires its own graph generator".into()),
         }
     }
 }
@@ -58,141 +58,345 @@ const JOB_EQUATION: &str =
 const JOB_DAG: &str = "O(N+E+(N+EM) log(2+M)) upper; M<=N+8, shared ancestry can cost less";
 const MEMBER_JOIN: &str = "O(N+E+(L+E(M+P)) log(2+L)) upper; L=local rows, M=max carrier, P=max logical pairs; suffix sharing can cost less";
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+enum Scenario {
+    Carrier,
+    MemberPredicate,
+    MixedPredicate,
+    FromAmbient,
+    ToAmbient,
+    MemberFunction,
+    Marking,
+    AmbientPredicate,
+    AmbientMarking,
+    Congruence,
+    RecursiveCongruence,
+    JobChain,
+    JobEquation,
+    JobDag,
+    MemberJoin,
+}
+
 struct Declaration {
-    name: &'static str,
     shapes: &'static [Shape],
     bound: &'static str,
     slow: bool,
 }
 
-const CASES: &[Declaration] = &[
-    Declaration {
-        name: "carrier",
-        shapes: &[Shape::Chain, Shape::Merge],
-        bound: PROPAGATION,
-        slow: false,
-    },
-    Declaration {
-        name: "member-predicate",
-        shapes: &[Shape::Chain, Shape::Merge],
-        bound: PROPAGATION,
-        slow: false,
-    },
-    Declaration {
-        name: "mixed-predicate",
-        shapes: &[Shape::Chain, Shape::Merge],
-        bound: PROPAGATION,
-        slow: false,
-    },
-    Declaration {
-        name: "from-ambient",
-        shapes: &[Shape::Chain, Shape::Merge],
-        bound: PROPAGATION,
-        slow: false,
-    },
-    Declaration {
-        name: "to-ambient",
-        shapes: &[Shape::Chain, Shape::Merge],
-        bound: PROPAGATION,
-        slow: false,
-    },
-    Declaration {
-        name: "member-function",
-        shapes: &[Shape::Chain, Shape::Merge],
-        bound: PROPAGATION,
-        slow: false,
-    },
-    Declaration {
-        name: "marking",
-        shapes: &[Shape::Chain, Shape::Merge],
-        bound: PROPAGATION,
-        slow: false,
-    },
-    Declaration {
-        name: "ambient-predicate",
-        shapes: &[
-            Shape::Chain,
-            Shape::Merge,
-            Shape::Sparse,
-            Shape::Dense,
-            Shape::Cycle,
+impl Scenario {
+    fn name(self) -> String {
+        self.to_possible_value().unwrap().get_name().to_owned()
+    }
+
+    fn declaration(self) -> Declaration {
+        let (shapes, bound, slow): (&'static [Shape], &'static str, bool) = match self {
+            Self::Carrier
+            | Self::MemberPredicate
+            | Self::MixedPredicate
+            | Self::FromAmbient
+            | Self::ToAmbient
+            | Self::MemberFunction
+            | Self::Marking => (&[Shape::Chain, Shape::Merge], PROPAGATION, false),
+            Self::AmbientPredicate | Self::AmbientMarking => (
+                &[
+                    Shape::Chain,
+                    Shape::Merge,
+                    Shape::Sparse,
+                    Shape::Dense,
+                    Shape::Cycle,
+                ],
+                AMBIENT,
+                false,
+            ),
+            Self::Congruence => (&[Shape::Chain], CONGRUENCE, false),
+            Self::RecursiveCongruence => (&[Shape::Chain], RECURSIVE, false),
+            Self::JobChain => (&[Shape::Chain], JOB_CHAIN, true),
+            Self::JobEquation => (&[Shape::Chain], JOB_EQUATION, true),
+            Self::JobDag => (
+                &[
+                    Shape::Chain,
+                    Shape::Sparse,
+                    Shape::Layered,
+                    Shape::Comb,
+                    Shape::Wide,
+                ],
+                JOB_DAG,
+                true,
+            ),
+            Self::MemberJoin => (
+                &[
+                    Shape::Chain,
+                    Shape::Fanout,
+                    Shape::Overlap,
+                    Shape::Split,
+                    Shape::Diamonds,
+                    Shape::Layered,
+                    Shape::Comb,
+                ],
+                MEMBER_JOIN,
+                true,
+            ),
+        };
+        Declaration {
+            shapes,
+            bound,
+            slow,
+        }
+    }
+
+    fn label(self, shape: Shape, values: &[(&str, usize)], seed: u64) -> Label {
+        let parameters: BTreeMap<_, _> = values
+            .iter()
+            .map(|&(name, value)| (name.to_owned(), u64::try_from(value).unwrap()))
+            .chain([("seed".to_owned(), seed)])
+            .collect();
+        Label {
+            case: self.name(),
+            shape: shape.name(),
+            parameters,
+            cow_bound: self.declaration().bound,
+        }
+    }
+
+    fn run(
+        self,
+        runner: &mut Runner,
+        shape: Shape,
+        vertices: usize,
+        args: &Arguments,
+    ) -> Result<()> {
+        let label = |values: &[(&str, usize)]| self.label(shape, values, args.seed);
+        match self {
+            Self::Carrier => {
+                run_propagation(runner, self, shape, vertices, args, propagation::carrier)
+            }
+            Self::MemberPredicate => run_propagation(
+                runner,
+                self,
+                shape,
+                vertices,
+                args,
+                propagation::member_predicate,
+            ),
+            Self::MixedPredicate => run_propagation(
+                runner,
+                self,
+                shape,
+                vertices,
+                args,
+                propagation::mixed_predicate,
+            ),
+            Self::FromAmbient => run_propagation(
+                runner,
+                self,
+                shape,
+                vertices,
+                args,
+                propagation::from_ambient,
+            ),
+            Self::ToAmbient => {
+                run_propagation(runner, self, shape, vertices, args, propagation::to_ambient)
+            }
+            Self::MemberFunction => run_propagation(
+                runner,
+                self,
+                shape,
+                vertices,
+                args,
+                propagation::member_function,
+            ),
+            Self::Marking => {
+                run_propagation(runner, self, shape, vertices, args, propagation::marking)
+            }
+            Self::AmbientPredicate => {
+                run_ambient(runner, self, shape, vertices, args, ambient::propagation)
+            }
+            Self::AmbientMarking => {
+                run_ambient(runner, self, shape, vertices, args, ambient::marking)
+            }
+            Self::Congruence => {
+                for &keys in &args.keys {
+                    let params = congruence::one_step::Params { vertices, keys };
+                    runner.run(
+                        label(&[("vertices", vertices), ("keys", keys)]),
+                        congruence::one_step::case(&params),
+                    )?;
+                }
+                Ok(())
+            }
+            Self::RecursiveCongruence => {
+                for &keys in &args.keys {
+                    for &depth in &args.depth {
+                        let params = congruence::recursive::Params {
+                            vertices,
+                            keys,
+                            depth,
+                        };
+                        runner.run(
+                            label(&[("vertices", vertices), ("keys", keys), ("depth", depth)]),
+                            congruence::recursive::case(&params),
+                        )?;
+                    }
+                }
+                Ok(())
+            }
+            Self::JobChain => run_chain(runner, self, shape, vertices, args, chain::plain),
+            Self::JobEquation => run_chain(runner, self, shape, vertices, args, chain::equation),
+            Self::JobDag => {
+                let variant = match shape {
+                    Shape::Chain => dag::Variant::Chain,
+                    Shape::Sparse => dag::Variant::Forward,
+                    Shape::Layered => dag::Variant::Layered,
+                    Shape::Comb => dag::Variant::Comb,
+                    Shape::Wide => dag::Variant::Wide,
+                    Shape::Merge
+                    | Shape::Dense
+                    | Shape::Cycle
+                    | Shape::Fanout
+                    | Shape::Overlap
+                    | Shape::Split
+                    | Shape::Diamonds => return Err("unsupported job-dag shape".into()),
+                };
+                let params = dag::Params {
+                    vertices,
+                    parents: args.parents,
+                    width: args.width,
+                    seed: args.seed,
+                    seed_mask: args.seed_mask,
+                };
+                runner.run(
+                    label(&[
+                        ("vertices", vertices),
+                        ("parents", args.parents),
+                        ("width", args.width),
+                        ("seed_mask", args.seed_mask as usize),
+                    ]),
+                    dag::case(&params, variant),
+                )
+            }
+            Self::MemberJoin => {
+                let variant = match shape {
+                    Shape::Chain => join::Variant::Chain,
+                    Shape::Fanout => join::Variant::Fanout,
+                    Shape::Overlap => join::Variant::Overlap,
+                    Shape::Split => join::Variant::Split,
+                    Shape::Diamonds => join::Variant::Diamonds,
+                    Shape::Layered => join::Variant::Layered,
+                    Shape::Comb => join::Variant::Comb,
+                    Shape::Merge | Shape::Sparse | Shape::Dense | Shape::Cycle | Shape::Wide => {
+                        return Err("unsupported member-join shape".into())
+                    }
+                };
+                for &members in &args.members {
+                    let params = join::Params {
+                        vertices,
+                        parents: args.parents,
+                        width: args.width,
+                        members,
+                        seed: args.seed,
+                    };
+                    runner.run(
+                        label(&[
+                            ("vertices", vertices),
+                            ("parents", args.parents),
+                            ("width", args.width),
+                            ("members", members),
+                        ]),
+                        join::case(&params, variant),
+                    )?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+fn run_propagation<C: Case>(
+    runner: &mut Runner,
+    scenario: Scenario,
+    shape: Shape,
+    vertices: usize,
+    args: &Arguments,
+    make: impl Fn(&propagation::Params, Graph) -> C,
+) -> Result<()> {
+    for &members in &args.members {
+        let params = propagation::Params {
+            vertices,
+            members,
+            seed: args.seed,
+        };
+        let graph = shape.graph(vertices, args.parents, args.seed)?;
+        let label = scenario.label(
+            shape,
+            &[("vertices", vertices), ("members", members)],
+            args.seed,
+        );
+        runner.run(label, make(&params, graph))?;
+    }
+    Ok(())
+}
+
+fn run_ambient<C: Case>(
+    runner: &mut Runner,
+    scenario: Scenario,
+    shape: Shape,
+    vertices: usize,
+    args: &Arguments,
+    make: impl Fn(&ambient::Params, Graph) -> C,
+) -> Result<()> {
+    for &members in &args.members {
+        let params = ambient::Params { vertices, members };
+        let graph = shape.graph(vertices, args.parents, args.seed)?;
+        let label = scenario.label(
+            shape,
+            &[
+                ("vertices", vertices),
+                ("members", members),
+                ("parents", args.parents),
+            ],
+            args.seed,
+        );
+        runner.run(label, make(&params, graph))?;
+    }
+    Ok(())
+}
+
+fn run_chain<C: Case>(
+    runner: &mut Runner,
+    scenario: Scenario,
+    shape: Shape,
+    vertices: usize,
+    args: &Arguments,
+    make: impl Fn(&chain::Params) -> C,
+) -> Result<()> {
+    let params = chain::Params {
+        vertices,
+        seed: args.seed,
+        seed_mask: args.seed_mask,
+    };
+    let label = scenario.label(
+        shape,
+        &[
+            ("vertices", vertices),
+            ("seed_mask", args.seed_mask as usize),
         ],
-        bound: AMBIENT,
-        slow: false,
-    },
-    Declaration {
-        name: "ambient-marking",
-        shapes: &[
-            Shape::Chain,
-            Shape::Merge,
-            Shape::Sparse,
-            Shape::Dense,
-            Shape::Cycle,
-        ],
-        bound: AMBIENT,
-        slow: false,
-    },
-    Declaration {
-        name: "congruence",
-        shapes: &[Shape::Chain],
-        bound: CONGRUENCE,
-        slow: false,
-    },
-    Declaration {
-        name: "recursive-congruence",
-        shapes: &[Shape::Chain],
-        bound: RECURSIVE,
-        slow: false,
-    },
-    Declaration {
-        name: "job-chain",
-        shapes: &[Shape::Chain],
-        bound: JOB_CHAIN,
-        slow: true,
-    },
-    Declaration {
-        name: "job-equation",
-        shapes: &[Shape::Chain],
-        bound: JOB_EQUATION,
-        slow: true,
-    },
-    Declaration {
-        name: "job-dag",
-        shapes: &[
-            Shape::Chain,
-            Shape::Sparse,
-            Shape::Layered,
-            Shape::Comb,
-            Shape::Wide,
-        ],
-        bound: JOB_DAG,
-        slow: true,
-    },
-    Declaration {
-        name: "member-join",
-        shapes: &[
-            Shape::Chain,
-            Shape::Fanout,
-            Shape::Overlap,
-            Shape::Split,
-            Shape::Diamonds,
-            Shape::Layered,
-            Shape::Comb,
-        ],
-        bound: MEMBER_JOIN,
-        slow: true,
-    },
-];
+        args.seed,
+    );
+    runner.run(label, make(&params))
+}
 
 #[derive(Parser)]
 #[command(
     about = "Paired native Eqlog and Rust COW closure benchmarks",
-    after_help = "Each comma-separated size list is swept independently in a Cartesian grid. Construction and full verification are outside the timer. --list describes cases and COW bounds. Examples: --case from-ambient --vertices 32,64,128 --members 4,16; --case ambient-predicate --shape sparse,cycle; --case member-join --shape overlap. --output writes raw paired observations and growth factors as JSON. Performance checks require a baseline for this host/compiler and at least seven samples; faster results also fail. Run on an otherwise idle pinned CPU. Expectation intervals assume independent samples; no outliers are discarded."
+    after_help = "Size lists form a Cartesian grid. Only close() is measured; construction and verification are excluded. Run on an idle pinned CPU. Ratio intervals assume independent samples; no outliers are discarded. Example: --case from-ambient --vertices 32,64,128 --members 4,16."
 )]
 struct Arguments {
-    /// Omit to run the small isolated cases. Repeat or comma-separate names.
-    #[arg(long = "case", value_delimiter = ',')]
-    cases: Vec<String>,
+    #[arg(
+        long = "case",
+        value_delimiter = ',',
+        help = "Cases to run; defaults to the isolated cases"
+    )]
+    cases: Vec<Scenario>,
     #[arg(long, value_delimiter = ',', default_value = "chain")]
     shape: Vec<Shape>,
     #[arg(long, value_delimiter = ',', default_value = "32,64,128")]
@@ -213,22 +417,29 @@ struct Arguments {
     seed_mask: u32,
     #[arg(long, default_value_t = 9)]
     samples: usize,
-    /// Include the older compound stress cases when --case is omitted.
-    #[arg(long)]
+    #[arg(long, help = "Include compound stress cases in the default selection")]
     slow: bool,
-    #[arg(long)]
+    #[arg(long, help = "List cases, supported shapes and COW bounds")]
     list: bool,
-    #[arg(long)]
+    #[arg(long, help = "Write raw pairs and growth comparisons as JSON")]
     output: Option<PathBuf>,
     #[arg(long)]
     baseline: Option<PathBuf>,
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Check host/compiler-specific ratio bands; speedups also fail"
+    )]
     check: bool,
-    /// Fail if the Eqlog/COW ratio grows too quickly across the size sweep.
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Check ratio growth across sizes; requires at least seven samples"
+    )]
     check_scaling: bool,
-    /// Allowed growth in the Eqlog/COW ratio per doubling of a size parameter.
-    #[arg(long, default_value_t = 1.25)]
+    #[arg(
+        long,
+        default_value_t = 1.25,
+        help = "Maximum ratio growth per doubling of a size parameter"
+    )]
     max_ratio_growth: f64,
     #[arg(long)]
     update_baseline: bool,
@@ -238,216 +449,21 @@ struct Arguments {
     bench: bool,
 }
 
-fn parameters(values: &[(&str, usize)], seed: u64) -> BTreeMap<String, u64> {
-    values
-        .iter()
-        .map(|&(name, value)| (name.to_owned(), u64::try_from(value).unwrap()))
-        .chain([("seed".to_owned(), seed)])
-        .collect()
-}
-
-fn run_case(
-    runner: &mut Runner,
-    declaration: &Declaration,
-    shape: Shape,
-    vertices: usize,
-    args: &Arguments,
-) -> Result<()> {
-    let label = |parameters| Label {
-        case: declaration.name.to_owned(),
-        shape: shape.name(),
-        parameters,
-        cow_bound: declaration.bound,
-    };
-    match declaration.name {
-        "carrier" | "member-predicate" | "mixed-predicate" | "from-ambient" | "to-ambient"
-        | "member-function" | "marking" => {
-            for &members in &args.members {
-                let params = propagation::Params {
-                    vertices,
-                    members,
-                    seed: args.seed,
-                };
-                let graph = shape.graph(vertices, args.parents, args.seed);
-                let label = label(parameters(
-                    &[("vertices", vertices), ("members", members)],
-                    args.seed,
-                ));
-                match declaration.name {
-                    "carrier" => runner.run(label, propagation::carrier(&params, graph))?,
-                    "member-predicate" => {
-                        runner.run(label, propagation::member_predicate(&params, graph))?
-                    }
-                    "mixed-predicate" => {
-                        runner.run(label, propagation::mixed_predicate(&params, graph))?
-                    }
-                    "from-ambient" => {
-                        runner.run(label, propagation::from_ambient(&params, graph))?
-                    }
-                    "to-ambient" => runner.run(label, propagation::to_ambient(&params, graph))?,
-                    "member-function" => {
-                        runner.run(label, propagation::member_function(&params, graph))?
-                    }
-                    "marking" => runner.run(label, propagation::marking(&params, graph))?,
-                    _ => unreachable!(),
-                }
-            }
-        }
-        "ambient-predicate" | "ambient-marking" => {
-            for &members in &args.members {
-                let params = ambient::Params { vertices, members };
-                let graph = shape.graph(vertices, args.parents, args.seed);
-                let label = label(parameters(
-                    &[
-                        ("vertices", vertices),
-                        ("members", members),
-                        ("parents", args.parents),
-                    ],
-                    args.seed,
-                ));
-                if declaration.name == "ambient-predicate" {
-                    runner.run(label, ambient::propagation(&params, graph))?;
-                } else {
-                    runner.run(label, ambient::marking(&params, graph))?;
-                }
-            }
-        }
-        "congruence" => {
-            for &keys in &args.keys {
-                let params = congruence::one_step::Params { vertices, keys };
-                runner.run(
-                    label(parameters(
-                        &[("vertices", vertices), ("keys", keys)],
-                        args.seed,
-                    )),
-                    congruence::one_step::case(&params),
-                )?;
-            }
-        }
-        "recursive-congruence" => {
-            for &keys in &args.keys {
-                for &depth in &args.depth {
-                    let params = congruence::recursive::Params {
-                        vertices,
-                        keys,
-                        depth,
-                    };
-                    runner.run(
-                        label(parameters(
-                            &[("vertices", vertices), ("keys", keys), ("depth", depth)],
-                            args.seed,
-                        )),
-                        congruence::recursive::case(&params),
-                    )?;
-                }
-            }
-        }
-        "job-chain" | "job-equation" => {
-            let params = chain::Params {
-                vertices,
-                seed: args.seed,
-                seed_mask: args.seed_mask,
-            };
-            let label = label(parameters(
-                &[
-                    ("vertices", vertices),
-                    ("seed_mask", args.seed_mask as usize),
-                ],
-                args.seed,
-            ));
-            if declaration.name == "job-chain" {
-                runner.run(label, chain::plain(&params))?;
-            } else {
-                runner.run(label, chain::equation(&params))?;
-            }
-        }
-        "job-dag" => {
-            let variant = match shape {
-                Shape::Chain => dag::Variant::Chain,
-                Shape::Sparse => dag::Variant::Forward,
-                Shape::Layered => dag::Variant::Layered,
-                Shape::Comb => dag::Variant::Comb,
-                Shape::Wide => dag::Variant::Wide,
-                Shape::Merge
-                | Shape::Dense
-                | Shape::Cycle
-                | Shape::Fanout
-                | Shape::Overlap
-                | Shape::Split
-                | Shape::Diamonds => unreachable!(),
-            };
-            let params = dag::Params {
-                vertices,
-                parents: args.parents,
-                width: args.width,
-                seed: args.seed,
-                seed_mask: args.seed_mask,
-            };
-            runner.run(
-                label(parameters(
-                    &[
-                        ("vertices", vertices),
-                        ("parents", args.parents),
-                        ("width", args.width),
-                        ("seed_mask", args.seed_mask as usize),
-                    ],
-                    args.seed,
-                )),
-                dag::case(&params, variant),
-            )?;
-        }
-        "member-join" => {
-            let variant = match shape {
-                Shape::Chain => join::Variant::Chain,
-                Shape::Fanout => join::Variant::Fanout,
-                Shape::Overlap => join::Variant::Overlap,
-                Shape::Split => join::Variant::Split,
-                Shape::Diamonds => join::Variant::Diamonds,
-                Shape::Layered => join::Variant::Layered,
-                Shape::Comb => join::Variant::Comb,
-                Shape::Merge | Shape::Sparse | Shape::Dense | Shape::Cycle | Shape::Wide => {
-                    unreachable!()
-                }
-            };
-            for &members in &args.members {
-                let params = join::Params {
-                    vertices,
-                    parents: args.parents,
-                    width: args.width,
-                    members,
-                    seed: args.seed,
-                };
-                runner.run(
-                    label(parameters(
-                        &[
-                            ("vertices", vertices),
-                            ("parents", args.parents),
-                            ("width", args.width),
-                            ("members", members),
-                        ],
-                        args.seed,
-                    )),
-                    join::case(&params, variant),
-                )?;
-            }
-        }
-        _ => unreachable!("registered case"),
-    }
-    Ok(())
-}
-
 fn main() -> Result<()> {
     let mut args = Arguments::parse();
     if args.list {
-        for case in CASES {
-            let shapes = case
+        for &scenario in Scenario::value_variants() {
+            let declaration = scenario.declaration();
+            let shapes = declaration
                 .shapes
                 .iter()
                 .map(|shape| shape.name())
                 .collect::<Vec<_>>()
                 .join(",");
-            let slow = if case.slow { " (opt-in)" } else { "" };
-            println!("{}{}\t{}\t{}", case.name, slow, shapes, case.bound);
+            let slow = if declaration.slow { " (opt-in)" } else { "" };
+            let name = scenario.name();
+            let bound = declaration.bound;
+            println!("{name}{slow}\t{shapes}\t{bound}");
         }
         return Ok(());
     }
@@ -467,28 +483,18 @@ fn main() -> Result<()> {
         return Err("invalid parent count, width or seed mask".into());
     }
     if args.cases.is_empty() {
-        args.cases = CASES
+        args.cases = Scenario::value_variants()
             .iter()
-            .filter(|case| args.slow || !case.slow)
-            .map(|case| case.name.to_owned())
+            .copied()
+            .filter(|scenario| args.slow || !scenario.declaration().slow)
             .collect();
     }
-    let selected = args
-        .cases
-        .iter()
-        .map(|name| {
-            CASES
-                .iter()
-                .find(|case| case.name == name)
-                .ok_or_else(|| format!("unknown case {name}; use --list"))
-        })
-        .collect::<std::result::Result<Vec<_>, _>>()?;
-    for case in &selected {
+    for &scenario in &args.cases {
         for shape in &args.shape {
-            if !case.shapes.contains(shape) {
+            if !scenario.declaration().shapes.contains(shape) {
                 return Err(format!(
                     "{} does not support {}; use --list",
-                    case.name,
+                    scenario.name(),
                     shape.name()
                 )
                 .into());
@@ -505,10 +511,10 @@ fn main() -> Result<()> {
         check_scaling: args.check_scaling,
         max_ratio_growth: args.max_ratio_growth,
     })?;
-    for case in selected {
+    for &scenario in &args.cases {
         for &shape in &args.shape {
             for &vertices in &args.vertices {
-                run_case(&mut runner, case, shape, vertices, &args)?;
+                scenario.run(&mut runner, shape, vertices, &args)?;
             }
         }
     }

@@ -69,15 +69,7 @@ impl Input {
     }
 }
 
-fn exact<T: Ord + std::fmt::Debug>(rows: impl Iterator<Item = T>, expected: BTreeSet<T>) {
-    let mut actual = BTreeSet::new();
-    for row in rows {
-        assert!(actual.insert(row), "duplicate public row");
-    }
-    assert_eq!(actual, expected);
-}
-
-fn check_rows(rows: impl Iterator<Item = (usize, u32)>, expected: &BTreeSet<(usize, u32)>) {
+fn exact<T: Ord + std::fmt::Debug>(rows: impl Iterator<Item = T>, expected: &BTreeSet<T>) {
     let mut actual = BTreeSet::new();
     for row in rows {
         assert!(actual.insert(row), "duplicate public row");
@@ -90,21 +82,21 @@ macro_rules! verify_carriers {
         let input = $input;
         exact(
             $model.iter_world().map(|world| world.0),
-            (0..u32::try_from(input.graph.parents.len()).unwrap()).collect(),
+            &(0..u32::try_from(input.graph.parents.len()).unwrap()).collect(),
         );
         exact(
             $model.iter_value().map(|value| value.0),
-            (0..u32::try_from(input.values).unwrap()).collect(),
+            &(0..u32::try_from(input.values).unwrap()).collect(),
         );
         exact(
             $model.iter_world_mor().map(|arrow| arrow.0),
-            (0..u32::try_from(input.graph.edges.len()).unwrap()).collect(),
+            &(0..u32::try_from(input.graph.edges.len()).unwrap()).collect(),
         );
         exact(
             $model
                 .iter_world_mor_dom()
                 .map(|(arrow, world)| (arrow.0, world.0)),
-            input
+            &input
                 .graph
                 .edges
                 .iter()
@@ -118,7 +110,7 @@ macro_rules! verify_carriers {
             $model
                 .iter_world_mor_cod()
                 .map(|(arrow, world)| (arrow.0, world.0)),
-            input
+            &input
                 .graph
                 .edges
                 .iter()
@@ -158,8 +150,7 @@ impl Transport {
     }
 
     fn close(&self, worlds: &mut [PrefixTree1]) {
-        // Unioning an SCC's incoming and local rows closes the whole component
-        // without propagating individual rows repeatedly around its cycles.
+        // Sharing each SCC's closure avoids repeated cyclic propagation.
         for component in morphism_components(&self.domains, &self.codomains, &self.objects) {
             let mut rows = PrefixTree1::new();
             for &owner in &component.objects {
@@ -247,7 +238,7 @@ impl Workload for NativePropagation<'_> {
     fn verify(&self) -> Metrics {
         verify_carriers!(self.model, self.input);
         let expected = self.input.expected();
-        check_rows(
+        exact(
             self.model
                 .iter_present()
                 .map(|(world, value)| (world.0 as usize, value.0)),
@@ -275,7 +266,7 @@ impl Workload for CowPropagation<'_> {
 
     fn verify(&self) -> Metrics {
         let expected = self.input.expected();
-        check_rows(
+        exact(
             self.worlds
                 .iter()
                 .enumerate()
@@ -347,13 +338,13 @@ impl Workload for NativeMarking<'_> {
     fn verify(&self) -> Metrics {
         verify_carriers!(self.model, self.input);
         let expected = self.input.expected();
-        check_rows(
+        exact(
             self.model
                 .iter_present()
                 .map(|(world, value)| (world.0 as usize, value.0)),
             &expected,
         );
-        check_rows(
+        exact(
             self.model
                 .iter_marked()
                 .map(|(world, value)| (world.0 as usize, value.0)),
@@ -377,8 +368,7 @@ impl Workload for CowMarking<'_> {
             return;
         }
         self.transport.close(&mut self.present);
-        // The rule preserves its argument, so the completed result can share
-        // the entire input tree instead of allocating one output row at a time.
+        // The unary rule lets output share the completed input tree.
         self.marked.clone_from(&self.present);
         self.closed = true;
     }
@@ -386,7 +376,7 @@ impl Workload for CowMarking<'_> {
     fn verify(&self) -> Metrics {
         let expected = self.input.expected();
         for worlds in [&self.present, &self.marked] {
-            check_rows(
+            exact(
                 worlds
                     .iter()
                     .enumerate()

@@ -11,22 +11,14 @@ pub struct Benchmark {
     input: Input,
 }
 
-impl Benchmark {
-    pub fn new(params: &Params, graph: Graph) -> Self {
-        let input = Input::new(params, graph);
-        Self { input }
-    }
+pub fn case(params: &Params, graph: Graph) -> Benchmark {
+    let input = Input::new(params, graph);
+    Benchmark { input }
 }
 
 impl Case for Benchmark {
-    type Native<'a>
-        = Native<'a>
-    where
-        Self: 'a;
-    type Cow<'a>
-        = Cow<'a>
-    where
-        Self: 'a;
+    type Native<'a> = Native<'a>;
+    type Cow<'a> = Cow<'a>;
 
     fn native(&self) -> Native<'_> {
         Native::new(self)
@@ -106,13 +98,9 @@ impl Workload for Native<'_> {
     }
 }
 
-struct World {
-    carrier: PrefixTree1,
-}
-
 pub struct Cow<'a> {
     case: &'a Benchmark,
-    worlds: Vec<World>,
+    worlds: Vec<PrefixTree1>,
     closed: bool,
 }
 
@@ -121,13 +109,11 @@ impl<'a> Cow<'a> {
         let input = &case.input;
         let worlds = (0..input.graph.parents.len())
             .map(|owner| {
-                let mut world = World {
-                    carrier: PrefixTree1::new(),
-                };
+                let mut carrier = PrefixTree1::new();
                 for origin in input.local(owner) {
-                    world.carrier.insert([origin]);
+                    carrier.insert([origin]);
                 }
-                world
+                carrier
             })
             .collect();
         Self {
@@ -145,9 +131,9 @@ impl Workload for Cow<'_> {
         }
         for owner in 0..self.worlds.len() {
             let (previous, current) = self.worlds.split_at_mut(owner);
-            let world = &mut current[0];
+            let carrier = &mut current[0];
             for &parent in &self.case.input.graph.parents[owner] {
-                world.carrier = world.carrier.union(&previous[parent].carrier);
+                *carrier = carrier.union(&previous[parent]);
             }
         }
         self.closed = true;
@@ -155,7 +141,7 @@ impl Workload for Cow<'_> {
 
     fn verify(&self) -> Metrics {
         let input = &self.case.input;
-        let members = verify::cow_members(input, self.worlds.iter().map(|world| &world.carrier));
+        let members = verify::cow_members(input, &self.worlds);
         members.metrics
     }
 }

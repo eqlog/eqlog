@@ -30,8 +30,7 @@ impl Graph {
         )
     }
 
-    // Each component is consumed at most once, so member origins have unique
-    // paths to a target without adding functionality or commutativity equations.
+    // Disjoint ancestry avoids equations just to identify path images.
     pub fn merge(vertices: usize, seed: u64) -> Self {
         assert!(vertices > 0);
         let leaves = vertices / 2 + 1;
@@ -40,8 +39,7 @@ impl Graph {
         let mut random = Random::new(seed);
         random.shuffle(&mut roots);
         let mut roots: VecDeque<_> = roots.into();
-        // Level-wise merges avoid rescanning fragmented carriers along an
-        // unbalanced spine, which would obscure the intended COW baseline.
+        // Balanced merges bound how often fragmented trees are rescanned.
         for (owner, incoming) in parents.iter_mut().enumerate().skip(leaves) {
             let first = roots.pop_front().unwrap();
             let second = roots.pop_front().unwrap();
@@ -58,8 +56,7 @@ impl Graph {
             .map(|owner| {
                 let count = fanin.min(owner);
                 let mut selected = BTreeSet::new();
-                // Floyd sampling avoids shuffling all earlier vertices when
-                // only a bounded number of incoming edges is requested.
+                // Avoid scanning all predecessors to sample a bounded fan-in.
                 for limit in owner - count..owner {
                     let candidate = random.below(limit + 1);
                     if !selected.insert(candidate) {
@@ -85,7 +82,7 @@ impl Graph {
         )
     }
 
-    // This deliberately independent traversal is an oracle, not timed work.
+    // Keep reachability checks independent of the measured SCC algorithm.
     pub fn ancestors(&self) -> Vec<BTreeSet<usize>> {
         (0..self.parents.len())
             .map(|owner| {

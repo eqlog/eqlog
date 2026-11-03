@@ -39,6 +39,7 @@ fn interval_index(samples: usize) -> usize {
     for k in mode..samples {
         weights[k + 1] = weights[k] * (samples - k) as f64 / (k + 1) as f64;
     }
+    // Binomial ranks avoid a Gaussian noise assumption; pairs must be independent.
     let limit = weights.iter().sum::<f64>() * 0.025;
     let mut tail = 0.0;
     let mut index = 0;
@@ -52,9 +53,6 @@ fn interval_index(samples: usize) -> usize {
     index
 }
 
-/// The median interval has at least 95% coverage for independent observations
-/// from a fixed ratio distribution; correlated drift invalidates that guarantee.
-/// Finite size sweeps can detect scaling divergence but cannot prove a big-O bound.
 pub fn summarize(pairs: &[Pair]) -> Summary {
     assert!(!pairs.is_empty(), "at least one timing pair is required");
     let mut native = Vec::with_capacity(pairs.len());
@@ -115,9 +113,6 @@ pub struct RelativeGrowth {
     pub upper: Option<f64>,
 }
 
-/// Combines the two cell intervals conservatively and normalizes their ratio
-/// to a doubling of the varied size. This is not a simultaneous 95% confidence
-/// guarantee for the pair or for an entire sweep.
 pub fn relative_growth(before: &Summary, after: &Summary, size_factor: f64) -> RelativeGrowth {
     assert!(
         size_factor.is_finite() && size_factor > 1.0,
@@ -136,6 +131,7 @@ pub fn relative_growth(before: &Summary, after: &Summary, size_factor: f64) -> R
         per_doubling.is_finite(),
         "normalized ratio growth overflowed"
     );
+    // Treating the earlier median as exact would overstate a change.
     let (lower, upper) = match valid_interval(before).zip(valid_interval(after)) {
         Some(((before_lower, before_upper), (after_lower, after_upper))) => {
             let lower = (after_lower / before_upper).powf(exponent);

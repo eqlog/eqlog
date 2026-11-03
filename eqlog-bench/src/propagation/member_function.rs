@@ -11,22 +11,14 @@ pub struct Benchmark {
     input: Input,
 }
 
-impl Benchmark {
-    pub fn new(params: &Params, graph: Graph) -> Self {
-        let input = Input::new(params, graph);
-        Self { input }
-    }
+pub fn case(params: &Params, graph: Graph) -> Benchmark {
+    let input = Input::new(params, graph);
+    Benchmark { input }
 }
 
 impl Case for Benchmark {
-    type Native<'a>
-        = Native<'a>
-    where
-        Self: 'a;
-    type Cow<'a>
-        = Cow<'a>
-    where
-        Self: 'a;
+    type Native<'a> = Native<'a>;
+    type Cow<'a> = Cow<'a>;
 
     fn native(&self) -> Native<'_> {
         Native::new(self)

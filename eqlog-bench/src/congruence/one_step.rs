@@ -196,8 +196,6 @@ impl Workload for Cow<'_> {
         if self.closed {
             return;
         }
-        // K fresh results collide with K inherited roots at each step. Shared
-        // snapshots and direct aliases cost O(N K log(2 + N K)) in total.
         for owner in 1..self.worlds.len() {
             let local = self.worlds[owner].clone();
             let mut world = self.worlds[owner - 1].clone();

@@ -223,8 +223,6 @@ impl Workload for Cow<'_> {
         if self.closed {
             return;
         }
-        // Each fresh member participates in one collision. Following successors
-        // costs O(N K (D + 1) log(2 + N K (D + 1))) across all snapshots.
         for owner in 1..self.worlds.len() {
             let local = self.worlds[owner].clone();
             let mut world = self.worlds[owner - 1].clone();

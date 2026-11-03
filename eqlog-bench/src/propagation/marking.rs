@@ -11,22 +11,14 @@ pub struct Benchmark {
     input: Input,
 }
 
-impl Benchmark {
-    pub fn new(params: &Params, graph: Graph) -> Self {
-        let input = Input::new(params, graph);
-        Self { input }
-    }
+pub fn case(params: &Params, graph: Graph) -> Benchmark {
+    let input = Input::new(params, graph);
+    Benchmark { input }
 }
 
 impl Case for Benchmark {
-    type Native<'a>
-        = Native<'a>
-    where
-        Self: 'a;
-    type Cow<'a>
-        = Cow<'a>
-    where
-        Self: 'a;
+    type Native<'a> = Native<'a>;
+    type Cow<'a> = Cow<'a>;
 
     fn native(&self) -> Native<'_> {
         Native::new(self)
@@ -179,7 +171,7 @@ impl Workload for Cow<'_> {
         for owner in 0..self.worlds.len() {
             let (previous, current) = self.worlds.split_at_mut(owner);
             let world = &mut current[0];
-            // Parent marks are complete, so only local seeds need a rule application.
+            // Inherited marks are already closed.
             world.marked = world.should_mark.clone();
             for &parent in &self.case.input.graph.parents[owner] {
                 world.carrier = world.carrier.union(&previous[parent].carrier);

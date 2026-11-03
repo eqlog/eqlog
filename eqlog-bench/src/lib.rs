@@ -33,7 +33,7 @@ pub trait Case {
     fn cow(&self) -> Self::Cow<'_>;
 }
 
-// Fix the generator algorithm so seed reproducibility does not depend on a crate version.
+// Keep seeded inputs stable across dependency updates.
 struct Random(u64);
 
 impl Random {

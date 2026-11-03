@@ -59,3 +59,7 @@ Expose size sweeps, reviewed COW bounds and ratio-growth checks so
 performance comparisons distinguish scaling from constant overhead.
 Check host-specific expectation bands in both directions and require
 explicit refreshes, retaining raw observations outside the repository.
+
+Keep each benchmark's constructors and CLI metadata in one place so
+changes cannot leave duplicate definitions out of sync. Remove unused
+reference machinery and retain only comments that explain invariants.

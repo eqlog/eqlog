@@ -59,8 +59,7 @@ impl Partition {
             return None;
         }
         let (winner, loser) = (left.min(right), left.max(right));
-        // Every collision pairs a fresh local member with an inherited root.
-        // Keeping that root makes aliases one hop deep across all snapshots.
+        // Keeping the inherited root leaves aliases one hop deep.
         self.parents.insert(loser, winner);
         Some((loser, winner))
     }

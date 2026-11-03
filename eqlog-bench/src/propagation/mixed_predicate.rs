@@ -13,24 +13,16 @@ pub struct Benchmark {
     keys: Vec<u32>,
 }
 
-impl Benchmark {
-    pub fn new(params: &Params, graph: Graph) -> Self {
-        let input = Input::new(params, graph);
-        let mut keys: Vec<_> = (0..u32::try_from(input.member_count()).unwrap()).collect();
-        Random::new(params.seed).shuffle(&mut keys);
-        Self { input, keys }
-    }
+pub fn case(params: &Params, graph: Graph) -> Benchmark {
+    let input = Input::new(params, graph);
+    let mut keys: Vec<_> = (0..u32::try_from(input.member_count()).unwrap()).collect();
+    Random::new(params.seed).shuffle(&mut keys);
+    Benchmark { input, keys }
 }
 
 impl Case for Benchmark {
-    type Native<'a>
-        = Native<'a>
-    where
-        Self: 'a;
-    type Cow<'a>
-        = Cow<'a>
-    where
-        Self: 'a;
+    type Native<'a> = Native<'a>;
+    type Cow<'a> = Cow<'a>;
 
     fn native(&self) -> Native<'_> {
         Native::new(self)

@@ -11,6 +11,14 @@ pub mod mixed_predicate;
 pub mod to_ambient;
 mod verify;
 
+pub use carrier::case as carrier;
+pub use from_ambient::case as from_ambient;
+pub use marking::case as marking;
+pub use member_function::case as member_function;
+pub use member_predicate::case as member_predicate;
+pub use mixed_predicate::case as mixed_predicate;
+pub use to_ambient::case as to_ambient;
+
 #[derive(Clone, Debug)]
 pub struct Params {
     pub vertices: usize,
@@ -56,32 +64,4 @@ impl Input {
         let end = start.checked_add(self.members).unwrap();
         (start..end).map(|origin| u32::try_from(origin).unwrap())
     }
-}
-
-pub fn carrier(params: &Params, graph: Graph) -> carrier::Benchmark {
-    carrier::Benchmark::new(params, graph)
-}
-
-pub fn member_predicate(params: &Params, graph: Graph) -> member_predicate::Benchmark {
-    member_predicate::Benchmark::new(params, graph)
-}
-
-pub fn mixed_predicate(params: &Params, graph: Graph) -> mixed_predicate::Benchmark {
-    mixed_predicate::Benchmark::new(params, graph)
-}
-
-pub fn from_ambient(params: &Params, graph: Graph) -> from_ambient::Benchmark {
-    from_ambient::Benchmark::new(params, graph)
-}
-
-pub fn to_ambient(params: &Params, graph: Graph) -> to_ambient::Benchmark {
-    to_ambient::Benchmark::new(params, graph)
-}
-
-pub fn member_function(params: &Params, graph: Graph) -> member_function::Benchmark {
-    member_function::Benchmark::new(params, graph)
-}
-
-pub fn marking(params: &Params, graph: Graph) -> marking::Benchmark {
-    marking::Benchmark::new(params, graph)
 }

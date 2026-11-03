@@ -1,6 +1,5 @@
 use super::spec::{oracle, Inputs, Metrics, Node, Operation, SEED};
 use eqlog_runtime::{PrefixTree1, PrefixTree2};
-use std::collections::BTreeMap;
 
 #[derive(Clone)]
 struct World {
@@ -14,22 +13,6 @@ fn singleton(tree: &PrefixTree1) -> u32 {
     let [value] = iter.next().unwrap();
     assert!(iter.next().is_none(), "item must be functional");
     value
-}
-
-fn root(parent: &BTreeMap<u32, u32>, mut value: u32) -> u32 {
-    while let Some(&next) = parent.get(&value) {
-        assert!(next < value);
-        value = next;
-    }
-    value
-}
-
-fn remap_unary(tree: &PrefixTree1, parent: &BTreeMap<u32, u32>) -> PrefixTree1 {
-    let mut result = PrefixTree1::new();
-    for [value] in tree.iter() {
-        result.insert([root(parent, value)]);
-    }
-    result
 }
 
 impl World {
@@ -51,39 +34,10 @@ impl World {
     }
 
     fn union_from(&mut self, other: &Self) {
-        let mut parent = BTreeMap::new();
-        // Wide merges should not rescan all previously accumulated keys.
-        let (probe, known) = if self.item.map.len() <= other.item.map.len() {
-            (&self.item.map, &other.item.map)
-        } else {
-            (&other.item.map, &self.item.map)
-        };
-        assert!(
-            probe.all_difference_entries(known, |_, incoming, existing| {
-                if let Some(existing) = existing {
-                    let left = root(&parent, singleton(incoming));
-                    let right = root(&parent, singleton(existing));
-                    if left != right {
-                        parent.insert(left.max(right), left.min(right));
-                    }
-                }
-                true
-            })
-        );
+        // A single origin per key makes functionality checks unnecessary.
         self.carrier = self.carrier.union(&other.carrier);
         self.item = self.item.union(&other.item);
         self.marked = self.marked.union(&other.marked);
-        if parent.is_empty() {
-            return;
-        }
-        // Item collisions identify images arriving along different paths.
-        self.carrier = remap_unary(&self.carrier, &parent);
-        self.marked = remap_unary(&self.marked, &parent);
-        let mut item = PrefixTree2::new();
-        for [key, value] in self.item.iter() {
-            item.insert([key, root(&parent, value)]);
-        }
-        self.item = item;
     }
 
     fn add_node(&mut self, owner: usize, node: &Node) {
@@ -95,7 +49,7 @@ impl World {
         self.add_local(node.output, SEED + owner as u32);
     }
 
-    fn apply_rule(&mut self, node: &Node) -> bool {
+    fn apply_rule(&mut self, node: &Node) {
         let ready = match node.operation {
             Operation::Job { input } => {
                 let input = self.lookup(input);
@@ -107,11 +61,10 @@ impl World {
                 self.marked.contains([left]) && self.marked.contains([right])
             }
         };
-        if !ready {
-            return false;
+        if ready {
+            let output = self.lookup(node.output);
+            self.marked.insert([output]);
         }
-        let output = self.lookup(node.output);
-        self.marked.insert([output])
     }
 
     fn mark_seeds(&mut self, seed_mask: u32) {
