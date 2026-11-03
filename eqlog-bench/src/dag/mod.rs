@@ -1,10 +1,19 @@
-use crate::{Case, Config, Engine, Metrics, Random, Workload};
+use crate::{Case, Metrics, Random, Workload};
 
 use self::spec::{Inputs, Node, Operation, SEED};
 
 mod cow;
 mod native;
 mod spec;
+
+#[derive(Clone, Copy, Debug)]
+pub struct Params {
+    pub vertices: usize,
+    pub parents: usize,
+    pub width: usize,
+    pub seed: u64,
+    pub seed_mask: u32,
+}
 
 #[derive(Clone, Copy)]
 pub enum Variant {
@@ -23,7 +32,7 @@ fn sample(random: &mut Random, start: usize, end: usize, count: usize) -> Vec<us
     values
 }
 
-fn generate(config: &Config, variant: Variant) -> Inputs {
+fn generate(config: &Params, variant: Variant) -> Inputs {
     assert!(config.vertices > 0 && config.parents > 0 && config.width > 0);
     let bound = SEED
         .checked_add(u32::try_from(config.vertices).unwrap())
@@ -123,73 +132,76 @@ fn generate(config: &Config, variant: Variant) -> Inputs {
     Inputs::new(nodes)
 }
 
-struct DagCase {
+pub struct DagCase {
     inputs: Inputs,
     seed_mask: u32,
 }
 
-enum Evaluator {
-    Native(native::Engine),
-    Cow(cow::Engine),
+pub struct Native<'a> {
+    engine: native::Engine,
+    case: &'a DagCase,
 }
 
-struct DagWorkload<'a> {
-    evaluator: Evaluator,
+pub struct Cow<'a> {
+    engine: cow::Engine,
     case: &'a DagCase,
 }
 
 impl Case for DagCase {
-    fn prepare(&self, engine: Engine) -> Box<dyn Workload + '_> {
-        let evaluator = match engine {
-            Engine::Native => {
-                let mut model = native::Engine::construct(&self.inputs);
-                model.mark_seeds(self.seed_mask);
-                Evaluator::Native(model)
-            }
-            Engine::Cow => {
-                let mut model = cow::Engine::construct(&self.inputs);
-                model.mark_seeds(self.seed_mask);
-                Evaluator::Cow(model)
-            }
-        };
-        Box::new(DagWorkload {
-            evaluator,
-            case: self,
-        })
+    type Native<'a> = Native<'a>;
+    type Cow<'a> = Cow<'a>;
+
+    fn native(&self) -> Self::Native<'_> {
+        let mut engine = native::Engine::construct(&self.inputs);
+        engine.mark_seeds(self.seed_mask);
+        Native { engine, case: self }
+    }
+
+    fn cow(&self) -> Self::Cow<'_> {
+        let mut engine = cow::Engine::construct(&self.inputs);
+        engine.mark_seeds(self.seed_mask);
+        Cow { engine, case: self }
     }
 }
 
-impl Workload for DagWorkload<'_> {
+fn metrics(metrics: spec::Metrics) -> Metrics {
+    Metrics {
+        worlds: metrics.vertices,
+        morphisms: metrics.edges,
+        owned_elements: metrics.local_members,
+        local_size: metrics.local_contribution_size,
+        checksum: metrics.checksum,
+    }
+}
+
+impl Workload for Native<'_> {
     fn close(&mut self) {
-        match &mut self.evaluator {
-            Evaluator::Native(model) => model.close(),
-            Evaluator::Cow(model) => {
-                model.close(&self.case.inputs);
-            }
-        }
+        self.engine.close();
     }
 
     fn verify(&self) -> Metrics {
-        let inputs = &self.case.inputs;
-        let mask = self.case.seed_mask;
-        let metrics = match &self.evaluator {
-            Evaluator::Native(model) => model.verify(inputs, mask),
-            Evaluator::Cow(model) => cow::verify(model, inputs, mask),
-        };
-        Metrics {
-            worlds: metrics.vertices,
-            morphisms: metrics.edges,
-            owned_elements: metrics.local_members,
-            local_size: metrics.local_contribution_size,
-            checksum: metrics.checksum,
-        }
+        metrics(self.engine.verify(&self.case.inputs, self.case.seed_mask))
     }
 }
 
-pub fn case(config: &Config, variant: Variant) -> Box<dyn Case> {
+impl Workload for Cow<'_> {
+    fn close(&mut self) {
+        self.engine.close(&self.case.inputs);
+    }
+
+    fn verify(&self) -> Metrics {
+        metrics(cow::verify(
+            &self.engine,
+            &self.case.inputs,
+            self.case.seed_mask,
+        ))
+    }
+}
+
+pub fn case(config: &Params, variant: Variant) -> DagCase {
     assert_eq!(config.seed_mask >> SEED, 0);
-    Box::new(DagCase {
+    DagCase {
         inputs: generate(config, variant),
         seed_mask: config.seed_mask,
-    })
+    }
 }

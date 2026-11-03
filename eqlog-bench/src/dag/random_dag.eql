@@ -1,4 +1,4 @@
-// Stable names identify coincident images through item functionality.
+// Functionality makes inherited images agree across paths.
 type Key;
 
 model World {

@@ -30,7 +30,7 @@ impl World {
         }
         let mut rows = PrefixTree2::new();
         for [x] in left.iter() {
-            // Every x shares the same right-hand suffix of the product.
+            // Suffix sharing avoids materializing every pair.
             rows.insert_restriction(x, right.clone());
         }
         if let Some(previous) = self.pairs.get(group) {
@@ -84,7 +84,7 @@ impl World {
             let only_right = right.difference(other_right);
             let only_other_left = other_left.difference(left);
             let only_other_right = other_right.difference(right);
-            // All remaining products were completed in one of the two inputs.
+            // Each input already contains its internal products.
             self.product(group, &only_left, &only_other_right);
             self.product(group, &only_other_left, &only_right);
         }

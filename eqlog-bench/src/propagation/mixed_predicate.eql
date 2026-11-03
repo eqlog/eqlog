@@ -1,0 +1,6 @@
+type Ambient;
+
+model World {
+    type El;
+    pred association(Ambient, El);
+}

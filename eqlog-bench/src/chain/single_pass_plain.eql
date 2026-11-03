@@ -1,4 +1,3 @@
-// Keys name corresponding members across models.
 type Key;
 
 model World {
@@ -7,7 +6,6 @@ model World {
     pred marked(El);
 }
 
-// The harness gives each model one inherited input key and one local output key.
 pred job(World, Key, Key);
 
 rule propagate {

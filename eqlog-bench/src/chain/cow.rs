@@ -119,7 +119,7 @@ pub struct Engine<const EQUATION: bool> {
 }
 
 impl<const EQUATION: bool> Engine<EQUATION> {
-    pub fn construct(inputs: &Inputs, mask: u32) -> Self {
+    pub(super) fn construct(inputs: &Inputs, mask: u32) -> Self {
         let local: Vec<_> = inputs
             .jobs
             .iter()

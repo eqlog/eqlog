@@ -11,6 +11,8 @@ allocations = []
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 eqlog-runtime = { path = "../eqlog-runtime" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [build-dependencies]
 eqlog = { path = "../eqlog", features = ["rebuild"] }

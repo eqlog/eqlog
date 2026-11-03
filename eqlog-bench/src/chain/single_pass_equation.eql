@@ -1,4 +1,3 @@
-// Keys name corresponding members across models.
 type Key;
 
 model World {
@@ -7,7 +6,6 @@ model World {
     pred marked(El);
 }
 
-// Each local job also chooses two inherited keys to identify.
 pred job(World, Key, Key, Key, Key);
 
 rule propagate {

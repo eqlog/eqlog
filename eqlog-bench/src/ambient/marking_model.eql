@@ -1,0 +1,11 @@
+type Value;
+
+model World {
+    pred present(Value);
+    pred marked(Value);
+
+    rule mark {
+        if present(x);
+        then marked(x);
+    }
+}

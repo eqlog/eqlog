@@ -15,7 +15,7 @@ macro_rules! native_engine {
             }
 
             impl Engine {
-                pub fn construct(inputs: &Inputs, mask: u32) -> Self {
+                pub(in crate::chain) fn construct(inputs: &Inputs, mask: u32) -> Self {
                     let mut model = Model::new();
                     model.enable_compact_world();
                     let worlds: Vec<_> = inputs
