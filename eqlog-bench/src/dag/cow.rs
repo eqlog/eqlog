@@ -1,6 +1,6 @@
 use super::spec::{oracle, Inputs, Metrics, Node, Operation, SEED};
 use eqlog_runtime::{PrefixTree1, PrefixTree2};
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::BTreeMap;
 
 #[derive(Clone)]
 struct World {
@@ -124,41 +124,12 @@ impl World {
     }
 }
 
-fn topological_order(inputs: &Inputs) -> Vec<usize> {
-    let mut indegree: Vec<_> = inputs.nodes.iter().map(|node| node.parents.len()).collect();
-    let mut successors = vec![Vec::new(); inputs.nodes.len()];
-    for (owner, node) in inputs.nodes.iter().enumerate() {
-        for &parent in &node.parents {
-            successors[parent].push(owner);
-        }
-    }
-    let mut ready: VecDeque<_> = indegree
-        .iter()
-        .enumerate()
-        .filter_map(|(owner, &count)| (count == 0).then_some(owner))
-        .collect();
-    let mut order = Vec::with_capacity(inputs.nodes.len());
-    while let Some(owner) = ready.pop_front() {
-        order.push(owner);
-        for &next in &successors[owner] {
-            indegree[next] -= 1;
-            if indegree[next] == 0 {
-                ready.push_back(next);
-            }
-        }
-    }
-    assert_eq!(order.len(), inputs.nodes.len(), "graph must be acyclic");
-    order
-}
-
 pub struct Engine {
     worlds: Vec<World>,
-    order: Vec<usize>,
 }
 
 impl Engine {
     pub fn construct(inputs: &Inputs) -> Self {
-        let order = topological_order(inputs);
         let worlds = inputs
             .nodes
             .iter()
@@ -169,7 +140,7 @@ impl Engine {
                 world
             })
             .collect();
-        Self { worlds, order }
+        Self { worlds }
     }
 
     pub fn mark_seeds(&mut self, seed_mask: u32) {
@@ -177,7 +148,8 @@ impl Engine {
     }
 
     pub fn close(&mut self, inputs: &Inputs) {
-        for &owner in &self.order {
+        // Input validation guarantees every parent precedes its child.
+        for owner in 0..self.worlds.len() {
             let node = &inputs.nodes[owner];
             let mut world = self.worlds[owner].clone();
             for &parent in &node.parents {

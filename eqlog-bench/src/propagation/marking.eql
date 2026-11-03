@@ -1,0 +1,10 @@
+model World {
+    type El;
+    pred should_mark(El);
+    pred marked(El);
+
+    rule mark {
+        if should_mark(x);
+        then marked(x);
+    }
+}

@@ -1,0 +1,7 @@
+type Key;
+
+model World {
+    type El;
+    func from_ambient(Key) -> El;
+    func next(El) -> El;
+}

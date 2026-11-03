@@ -1,0 +1,4 @@
+model World {
+    type El;
+    func next(El) -> El;
+}

@@ -49,3 +49,13 @@ Remove historical results and the obsolete ETT profiling script and
 reports so the benchmark crate contains only maintained workloads.
 Use the normal Cargo build entry point and keep Eqlog programs beside
 their Rust adapters instead of maintaining custom generation paths.
+
+Isolate propagation, mixed-signature functions, member rules and
+congruence costs in small programs with specialized COW references.
+Keep implementation selection outside the timed path using concrete
+paired workloads. Preserve full semantic checks and finite-cycle cases.
+
+Expose size sweeps, reviewed COW bounds and ratio-growth checks so
+performance comparisons distinguish scaling from constant overhead.
+Check host-specific expectation bands in both directions and require
+explicit refreshes, retaining raw observations outside the repository.

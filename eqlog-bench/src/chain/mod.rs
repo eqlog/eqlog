@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use crate::{Case, Config, Engine, Metrics, Random, Workload};
+use crate::{Case, Metrics, Random, Workload};
 
 mod cow;
 mod native;
@@ -8,17 +8,19 @@ mod spec;
 
 const SEEDS: u32 = 8;
 
-#[derive(Clone, Copy)]
-pub enum Variant {
-    Plain,
-    Equation,
+#[derive(Clone, Copy, Debug)]
+pub struct Params {
+    pub vertices: usize,
+    pub seed: u64,
+    pub seed_mask: u32,
 }
 
-impl Variant {
-    fn equation(self) -> bool {
-        match self {
-            Self::Plain => false,
-            Self::Equation => true,
+impl Default for Params {
+    fn default() -> Self {
+        Self {
+            vertices: 64,
+            seed: 17,
+            seed_mask: 255,
         }
     }
 }
@@ -35,9 +37,8 @@ struct Inputs {
     jobs: Vec<Job>,
 }
 
-struct Chain {
+pub struct Chain<const EQUATION: bool> {
     inputs: Inputs,
-    variant: Variant,
     mask: u32,
 }
 
@@ -45,55 +46,69 @@ trait Evaluator: spec::View {
     fn close(&mut self);
 }
 
-struct Fixture<'a, E> {
+pub struct Fixture<'a, E, const EQUATION: bool> {
     engine: E,
-    chain: &'a Chain,
+    chain: &'a Chain<EQUATION>,
 }
 
-impl<E: Evaluator> Workload for Fixture<'_, E> {
+impl<E: Evaluator, const EQUATION: bool> Workload for Fixture<'_, E, EQUATION> {
     fn close(&mut self) {
         self.engine.close();
     }
 
     fn verify(&self) -> Metrics {
-        spec::verify(
-            &self.engine,
-            &self.chain.inputs,
-            self.chain.mask,
-            self.chain.variant.equation(),
-        )
+        spec::verify(&self.engine, &self.chain.inputs, self.chain.mask, EQUATION)
     }
 }
 
-impl Chain {
-    fn fixture<E: Evaluator + 'static>(&self, engine: E) -> Box<dyn Workload + '_> {
-        Box::new(Fixture {
-            engine,
+impl Case for Chain<false> {
+    type Native<'a> = Fixture<'a, native::plain::Engine, false>;
+    type Cow<'a> = Fixture<'a, cow::Engine<false>, false>;
+
+    fn native(&self) -> Self::Native<'_> {
+        Fixture {
+            engine: native::plain::Engine::construct(&self.inputs, self.mask),
             chain: self,
-        })
+        }
     }
-}
 
-impl Case for Chain {
-    fn prepare(&self, engine: Engine) -> Box<dyn Workload + '_> {
-        match (engine, self.variant) {
-            (Engine::Native, Variant::Plain) => {
-                self.fixture(native::plain::Engine::construct(&self.inputs, self.mask))
-            }
-            (Engine::Native, Variant::Equation) => {
-                self.fixture(native::equation::Engine::construct(&self.inputs, self.mask))
-            }
-            (Engine::Cow, Variant::Plain) => {
-                self.fixture(cow::Engine::<false>::construct(&self.inputs, self.mask))
-            }
-            (Engine::Cow, Variant::Equation) => {
-                self.fixture(cow::Engine::<true>::construct(&self.inputs, self.mask))
-            }
+    fn cow(&self) -> Self::Cow<'_> {
+        Fixture {
+            engine: cow::Engine::construct(&self.inputs, self.mask),
+            chain: self,
         }
     }
 }
 
-pub fn case(config: &Config, variant: Variant) -> Box<dyn Case> {
+impl Case for Chain<true> {
+    type Native<'a> = Fixture<'a, native::equation::Engine, true>;
+    type Cow<'a> = Fixture<'a, cow::Engine<true>, true>;
+
+    fn native(&self) -> Self::Native<'_> {
+        Fixture {
+            engine: native::equation::Engine::construct(&self.inputs, self.mask),
+            chain: self,
+        }
+    }
+
+    fn cow(&self) -> Self::Cow<'_> {
+        Fixture {
+            engine: cow::Engine::construct(&self.inputs, self.mask),
+            chain: self,
+        }
+    }
+}
+
+pub fn plain(params: &Params) -> Chain<false> {
+    generate(params)
+}
+
+pub fn equation(params: &Params) -> Chain<true> {
+    generate(params)
+}
+
+fn generate<const EQUATION: bool>(config: &Params) -> Chain<EQUATION> {
+    assert_eq!(config.seed_mask >> SEEDS, 0);
     assert!(config.vertices > 0);
     let end = SEEDS
         .checked_add(u32::try_from(config.vertices).unwrap())
@@ -119,9 +134,8 @@ pub fn case(config: &Config, variant: Variant) -> Box<dyn Case> {
         assert!(classes.remove(&left.max(right)));
         assert!(classes.insert(output));
     }
-    Box::new(Chain {
+    Chain {
         inputs: Inputs { jobs },
-        variant,
         mask: config.seed_mask,
-    })
+    }
 }

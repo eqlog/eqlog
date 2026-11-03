@@ -1,0 +1,5 @@
+type Value;
+
+model World {
+    pred present(Value);
+}

@@ -1,10 +1,31 @@
-use crate::{Case, Config, Engine, Metrics, Random, Workload};
+use crate::{Case, Metrics, Random, Workload};
 
 use self::spec::{Element, Evaluator, Inputs, Node, Role};
 
 mod cow;
 mod native;
 mod spec;
+
+#[derive(Clone, Copy, Debug)]
+pub struct Params {
+    pub vertices: usize,
+    pub parents: usize,
+    pub width: usize,
+    pub members: usize,
+    pub seed: u64,
+}
+
+impl Default for Params {
+    fn default() -> Self {
+        Self {
+            vertices: 64,
+            parents: 4,
+            width: 8,
+            members: 16,
+            seed: 17,
+        }
+    }
+}
 
 #[derive(Clone, Copy)]
 pub enum Variant {
@@ -17,32 +38,36 @@ pub enum Variant {
     Chain,
 }
 
-pub fn case(config: &Config, variant: Variant) -> Box<dyn Case> {
-    Box::new(JoinCase {
+pub fn case(config: &Params, variant: Variant) -> JoinCase {
+    JoinCase {
         input: generate(config, variant),
-    })
+    }
 }
 
-struct JoinCase {
+pub struct JoinCase {
     input: Inputs,
 }
 
 impl Case for JoinCase {
-    fn prepare(&self, engine: Engine) -> Box<dyn Workload + '_> {
-        match engine {
-            Engine::Native => Box::new(Run {
-                input: &self.input,
-                engine: native::Native::new(&self.input),
-            }),
-            Engine::Cow => Box::new(Run {
-                input: &self.input,
-                engine: cow::Cow::new(&self.input),
-            }),
+    type Native<'a> = Run<'a, native::Native>;
+    type Cow<'a> = Run<'a, cow::Cow>;
+
+    fn native(&self) -> Self::Native<'_> {
+        Run {
+            input: &self.input,
+            engine: native::Native::new(&self.input),
+        }
+    }
+
+    fn cow(&self) -> Self::Cow<'_> {
+        Run {
+            input: &self.input,
+            engine: cow::Cow::new(&self.input),
         }
     }
 }
 
-struct Run<'a, E> {
+pub struct Run<'a, E> {
     input: &'a Inputs,
     engine: E,
 }
@@ -57,7 +82,7 @@ impl<E: Evaluator> Workload for Run<'_, E> {
     }
 }
 
-fn parents(owner: usize, config: &Config, variant: Variant, random: &mut Random) -> Vec<usize> {
+fn parents(owner: usize, config: &Params, variant: Variant, random: &mut Random) -> Vec<usize> {
     match variant {
         Variant::Fanout | Variant::Overlap | Variant::Split => {
             if owner < config.parents {
@@ -95,7 +120,7 @@ fn parents(owner: usize, config: &Config, variant: Variant, random: &mut Random)
     }
 }
 
-fn generate(config: &Config, variant: Variant) -> Inputs {
+fn generate(config: &Params, variant: Variant) -> Inputs {
     assert!(config.vertices > 0 && config.parents > 0 && config.width > 0 && config.members > 0);
     let mut random = Random::new(config.seed);
     let mut nodes = Vec::with_capacity(config.vertices);

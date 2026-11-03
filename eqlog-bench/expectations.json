@@ -1,0 +1,510 @@
+{
+  "host": "x86_64; Intel(R) Xeon(R) Platinum 8488C; MemTotal:       16078416 kB",
+  "compiler": "rustc 1.95.0 (59807616e 2026-04-14)\nbinary: rustc\ncommit-hash: 59807616e1fa2540724bfbac14d7976d7e4a3860\ncommit-date: 2026-04-14\nhost: x86_64-unknown-linux-gnu\nrelease: 1.95.0\nLLVM version: 22.1.2\n",
+  "cases": {
+    "congruence/chain/{\"keys\":16,\"seed\":17,\"vertices\":128}": {
+      "metrics": {
+        "worlds": 128,
+        "morphisms": 127,
+        "owned_elements": 2048,
+        "local_size": 4096,
+        "checksum": 15556496380764877349
+      },
+      "expected": {
+        "lower": 8.548662499917269,
+        "upper": 12.8229937498759,
+        "reference": {
+          "native_ns": 4872811.0,
+          "cow_ns": 456035.0,
+          "ratio": 10.685828124896585,
+          "lower": 10.421675147847614,
+          "upper": 11.297698670585847,
+          "samples": 15
+        }
+      }
+    },
+    "congruence/chain/{\"keys\":16,\"seed\":17,\"vertices\":256}": {
+      "metrics": {
+        "worlds": 256,
+        "morphisms": 255,
+        "owned_elements": 4096,
+        "local_size": 8192,
+        "checksum": 16892249942058301221
+      },
+      "expected": {
+        "lower": 8.553519445778175,
+        "upper": 12.83027916866726,
+        "reference": {
+          "native_ns": 10154638.0,
+          "cow_ns": 953673.0,
+          "ratio": 10.691899307222718,
+          "lower": 10.52006290507053,
+          "upper": 10.93541946495333,
+          "samples": 15
+        }
+      }
+    },
+    "congruence/chain/{\"keys\":16,\"seed\":17,\"vertices\":64}": {
+      "metrics": {
+        "worlds": 64,
+        "morphisms": 63,
+        "owned_elements": 1024,
+        "local_size": 2048,
+        "checksum": 5924638619748281253
+      },
+      "expected": {
+        "lower": 8.191865799868918,
+        "upper": 12.287798699803375,
+        "reference": {
+          "native_ns": 2307887.0,
+          "cow_ns": 227355.0,
+          "ratio": 10.239832249836146,
+          "lower": 10.00759165182204,
+          "upper": 10.415194409604014,
+          "samples": 15
+        }
+      }
+    },
+    "congruence/chain/{\"keys\":4,\"seed\":17,\"vertices\":128}": {
+      "metrics": {
+        "worlds": 128,
+        "morphisms": 127,
+        "owned_elements": 512,
+        "local_size": 1024,
+        "checksum": 11863897637112174629
+      },
+      "expected": {
+        "lower": 10.967070377390248,
+        "upper": 16.450605566085372,
+        "reference": {
+          "native_ns": 1866884.0,
+          "cow_ns": 135090.0,
+          "ratio": 13.70883797173781,
+          "lower": 12.684701241349597,
+          "upper": 13.97672386755679,
+          "samples": 15
+        }
+      }
+    },
+    "congruence/chain/{\"keys\":4,\"seed\":17,\"vertices\":256}": {
+      "metrics": {
+        "worlds": 256,
+        "morphisms": 255,
+        "owned_elements": 1024,
+        "local_size": 2048,
+        "checksum": 7645443729632234277
+      },
+      "expected": {
+        "lower": 11.002690481573595,
+        "upper": 16.50403572236039,
+        "reference": {
+          "native_ns": 3872071.0,
+          "cow_ns": 283293.0,
+          "ratio": 13.753363101966992,
+          "lower": 13.160555470983239,
+          "upper": 13.999048552751058,
+          "samples": 15
+        }
+      }
+    },
+    "congruence/chain/{\"keys\":4,\"seed\":17,\"vertices\":64}": {
+      "metrics": {
+        "worlds": 64,
+        "morphisms": 63,
+        "owned_elements": 256,
+        "local_size": 512,
+        "checksum": 7025126062802485157
+      },
+      "expected": {
+        "lower": 10.837696786715549,
+        "upper": 16.25654518007332,
+        "reference": {
+          "native_ns": 900444.0,
+          "cow_ns": 65866.0,
+          "ratio": 13.547120983394436,
+          "lower": 13.24174878309391,
+          "upper": 14.138060277015146,
+          "samples": 15
+        }
+      }
+    },
+    "from-ambient/chain/{\"members\":16,\"seed\":17,\"vertices\":128}": {
+      "metrics": {
+        "worlds": 128,
+        "morphisms": 127,
+        "owned_elements": 2048,
+        "local_size": 4096,
+        "checksum": 14088263480944026594
+      },
+      "expected": {
+        "lower": 2.654884033466432,
+        "upper": 3.982326050199647,
+        "reference": {
+          "native_ns": 3371472.0,
+          "cow_ns": 1006023.0,
+          "ratio": 3.3186050418330395,
+          "lower": 3.2338883111859253,
+          "upper": 3.4502622385540493,
+          "samples": 15
+        }
+      }
+    },
+    "from-ambient/chain/{\"members\":16,\"seed\":17,\"vertices\":256}": {
+      "metrics": {
+        "worlds": 256,
+        "morphisms": 255,
+        "owned_elements": 4096,
+        "local_size": 8192,
+        "checksum": 1252120044532680512
+      },
+      "expected": {
+        "lower": 2.6324513701129066,
+        "upper": 3.9486770551693593,
+        "reference": {
+          "native_ns": 7382625.0,
+          "cow_ns": 2247050.0,
+          "ratio": 3.290564212641133,
+          "lower": 3.197017069874873,
+          "upper": 3.3258456081637897,
+          "samples": 15
+        }
+      }
+    },
+    "from-ambient/chain/{\"members\":16,\"seed\":17,\"vertices\":64}": {
+      "metrics": {
+        "worlds": 64,
+        "morphisms": 63,
+        "owned_elements": 1024,
+        "local_size": 2048,
+        "checksum": 12187805746413581207
+      },
+      "expected": {
+        "lower": 2.6610092524015343,
+        "upper": 3.9915138786023014,
+        "reference": {
+          "native_ns": 1497263.0,
+          "cow_ns": 454916.0,
+          "ratio": 3.326261565501918,
+          "lower": 3.2698975208640157,
+          "upper": 3.3859763358862023,
+          "samples": 15
+        }
+      }
+    },
+    "from-ambient/chain/{\"members\":4,\"seed\":17,\"vertices\":128}": {
+      "metrics": {
+        "worlds": 128,
+        "morphisms": 127,
+        "owned_elements": 512,
+        "local_size": 1024,
+        "checksum": 6740427835253331300
+      },
+      "expected": {
+        "lower": 4.458799007758819,
+        "upper": 6.688198511638228,
+        "reference": {
+          "native_ns": 1408733.0,
+          "cow_ns": 252440.0,
+          "ratio": 5.5734987596985235,
+          "lower": 5.34904890333307,
+          "upper": 5.6664323739312055,
+          "samples": 15
+        }
+      }
+    },
+    "from-ambient/chain/{\"members\":4,\"seed\":17,\"vertices\":256}": {
+      "metrics": {
+        "worlds": 256,
+        "morphisms": 255,
+        "owned_elements": 1024,
+        "local_size": 2048,
+        "checksum": 5209071619028331144
+      },
+      "expected": {
+        "lower": 4.349417226110556,
+        "upper": 6.5241258391658326,
+        "reference": {
+          "native_ns": 3049073.0,
+          "cow_ns": 562418.0,
+          "ratio": 5.436771532638194,
+          "lower": 5.35799174295207,
+          "upper": 5.4959519671580095,
+          "samples": 15
+        }
+      }
+    },
+    "from-ambient/chain/{\"members\":4,\"seed\":17,\"vertices\":64}": {
+      "metrics": {
+        "worlds": 64,
+        "morphisms": 63,
+        "owned_elements": 256,
+        "local_size": 512,
+        "checksum": 5228414536322094152
+      },
+      "expected": {
+        "lower": 4.800551265968161,
+        "upper": 7.200826898952241,
+        "reference": {
+          "native_ns": 675619.0,
+          "cow_ns": 112995.0,
+          "ratio": 6.000689082460201,
+          "lower": 5.808326067619576,
+          "upper": 6.04404801037678,
+          "samples": 15
+        }
+      }
+    },
+    "mixed-predicate/chain/{\"members\":16,\"seed\":17,\"vertices\":128}": {
+      "metrics": {
+        "worlds": 128,
+        "morphisms": 127,
+        "owned_elements": 2048,
+        "local_size": 4096,
+        "checksum": 14088263480944026594
+      },
+      "expected": {
+        "lower": 1.5053972301831782,
+        "upper": 2.258095845274767,
+        "reference": {
+          "native_ns": 1894915.0,
+          "cow_ns": 1006061.0,
+          "ratio": 1.8817465377289726,
+          "lower": 1.8518237592868503,
+          "upper": 1.9049152547483574,
+          "samples": 15
+        }
+      }
+    },
+    "mixed-predicate/chain/{\"members\":16,\"seed\":17,\"vertices\":256}": {
+      "metrics": {
+        "worlds": 256,
+        "morphisms": 255,
+        "owned_elements": 4096,
+        "local_size": 8192,
+        "checksum": 1252120044532680512
+      },
+      "expected": {
+        "lower": 1.4352008904001758,
+        "upper": 2.1528013356002638,
+        "reference": {
+          "native_ns": 4101967.0,
+          "cow_ns": 2273456.0,
+          "ratio": 1.7940011130002198,
+          "lower": 1.7351042122171276,
+          "upper": 1.8381504880812989,
+          "samples": 15
+        }
+      }
+    },
+    "mixed-predicate/chain/{\"members\":16,\"seed\":17,\"vertices\":64}": {
+      "metrics": {
+        "worlds": 64,
+        "morphisms": 63,
+        "owned_elements": 1024,
+        "local_size": 2048,
+        "checksum": 12187805746413581207
+      },
+      "expected": {
+        "lower": 1.5327202056408935,
+        "upper": 2.29908030846134,
+        "reference": {
+          "native_ns": 858890.0,
+          "cow_ns": 458688.0,
+          "ratio": 1.9159002570511168,
+          "lower": 1.8269675925925926,
+          "upper": 1.943684349697279,
+          "samples": 15
+        }
+      }
+    },
+    "mixed-predicate/chain/{\"members\":4,\"seed\":17,\"vertices\":128}": {
+      "metrics": {
+        "worlds": 128,
+        "morphisms": 127,
+        "owned_elements": 512,
+        "local_size": 1024,
+        "checksum": 6740427835253331300
+      },
+      "expected": {
+        "lower": 2.122707025170397,
+        "upper": 3.184060537755595,
+        "reference": {
+          "native_ns": 693771.0,
+          "cow_ns": 270586.0,
+          "ratio": 2.653383781462996,
+          "lower": 2.5330395363681935,
+          "upper": 2.850899362385309,
+          "samples": 15
+        }
+      }
+    },
+    "mixed-predicate/chain/{\"members\":4,\"seed\":17,\"vertices\":256}": {
+      "metrics": {
+        "worlds": 256,
+        "morphisms": 255,
+        "owned_elements": 1024,
+        "local_size": 2048,
+        "checksum": 5209071619028331144
+      },
+      "expected": {
+        "lower": 2.0693515343680153,
+        "upper": 3.104027301552023,
+        "reference": {
+          "native_ns": 1448754.0,
+          "cow_ns": 560396.0,
+          "ratio": 2.5866894179600193,
+          "lower": 2.5035929279377367,
+          "upper": 2.627522797445073,
+          "samples": 15
+        }
+      }
+    },
+    "mixed-predicate/chain/{\"members\":4,\"seed\":17,\"vertices\":64}": {
+      "metrics": {
+        "worlds": 64,
+        "morphisms": 63,
+        "owned_elements": 256,
+        "local_size": 512,
+        "checksum": 5228414536322094152
+      },
+      "expected": {
+        "lower": 2.3572548436994767,
+        "upper": 3.5358822655492146,
+        "reference": {
+          "native_ns": 337454.0,
+          "cow_ns": 113873.0,
+          "ratio": 2.9465685546243456,
+          "lower": 2.8789623087841036,
+          "upper": 3.0673381749844126,
+          "samples": 15
+        }
+      }
+    },
+    "recursive-congruence/chain/{\"depth\":8,\"keys\":16,\"seed\":17,\"vertices\":128}": {
+      "metrics": {
+        "worlds": 128,
+        "morphisms": 127,
+        "owned_elements": 18432,
+        "local_size": 36864,
+        "checksum": 1113040423226249253
+      },
+      "expected": {
+        "lower": 11.211432057824123,
+        "upper": 16.817148086736182,
+        "reference": {
+          "native_ns": 96542670.0,
+          "cow_ns": 6872256.0,
+          "ratio": 14.014290072280152,
+          "lower": 13.90689712578383,
+          "upper": 14.209883762758162,
+          "samples": 15
+        }
+      }
+    },
+    "recursive-congruence/chain/{\"depth\":8,\"keys\":16,\"seed\":17,\"vertices\":256}": {
+      "metrics": {
+        "worlds": 256,
+        "morphisms": 255,
+        "owned_elements": 36864,
+        "local_size": 73728,
+        "checksum": 4728306975226897189
+      },
+      "expected": {
+        "lower": 11.008154131003804,
+        "upper": 16.512231196505706,
+        "reference": {
+          "native_ns": 194913312.0,
+          "cow_ns": 14197163.0,
+          "ratio": 13.760192663754754,
+          "lower": 13.617230401420077,
+          "upper": 13.885607364782192,
+          "samples": 15
+        }
+      }
+    },
+    "recursive-congruence/chain/{\"depth\":8,\"keys\":16,\"seed\":17,\"vertices\":64}": {
+      "metrics": {
+        "worlds": 64,
+        "morphisms": 63,
+        "owned_elements": 9216,
+        "local_size": 18432,
+        "checksum": 15372136998799322021
+      },
+      "expected": {
+        "lower": 11.139653465920286,
+        "upper": 16.709480198880428,
+        "reference": {
+          "native_ns": 46683252.0,
+          "cow_ns": 3355011.0,
+          "ratio": 13.924566832400357,
+          "lower": 13.640513088107049,
+          "upper": 14.19778621798049,
+          "samples": 15
+        }
+      }
+    },
+    "recursive-congruence/chain/{\"depth\":8,\"keys\":4,\"seed\":17,\"vertices\":128}": {
+      "metrics": {
+        "worlds": 128,
+        "morphisms": 127,
+        "owned_elements": 4608,
+        "local_size": 9216,
+        "checksum": 11432006970047930405
+      },
+      "expected": {
+        "lower": 9.917120227188686,
+        "upper": 14.875680340783028,
+        "reference": {
+          "native_ns": 19646618.0,
+          "cow_ns": 1587403.0,
+          "ratio": 12.396400283985857,
+          "lower": 12.23264268626377,
+          "upper": 12.526606997142718,
+          "samples": 15
+        }
+      }
+    },
+    "recursive-congruence/chain/{\"depth\":8,\"keys\":4,\"seed\":17,\"vertices\":256}": {
+      "metrics": {
+        "worlds": 256,
+        "morphisms": 255,
+        "owned_elements": 9216,
+        "local_size": 18432,
+        "checksum": 10254430314801709861
+      },
+      "expected": {
+        "lower": 10.019381202138938,
+        "upper": 15.029071803208407,
+        "reference": {
+          "native_ns": 41634205.0,
+          "cow_ns": 3249170.0,
+          "ratio": 12.524226502673672,
+          "lower": 12.279881137602333,
+          "upper": 13.2585308303095,
+          "samples": 15
+        }
+      }
+    },
+    "recursive-congruence/chain/{\"depth\":8,\"keys\":4,\"seed\":17,\"vertices\":64}": {
+      "metrics": {
+        "worlds": 64,
+        "morphisms": 63,
+        "owned_elements": 2304,
+        "local_size": 4608,
+        "checksum": 8308114880504337829
+      },
+      "expected": {
+        "lower": 9.718718457327945,
+        "upper": 14.578077685991914,
+        "reference": {
+          "native_ns": 9572002.0,
+          "cow_ns": 790736.0,
+          "ratio": 12.14839807165993,
+          "lower": 12.056754400991545,
+          "upper": 12.223142626099262,
+          "samples": 15
+        }
+      }
+    }
+  }
+}
