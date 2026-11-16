@@ -2,7 +2,6 @@ use std::collections::BTreeSet;
 
 use crate::graph::Graph;
 
-pub mod carrier;
 pub mod from_ambient;
 pub mod marking;
 pub mod member_function;
@@ -11,7 +10,6 @@ pub mod mixed_predicate;
 pub mod to_ambient;
 mod verify;
 
-pub use carrier::case as carrier;
 pub use from_ambient::case as from_ambient;
 pub use marking::case as marking;
 pub use member_function::case as member_function;

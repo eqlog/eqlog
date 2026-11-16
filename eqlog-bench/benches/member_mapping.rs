@@ -60,7 +60,6 @@ const MEMBER_JOIN: &str = "O(N+E+(L+E(M+P)) log(2+L)) upper; L=local rows, M=max
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 enum Scenario {
-    Carrier,
     MemberPredicate,
     MixedPredicate,
     FromAmbient,
@@ -90,8 +89,7 @@ impl Scenario {
 
     fn declaration(self) -> Declaration {
         let (shapes, bound, slow): (&'static [Shape], &'static str, bool) = match self {
-            Self::Carrier
-            | Self::MemberPredicate
+            Self::MemberPredicate
             | Self::MixedPredicate
             | Self::FromAmbient
             | Self::ToAmbient
@@ -167,9 +165,6 @@ impl Scenario {
     ) -> Result<()> {
         let label = |values: &[(&str, usize)]| self.label(shape, values, args.seed);
         match self {
-            Self::Carrier => {
-                run_propagation(runner, self, shape, vertices, args, propagation::carrier)
-            }
             Self::MemberPredicate => run_propagation(
                 runner,
                 self,

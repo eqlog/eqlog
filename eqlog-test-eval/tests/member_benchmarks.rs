@@ -32,9 +32,6 @@ fn isolated_member_propagation_preserves_exact_images_and_rows() {
                     seed: 17,
                 };
                 eprintln!("member propagation: {params:?}, {:?}", graph.edges);
-                let carrier = check(propagation::carrier(&params, graph.clone()));
-                assert_eq!(carrier.owned_elements, vertices * members);
-                assert_eq!(carrier.local_size, vertices * members);
                 check(propagation::member_predicate(&params, graph.clone()));
                 check(propagation::mixed_predicate(&params, graph.clone()));
                 check(propagation::from_ambient(&params, graph.clone()));

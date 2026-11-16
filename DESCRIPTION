@@ -1,0 +1,6 @@
+Make the carrier benchmark self-contained
+
+Keep the carrier theory, implementations and timing entry point together
+so readers can follow preparation and propagation directly. Measure
+plain Eqlog and COW calls and keep semantic checks in the evaluation
+test crate.

@@ -20,3 +20,8 @@ eqlog = { path = "../eqlog", features = ["rebuild"] }
 [[bench]]
 name = "member_mapping"
 harness = false
+
+[[bench]]
+name = "carrier"
+path = "src/carrier/bench.rs"
+harness = false

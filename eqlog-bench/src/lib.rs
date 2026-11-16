@@ -1,5 +1,6 @@
 pub mod ambient;
 pub mod analysis;
+pub mod carrier;
 pub mod chain;
 pub mod congruence;
 pub mod dag;
