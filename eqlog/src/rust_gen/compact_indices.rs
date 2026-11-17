@@ -352,14 +352,26 @@ pub(super) fn methods<'a>(
                 }}
 
                 fn __compact_publish_{name}(&mut self, owner: u32) {{
-                    let indices = self.__compact_indices_{name}.as_ref().unwrap();
             "}?;
-            for layout in layouts {
+            let mut published_layouts = layouts
+                .iter()
+                .filter(|layout| {
+                    selection
+                        .current_primary(&FlatInRel::Rel(layout.rel))
+                        .order
+                        .first()
+                        == Some(&0)
+                })
+                .peekable();
+            if published_layouts.peek().is_some() {
+                writeln!(
+                    f,
+                    "let indices = self.__compact_indices_{name}.as_ref().unwrap();"
+                )?;
+            }
+            for layout in published_layouts {
                 let rel = FlatInRel::Rel(layout.rel);
                 let primary = selection.current_primary(&rel);
-                if primary.order.first() != Some(&0) {
-                    continue;
-                }
                 let slot = layout.slot(
                     &primary.order[1..]
                         .iter()

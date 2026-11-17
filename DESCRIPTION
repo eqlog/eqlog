@@ -4,3 +4,6 @@ Keep the carrier theory, implementations and timing entry point together
 so readers can follow preparation and propagation directly. Measure
 plain Eqlog and COW calls and keep semantic checks in the evaluation
 test crate.
+
+Avoid unused generated bindings for models that publish only member
+domains, so the minimal carrier benchmark builds without warnings.
